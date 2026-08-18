@@ -81,26 +81,28 @@ Zie `docs/migratie-log/2026-08-18-fase-1c-afronding.md` voor de volledige classi
 
 ### 1D. Generieke contentpagina's
 
-Status: **bezig**
+Status: **afgerond**
 
-Doel: RC-specifieke pagina's zoals `baanreglement.php` uiteindelijk onder een algemeen content-/pagina-concept brengen, zodat andere verenigingen eigen pagina's kunnen maken zonder nieuwe PHP-bestanden.
+Doel: RC-specifieke pagina's onder een algemeen content-/pagina-concept brengen, zodat andere verenigingen herbruikbare paginatypen kunnen gebruiken zonder per pagina een unieke PHP-template en unieke opslaglogica te bouwen.
 
-#### Gedaan
+#### Resultaat
 
-- `pagina-definities.php` toegevoegd als centrale registry voor contentpagina's.
-- `ontstaan` beschreven als generiek paginatype `verhaal`.
-- `baanreglement` beschreven als generiek paginatype `artikelen`.
-- Per pagina staan slug, label, SEO-sleutel, beheer-tab, databestand, hero-instellingen en veldstructuur nu centraal vastgelegd.
-- `content-pagina.php` toegevoegd met generieke helpers voor definities, JSON-content, taalafhankelijke waarden, hero, SEO, beheer-tab en paginatype.
-- De bestaande URLs en layouts blijven voorlopig ongewijzigd via `legacy_layout => true`.
+- `pagina-definities.php` is de centrale registry voor configureerbare contentpagina's.
+- `ontstaan` draait als generiek paginatype `verhaal`.
+- `baanreglement` draait als generiek paginatype `artikelen`.
+- Per pagina staan slug, label, SEO-sleutel, beheer-tab, databestand, hero-instellingen, veldstructuur en eventuele galerij/artikelstructuur centraal vastgelegd.
+- `content-pagina.php` levert de generieke bootstrap, data-, taal-, hero-, SEO- en typehelpers.
+- `content-renderer.php` rendert de gedeelde paginatypen; `ontstaan.php` en `baanreglement.php` zijn dunne routes geworden.
+- `content-beheer.php` is de generieke editor. Velden en groepen worden automatisch uit `pagina-definities.php` opgebouwd.
+- De editor gebruikt het bestaande rechtenmodel, CSRF, centrale data-lock, back-ups en logging.
+- De generieke route is op de DEV-omgeving praktisch getest voor Ontstaan en Baanreglement: lezen, opslaan, publieke weergave, logboek en back-up zijn bevestigd.
+- De historische Ontstaan/Baanreglement-ingangen in `beheer.php` zijn daarna uit runtimegebruik genomen: de tabs worden verborgen en de oude POST-formulieren worden server-side geblokkeerd.
 
-#### Volgende stappen
+#### Technische schuld voor fase 2
 
-- `ontstaan.php` en `baanreglement.php` laten bootstrappen vanuit de centrale paginaregistry.
-- Daarna gedeelde rendererlogica voor `verhaal` en `artikelen` invoeren.
-- Vervolgens de beheer-velddefinities uit de paginaregistry laten komen in plaats van uit aparte hardcoded lijsten in `beheer.php`.
+De oude Ontstaan/Baanreglement-code staat fysiek nog als onbereikbare dode code in het grote monolithische `beheer.php`. Omdat dit bestand zeer groot is, wordt die fysieke verwijdering gecombineerd met de structurele opsplitsing van `beheer.php` in fase 2. Functioneel bestaat er vanaf 1D nog maar één beheerroute: `content-beheer.php`.
 
-Zie `docs/migratie-log/2026-08-18-fase-1d-start.md` voor de technische start van deze fase.
+Zie de bestanden onder `docs/migratie-log/2026-08-18-fase-1d-*.md` voor de technische tussenstappen en validatie.
 
 ## Eerste inventarisatie
 
@@ -111,7 +113,7 @@ Reeds gevonden hardcoding / technische schuld die voor fase 1 relevant is:
 - Publieke pagina's bevatten in de bron nog vaste favicon- en theme-color-tags; runtime worden die inmiddels centraal vervangen.
 - De repository bevat de vaste asset `rc045-logo.png`; het pad en de gerenderde branding zijn inmiddels configureerbaar.
 - `auth.php` en diverse comments/labels zijn expliciet op RC045 benoemd.
-- Grote bestanden zoals `beheer.php` en `leden.php` worden pas in fase 2 structureel opgesplitst; fase 1 beperkt zich tot template-/configuratiescheiding.
+- Grote bestanden zoals `beheer.php` en `leden.php` worden in fase 2 structureel opgesplitst.
 
 ## Besluiten
 
@@ -129,7 +131,7 @@ Bestaande publieke functienamen met `rc045` worden niet in één keer hernoemd. 
 
 ### 2026-08-18 — contentconfiguratie apart van applicatielogica
 
-Verenigingsspecifieke SEO-content staat voortaan in `site-seo.php` en niet meer in `seo-head.php`. Dit patroon kan later ook voor andere content/configuratie worden gebruikt.
+Verenigingsspecifieke SEO-content staat voortaan in `site-seo.php` en niet meer in `seo-head.php`. Dit patroon wordt ook gebruikt voor contentpagina's via `pagina-definities.php`.
 
 ### 2026-08-18 — tijdelijke outputfilter voor grote legacy-pagina's
 
@@ -138,3 +140,7 @@ Omdat meerdere publieke pagina's tientallen tot honderden kilobytes groot zijn e
 ### 2026-08-18 — moduleflags zijn functionaliteit, geen gebruikersrecht
 
 Een uitgeschakelde module is voor de hele vereniging uitgeschakeld, ook voor een masteraccount. Gebruikersrechten bepalen vervolgens alleen wie toegang heeft tot modules die voor die vereniging wél actief zijn.
+
+### 2026-08-18 — legacy contentbeheer pas na praktijktest uit runtime
+
+De oude Ontstaan- en Baanreglement-routes zijn pas gedeactiveerd nadat de generieke editor op de DEV-omgeving succesvol is getest op opslaan, publieke weergave, logging en back-up. Fysieke verwijdering van de dode code volgt bij de opsplitsing van `beheer.php` in fase 2.
