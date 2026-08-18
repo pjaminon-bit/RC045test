@@ -8,7 +8,10 @@ require_once dirname(__DIR__) . '/site.php';
 require_once dirname(__DIR__) . '/data-slot.php';
 
 if (!$ingelogd) { header('Location: ../beheer.php'); exit; }
-if (!siteModuleActief('agenda')) { http_response_code(404); echo 'De agendamodule is voor deze vereniging niet ingeschakeld.'; exit; }
+// De Agenda-beheertab hoort in module-definities bij de feature
+// `evenementen`. Gebruik daarom dezelfde feature flag als beheer.php; een
+// losse `agenda`-flag bestaat niet in site-config.php.
+if (!siteModuleActief('evenementen')) { http_response_code(404); echo 'De evenementenmodule is voor deze vereniging niet ingeschakeld.'; exit; }
 
 $rechten = authRechten(['agenda' => 'Agenda'], []);
 if (!$isMaster && !in_array('agenda', $rechten['toegestaneTabs'] ?? [], true)) { http_response_code(403); echo 'Geen toegang tot Agenda.'; exit; }
