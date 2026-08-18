@@ -11,6 +11,7 @@
 
 require_once __DIR__ . '/site.php';
 require_once __DIR__ . '/content-pagina.php';
+require_once __DIR__ . '/content-pagina-runtime.php';
 
 $RC045_SITE = siteUrl();
 $RC045_TALEN = siteTalen();
@@ -34,9 +35,6 @@ function rc045Url($pagina, $taal) {
 function rc045SeoHead($pagina, $indexeerbaar = true) {
   global $RC045_PAGINAS, $RC045_TALEN;
 
-  // Voor geregistreerde contentpagina's komt de SEO-identiteit voortaan uit
-  // pagina-definities.php. Voor overige legacy-pagina's blijft de aangeleverde
-  // sleutel ongewijzigd werken.
   if (contentPaginaBestaat((string) $pagina)) {
     $pagina = contentPaginaSeoSleutel((string) $pagina);
   }
