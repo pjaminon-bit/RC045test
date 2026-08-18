@@ -14,6 +14,7 @@ return [
         'type' => 'verhaal',
         'seo_sleutel' => 'ontstaan',
         'beheer_tab' => 'ontstaan',
+        'beheer_prefix' => 'ont',
         'data_bestand' => 'data/ontstaan.json',
         'hero' => [
             'achtergrond' => 'images/crawlergroen.jpg',
@@ -64,6 +65,7 @@ return [
         'type' => 'artikelen',
         'seo_sleutel' => 'baanreglement',
         'beheer_tab' => 'baanreglement',
+        'beheer_prefix' => 'br',
         'data_bestand' => 'data/baanreglement.json',
         'hero' => [
             'achtergrond' => 'images/hero-achtergrond.jpg',
