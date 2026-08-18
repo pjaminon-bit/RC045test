@@ -40,6 +40,52 @@ function siteAsset(string $configPad): string { return ltrim((string) siteConfig
 function siteAssetUrl(string $configPad): string { return siteUrl() . '/' . siteAsset($configPad); }
 function siteModuleActief(string $module): bool { return siteConfigGet('modules.' . $module, false) === true; }
 
+function siteModuleDefinities(): array
+{
+    static $definities = null;
+    if ($definities === null) {
+        $geladen = require __DIR__ . '/module-definities.php';
+        $definities = is_array($geladen) ? $geladen : [];
+    }
+    return $definities;
+}
+
+function siteModuleDefinitie(string $module): array
+{
+    $definities = siteModuleDefinities();
+    return isset($definities[$module]) && is_array($definities[$module]) ? $definities[$module] : [];
+}
+
+function siteModuleVoorWaarde(string $veld, string $waarde): ?string
+{
+    foreach (siteModuleDefinities() as $module => $definitie) {
+        $waarden = $definitie[$veld] ?? [];
+        if (is_array($waarden) && in_array($waarde, $waarden, true)) return $module;
+    }
+    return null;
+}
+
+function siteModuleVoorPagina(string $pagina): ?string
+{
+    return siteModuleVoorWaarde('publieke_paginas', $pagina);
+}
+
+function siteModuleVoorBeheerTab(string $tab): ?string
+{
+    return siteModuleVoorWaarde('beheer_tabs', $tab);
+}
+
+function siteModuleVoorBeheerFormulier(string $formulier): ?string
+{
+    return siteModuleVoorWaarde('beheer_formulieren', $formulier);
+}
+
+function siteModuleLabel(string $module): string
+{
+    $definitie = siteModuleDefinitie($module);
+    return trim((string) ($definitie['label'] ?? '')) ?: 'Deze pagina';
+}
+
 function siteHuidigScript(): string
 {
     return strtolower(basename((string) ($_SERVER['SCRIPT_NAME'] ?? '')));
@@ -48,16 +94,6 @@ function siteHuidigScript(): string
 function siteIsBeheerPagina(): bool
 {
     return siteHuidigScript() === 'beheer.php';
-}
-
-function siteModuleVoorPagina(string $pagina): ?string
-{
-    $mapping = [
-        'fotoboek' => 'fotoboek',
-        'media' => 'media',
-        'aanmelden' => 'aanmelden',
-    ];
-    return $mapping[$pagina] ?? null;
 }
 
 function siteModulePaginaToegestaan(string $pagina): bool
@@ -93,13 +129,7 @@ function siteRenderModuleNietBeschikbaar(string $module): void
     $dark = siteVeiligeKleur('branding.kleuren.dark', '#1E2C13');
     $bg = siteVeiligeKleur('branding.kleuren.background', '#FAF6EC');
     $text = siteVeiligeKleur('branding.kleuren.text', '#2A3818');
-
-    $moduleNaam = [
-        'fotoboek' => 'Fotoboek',
-        'media' => 'Media',
-        'aanmelden' => 'Aanmelden',
-    ][$module] ?? 'Deze pagina';
-    $moduleNaam = htmlspecialchars($moduleNaam, ENT_QUOTES, 'UTF-8');
+    $moduleNaam = htmlspecialchars(siteModuleLabel($module), ENT_QUOTES, 'UTF-8');
 
     echo '<!DOCTYPE html><html lang="nl"><head><meta charset="UTF-8">';
     echo '<meta name="viewport" content="width=device-width, initial-scale=1.0">';
@@ -128,23 +158,47 @@ function siteBewaakPubliekeModule(): void
     }
 }
 
+function siteBewaakBeheerModulePost(): void
+{
+    if (!siteIsBeheerPagina() || ($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') return;
+
+    $formulier = isset($_POST['formulier']) && is_string($_POST['formulier']) ? $_POST['formulier'] : '';
+    if ($formulier === '') return;
+
+    $module = siteModuleVoorBeheerFormulier($formulier);
+    if ($module === null || siteModuleActief($module)) return;
+
+    // Een uitgeschakelde module is ook voor een master-account niet
+    // wijzigbaar. Maak het formulier onbekend vóór beheer.php zijn bestaande
+    // autorisatie- en opslaglogica uitvoert.
+    $_POST['formulier'] = '';
+    $GLOBALS['siteModulePostGeblokkeerd'] = [
+        'module' => $module,
+        'formulier' => $formulier,
+    ];
+
+    // auth.php is vóór paneel-hulp.php/site.php geladen. Als logging dus al
+    // beschikbaar is, registreer alleen module + formuliernaam; nooit POST-
+    // inhoud of persoonsgegevens.
+    if (function_exists('schrijfLog') && isset($GLOBALS['logBestand'], $GLOBALS['huidigeGebruiker'])) {
+        schrijfLog(
+            $GLOBALS['logBestand'],
+            (string) $GLOBALS['huidigeGebruiker'],
+            'module_geblokkeerd',
+            $module . ':' . $formulier
+        );
+    }
+}
+
 function siteModuleVisibilityMarkup(): string
 {
     $selectors = [];
 
-    if (!siteModuleActief('evenementen')) {
-        $selectors[] = '#activiteiten';
-        $selectors[] = 'a[href="index.html#activiteiten"]';
-        $selectors[] = 'a[href="#activiteiten"]';
-        $selectors[] = '#footer-link-calendar';
-    }
-
-    if (!siteModuleActief('sponsors')) {
-        $selectors[] = '.footer-sponsors';
-        $selectors[] = '#footer-link-sponsor';
-        $selectors[] = '#sponsors-grid';
-        $selectors[] = '#footer-sponsors-title';
-        $selectors[] = '#footer-sponsors-cta';
+    foreach (siteModuleDefinities() as $module => $definitie) {
+        if (siteModuleActief($module)) continue;
+        foreach (($definitie['publieke_selectors'] ?? []) as $selector) {
+            if (is_string($selector) && $selector !== '') $selectors[] = $selector;
+        }
     }
 
     if (!$selectors) return '';
@@ -154,20 +208,16 @@ function siteModuleVisibilityMarkup(): string
 function siteBeheerModuleVisibilityMarkup(): string
 {
     $selectors = [];
-    $mapping = [
-        'evenementen' => 'agenda',
-        'sponsors' => 'sponsors',
-        'media' => 'media',
-        'fotoboek' => 'fotoboek',
-        'aanmelden' => 'aanmelden',
-    ];
 
-    foreach ($mapping as $module => $tab) {
+    foreach (siteModuleDefinities() as $module => $definitie) {
         if (siteModuleActief($module)) continue;
-        $selectors[] = '#tab-' . $tab;
-        $selectors[] = '[href="#tab-' . $tab . '"]';
-        $selectors[] = '[data-tab="' . $tab . '"]';
-        $selectors[] = '[data-tab-target="' . $tab . '"]';
+        foreach (($definitie['beheer_tabs'] ?? []) as $tab) {
+            if (!is_string($tab) || $tab === '') continue;
+            $selectors[] = '#tab-' . $tab;
+            $selectors[] = '[href="#tab-' . $tab . '"]';
+            $selectors[] = '[data-tab="' . $tab . '"]';
+            $selectors[] = '[data-tab-target="' . $tab . '"]';
+        }
     }
 
     if (!$selectors) return '';
@@ -176,15 +226,18 @@ function siteBeheerModuleVisibilityMarkup(): string
 
 function siteVerbergUitgeschakeldeModules(string $html): string
 {
-    if (!siteModuleActief('fotoboek')) {
-        $html = preg_replace('~<li[^>]*>\s*<a[^>]+href="fotoboek\.html"[^>]*>.*?</a>\s*</li>~is', '', $html) ?? $html;
-    }
-    if (!siteModuleActief('media')) {
-        $html = preg_replace('~<li[^>]*>\s*<a[^>]+href="media\.html"[^>]*>.*?</a>\s*</li>~is', '', $html) ?? $html;
-    }
-    if (!siteModuleActief('aanmelden')) {
-        $html = preg_replace('~<li[^>]*class="[^"]*nav-lid[^"]*"[^>]*>.*?</li>~is', '', $html) ?? $html;
-        $html = preg_replace('~<li[^>]*>\s*<a[^>]+href="aanmelden\.html"[^>]*>.*?</a>\s*</li>~is', '', $html) ?? $html;
+    foreach (siteModuleDefinities() as $module => $definitie) {
+        if (siteModuleActief($module)) continue;
+
+        foreach (($definitie['publieke_links'] ?? []) as $link) {
+            if (!is_string($link) || $link === '') continue;
+            $veiligLink = preg_quote($link, '~');
+            $html = preg_replace('~<li[^>]*>\s*<a[^>]+href="' . $veiligLink . '"[^>]*>.*?</a>\s*</li>~is', '', $html) ?? $html;
+        }
+
+        if (!empty($definitie['verberg_nav_lid'])) {
+            $html = preg_replace('~<li[^>]*class="[^"]*nav-lid[^"]*"[^>]*>.*?</li>~is', '', $html) ?? $html;
+        }
     }
 
     $moduleVisibility = siteModuleVisibilityMarkup();
@@ -293,5 +346,6 @@ function siteStartTemplateOutputFilter(): void
     });
 }
 
+siteBewaakBeheerModulePost();
 siteBewaakPubliekeModule();
 siteStartTemplateOutputFilter();
