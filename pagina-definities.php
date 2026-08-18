@@ -69,6 +69,16 @@ return [
             'achtergrond' => 'images/hero-achtergrond.jpg',
             'positie' => 'center',
             'opacity' => 0.35,
+            'label' => [
+                'nl' => 'RC045',
+                'en' => 'RC045',
+                'de' => 'RC045',
+            ],
+            'titel' => [
+                'nl' => 'Baanreglement',
+                'en' => 'Track rules',
+                'de' => 'Bahnordnung',
+            ],
         ],
         'velden' => [
             'hero_sub' => ['type' => 'tekst', 'label' => 'Ondertitel boven de pagina'],
@@ -87,6 +97,6 @@ return [
             9 => ['titel' => 'a9_title', 'inhoud' => 'a9_body'],
             10 => ['titel' => 'a10_title', 'inhoud' => 'a10_body'],
         ],
-        'legacy_layout' => true,
+        'legacy_layout' => false,
     ],
 ];
