@@ -142,3 +142,8 @@ function siteStartTemplateOutputFilter(): void
         return preg_replace($patroon, "\n" . $branding . "\n", $html) ?? $html;
     });
 }
+
+// site.php wordt door seo-head.php vóór enige HTML geladen. Daardoor kan de
+// filter veilig één keer per request worden gestart zonder wijzigingen in
+// iedere afzonderlijke publieke pagina.
+siteStartTemplateOutputFilter();
