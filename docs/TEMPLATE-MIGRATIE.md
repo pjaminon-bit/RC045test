@@ -22,22 +22,17 @@ Status: **bezig**
 
 #### Gedaan
 
-- `site-config.php` toegevoegd als eerste centrale verenigingsconfiguratie.
-- Configuratie bevat momenteel verenigingsidentiteit, site-URL, tijdzone, talen, branding, themakleuren en feature flags.
-- Huidige RC045-waarden zijn bewust als defaults opgenomen.
-- `site.php` toegevoegd als generieke toegang tot de configuratie.
-- Helpers toegevoegd voor configuratiepaden, verenigingsnaam, volledige naam, site-URL, standaardtaal, talen, assets en module-status.
-- `seo-head.php` gekoppeld aan de centrale configuratielaag voor:
-  - site-URL;
-  - beschikbare talen;
-  - standaardtaal;
-  - social image.
-- De bestaande functies `rc045Taal()`, `rc045Url()` en `rc045SeoHead()` blijven voorlopig als compatibiliteitslaag bestaan. Daardoor hoeven alle publieke pagina's en JavaScript-koppelingen niet gelijktijdig te veranderen.
-- `x-default` en de kale URL worden nu gebaseerd op de configureerbare standaardtaal in plaats van impliciet altijd Nederlands.
+- `site-config.php` toegevoegd als centrale verenigingsconfiguratie voor identiteit, site-URL, tijdzone, talen, branding, themakleuren en feature flags.
+- `site.php` toegevoegd als generieke toegang tot configuratie.
+- Helpers toegevoegd voor configuratiepaden, naam, volledige naam, URL, talen, assets en module-status.
+- `seo-head.php` gebruikt nu de centrale configuratie voor site-URL, talen, standaardtaal en social image.
+- `site-seo.php` toegevoegd: RC045-specifieke SEO-titels en omschrijvingen staan nu buiten de gedeelde SEO-engine.
+- `seo-head.php` bevat daardoor alleen nog generieke SEO-logica plus tijdelijke compatibiliteitsnamen.
+- `x-default` en de kale URL worden gebaseerd op de configureerbare standaardtaal.
 
-#### Bewust nog niet aangepast
+#### Compatibiliteit
 
-- De SEO-titels en omschrijvingen in `seo-head.php` zijn nog RC045-specifieke content. Die worden later naar configureerbare paginametadata verplaatst.
+- `rc045Taal()`, `rc045Url()` en `rc045SeoHead()` blijven voorlopig bestaan zodat publieke pagina's niet allemaal tegelijk hoeven te veranderen.
 - De meta-naam `rc045-title-*` blijft tijdelijk bestaan vanwege bestaande JavaScript-koppelingen.
 
 #### Volgende stappen
@@ -48,9 +43,21 @@ Status: **bezig**
 
 ### 1B. Branding generiek maken
 
-Status: **nog te doen**
+Status: **bezig**
 
 Doel: logo, favicon, kleuren, naam, slogan en social-media-afbeelding per vereniging instelbaar maken zonder broncodewijzigingen.
+
+#### Gedaan
+
+- `site-config.php` bevat nu logo, social image, favicon, PNG-faviconvarianten, apple-touch-icon, manifest en theme color.
+- `site.php` bevat `siteHeadBranding()` om deze head-assets centraal te renderen.
+- `siteAsset()` toegevoegd naast `siteAssetUrl()`, zodat zowel relatieve webpaden als absolute social/SEO-URLs uit dezelfde configuratie kunnen komen.
+
+#### Volgende stappen
+
+- Het vaste favicon/manifest/theme-color-blok op publieke pagina's vervangen door `siteHeadBranding()`.
+- Logo, verenigingsnaam en slogan in navigatie/footer/homepage aan de configuratie koppelen.
+- Daarna CSS-themawaarden centraal genereren.
 
 ### 1C. Modules configureerbaar maken
 
@@ -68,11 +75,10 @@ Doel: RC-specifieke pagina's zoals `baanreglement.php` uiteindelijk onder een al
 
 Reeds gevonden hardcoding / technische schuld die voor fase 1 relevant is:
 
-- `seo-head.php` bevatte het vaste domein en vaste social image; deze zijn inmiddels centraal configureerbaar. De pagina-inhoud is nog RC045-specifiek.
 - Veel publieke code gebruikt functies met prefix `rc045...`; dit wordt stapsgewijs generieker gemaakt om regressies te vermijden.
 - `styles.css` bevat vaste RC045-kleuren als CSS-variabelen.
-- `index.php` gebruikt vaste favicon-bestanden en een vaste `theme-color`.
-- De repository bevat de vaste asset `rc045-logo.png`.
+- Publieke pagina's bevatten nog vaste favicon- en theme-color-tags; de centrale vervanger bestaat inmiddels.
+- De repository bevat de vaste asset `rc045-logo.png`; het pad is inmiddels configureerbaar maar pagina's moeten nog worden gekoppeld.
 - `auth.php` en diverse comments/labels zijn expliciet op RC045 benoemd.
 - Grote bestanden zoals `beheer.php` en `leden.php` worden pas in fase 2 structureel opgesplitst; fase 1 beperkt zich tot template-/configuratiescheiding.
 
@@ -89,3 +95,7 @@ Tijdens de introductie van de centrale configuratielaag blijven de bestaande RC0
 ### 2026-08-18 — compatibiliteitslaag tijdens refactor
 
 Bestaande publieke functienamen met `rc045` worden niet in één keer hernoemd. De interne bron wordt eerst generiek gemaakt. Dit beperkt het aantal gelijktijdige wijzigingen en maakt regressies eenvoudiger te herleiden.
+
+### 2026-08-18 — contentconfiguratie apart van applicatielogica
+
+Verenigingsspecifieke SEO-content staat voortaan in `site-seo.php` en niet meer in `seo-head.php`. Dit patroon kan later ook voor andere content/configuratie worden gebruikt.
