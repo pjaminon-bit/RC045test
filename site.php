@@ -116,6 +116,30 @@ function siteBewaakPubliekeModule(): void
     }
 }
 
+function siteModuleVisibilityMarkup(): string
+{
+    $selectors = [];
+
+    if (!siteModuleActief('evenementen')) {
+        $selectors[] = '#activiteiten';
+        $selectors[] = 'a[href="index.html#activiteiten"]';
+        $selectors[] = 'a[href="#activiteiten"]';
+        $selectors[] = '#footer-link-calendar';
+    }
+
+    if (!siteModuleActief('sponsors')) {
+        $selectors[] = '.footer-sponsors';
+        $selectors[] = '#footer-link-sponsor';
+        $selectors[] = '#sponsors-grid';
+        $selectors[] = '#footer-sponsors-title';
+        $selectors[] = '#footer-sponsors-cta';
+    }
+
+    if (!$selectors) return '';
+
+    return '<style id="site-module-visibility">' . implode(',', array_unique($selectors)) . '{display:none!important}</style>';
+}
+
 function siteVerbergUitgeschakeldeModules(string $html): string
 {
     if (!siteModuleActief('fotoboek')) {
@@ -128,6 +152,12 @@ function siteVerbergUitgeschakeldeModules(string $html): string
         $html = preg_replace('~<li[^>]*class="[^"]*nav-lid[^"]*"[^>]*>.*?</li>~is', '', $html) ?? $html;
         $html = preg_replace('~<li[^>]*>\s*<a[^>]+href="aanmelden\.html"[^>]*>.*?</a>\s*</li>~is', '', $html) ?? $html;
     }
+
+    $moduleVisibility = siteModuleVisibilityMarkup();
+    if ($moduleVisibility !== '' && stripos($html, '</head>') !== false && strpos($html, 'id="site-module-visibility"') === false) {
+        $html = preg_replace('~</head>~i', $moduleVisibility . "\n</head>", $html, 1) ?? $html;
+    }
+
     return $html;
 }
 
