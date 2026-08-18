@@ -79,6 +79,34 @@ function siteModuleActief(string $module): bool
     return siteConfigGet('modules.' . $module, false) === true;
 }
 
+function siteVeiligeKleur(string $configPad, string $standaard): string
+{
+    $kleur = trim((string) siteConfigGet($configPad, $standaard));
+    return preg_match('/^#[0-9A-Fa-f]{6}$/', $kleur) ? $kleur : $standaard;
+}
+
+function siteThemeMarkup(): string
+{
+    $mapping = [
+        '--teal' => ['branding.kleuren.primary', '#3A7A77'],
+        '--teal-dark' => ['branding.kleuren.primary_dark', '#2D6260'],
+        '--teal-light' => ['branding.kleuren.primary_light', '#EAF4F3'],
+        '--gold' => ['branding.kleuren.accent', '#C89A1A'],
+        '--gold-light' => ['branding.kleuren.accent_light', '#FBF4DF'],
+        '--dark' => ['branding.kleuren.dark', '#1E2C13'],
+        '--text' => ['branding.kleuren.text', '#2A3818'],
+        '--muted' => ['branding.kleuren.muted', '#6A7560'],
+        '--bg' => ['branding.kleuren.background', '#FAF6EC'],
+    ];
+
+    $regels = [];
+    foreach ($mapping as $cssVariabele => [$configPad, $standaard]) {
+        $regels[] = '    ' . $cssVariabele . ': ' . siteVeiligeKleur($configPad, $standaard) . ';';
+    }
+
+    return "<style id=\"site-theme\">\n  :root {\n" . implode("\n", $regels) . "\n  }\n</style>";
+}
+
 function siteHeadBrandingMarkup(): string
 {
     $regels = [];
@@ -86,7 +114,7 @@ function siteHeadBrandingMarkup(): string
     $favicon = htmlspecialchars(siteAsset('branding.favicon'), ENT_QUOTES, 'UTF-8');
     $appleTouch = htmlspecialchars(siteAsset('branding.apple_touch_icon'), ENT_QUOTES, 'UTF-8');
     $manifest = htmlspecialchars(siteAsset('branding.manifest'), ENT_QUOTES, 'UTF-8');
-    $themeColor = htmlspecialchars((string) siteConfigGet('branding.theme_color', '#1E2C13'), ENT_QUOTES, 'UTF-8');
+    $themeColor = htmlspecialchars(siteVeiligeKleur('branding.theme_color', '#1E2C13'), ENT_QUOTES, 'UTF-8');
 
     if ($favicon !== '') {
         $regels[] = '<link rel="icon" type="image/x-icon" href="' . $favicon . '">';
@@ -139,6 +167,14 @@ function siteStartTemplateOutputFilter(): void
                 . '<meta\s+name="theme-color"\s+content="#[0-9A-Fa-f]{6}">~';
 
             $html = preg_replace($patroon, "\n" . $branding . "\n", $html) ?? $html;
+        }
+
+        // Voeg de configureerbare kleurvariabelen als laatste styleblok in de
+        // head toe. Daardoor overschrijven ze de historische defaults in
+        // styles.css zonder dat die stylesheet tijdens fase 1 herschreven hoeft
+        // te worden. Alleen geldige #RRGGBB-waarden worden toegelaten.
+        if (stripos($html, '</head>') !== false && strpos($html, 'id="site-theme"') === false) {
+            $html = preg_replace('~</head>~i', siteThemeMarkup() . "\n</head>", $html, 1) ?? $html;
         }
 
         // Alleen bekende merk-markup vervangen. Inhoudelijke RC045-teksten
