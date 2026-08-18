@@ -1,0 +1,28 @@
+name: Deploy testsite naar Strato /dev
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-dev:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout testcode
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Upload testsite via SFTP naar /dev
+        uses: wlixcc/SFTP-Deploy-Action@a5ccb9c6211a94cc59404f0fdb2a9936a6dfee64 # v1.2.6
+        with:
+          username: ${{ secrets.FTP_USERNAME }}
+          server: ${{ secrets.FTP_SERVER }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          port: 22
+          sftp_only: true
+          local_path: './*'
+          remote_path: '/dev/'
