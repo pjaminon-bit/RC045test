@@ -2,8 +2,8 @@ name: One-time fix relative home links
 
 on:
   push:
-    paths:
-      - '.github/workflows/fix-relative-home-links.yml'
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
@@ -61,8 +61,6 @@ jobs:
       } else {
         url.searchParams.set('lang', lang);
       }
-      // Homepage-links blijven expliciet relatief aan de huidige map. Daardoor
-      // wijzen ze op productie naar / en in de testomgeving naar /dev/.
       const newHref = isHomepageLink
         ? './' + url.search + url.hash
         : url.pathname.split('/').pop() + url.search + url.hash;
