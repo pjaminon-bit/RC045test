@@ -56,6 +56,66 @@ function siteModulePaginaToegestaan(string $pagina): bool
     return $module === null || siteModuleActief($module);
 }
 
+function siteHuidigePubliekePagina(): ?string
+{
+    $requestUri = $_SERVER['REQUEST_URI'] ?? '';
+    if (!is_string($requestUri) || $requestUri === '') return null;
+
+    $pad = parse_url($requestUri, PHP_URL_PATH);
+    if (!is_string($pad) || $pad === '') return null;
+
+    $bestand = strtolower(basename($pad));
+    $pagina = preg_replace('/\.(?:html|php)$/', '', $bestand);
+    return is_string($pagina) && $pagina !== '' ? $pagina : null;
+}
+
+function siteRenderModuleNietBeschikbaar(string $module): void
+{
+    if (!headers_sent()) {
+        http_response_code(404);
+        header('Content-Type: text/html; charset=UTF-8');
+        header('X-Robots-Tag: noindex, nofollow', true);
+    }
+
+    $naam = htmlspecialchars(siteNaam(), ENT_QUOTES, 'UTF-8');
+    $logo = htmlspecialchars(siteAsset('branding.logo'), ENT_QUOTES, 'UTF-8');
+    $primary = siteVeiligeKleur('branding.kleuren.primary', '#3A7A77');
+    $dark = siteVeiligeKleur('branding.kleuren.dark', '#1E2C13');
+    $bg = siteVeiligeKleur('branding.kleuren.background', '#FAF6EC');
+    $text = siteVeiligeKleur('branding.kleuren.text', '#2A3818');
+
+    $moduleNaam = [
+        'fotoboek' => 'Fotoboek',
+        'media' => 'Media',
+        'aanmelden' => 'Aanmelden',
+    ][$module] ?? 'Deze pagina';
+    $moduleNaam = htmlspecialchars($moduleNaam, ENT_QUOTES, 'UTF-8');
+
+    echo '<!DOCTYPE html><html lang="nl"><head><meta charset="UTF-8">';
+    echo '<meta name="viewport" content="width=device-width, initial-scale=1.0">';
+    echo '<meta name="robots" content="noindex,nofollow">';
+    echo '<title>Pagina niet beschikbaar – ' . $naam . '</title>';
+    echo '<style>body{margin:0;font-family:Arial,sans-serif;background:' . $bg . ';color:' . $text . ';display:grid;min-height:100vh;place-items:center;padding:24px;box-sizing:border-box}.card{max-width:620px;background:#fff;border:1px solid rgba(0,0,0,.1);border-radius:16px;padding:36px;text-align:center;box-shadow:0 12px 40px rgba(0,0,0,.08)}.logo{max-height:84px;max-width:180px;margin:0 auto 20px}h1{margin:0 0 12px;color:' . $dark . ';font-size:30px}p{line-height:1.65;margin:0 0 24px}.btn{display:inline-block;background:' . $primary . ';color:#fff;text-decoration:none;padding:12px 20px;border-radius:9px;font-weight:700}</style>';
+    echo '</head><body><main class="card">';
+    if ($logo !== '') echo '<img class="logo" src="' . $logo . '" alt="' . $naam . '">';
+    echo '<h1>Pagina niet beschikbaar</h1>';
+    echo '<p>' . $moduleNaam . ' is voor deze vereniging niet ingeschakeld.</p>';
+    echo '<a class="btn" href="index.html">Terug naar de homepage</a>';
+    echo '</main></body></html>';
+    exit;
+}
+
+function siteBewaakPubliekeModule(): void
+{
+    $pagina = siteHuidigePubliekePagina();
+    if ($pagina === null) return;
+
+    $module = siteModuleVoorPagina($pagina);
+    if ($module !== null && !siteModuleActief($module)) {
+        siteRenderModuleNietBeschikbaar($module);
+    }
+}
+
 function siteVerbergUitgeschakeldeModules(string $html): string
 {
     if (!siteModuleActief('fotoboek')) {
@@ -159,4 +219,6 @@ function siteStartTemplateOutputFilter(): void
     });
 }
 
+// Eerst directe toegang blokkeren; pas daarna output buffering starten.
+siteBewaakPubliekeModule();
 siteStartTemplateOutputFilter();
