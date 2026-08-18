@@ -46,7 +46,7 @@ function beheerContentVervangMenuItems(string $html): string
 
     foreach ($koppelingen as $tab => $info) {
         $patroon = '~<button\s+type="button"\s+class="menu-item"\s+data-tab="' . preg_quote($tab, '~') . '">.*?</button>~is';
-        $link = '<a class="menu-item menu-item-link" href="content-beheer.php?pagina=' . rawurlencode($info['pagina']) . '">'
+        $link = '<a class="menu-item menu-item-link" style="display:block;text-decoration:none" href="content-beheer.php?pagina=' . rawurlencode($info['pagina']) . '">'
             . htmlspecialchars($info['label'], ENT_QUOTES, 'UTF-8') . '</a>';
         $html = preg_replace($patroon, $link, $html, 1) ?? $html;
     }
