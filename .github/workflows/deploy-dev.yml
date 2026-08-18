@@ -34,7 +34,7 @@ jobs:
             -P 22 \
             "$FTP_USERNAME@$FTP_SERVER"
 
-      - name: Upload testsite via SFTP naar /dev
+      - name: Upload testsite via SFTP naar gekoppelde dev-root
         uses: wlixcc/SFTP-Deploy-Action@a5ccb9c6211a94cc59404f0fdb2a9936a6dfee64 # v1.2.6
         with:
           username: ${{ secrets.FTP_USERNAME }}
@@ -43,4 +43,4 @@ jobs:
           port: 22
           sftp_only: true
           local_path: './*'
-          remote_path: '/dev/'
+          remote_path: '/'
