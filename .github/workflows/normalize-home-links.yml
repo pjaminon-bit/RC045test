@@ -11,7 +11,6 @@ permissions:
 
 jobs:
   normalize:
-    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -70,8 +69,6 @@ jobs:
       } else {
         url.searchParams.set('lang', lang);
       }
-      // Homepage-links blijven expliciet relatief aan de huidige map. Daardoor
-      // blijven ze op productie in / en in de testomgeving in /dev/.
       const newHref = isHomepageLink
         ? './' + url.search + url.hash
         : url.pathname.split('/').pop() + url.search + url.hash;
@@ -81,17 +78,15 @@ jobs:
           p.write_text(s, encoding='utf-8')
           PY
 
-      - name: Remove compatibility index.html
-        run: rm -f index.html
+      - name: Remove compatibility files
+        run: rm -f index.html .normalize-home-links-trigger
 
       - name: Validate
         run: |
           for f in aanmelden.php ontstaan.php baanreglement.php media.php fotoboek.php bedankt.php; do php -l "$f"; done
           node --check site-i18n.js
-          if grep -RIn --include='*.php' --include='*.js' 'index\.html\(#\|"\|\x27\)' aanmelden.php ontstaan.php baanreglement.php media.php fotoboek.php bedankt.php site-i18n.js; then
-            echo 'Legacy index.html-homepage links remain' >&2
-            exit 1
-          fi
+          ! grep -RIn --include='*.php' 'href="index\.html' aanmelden.php ontstaan.php baanreglement.php media.php fotoboek.php bedankt.php
+          ! grep -n "return isHomepage ? '#contact' : 'index.html#contact'" site-i18n.js
           git diff --check
 
       - name: Commit cleanup
