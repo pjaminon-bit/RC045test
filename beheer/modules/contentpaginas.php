@@ -2,7 +2,7 @@
 // ============================================================
 // Beheermodule: generieke contentpagina's
 // ============================================================
-// Verzorgt de menu-ingang naar content-beheer.php en schakelt de oude
+// Verzorgt de menu-ingang naar /beheer/content.php en schakelt de oude
 // Ontstaan/Baanreglement-tabs + POST-routes uit.
 // ============================================================
 
@@ -46,7 +46,7 @@ function beheerContentVervangMenuItems(string $html): string
 
     foreach ($koppelingen as $tab => $info) {
         $patroon = '~<button\s+type="button"\s+class="menu-item"\s+data-tab="' . preg_quote($tab, '~') . '">.*?</button>~is';
-        $link = '<a class="menu-item menu-item-link" style="display:block;text-decoration:none" href="content-beheer.php?pagina=' . rawurlencode($info['pagina']) . '">'
+        $link = '<a class="menu-item menu-item-link" style="display:block;text-decoration:none" href="beheer/content.php?pagina=' . rawurlencode($info['pagina']) . '">'
             . htmlspecialchars($info['label'], ENT_QUOTES, 'UTF-8') . '</a>';
         $html = preg_replace($patroon, $link, $html, 1) ?? $html;
     }
