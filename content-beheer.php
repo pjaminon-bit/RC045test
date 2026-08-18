@@ -118,6 +118,16 @@ function contentBeheerHuidigeWaarde(array $data, string $veld, string $taal): st
     return is_scalar($waarde) ? (string) $waarde : '';
 }
 
+function contentBeheerSchrijfJson(string $pad, array $data): bool
+{
+    global $dataBackupMap, $dataBackupBewaardagen, $dataBackupMaxPerBestand;
+    if (function_exists('maakDataBackup')) {
+        maakDataBackup($pad, $dataBackupMap, $dataBackupBewaardagen, $dataBackupMaxPerBestand);
+    }
+    $json = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+    return $json !== false && file_put_contents($pad, $json, LOCK_EX) !== false;
+}
+
 if (strtolower(basename((string) ($_SERVER['SCRIPT_FILENAME'] ?? ''))) !== 'content-beheer.php') {
     return;
 }
@@ -139,7 +149,7 @@ if (!$def) {
 }
 
 $beheerTab = contentPaginaBeheerTab($paginaSleutel);
-$rechten = authRechten([$beheerTab], []);
+$rechten = authRechten([$beheerTab => (string) ($def['label'] ?? $beheerTab)], []);
 if (!$isMaster && !in_array($beheerTab, $rechten['toegestaneTabs'] ?? [], true)) {
     http_response_code(403);
     echo 'Geen toegang tot deze contentpagina.';
@@ -154,15 +164,16 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         $meldingTypeEditor = 'fout';
     } else {
         $slot = dataSlotOpen();
-        $resultaat = contentBeheerOpslaan(
-            $paginaSleutel,
-            $_POST,
-            static fn($waarde, $max) => contentBeheerKort($waarde, $max),
-            static function ($pad, $data) {
-                return function_exists('schrijfJson') ? schrijfJson($pad, $data) : false;
-            }
-        );
-        dataSlotSluit($slot);
+        try {
+            $resultaat = contentBeheerOpslaan(
+                $paginaSleutel,
+                $_POST,
+                static fn($waarde, $max) => contentBeheerKort($waarde, $max),
+                static fn($pad, $data) => contentBeheerSchrijfJson($pad, $data)
+            );
+        } finally {
+            dataSlotDicht($slot);
+        }
 
         $meldingEditor = (string) ($resultaat['melding'] ?? '');
         $meldingTypeEditor = !empty($resultaat['ok']) ? 'ok' : 'fout';
