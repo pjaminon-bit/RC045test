@@ -19,9 +19,31 @@ function fbMaakSlug($tekst): string {
 }
 function fbUniekeSlug(string $basis,array $slugs): string { $s=$basis;$i=2;while(in_array($s,$slugs,true)){$s=$basis.'-'.$i++;}return $s; }
 function fbLees(string $pad): array {
-    if(!is_file($pad)) return ['albums'=>[]];
-    $d=json_decode((string)@file_get_contents($pad),true);
-    if(!is_array($d)||!isset($d['albums'])||!is_array($d['albums'])) return ['albums'=>[]];
+    $GLOBALS['fbLeesStatus']=['ok'=>false,'code'=>'onbekend','pad'=>$pad,'melding'=>''];
+    if(!is_file($pad)) {
+        $GLOBALS['fbLeesStatus']=['ok'=>false,'code'=>'ontbreekt','pad'=>$pad,'melding'=>'fotoboek.json bestaat niet op deze installatie.'];
+        return ['albums'=>[]];
+    }
+    $ruw=@file_get_contents($pad);
+    if($ruw===false){
+        $GLOBALS['fbLeesStatus']=['ok'=>false,'code'=>'onleesbaar','pad'=>$pad,'melding'=>'fotoboek.json bestaat wel, maar kon niet worden gelezen.'];
+        return ['albums'=>[]];
+    }
+    $d=json_decode($ruw,true);
+    if(json_last_error()!==JSON_ERROR_NONE||!is_array($d)){
+        $GLOBALS['fbLeesStatus']=['ok'=>false,'code'=>'ongeldige_json','pad'=>$pad,'melding'=>'fotoboek.json bevat ongeldige JSON: '.json_last_error_msg()];
+        return ['albums'=>[]];
+    }
+    // Compatibiliteit: een zeer oude versie kan rechtstreeks een lijst albums
+    // bevatten in plaats van {"albums": [...]}. Alleen herkennen wanneer het
+    // echt een numerieke lijst is; andere structuren worden niet gegokt.
+    $isLijst=function_exists('array_is_list')?array_is_list($d):(array_keys($d)===range(0,count($d)-1));
+    if(!isset($d['albums'])&&$isLijst){$d=['albums'=>$d];$formaat='legacy_lijst';}
+    else $formaat='object';
+    if(!isset($d['albums'])||!is_array($d['albums'])){
+        $GLOBALS['fbLeesStatus']=['ok'=>false,'code'=>'onbekend_formaat','pad'=>$pad,'melding'=>'fotoboek.json is leesbaar, maar bevat geen geldige albums-lijst.'];
+        return ['albums'=>[]];
+    }
     foreach($d['albums'] as $i=>&$a){
         if(!is_array($a)){$a=[];}
         if(!isset($a['volgorde']))$a['volgorde']=$i;
@@ -41,6 +63,7 @@ function fbLees(string $pad): array {
     }
     unset($a);
     usort($d['albums'],static fn($a,$b)=>(float)($a['volgorde']??0)<=>(float)($b['volgorde']??0));
+    $GLOBALS['fbLeesStatus']=['ok'=>true,'code'=>$formaat,'pad'=>$pad,'melding'=>count($d['albums']).' album(s) gelezen.'];
     return $d;
 }
 function fbSchrijf(string $pad,array $data): bool {
@@ -55,7 +78,6 @@ function fbSchaalAf($bron,int $b,int $h,int $max){
     $factor=$b>$max?$max/$b:1;
     $nb=max(1,(int)round($b*$factor));$nh=max(1,(int)round($h*$factor));
     $nieuw=imagecreatetruecolor($nb,$nh);
-    // Transparantie correct op wit afvlakken; output wordt altijd JPEG.
     $wit=imagecolorallocate($nieuw,255,255,255);imagefill($nieuw,0,0,$wit);
     imagecopyresampled($nieuw,$bron,0,0,0,0,$nb,$nh,$b,$h);
     return $nieuw;
