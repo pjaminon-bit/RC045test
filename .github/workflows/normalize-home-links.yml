@@ -1,0 +1,105 @@
+name: Normalize homepage links in testsite
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  normalize:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Normalize homepage links
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          targets = [
+              'aanmelden.php',
+              'ontstaan.php',
+              'baanreglement.php',
+              'media.php',
+              'fotoboek.php',
+              'bedankt.php',
+              'site-i18n.js',
+          ]
+
+          for name in targets:
+              p = Path(name)
+              if not p.exists():
+                  continue
+              s = p.read_text(encoding='utf-8')
+              s = s.replace('index.html#', './#')
+              s = s.replace('href="index.html"', 'href="./"')
+              s = s.replace("href='index.html'", "href='./'")
+              s = s.replace("'index.html#contact'", "'./#contact'")
+              s = s.replace('"index.html#contact"', '"./#contact"')
+              p.write_text(s, encoding='utf-8')
+
+          p = Path('site-i18n.js')
+          s = p.read_text(encoding='utf-8')
+          old = """      // Alleen lokale .html links en lokale anchors, geen externe/mailto/tel links
+      if (!href || href.startsWith('http') || href.startsWith('mailto:') || href.startsWith('tel:') || href.startsWith('#')) return;
+      if (!href.endsWith('.html') && !href.includes('.html#') && !href.includes('.html?')) return;
+      const url = new URL(href, window.location.href);
+      if (lang === 'nl') {
+        url.searchParams.delete('lang');
+      } else {
+        url.searchParams.set('lang', lang);
+      }
+      // Bouw relatieve href terug op (pad + query + hash)
+      const newHref = url.pathname.split('/').pop() + url.search + url.hash;
+      a.setAttribute('href', newHref);"""
+          new = """      // Lokale .html-links en homepage-links (./ of ./#sectie). Externe,
+      // mailto-, tel- en puur lokale anchors blijven ongemoeid.
+      if (!href || href.startsWith('http') || href.startsWith('mailto:') || href.startsWith('tel:') || href.startsWith('#')) return;
+      const isHomepageLink = href === './' || href.startsWith('./#') || href.startsWith('./?');
+      const isHtmlLink = href.endsWith('.html') || href.includes('.html#') || href.includes('.html?');
+      if (!isHomepageLink && !isHtmlLink) return;
+      const url = new URL(href, window.location.href);
+      if (lang === 'nl') {
+        url.searchParams.delete('lang');
+      } else {
+        url.searchParams.set('lang', lang);
+      }
+      // Homepage-links blijven expliciet relatief aan de huidige map. Daardoor
+      // blijven ze op productie in / en in de testomgeving in /dev/.
+      const newHref = isHomepageLink
+        ? './' + url.search + url.hash
+        : url.pathname.split('/').pop() + url.search + url.hash;
+      a.setAttribute('href', newHref);"""
+          if old in s:
+              s = s.replace(old, new)
+          p.write_text(s, encoding='utf-8')
+          PY
+
+      - name: Remove compatibility index.html
+        run: rm -f index.html
+
+      - name: Validate
+        run: |
+          for f in aanmelden.php ontstaan.php baanreglement.php media.php fotoboek.php bedankt.php; do php -l "$f"; done
+          node --check site-i18n.js
+          if grep -RIn --include='*.php' --include='*.js' 'index\.html\(#\|"\|\x27\)' aanmelden.php ontstaan.php baanreglement.php media.php fotoboek.php bedankt.php site-i18n.js; then
+            echo 'Legacy index.html-homepage links remain' >&2
+            exit 1
+          fi
+          git diff --check
+
+      - name: Commit cleanup
+        run: |
+          rm -f .github/workflows/normalize-home-links.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          git commit -m 'Normalize homepage links for testsite'
+          git push origin main
