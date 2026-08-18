@@ -43,7 +43,7 @@ function beheerSponsorsStartOutputFilter(): void
         if (beheerSponsorsMagOpenen()) {
             $html = preg_replace(
                 '~<button\s+type="button"\s+class="menu-item"\s+data-tab="sponsors">.*?</button>~is',
-                '<a class="menu-item menu-item-link" href="beheer/sponsors.php">Sponsors</a>',
+                '<a class="menu-item menu-item-link" style="display:block;text-decoration:none" href="beheer/sponsors.php">Sponsors</a>',
                 $html,
                 1
             ) ?? $html;
