@@ -81,9 +81,26 @@ Zie `docs/migratie-log/2026-08-18-fase-1c-afronding.md` voor de volledige classi
 
 ### 1D. Generieke contentpagina's
 
-Status: **nog te doen**
+Status: **bezig**
 
 Doel: RC-specifieke pagina's zoals `baanreglement.php` uiteindelijk onder een algemeen content-/pagina-concept brengen, zodat andere verenigingen eigen pagina's kunnen maken zonder nieuwe PHP-bestanden.
+
+#### Gedaan
+
+- `pagina-definities.php` toegevoegd als centrale registry voor contentpagina's.
+- `ontstaan` beschreven als generiek paginatype `verhaal`.
+- `baanreglement` beschreven als generiek paginatype `artikelen`.
+- Per pagina staan slug, label, SEO-sleutel, beheer-tab, databestand, hero-instellingen en veldstructuur nu centraal vastgelegd.
+- `content-pagina.php` toegevoegd met generieke helpers voor definities, JSON-content, taalafhankelijke waarden, hero, SEO, beheer-tab en paginatype.
+- De bestaande URLs en layouts blijven voorlopig ongewijzigd via `legacy_layout => true`.
+
+#### Volgende stappen
+
+- `ontstaan.php` en `baanreglement.php` laten bootstrappen vanuit de centrale paginaregistry.
+- Daarna gedeelde rendererlogica voor `verhaal` en `artikelen` invoeren.
+- Vervolgens de beheer-velddefinities uit de paginaregistry laten komen in plaats van uit aparte hardcoded lijsten in `beheer.php`.
+
+Zie `docs/migratie-log/2026-08-18-fase-1d-start.md` voor de technische start van deze fase.
 
 ## Eerste inventarisatie
 
