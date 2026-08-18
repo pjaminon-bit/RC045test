@@ -9,48 +9,15 @@
 // de contributie van een lid.
 // ============================================================
 
-// Beheer.php gebruikt vanaf fase 1C ook de centrale moduleconfiguratie. Alleen
-// op de beheerpagina laden we site.php hier in; leden.php blijft daardoor vrij
-// van de publieke template/outputfilter. site.php herkent beheer.php en past
-// daar uitsluitend modulezichtbaarheid toe, niet de publieke branding.
-$isBeheerScript = strtolower(basename((string) ($_SERVER['SCRIPT_NAME'] ?? ''))) === 'beheer.php';
-if ($isBeheerScript) {
+// Fase 1C: moduleconfiguratie voor de twee afgeschermde panelen.
+// - beheer.php gebruikt site.php: centrale registry, zichtbaarheid en POST-guard.
+// - leden.php gebruikt paneel-modules.php: dezelfde registry, maar zonder de
+//   publieke branding/templatefilter.
+$huidigPaneelScript = strtolower(basename((string) ($_SERVER['SCRIPT_NAME'] ?? '')));
+if ($huidigPaneelScript === 'beheer.php') {
   require_once __DIR__ . '/site.php';
-}
-
-// ===== Fase 1C: server-side moduleguard voor beheer-POSTs =====
-// Een verborgen tabblad is geen beveiligingsgrens. Daarom blokkeren we hier,
-// vóór beheer.php zijn eigen opslagafhandeling bereikt, alle bekende
-// formulieren die horen bij een module die voor deze vereniging uitstaat.
-// Dit geldt óók voor de mastergebruiker: een feature flag schakelt een module
-// voor de hele tenant/vereniging uit en staat los van gebruikersrechten.
-if ($isBeheerScript && ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && function_exists('siteModuleActief')) {
-  $formulier = is_string($_POST['formulier'] ?? null) ? $_POST['formulier'] : '';
-  $formulierModule = [
-    'agenda' => 'evenementen',
-    'sponsors' => 'sponsors',
-    'media' => 'media',
-    'media_tekst' => 'media',
-    'fotoboek_tekst' => 'fotoboek',
-    'fotoboek_album_aanmaken' => 'fotoboek',
-    'fotoboek_album_bewerken' => 'fotoboek',
-    'aanmelden' => 'aanmelden',
-  ];
-
-  $module = $formulierModule[$formulier] ?? null;
-  if ($module !== null && !siteModuleActief($module)) {
-    // beheer.php leest het formulier later opnieuw uit $_POST. Door de waarde
-    // hier leeg te maken valt de request door zijn bestaande 'onbekend
-    // formulier'-pad en wordt geen data gelezen/gewijzigd/geschreven.
-    $_POST['formulier'] = '';
-
-    // Log de poging wanneer auth.php zijn logger al beschikbaar heeft. De
-    // daadwerkelijke POST-inhoud wordt bewust niet gelogd; alleen formulier en
-    // module, zodat er geen persoonsgegevens of uploads in het log belanden.
-    if (function_exists('schrijfLog') && isset($logBestand, $huidigeGebruiker)) {
-      schrijfLog($logBestand, $huidigeGebruiker, 'module_geblokkeerd', $formulier . ' -> ' . $module);
-    }
-  }
+} elseif ($huidigPaneelScript === 'leden.php') {
+  require_once __DIR__ . '/paneel-modules.php';
 }
 
 // jjjj-mm-dd naar dd-mm-jjjj. Ongeldig of leeg blijft leeg.
