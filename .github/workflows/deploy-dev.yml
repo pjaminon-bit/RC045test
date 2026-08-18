@@ -16,24 +16,6 @@ jobs:
       - name: Checkout testcode
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - name: Diagnose SFTP-login
-        env:
-          FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
-          FTP_SERVER: ${{ secrets.FTP_SERVER }}
-          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq sshpass >/dev/null
-          printf 'pwd\nquit\n' > /tmp/sftp-check.txt
-          SSHPASS="$FTP_PASSWORD" sshpass -e sftp -vvv \
-            -oBatchMode=no \
-            -oPreferredAuthentications=password \
-            -oPubkeyAuthentication=no \
-            -oStrictHostKeyChecking=no \
-            -b /tmp/sftp-check.txt \
-            -P 22 \
-            "$FTP_USERNAME@$FTP_SERVER"
-
       - name: Upload testsite via SFTP naar gekoppelde dev-root
         uses: wlixcc/SFTP-Deploy-Action@a5ccb9c6211a94cc59404f0fdb2a9936a6dfee64 # v1.2.6
         with:
