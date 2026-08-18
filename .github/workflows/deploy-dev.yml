@@ -9,6 +9,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: rc045-dev-deploy
+  cancel-in-progress: true
+
 jobs:
   deploy-dev:
     runs-on: ubuntu-latest
