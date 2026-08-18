@@ -43,6 +43,11 @@ function siteVolledigeNaam(): string
     return (string) siteConfigGet('vereniging.volledige_naam', siteNaam());
 }
 
+function siteSlogan(): string
+{
+    return (string) siteConfigGet('vereniging.slogan', '');
+}
+
 function siteUrl(): string
 {
     return rtrim((string) siteConfigGet('vereniging.site_url', ''), '/');
@@ -115,12 +120,6 @@ function siteHeadBranding(): void
     }
 }
 
-// Tijdelijke fase-1 compatibiliteitslaag. De publieke pagina's bevatten nog
-// een identiek, historisch hardcoded favicon/manifest/theme-color-blok. In
-// plaats van zes grote pagina's tegelijk te herschrijven vervangen we dat
-// blok server-side in de uiteindelijke HTML. Daardoor werkt de centrale
-// brandingconfiguratie direct op alle pagina's. Zodra de pagina's later stuk
-// voor stuk zijn opgeschoond kan deze filter zonder gedragswijziging weg.
 function siteStartTemplateOutputFilter(): void
 {
     static $actief = false;
@@ -129,21 +128,39 @@ function siteStartTemplateOutputFilter(): void
 
     ob_start(function ($html) {
         $branding = siteHeadBrandingMarkup();
-        if ($branding === '') return $html;
 
-        $patroon = '~\s*<link\s+rel="icon"\s+type="image/x-icon"\s+href="favicon\.ico">\s*'
-            . '(?:<link\s+rel="icon"\s+type="image/png"\s+sizes="16x16"\s+href="favicon-16x16\.png">\s*)?'
-            . '(?:<link\s+rel="icon"\s+type="image/png"\s+sizes="32x32"\s+href="favicon-32x32\.png">\s*)?'
-            . '(?:<link\s+rel="icon"\s+type="image/png"\s+sizes="48x48"\s+href="favicon-48x48\.png">\s*)?'
-            . '<link\s+rel="apple-touch-icon"\s+sizes="180x180"\s+href="apple-touch-icon\.png">\s*'
-            . '<link\s+rel="manifest"\s+href="site\.webmanifest">\s*'
-            . '<meta\s+name="theme-color"\s+content="#[0-9A-Fa-f]{6}">~';
+        if ($branding !== '') {
+            $patroon = '~\s*<link\s+rel="icon"\s+type="image/x-icon"\s+href="favicon\.ico">\s*'
+                . '(?:<link\s+rel="icon"\s+type="image/png"\s+sizes="16x16"\s+href="favicon-16x16\.png">\s*)?'
+                . '(?:<link\s+rel="icon"\s+type="image/png"\s+sizes="32x32"\s+href="favicon-32x32\.png">\s*)?'
+                . '(?:<link\s+rel="icon"\s+type="image/png"\s+sizes="48x48"\s+href="favicon-48x48\.png">\s*)?'
+                . '<link\s+rel="apple-touch-icon"\s+sizes="180x180"\s+href="apple-touch-icon\.png">\s*'
+                . '<link\s+rel="manifest"\s+href="site\.webmanifest">\s*'
+                . '<meta\s+name="theme-color"\s+content="#[0-9A-Fa-f]{6}">~';
 
-        return preg_replace($patroon, "\n" . $branding . "\n", $html) ?? $html;
+            $html = preg_replace($patroon, "\n" . $branding . "\n", $html) ?? $html;
+        }
+
+        // Alleen bekende merk-markup vervangen. Inhoudelijke RC045-teksten
+        // blijven onaangeroerd; dit centraliseert identiteit zonder content
+        // per ongeluk generiek te maken.
+        $logo = htmlspecialchars(siteAsset('branding.logo'), ENT_QUOTES, 'UTF-8');
+        $naam = htmlspecialchars(siteNaam(), ENT_QUOTES, 'UTF-8');
+        $slogan = htmlspecialchars(siteSlogan(), ENT_QUOTES, 'UTF-8');
+
+        if ($logo !== '') {
+            $html = str_replace('src="rc045-logo.png"', 'src="' . $logo . '"', $html);
+        }
+        $html = str_replace('alt="RC045 logo"', 'alt="' . $naam . ' logo"', $html);
+        $html = str_replace('alt="RC045"', 'alt="' . $naam . '"', $html);
+        $html = preg_replace('~(<span\s+class="nav-logo-text">)RC045(</span>)~', '$1' . $naam . '$2', $html) ?? $html;
+        $html = preg_replace('~(<span\s+class="nav-logo-sub">)Bashers of the South(</span>)~', '$1' . $slogan . '$2', $html) ?? $html;
+
+        $footerMerk = $naam . ($slogan !== '' ? ' · ' . $slogan : '');
+        $html = str_replace('RC045 · Bashers of the South', $footerMerk, $html);
+
+        return $html;
     });
 }
 
-// site.php wordt door seo-head.php vóór enige HTML geladen. Daardoor kan de
-// filter veilig één keer per request worden gestart zonder wijzigingen in
-// iedere afzonderlijke publieke pagina.
 siteStartTemplateOutputFilter();
