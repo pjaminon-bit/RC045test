@@ -37,11 +37,11 @@ function beheerDevBuildMarkup(): string
     $tijdTekst = htmlspecialchars($tijdTekst, ENT_QUOTES, 'UTF-8');
 
     return '<div id="dev-build-indicator" title="Deze gegevens worden tijdens de GitHub Actions deployment geschreven" '
-        . 'style="position:fixed;right:18px;top:18px;z-index:10000;background:#201f1b;color:#fff;padding:8px 11px;border-radius:9px;'
-        . 'font:600 12px/1.35 system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;box-shadow:0 6px 20px rgba(0,0,0,.22)">'
-        . '<strong style="color:#ffd76a">DEV</strong> · build <code style="color:#fff">' . $commit . '</code>'
-        . ($run !== '' ? ' · run #' . $run : '')
-        . '<br><span style="opacity:.78">' . $branch . ' · ' . $tijdTekst . '</span></div>';
+        . 'style="position:fixed;right:14px;bottom:12px;z-index:10000;background:#201f1b;color:#fff;padding:6px 9px;border-radius:8px;'
+        . 'font:600 11px/1.3 system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;box-shadow:0 4px 14px rgba(0,0,0,.18);opacity:.88;max-width:360px">'
+        . '<strong style="color:#ffd76a">DEV</strong> · <code style="color:#fff">' . $commit . '</code>'
+        . ($run !== '' ? ' · #' . $run : '')
+        . ' <span style="opacity:.68">· ' . $branch . ' · ' . $tijdTekst . '</span></div>';
 }
 
 function beheerDevBuildStartOutputFilter(): void
