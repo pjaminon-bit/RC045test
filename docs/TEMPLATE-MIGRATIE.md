@@ -37,8 +37,7 @@ Status: **bezig**
 
 #### Volgende stappen
 
-- Publieke pagina's koppelen aan centrale branding en algemene verenigingsgegevens.
-- Vaste favicon-, manifest- en theme-color-verwijzingen uit de pagina's halen.
+- Algemene verenigingsgegevens in navigatie/footer/homepage centraliseren.
 - Daarna CSS-kleuren vanuit de configuratie/themalaag laten komen.
 
 ### 1B. Branding generiek maken
@@ -49,15 +48,21 @@ Doel: logo, favicon, kleuren, naam, slogan en social-media-afbeelding per vereni
 
 #### Gedaan
 
-- `site-config.php` bevat nu logo, social image, favicon, PNG-faviconvarianten, apple-touch-icon, manifest en theme color.
-- `site.php` bevat `siteHeadBranding()` om deze head-assets centraal te renderen.
+- `site-config.php` bevat logo, social image, favicon, PNG-faviconvarianten, apple-touch-icon, manifest en theme color.
+- `site.php` bevat `siteHeadBranding()` en `siteHeadBrandingMarkup()` om deze head-assets centraal te renderen.
 - `siteAsset()` toegevoegd naast `siteAssetUrl()`, zodat zowel relatieve webpaden als absolute social/SEO-URLs uit dezelfde configuratie kunnen komen.
+- De publieke pagina's bevatten in de bron nog hun historische vaste favicon/manifest/theme-color-blok, maar `site.php` start nu vóór de HTML een server-side outputfilter die dit blok in de uiteindelijke HTML vervangt door de centrale configuratie.
+- Daardoor werken favicon, PNG-favicons, apple-touch-icon, manifest en theme color nu al centraal op alle publieke pagina's die `seo-head.php` gebruiken, zonder grote pagina's tegelijk te herschrijven.
+
+#### Tijdelijke compatibiliteitslaag
+
+De outputfilter is bewust tijdelijk. De grote publieke PHP-bestanden worden later individueel opgeschoond en krijgen uiteindelijk rechtstreeks `siteHeadBranding()` in hun `<head>`. Zodra alle vaste blokken uit de bron verdwenen zijn kan `siteStartTemplateOutputFilter()` worden verwijderd zonder zichtbare wijziging.
 
 #### Volgende stappen
 
-- Het vaste favicon/manifest/theme-color-blok op publieke pagina's vervangen door `siteHeadBranding()`.
 - Logo, verenigingsnaam en slogan in navigatie/footer/homepage aan de configuratie koppelen.
 - Daarna CSS-themawaarden centraal genereren.
+- De historische head-blokken later fysiek uit de publieke pagina's verwijderen wanneer die pagina's toch worden opgeschoond.
 
 ### 1C. Modules configureerbaar maken
 
@@ -77,8 +82,8 @@ Reeds gevonden hardcoding / technische schuld die voor fase 1 relevant is:
 
 - Veel publieke code gebruikt functies met prefix `rc045...`; dit wordt stapsgewijs generieker gemaakt om regressies te vermijden.
 - `styles.css` bevat vaste RC045-kleuren als CSS-variabelen.
-- Publieke pagina's bevatten nog vaste favicon- en theme-color-tags; de centrale vervanger bestaat inmiddels.
-- De repository bevat de vaste asset `rc045-logo.png`; het pad is inmiddels configureerbaar maar pagina's moeten nog worden gekoppeld.
+- Publieke pagina's bevatten in de bron nog vaste favicon- en theme-color-tags; runtime worden die inmiddels centraal vervangen.
+- De repository bevat de vaste asset `rc045-logo.png`; het pad is configureerbaar maar body-elementen moeten nog worden gekoppeld.
 - `auth.php` en diverse comments/labels zijn expliciet op RC045 benoemd.
 - Grote bestanden zoals `beheer.php` en `leden.php` worden pas in fase 2 structureel opgesplitst; fase 1 beperkt zich tot template-/configuratiescheiding.
 
@@ -99,3 +104,7 @@ Bestaande publieke functienamen met `rc045` worden niet in één keer hernoemd. 
 ### 2026-08-18 — contentconfiguratie apart van applicatielogica
 
 Verenigingsspecifieke SEO-content staat voortaan in `site-seo.php` en niet meer in `seo-head.php`. Dit patroon kan later ook voor andere content/configuratie worden gebruikt.
+
+### 2026-08-18 — tijdelijke outputfilter voor grote legacy-pagina's
+
+Omdat meerdere publieke pagina's tientallen tot honderden kilobytes groot zijn en hetzelfde historische head-blok bevatten, wordt dit blok tijdens fase 1 server-side vervangen. Dit geeft direct centrale branding zonder een risicovolle bulk-herschrijving. De filter is nadrukkelijk een migratiehulpmiddel en geen eindarchitectuur.
