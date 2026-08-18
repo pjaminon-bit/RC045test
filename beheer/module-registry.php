@@ -22,7 +22,11 @@ return [
     ],
     'sponsors' => [
         'label' => 'Sponsors',
-        'status' => 'legacy',
+        'status' => 'module',
+        'bootstrap' => __DIR__ . '/modules/sponsors.php',
+        'editor' => __DIR__ . '/sponsors.php',
+        'legacy_tabs' => ['sponsors'],
+        'legacy_formulieren' => ['sponsors'],
     ],
     'media' => [
         'label' => 'Media',
