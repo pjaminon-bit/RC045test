@@ -1,0 +1,105 @@
+name: One-time fix relative home links
+
+on:
+  push:
+    paths:
+      - '.github/workflows/fix-relative-home-links.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Make homepage links environment-safe
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          targets = [
+              'aanmelden.php', 'ontstaan.php', 'baanreglement.php',
+              'media.php', 'fotoboek.php', 'bedankt.php', 'site-i18n.js'
+          ]
+          for name in targets:
+              p = Path(name)
+              if not p.exists():
+                  continue
+              s = p.read_text(encoding='utf-8')
+              s = s.replace('index.html#', './#')
+              s = s.replace('href="index.html"', 'href="./"')
+              s = s.replace("href='index.html'", "href='./'")
+              p.write_text(s, encoding='utf-8')
+
+          p = Path('site-i18n.js')
+          s = p.read_text(encoding='utf-8')
+          old = """      // Alleen lokale .html links en lokale anchors, geen externe/mailto/tel links
+      if (!href || href.startsWith('http') || href.startsWith('mailto:') || href.startsWith('tel:') || href.startsWith('#')) return;
+      if (!href.endsWith('.html') && !href.includes('.html#') && !href.includes('.html?')) return;
+      const url = new URL(href, window.location.href);
+      if (lang === 'nl') {
+        url.searchParams.delete('lang');
+      } else {
+        url.searchParams.set('lang', lang);
+      }
+      // Bouw relatieve href terug op (pad + query + hash)
+      const newHref = url.pathname.split('/').pop() + url.search + url.hash;
+      a.setAttribute('href', newHref);"""
+          new = """      // Lokale .html-links en homepage-links (./ of ./#sectie). Externe,
+      // mailto-, tel- en puur lokale anchors blijven ongemoeid.
+      if (!href || href.startsWith('http') || href.startsWith('mailto:') || href.startsWith('tel:') || href.startsWith('#')) return;
+      const isHomepageLink = href === './' || href.startsWith('./#') || href.startsWith('./?');
+      const isHtmlLink = href.endsWith('.html') || href.includes('.html#') || href.includes('.html?');
+      if (!isHomepageLink && !isHtmlLink) return;
+      const url = new URL(href, window.location.href);
+      if (lang === 'nl') {
+        url.searchParams.delete('lang');
+      } else {
+        url.searchParams.set('lang', lang);
+      }
+      // Homepage-links blijven expliciet relatief aan de huidige map. Daardoor
+      // wijzen ze op productie naar / en in de testomgeving naar /dev/.
+      const newHref = isHomepageLink
+        ? './' + url.search + url.hash
+        : url.pathname.split('/').pop() + url.search + url.hash;
+      a.setAttribute('href', newHref);"""
+          if old not in s:
+              raise SystemExit('updateInternalLinks-blok niet gevonden')
+          s = s.replace(old, new)
+          p.write_text(s, encoding='utf-8')
+          PY
+
+      - name: Remove stale old index.html from dev SFTP root
+        env:
+          FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
+          FTP_SERVER: ${{ secrets.FTP_SERVER }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq sshpass >/dev/null
+          printf 'rm index.html\nquit\n' > /tmp/remove-old-index.txt
+          SSHPASS="$FTP_PASSWORD" sshpass -e sftp \
+            -oBatchMode=no -oPreferredAuthentications=password -oPubkeyAuthentication=no \
+            -oStrictHostKeyChecking=no -b /tmp/remove-old-index.txt -P 22 \
+            "$FTP_USERNAME@$FTP_SERVER" || true
+
+      - name: Validate and commit
+        run: |
+          php -l aanmelden.php
+          php -l ontstaan.php
+          php -l baanreglement.php
+          php -l media.php
+          php -l fotoboek.php
+          php -l bedankt.php
+          node --check site-i18n.js
+          rm -f .deploy-trigger .github/workflows/fix-relative-home-links.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          git commit -m 'Make homepage links environment-safe'
+          git push origin main
