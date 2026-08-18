@@ -18,6 +18,7 @@ return [
         'label' => 'Contentpagina\'s',
         'status' => 'module',
         'bootstrap' => __DIR__ . '/modules/contentpaginas.php',
+        'editor' => __DIR__ . '/content.php',
         'legacy_tabs' => ['ontstaan', 'baanreglement'],
         'legacy_formulieren' => ['ontstaan', 'baanreglement'],
     ],
