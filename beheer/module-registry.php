@@ -18,7 +18,11 @@ return [
     ],
     'agenda' => [
         'label' => 'Agenda',
-        'status' => 'legacy',
+        'status' => 'module',
+        'bootstrap' => __DIR__ . '/modules/agenda.php',
+        'editor' => __DIR__ . '/agenda.php',
+        'legacy_tabs' => ['agenda'],
+        'legacy_formulieren' => ['agenda'],
     ],
     'sponsors' => [
         'label' => 'Sponsors',
@@ -28,32 +32,11 @@ return [
         'legacy_tabs' => ['sponsors'],
         'legacy_formulieren' => ['sponsors'],
     ],
-    'media' => [
-        'label' => 'Media',
-        'status' => 'legacy',
-    ],
-    'fotoboek' => [
-        'label' => 'Fotoboek',
-        'status' => 'legacy',
-    ],
-    'aanmelden' => [
-        'label' => 'Aanmelden',
-        'status' => 'legacy',
-    ],
-    'homepage' => [
-        'label' => 'Homepage',
-        'status' => 'legacy',
-    ],
-    'gebruikers' => [
-        'label' => 'Gebruikers',
-        'status' => 'legacy',
-    ],
-    'backups' => [
-        'label' => 'Back-ups',
-        'status' => 'legacy',
-    ],
-    'logboek' => [
-        'label' => 'Logboek',
-        'status' => 'legacy',
-    ],
+    'media' => ['label' => 'Media', 'status' => 'legacy'],
+    'fotoboek' => ['label' => 'Fotoboek', 'status' => 'legacy'],
+    'aanmelden' => ['label' => 'Aanmelden', 'status' => 'legacy'],
+    'homepage' => ['label' => 'Homepage', 'status' => 'legacy'],
+    'gebruikers' => ['label' => 'Gebruikers', 'status' => 'legacy'],
+    'backups' => ['label' => 'Back-ups', 'status' => 'legacy'],
+    'logboek' => ['label' => 'Logboek', 'status' => 'legacy'],
 ];
