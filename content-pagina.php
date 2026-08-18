@@ -108,6 +108,14 @@ function contentPaginaHomepageStandaard(): array
     return $standaard;
 }
 
+function contentPaginaStandaard(string $sleutel): array
+{
+    if ($sleutel === 'homepage') return contentPaginaHomepageStandaard();
+    $def = contentPaginaDefinitie($sleutel);
+    $standaard = $def['standaard'] ?? [];
+    return is_array($standaard) ? $standaard : [];
+}
+
 function contentPaginaMengStandaard(array $standaard, array $opgeslagen): array
 {
     $resultaat = $standaard;
@@ -128,7 +136,7 @@ function contentPaginaMengStandaard(array $standaard, array $opgeslagen): array
 
 function contentPaginaLees(string $sleutel): array
 {
-    $standaard = $sleutel === 'homepage' ? contentPaginaHomepageStandaard() : [];
+    $standaard = contentPaginaStandaard($sleutel);
     $pad = contentPaginaDataPad($sleutel);
     if ($pad === null || !is_file($pad)) return $standaard;
 
@@ -137,7 +145,7 @@ function contentPaginaLees(string $sleutel): array
     $data = json_decode($json, true);
     if (!is_array($data)) return $standaard;
 
-    return $sleutel === 'homepage' ? contentPaginaMengStandaard($standaard, $data) : $data;
+    return $standaard ? contentPaginaMengStandaard($standaard, $data) : $data;
 }
 
 function contentPaginaWaarde(array $data, string $veld, string $taal = 'nl', string $standaard = ''): string
