@@ -59,13 +59,49 @@ function siteTalen(): array
     return is_array($talen) && $talen ? $talen : ['nl' => 'nl_NL'];
 }
 
+function siteAsset(string $configPad): string
+{
+    return ltrim((string) siteConfigGet($configPad, ''), '/');
+}
+
 function siteAssetUrl(string $configPad): string
 {
-    $bestand = ltrim((string) siteConfigGet($configPad, ''), '/');
-    return siteUrl() . '/' . $bestand;
+    return siteUrl() . '/' . siteAsset($configPad);
 }
 
 function siteModuleActief(string $module): bool
 {
     return siteConfigGet('modules.' . $module, false) === true;
+}
+
+function siteHeadBranding(): void
+{
+    $favicon = htmlspecialchars(siteAsset('branding.favicon'), ENT_QUOTES, 'UTF-8');
+    $appleTouch = htmlspecialchars(siteAsset('branding.apple_touch_icon'), ENT_QUOTES, 'UTF-8');
+    $manifest = htmlspecialchars(siteAsset('branding.manifest'), ENT_QUOTES, 'UTF-8');
+    $themeColor = htmlspecialchars((string) siteConfigGet('branding.theme_color', '#1E2C13'), ENT_QUOTES, 'UTF-8');
+
+    if ($favicon !== '') {
+        echo "  <link rel=\"icon\" type=\"image/x-icon\" href=\"$favicon\">\n";
+    }
+
+    // De huidige RC045-installatie heeft daarnaast losse PNG-favicons. Deze
+    // blijven tijdens fase 1 als compatibele defaults bestaan zolang ze in de
+    // config zijn opgenomen; andere verenigingen hoeven ze niet te gebruiken.
+    foreach ([16, 32, 48] as $maat) {
+        $pad = siteAsset('branding.favicon_' . $maat);
+        if ($pad === '') continue;
+        $veiligPad = htmlspecialchars($pad, ENT_QUOTES, 'UTF-8');
+        echo "  <link rel=\"icon\" type=\"image/png\" sizes=\"{$maat}x{$maat}\" href=\"$veiligPad\">\n";
+    }
+
+    if ($appleTouch !== '') {
+        echo "  <link rel=\"apple-touch-icon\" sizes=\"180x180\" href=\"$appleTouch\">\n";
+    }
+    if ($manifest !== '') {
+        echo "  <link rel=\"manifest\" href=\"$manifest\">\n";
+    }
+    if ($themeColor !== '') {
+        echo "  <meta name=\"theme-color\" content=\"$themeColor\">\n";
+    }
 }
