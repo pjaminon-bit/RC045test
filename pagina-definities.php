@@ -3,8 +3,8 @@
 // Centrale definities voor configureerbare contentpagina's
 // ============================================================
 // Fase 1D: losse RC045-pagina's stapsgewijs terugbrengen naar generieke
-// paginatypen. De bestaande PHP-bestanden/URLs blijven voorlopig bestaan;
-// deze registry beschrijft wat per vereniging/contentpagina mag verschillen.
+// paginatypen. De slug/URL kan gelijk blijven terwijl inhoud en layout vanuit
+// deze registry en het bijbehorende databestand worden opgebouwd.
 // ============================================================
 
 return [
@@ -19,6 +19,16 @@ return [
             'achtergrond' => 'images/crawlergroen.jpg',
             'positie' => 'center',
             'opacity' => 0.35,
+            'label' => [
+                'nl' => 'Onze geschiedenis',
+                'en' => 'Our history',
+                'de' => 'Unsere Geschichte',
+            ],
+            'titel' => [
+                'nl' => 'Het ontstaan van RC045',
+                'en' => 'The story of RC045',
+                'de' => 'Die Entstehung von RC045',
+            ],
         ],
         'velden' => [
             'hero_sub' => ['type' => 'tekst', 'label' => 'Ondertitel boven het verhaal'],
@@ -30,9 +40,22 @@ return [
             'story_p6' => ['type' => 'blok', 'label' => 'Alinea 6'],
             'story_p7' => ['type' => 'blok', 'label' => 'Alinea 7'],
         ],
-        // De fotogrid is in de eerste 1D-stap nog layout-specifiek. In een
-        // volgende stap wordt dit een generiek bloktype "afbeeldingengalerij".
-        'legacy_layout' => true,
+        'galerij' => [
+            'titel' => [
+                'nl' => "Foto's door de jaren heen",
+                'en' => 'Photos through the years',
+                'de' => 'Fotos im Laufe der Jahre',
+            ],
+            'afbeeldingen' => [
+                ['src' => 'images/basherbaaneersteaanleg.jpg', 'alt' => 'Eerste aanleg van de RC045 baan'],
+                ['src' => 'images/basherbaaneersteaanleghek.jpg', 'alt' => 'Plaatsen van het hek tijdens de eerste aanleg'],
+                ['src' => 'images/basherbaaneersteaanleglucht.jpg', 'alt' => 'Luchtfoto van de eerste aanleg van de baan'],
+                ['src' => 'images/basherbaaneersteaanlegmaaien.jpg', 'alt' => 'Maaien tijdens de eerste aanleg van de baan'],
+                ['src' => 'images/basherbaaneersteaanlegtrack.jpg', 'alt' => 'Aanleg van het parcours'],
+                ['src' => 'images/crawlerbaaneersteaanleg.jpg', 'alt' => 'Eerste aanleg van de crawlerbaan'],
+            ],
+        ],
+        'legacy_layout' => false,
     ],
 
     'baanreglement' => [
