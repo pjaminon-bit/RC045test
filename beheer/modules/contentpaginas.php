@@ -3,7 +3,7 @@
 // Beheermodule: generieke contentpagina's
 // ============================================================
 // Verzorgt de menu-ingang naar /beheer/content.php en schakelt de oude
-// Homepage/Ontstaan/Baanreglement-tabs + POST-routes uit.
+// gemigreerde contenttabs + POST-routes uit.
 // ============================================================
 
 require_once dirname(__DIR__, 2) . '/content-pagina.php';
@@ -28,12 +28,7 @@ function beheerContentBewaakLegacyPost(): void
 
     $_POST['formulier'] = '';
     if (function_exists('schrijfLog') && isset($GLOBALS['logBestand'], $GLOBALS['huidigeGebruiker'])) {
-        schrijfLog(
-            $GLOBALS['logBestand'],
-            (string) $GLOBALS['huidigeGebruiker'],
-            'legacy_content_geblokkeerd',
-            $formulier
-        );
+        schrijfLog($GLOBALS['logBestand'], (string) $GLOBALS['huidigeGebruiker'], 'legacy_content_geblokkeerd', $formulier);
     }
 }
 
@@ -43,6 +38,7 @@ function beheerContentVervangMenuItems(string $html): string
         'homepage' => ['pagina' => 'homepage', 'label' => 'Homepage'],
         'ontstaan' => ['pagina' => 'ontstaan', 'label' => 'Ontstaan / geschiedenis'],
         'baanreglement' => ['pagina' => 'baanreglement', 'label' => 'Reglement'],
+        'aanmelden' => ['pagina' => 'aanmelden', 'label' => 'Aanmelden'],
     ];
 
     foreach ($koppelingen as $tab => $info) {
@@ -59,11 +55,8 @@ function beheerContentStartOutputFilter(): void
 {
     ob_start(function ($html) {
         if (!is_string($html)) return $html;
-
         $html = beheerContentVervangMenuItems($html);
 
-        // Alleen de oude inhoudspanelen verbergen. De menu-items zelf zijn
-        // hierboven vervangen door links naar de modulaire editor.
         $selectors = [];
         foreach (beheerContentLegacyTabs() as $tab) {
             $selectors[] = '#tab-' . $tab;
@@ -74,7 +67,6 @@ function beheerContentStartOutputFilter(): void
             $css = '<style id="beheer-content-legacy-hidden">' . implode(',', $selectors) . '{display:none!important}</style>';
             $html = preg_replace('~</head>~i', $css . "\n</head>", $html, 1) ?? $html;
         }
-
         return $html;
     });
 }
