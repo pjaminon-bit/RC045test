@@ -7,30 +7,31 @@ Branch: `agent/template-foundation`
 
 Publieke onderdelen per vereniging kunnen uitschakelen via `site-config.php`, zonder aparte codebase of handmatige wijzigingen in navigatie en footer.
 
-## Eerste modules
+## Gekoppelde modules
 
-De eerste set is bewust beperkt tot duidelijke, zelfstandige publieke modules:
+De volgende flags zijn nu daadwerkelijk gekoppeld aan de publieke site:
 
 - `fotoboek`
 - `media`
 - `aanmelden`
-
-Deze flags bestonden al in `site-config.php` en zijn nu daadwerkelijk gekoppeld aan zowel navigatie/footer als directe pagina-toegang.
+- `evenementen`
+- `sponsors`
 
 ## Technische wijzigingen
 
-In `site.php` zijn toegevoegd:
+In `site.php` zijn toegevoegd / uitgebreid:
 
-- `siteModuleVoorPagina()` — koppelt een publieke pagina aan zijn feature flag.
+- `siteModuleVoorPagina()` — koppelt zelfstandige publieke pagina's aan hun feature flag.
 - `siteModulePaginaToegestaan()` — generieke controle of een modulepagina actief is.
 - `siteHuidigePubliekePagina()` — bepaalt op basis van `REQUEST_URI` welke publieke pagina wordt opgevraagd en ondersteunt zowel `.html` als `.php`.
-- `siteBewaakPubliekeModule()` — centrale guard die uitgeschakelde modulepagina's blokkeert vóór de normale pagina wordt gerenderd.
-- `siteRenderModuleNietBeschikbaar()` — rendert een eenvoudige, gebrande 404-pagina voor uitgeschakelde modules.
-- `siteVerbergUitgeschakeldeModules()` — verwijdert navigatie- en footerlinks van uitgeschakelde modules uit de uiteindelijke HTML.
+- `siteBewaakPubliekeModule()` — centrale guard die uitgeschakelde zelfstandige modulepagina's blokkeert vóór de normale pagina wordt gerenderd.
+- `siteRenderModuleNietBeschikbaar()` — rendert een eenvoudige, gebrande 404-pagina voor uitgeschakelde zelfstandige modules.
+- `siteVerbergUitgeschakeldeModules()` — verwijdert links en injecteert module-afhankelijke zichtbaarheid voor onderdelen die op de homepage/footer ingebed zijn.
+- `siteModuleVisibilityMarkup()` — maakt centrale CSS-selectors voor ingebedde modules die geen eigen pagina hebben.
 
-De guard draait vóór de bestaande fase-1 outputfilter. Daardoor wordt uitgeschakelde functionaliteit niet eerst opgebouwd om daarna pas verborgen te worden.
+De guard draait vóór de bestaande fase-1 outputfilter. Daardoor wordt uitgeschakelde zelfstandige functionaliteit niet eerst opgebouwd om daarna pas verborgen te worden.
 
-## Gedrag
+## Gedrag zelfstandige modules
 
 Als bijvoorbeeld in `site-config.php` staat:
 
@@ -48,17 +49,37 @@ dan:
 
 Voor `aanmelden => false` worden zowel de opvallende `nav-lid`-knop als gewone footerlinks naar `aanmelden.html` verwijderd, en wordt de aanmeldpagina rechtstreeks geblokkeerd.
 
-## Waarom 404 en geen redirect
+## Gedrag ingebedde modules
 
-Een uitgeschakelde module bestaat voor die vereniging functioneel niet. Een 404-respons is daarom duidelijker dan een redirect naar de homepage en voorkomt dat zoekmachines of externe links een niet-bestaande functionaliteit als geldige pagina blijven behandelen.
+`evenementen` en `sponsors` hebben geen zelfstandige publieke pagina die geblokkeerd moet worden; ze zijn onderdelen van bestaande pagina's.
 
-## Nog open
+Bij:
 
-De basis voor publieke modules staat nu. Volgende stappen binnen 1C:
+```php
+'evenementen' => false,
+```
 
-- meer publieke modules koppelen waar dat functioneel logisch is, bijvoorbeeld sponsors en delen van evenementen;
-- bepalen welke modules alleen publieke zichtbaarheid regelen en welke ook beheerfunctionaliteit moeten uitschakelen;
-- later de modulechecks rechtstreeks in opgeschoonde templates opnemen zodat de tijdelijke outputfilter voor navigatielinks kan verdwijnen.
+worden de homepage-sectie `#activiteiten` en bekende links naar die sectie verborgen.
+
+Bij:
+
+```php
+'sponsors' => false,
+```
+
+wordt het sponsorgedeelte in de footer verborgen, inclusief de sponsortitel, sponsorgrid, CTA en de bekende sponsorlink in de footer.
+
+Deze zichtbaarheid wordt centraal als CSS in de uiteindelijke HTML geïnjecteerd. Daardoor hoeven de grote legacy-pagina's tijdens fase 1 niet individueel herschreven te worden.
+
+## Waarom 404 voor zelfstandige pagina's
+
+Een uitgeschakelde zelfstandige module bestaat voor die vereniging functioneel niet. Een 404-respons is daarom duidelijker dan een redirect naar de homepage en voorkomt dat zoekmachines of externe links een niet-bestaande functionaliteit als geldige pagina blijven behandelen.
+
+## Belangrijke beperking van de huidige fase-1 oplossing
+
+Voor ingebedde modules zoals evenementen en sponsors wordt de presentatie nu centraal uitgeschakeld, maar bestaande inline JavaScript-code kan de bijbehorende databron nog wel opvragen. Dat is functioneel niet zichtbaar voor bezoekers, maar in de eindarchitectuur moeten ook data-loading en beheerfunctionaliteit modulebewust worden gemaakt.
+
+Dat wordt in de volgende stap van 1C aangepakt: bepalen welke beheeronderdelen, endpoints en data-loaders aan iedere module gekoppeld zijn.
 
 ## Ontwerpbesluit
 
