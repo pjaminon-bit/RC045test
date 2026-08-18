@@ -40,6 +40,16 @@ function siteAsset(string $configPad): string { return ltrim((string) siteConfig
 function siteAssetUrl(string $configPad): string { return siteUrl() . '/' . siteAsset($configPad); }
 function siteModuleActief(string $module): bool { return siteConfigGet('modules.' . $module, false) === true; }
 
+function siteHuidigScript(): string
+{
+    return strtolower(basename((string) ($_SERVER['SCRIPT_NAME'] ?? '')));
+}
+
+function siteIsBeheerPagina(): bool
+{
+    return siteHuidigScript() === 'beheer.php';
+}
+
 function siteModuleVoorPagina(string $pagina): ?string
 {
     $mapping = [
@@ -107,6 +117,8 @@ function siteRenderModuleNietBeschikbaar(string $module): void
 
 function siteBewaakPubliekeModule(): void
 {
+    if (siteIsBeheerPagina()) return;
+
     $pagina = siteHuidigePubliekePagina();
     if ($pagina === null) return;
 
@@ -136,8 +148,30 @@ function siteModuleVisibilityMarkup(): string
     }
 
     if (!$selectors) return '';
-
     return '<style id="site-module-visibility">' . implode(',', array_unique($selectors)) . '{display:none!important}</style>';
+}
+
+function siteBeheerModuleVisibilityMarkup(): string
+{
+    $selectors = [];
+    $mapping = [
+        'evenementen' => 'agenda',
+        'sponsors' => 'sponsors',
+        'media' => 'media',
+        'fotoboek' => 'fotoboek',
+        'aanmelden' => 'aanmelden',
+    ];
+
+    foreach ($mapping as $module => $tab) {
+        if (siteModuleActief($module)) continue;
+        $selectors[] = '#tab-' . $tab;
+        $selectors[] = '[href="#tab-' . $tab . '"]';
+        $selectors[] = '[data-tab="' . $tab . '"]';
+        $selectors[] = '[data-tab-target="' . $tab . '"]';
+    }
+
+    if (!$selectors) return '';
+    return '<style id="site-beheer-module-visibility">' . implode(',', array_unique($selectors)) . '{display:none!important}</style>';
 }
 
 function siteVerbergUitgeschakeldeModules(string $html): string
@@ -219,6 +253,16 @@ function siteStartTemplateOutputFilter(): void
     $actief = true;
 
     ob_start(function ($html) {
+        // Afgeschermd beheer krijgt alleen modulezichtbaarheid. Publieke
+        // branding/thema-overrides horen niet over de beheerinterface heen.
+        if (siteIsBeheerPagina()) {
+            $beheerVisibility = siteBeheerModuleVisibilityMarkup();
+            if ($beheerVisibility !== '' && stripos($html, '</head>') !== false && strpos($html, 'id="site-beheer-module-visibility"') === false) {
+                $html = preg_replace('~</head>~i', $beheerVisibility . "\n</head>", $html, 1) ?? $html;
+            }
+            return $html;
+        }
+
         $branding = siteHeadBrandingMarkup();
         if ($branding !== '') {
             $patroon = '~\s*<link\s+rel="icon"\s+type="image/x-icon"\s+href="favicon\.ico">\s*'
@@ -249,6 +293,5 @@ function siteStartTemplateOutputFilter(): void
     });
 }
 
-// Eerst directe toegang blokkeren; pas daarna output buffering starten.
 siteBewaakPubliekeModule();
 siteStartTemplateOutputFilter();
