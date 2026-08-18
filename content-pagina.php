@@ -2,10 +2,6 @@
 // ============================================================
 // Generieke contentpagina-hulpfuncties
 // ============================================================
-// Leest de centrale pagina-definities en de bijbehorende tenant-/vereniging-
-// content. De bestaande losse pagina's kunnen deze laag stapsgewijs gaan
-// gebruiken zonder dat hun URL of layout meteen hoeft te veranderen.
-// ============================================================
 
 function contentPaginaDefinities(): array
 {
@@ -36,29 +32,123 @@ function contentPaginaDataPad(string $sleutel): ?string
     return __DIR__ . '/' . ltrim($relatief, '/');
 }
 
+function contentPaginaJsObjectBlok(string $bron, string $taal): string
+{
+    $naald = $taal . ': {';
+    $pos = strpos($bron, $naald);
+    if ($pos === false) return '';
+    $start = strpos($bron, '{', $pos);
+    if ($start === false) return '';
+
+    $diepte = 0;
+    $inString = false;
+    $escape = false;
+    $lengte = strlen($bron);
+    for ($i = $start; $i < $lengte; $i++) {
+        $ch = $bron[$i];
+        if ($inString) {
+            if ($escape) { $escape = false; continue; }
+            if ($ch === '\\') { $escape = true; continue; }
+            if ($ch === "'") $inString = false;
+            continue;
+        }
+        if ($ch === "'") { $inString = true; continue; }
+        if ($ch === '{') { $diepte++; continue; }
+        if ($ch === '}') {
+            $diepte--;
+            if ($diepte === 0) return substr($bron, $start + 1, $i - $start - 1);
+        }
+    }
+    return '';
+}
+
+function contentPaginaJsVertalingen(string $blok): array
+{
+    if ($blok === '') return [];
+    $resultaat = [];
+    if (!preg_match_all("/'([^']+)'\\s*:\\s*'((?:\\\\.|[^'])*)'/s", $blok, $matches, PREG_SET_ORDER)) return [];
+    foreach ($matches as $m) {
+        $waarde = stripcslashes($m[2]);
+        $resultaat[(string) $m[1]] = $waarde;
+    }
+    return $resultaat;
+}
+
+function contentPaginaHomepageStandaard(): array
+{
+    static $standaard = null;
+    if ($standaard !== null) return $standaard;
+
+    $standaard = [];
+    $pad = __DIR__ . '/homepage.js';
+    $bron = is_file($pad) ? @file_get_contents($pad) : false;
+    if (!is_string($bron) || $bron === '') return $standaard;
+
+    $perTaal = [];
+    foreach (['nl', 'en', 'de'] as $taal) {
+        $perTaal[$taal] = contentPaginaJsVertalingen(contentPaginaJsObjectBlok($bron, $taal));
+    }
+
+    $def = contentPaginaDefinitie('homepage');
+    foreach (array_keys((array) ($def['velden'] ?? [])) as $veld) {
+        $i18nSleutel = str_replace('_', '.', (string) $veld);
+        $uitzonderingen = [
+            'about_photos_title' => 'about.photos.title',
+            'guest_note' => 'guest.notes',
+            'member_note' => 'member.notes',
+            'footer_sponsors_title' => 'footer.sponsors.title',
+        ];
+        if (isset($uitzonderingen[$veld])) $i18nSleutel = $uitzonderingen[$veld];
+
+        $standaard[$veld] = [];
+        foreach (['nl', 'en', 'de'] as $taal) {
+            $standaard[$veld][$taal] = (string) ($perTaal[$taal][$i18nSleutel] ?? '');
+        }
+    }
+    return $standaard;
+}
+
+function contentPaginaMengStandaard(array $standaard, array $opgeslagen): array
+{
+    $resultaat = $standaard;
+    foreach ($opgeslagen as $veld => $waarde) {
+        if (!array_key_exists($veld, $resultaat)) {
+            $resultaat[$veld] = $waarde;
+            continue;
+        }
+        if (!is_array($waarde) || !is_array($resultaat[$veld])) continue;
+        foreach (['nl', 'en', 'de'] as $taal) {
+            if (isset($waarde[$taal]) && is_scalar($waarde[$taal]) && trim((string) $waarde[$taal]) !== '') {
+                $resultaat[$veld][$taal] = (string) $waarde[$taal];
+            }
+        }
+    }
+    return $resultaat;
+}
+
 function contentPaginaLees(string $sleutel): array
 {
+    $standaard = $sleutel === 'homepage' ? contentPaginaHomepageStandaard() : [];
     $pad = contentPaginaDataPad($sleutel);
-    if ($pad === null || !is_file($pad)) return [];
+    if ($pad === null || !is_file($pad)) return $standaard;
 
     $json = @file_get_contents($pad);
-    if ($json === false) return [];
-
+    if ($json === false) return $standaard;
     $data = json_decode($json, true);
-    return is_array($data) ? $data : [];
+    if (!is_array($data)) return $standaard;
+
+    return $sleutel === 'homepage' ? contentPaginaMengStandaard($standaard, $data) : $data;
 }
 
 function contentPaginaWaarde(array $data, string $veld, string $taal = 'nl', string $standaard = ''): string
 {
     if (!array_key_exists($veld, $data)) return $standaard;
     $waarde = $data[$veld];
-
     if (is_array($waarde)) {
         if (isset($waarde[$taal]) && is_scalar($waarde[$taal])) return (string) $waarde[$taal];
         if (isset($waarde['nl']) && is_scalar($waarde['nl'])) return (string) $waarde['nl'];
         return $standaard;
     }
-
     return is_scalar($waarde) ? (string) $waarde : $standaard;
 }
 
@@ -74,14 +164,10 @@ function contentPaginaHeroCss(string $sleutel): string
     $hero = contentPaginaHero($sleutel);
     $achtergrond = trim((string) ($hero['achtergrond'] ?? ''));
     if ($achtergrond === '') return '';
-
     $positie = trim((string) ($hero['positie'] ?? 'center')) ?: 'center';
     $opacity = $hero['opacity'] ?? 0.35;
     $opacity = is_numeric($opacity) ? max(0, min(1, (float) $opacity)) : 0.35;
-
-    // Alleen lokale, relatieve assets toelaten in deze eerste templatefase.
     if (preg_match('~^(?:https?:)?//~i', $achtergrond) || str_contains($achtergrond, '..')) return '';
-
     $url = htmlspecialchars($achtergrond, ENT_QUOTES, 'UTF-8');
     $pos = htmlspecialchars($positie, ENT_QUOTES, 'UTF-8');
     return ".page-hero-bg{background-image:url('{$url}')!important;background-position:{$pos}!important;opacity:{$opacity}!important;}";
@@ -110,12 +196,10 @@ function contentPaginaSleutelVoorRequest(?string $scriptNaam = null): ?string
     $scriptNaam = $scriptNaam ?? (string) ($_SERVER['SCRIPT_NAME'] ?? '');
     $bestand = pathinfo(basename($scriptNaam), PATHINFO_FILENAME);
     if ($bestand === '') return null;
-
     foreach (contentPaginaDefinities() as $sleutel => $def) {
         $slug = trim((string) ($def['slug'] ?? $sleutel));
         if ($bestand === $slug || $bestand === $sleutel) return (string) $sleutel;
     }
-
     return null;
 }
 
@@ -123,7 +207,6 @@ function contentPaginaBootstrap(?string $sleutel = null): array
 {
     $sleutel = $sleutel ?? contentPaginaSleutelVoorRequest();
     if ($sleutel === null || !contentPaginaBestaat($sleutel)) return [];
-
     return [
         'sleutel' => $sleutel,
         'definitie' => contentPaginaDefinitie($sleutel),
