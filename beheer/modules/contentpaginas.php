@@ -3,7 +3,7 @@
 // Beheermodule: generieke contentpagina's
 // ============================================================
 // Verzorgt de menu-ingang naar /beheer/content.php en schakelt de oude
-// Ontstaan/Baanreglement-tabs + POST-routes uit.
+// Homepage/Ontstaan/Baanreglement-tabs + POST-routes uit.
 // ============================================================
 
 require_once dirname(__DIR__, 2) . '/content-pagina.php';
@@ -40,6 +40,7 @@ function beheerContentBewaakLegacyPost(): void
 function beheerContentVervangMenuItems(string $html): string
 {
     $koppelingen = [
+        'homepage' => ['pagina' => 'homepage', 'label' => 'Homepage'],
         'ontstaan' => ['pagina' => 'ontstaan', 'label' => 'Ontstaan / geschiedenis'],
         'baanreglement' => ['pagina' => 'baanreglement', 'label' => 'Reglement'],
     ];
