@@ -9,6 +9,11 @@
 // ============================================================
 
 return [
+    'devbuild' => [
+        'label' => 'DEV build-indicator',
+        'status' => 'module',
+        'bootstrap' => __DIR__ . '/modules/dev-build.php',
+    ],
     'contentpaginas' => [
         'label' => 'Contentpagina\'s',
         'status' => 'module',
