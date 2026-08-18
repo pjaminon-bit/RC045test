@@ -19,8 +19,13 @@ return [
         'status' => 'module',
         'bootstrap' => __DIR__ . '/modules/contentpaginas.php',
         'editor' => __DIR__ . '/content.php',
-        'legacy_tabs' => ['ontstaan', 'baanreglement'],
-        'legacy_formulieren' => ['ontstaan', 'baanreglement'],
+        'legacy_tabs' => ['homepage', 'ontstaan', 'baanreglement'],
+        'legacy_formulieren' => ['homepage', 'ontstaan', 'baanreglement'],
+    ],
+    'homepage' => [
+        'label' => 'Homepage',
+        'status' => 'module',
+        'editor' => __DIR__ . '/content.php?pagina=homepage',
     ],
     'agenda' => [
         'label' => 'Agenda',
@@ -41,7 +46,6 @@ return [
     'media' => ['label' => 'Media', 'status' => 'legacy'],
     'fotoboek' => ['label' => 'Fotoboek', 'status' => 'legacy'],
     'aanmelden' => ['label' => 'Aanmelden', 'status' => 'legacy'],
-    'homepage' => ['label' => 'Homepage', 'status' => 'legacy'],
     'gebruikers' => ['label' => 'Gebruikers', 'status' => 'legacy'],
     'backups' => ['label' => 'Back-ups', 'status' => 'legacy'],
     'logboek' => ['label' => 'Logboek', 'status' => 'legacy'],
