@@ -1,0 +1,35 @@
+# RC045 website: alles hieronder is server-only en wordt beheerd via beheer.php.
+# Nooit committen, ook niet per ongeluk: de deploy-workflow pusht de hele repo
+# op elke push naar main, dus elk bestand dat hier per ongeluk in staat
+# overschrijft bij de volgende deploy de live, via beheer.php bewerkte versie.
+
+# Admin-data (JSON), geschreven door beheer.php
+data/
+
+# Automatische back-ups van de databestanden hierboven
+data-backups/
+
+# Fotoboek-foto's en sponsorlogo's, geupload via beheer.php
+images/fotoboek/
+images/sponsors/
+
+# Inloggegevens en logboek van beheer.php
+beheer-config.php
+beheer-users.json
+beheer-log.json
+beheer-login-pogingen.json
+
+# DeepL API-sleutel voor de automatische vertaalknopjes in beheer.php
+vertaal-config.php
+
+# Ledenadministratie, vergaderingen (bestuur + leden/ALV) en de takenlijst:
+# server-only databestanden, staan om dezelfde reden nooit in GitHub. Werden
+# tot nu toe alleen door discipline nooit toegevoegd, nu ook expliciet hier.
+leden-data.php
+vergaderingen-data.php
+taken-data.php
+operationele-taken-data.php
+evenementen-data.php
+
+# macOS
+.DS_Store

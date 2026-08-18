@@ -1,0 +1,375 @@
+/* RC045 gedeelde stijlen: variabelen + componenten die identiek zijn op alle pagina's */
+
+:root {
+      --teal: #3A7A77; --teal-dark: #2D6260; --teal-light: #EAF4F3;
+      --gold: #C89A1A; --gold-light: #FBF4DF; --rust: #8B3319;
+      --dark: #1E2C13; --text: #2A3818; --muted: #6A7560;
+      --cream: #EDE3C0; --border: #DDD8C0; --bg: #FAF6EC;
+      --white: #FFFFFF; --green: #22C55E;
+      --text-body: #292524;
+      --nav-bg: rgba(255,251,247,0.95); --nav-bg-open: rgba(255,251,247,0.98);
+      --radius: 12px; --shadow: 0 4px 20px rgba(0,0,0,0.08); --shadow-hover: 0 8px 32px rgba(0,0,0,0.14);
+    }
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { scroll-behavior: smooth; }
+
+/* Respecteer de systeeminstelling "verminder beweging" (macOS, iOS, Windows, Android).
+   Animaties en transities worden tot vrijwel nul teruggebracht in plaats van uitgezet,
+   zodat elementen wel hun eindtoestand bereiken (reveal, agenda-kaarten, enz.). */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+h1, h2, h3, h4 { font-family: 'Poppins', sans-serif; line-height: 1.2; }
+
+a { color: inherit; text-decoration: none; }
+
+img { max-width: 100%; height: auto; display: block; }
+
+/* ===== TAALKEUZE (uitklapmenu) ===== */
+.lang-switch { position: relative; flex-shrink: 0; }
+
+.lang-trigger {
+      display: flex; align-items: center; gap: 7px;
+      padding: 7px 10px; border-radius: 8px; line-height: 1;
+      border: 1px solid var(--border); background: var(--white);
+      font-family: inherit; font-size: 14px; font-weight: 600;
+      color: var(--text); cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+    }
+
+.lang-trigger:hover { background: var(--teal-light); border-color: var(--teal); }
+
+.lang-trigger-flag { width: 20px; height: 14px; flex-shrink: 0; }
+
+.lang-trigger-flag svg { display: block; width: 100%; height: 100%; border-radius: 2px; }
+
+.lang-trigger-code { letter-spacing: 0.03em; }
+
+/* Pijltje omlaag, draait als het menu open staat */
+.lang-chevron {
+      width: 7px; height: 7px; margin-left: 1px;
+      border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted);
+      transform: rotate(45deg) translate(-2px, -2px);
+      transition: transform 0.2s;
+    }
+
+.lang-switch.open .lang-chevron { transform: rotate(-135deg) translate(-2px, -2px); }
+
+.lang-menu {
+      position: absolute; top: calc(100% + 8px); right: 0; z-index: 200;
+      min-width: 178px; padding: 5px;
+      background: var(--white); border: 1px solid var(--border);
+      border-radius: 10px; box-shadow: var(--shadow-hover);
+      display: none;
+    }
+
+.lang-switch.open .lang-menu { display: block; }
+
+.lang-flag {
+      display: flex; align-items: center; gap: 10px; width: 100%;
+      padding: 9px 10px; border: none; background: none; border-radius: 7px;
+      font-family: inherit; font-size: 15px; font-weight: 500; text-align: left;
+      color: var(--text); cursor: pointer; line-height: 1.2;
+      transition: background 0.15s, color 0.15s;
+    }
+
+.lang-menu-flag { width: 20px; height: 14px; flex-shrink: 0; }
+
+.lang-menu-flag svg { display: block; width: 100%; height: 100%; border-radius: 2px; }
+
+.lang-flag:hover { background: var(--teal-light); color: var(--teal-dark); }
+
+.lang-flag.active { background: var(--teal-light); color: var(--teal-dark); font-weight: 700; }
+
+@media (max-width: 480px) {
+  .lang-trigger { padding: 7px 8px; gap: 5px; }
+  .lang-menu { min-width: 165px; }
+}
+
+.nav-inner { max-width: 1200px; margin: 0 auto; padding: 0 24px; display: flex; align-items: center; justify-content: space-between; height: 72px; }
+
+.nav-logo { display: flex; align-items: center; gap: 12px; }
+
+.nav-logo img { height: 48px; width: auto; }
+
+.nav-logo-text { font-family: 'Poppins', sans-serif; font-weight: 700; font-size: 22px; color: var(--dark); }
+
+.nav-links { display: flex; align-items: center; gap: 4px; list-style: none; }
+
+.nav-links a { padding: 6px 14px; border-radius: 8px; font-size: 16px; font-weight: 500; color: var(--text); transition: background 0.15s, color 0.15s; }
+
+.nav-links a:hover { background: var(--teal-light); color: var(--teal-dark); }
+
+.nav-links .nav-cta a { background: transparent; color: var(--text); font-weight: 500; border: none; }
+
+.nav-links .nav-cta a:hover { background: var(--teal-light); color: var(--teal-dark); }
+
+.nav-links .nav-lid a { background: var(--teal); color: white; font-weight: 600; border-radius: 8px; }
+
+.nav-links .nav-lid a:hover { background: var(--teal-dark); }
+
+.nav-links li.nav-active > a { background: var(--teal-light); color: var(--teal-dark); font-weight: 700; box-shadow: inset 0 -2px 0 var(--teal); }
+
+.nav-links .nav-lid.nav-active a { background: var(--teal); color: white; box-shadow: none; }
+
+.nav-links .nav-lid.nav-active a:hover { background: var(--teal-dark); }
+
+.nav-hamburger { display: none; flex-direction: column; gap: 5px; cursor: pointer; padding: 8px; border: none; background: none; margin-left: 8px; }
+
+.nav-hamburger span { width: 24px; height: 2px; background: var(--text); border-radius: 2px; transition: 0.3s; }
+
+.btn { display: inline-flex; align-items: center; gap: 8px; padding: 14px 28px; border-radius: 10px; font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 15px; cursor: pointer; transition: all 0.2s; border: none; }
+
+.btn-primary { background: var(--teal); color: white; }
+.btn-primary:hover { background: var(--teal-dark); transform: translateY(-1px); box-shadow: 0 8px 24px rgba(58,122,119,0.35); }
+
+.section-label { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; color: var(--gold); margin-bottom: 12px; }
+
+.lightbox { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.92); z-index: 1000; align-items: center; justify-content: center; }
+
+.lightbox.open { display: flex; }
+
+.lightbox img { max-width: 90vw; max-height: 90vh; object-fit: contain; border-radius: var(--radius); box-shadow: 0 20px 60px rgba(0,0,0,0.5); }
+
+.lightbox-close { position: absolute; top: 20px; right: 28px; color: white; font-size: 36px; cursor: pointer; line-height: 1; opacity: 0.7; transition: opacity 0.2s; background: none; border: none; padding: 4px; }
+
+.lightbox-close:hover { opacity: 1; }
+
+.form-group { display: flex; flex-direction: column; gap: 6px; }
+
+.form-group label { font-size: 13px; font-weight: 600; color: var(--text); }
+
+.hp-field { position: absolute; left: -9999px; top: -9999px; width: 1px; height: 1px; overflow: hidden; }
+
+.footer-inner { max-width: 1200px; margin: 0 auto; }
+
+.footer-top { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 48px; padding-bottom: 40px; border-bottom: 1px solid rgba(255,255,255,0.1); margin-bottom: 32px; }
+
+.footer-sponsors { padding-bottom: 32px; margin-bottom: 32px; border-bottom: 1px solid rgba(255,255,255,0.1); }
+
+.footer-sponsors-title { font-family: 'Poppins', sans-serif; font-size: 13px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(255,255,255,0.45); margin-bottom: 18px; }
+
+.footer-sponsors-grid { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; }
+
+.footer-sponsor-card { background: var(--white); border-radius: 8px; padding: 8px 14px; display: flex; align-items: center; transition: transform 0.2s, box-shadow 0.2s; box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
+
+.footer-sponsor-card:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(0,0,0,0.25); }
+
+.footer-sponsor-logo { height: 30px; width: auto; object-fit: contain; display: block; }
+
+.footer-sponsors-cta { margin: 16px 0 0; font-size: 13px; color: rgba(255,255,255,0.5); }
+
+.footer-sponsors-cta a { color: rgba(255,255,255,0.85); text-decoration: underline; }
+
+.footer-sponsors-cta a:hover { color: #fff; }
+
+.footer-brand img { height: 44px; width: auto; margin-bottom: 16px; }
+
+.footer-brand p { font-size: 14px; line-height: 1.7; max-width: 280px; }
+
+.footer-social { display: flex; gap: 12px; margin-top: 20px; align-items: center; }
+
+.footer-social a { opacity: 0.75; transition: opacity 0.2s, transform 0.2s; display: flex; align-items: center; }
+
+.footer-social img { width: 36px; height: 36px; object-fit: contain; }
+
+.footer-social a:hover { opacity: 1; transform: translateY(-2px); }
+
+.footer-col h4 { font-family: 'Poppins', sans-serif; font-size: 14px; font-weight: 600; color: white; margin-bottom: 16px; }
+
+.footer-col ul { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+
+.footer-col ul a { font-size: 14px; transition: color 0.2s; }
+
+.footer-col ul a:hover { color: var(--teal); }
+.footer-credit-link { text-decoration: underline; text-underline-offset: 3px; text-decoration-color: rgba(255,255,255,0.35); transition: text-decoration-color 0.2s; }
+.footer-credit-link:hover { text-decoration-color: currentColor; }
+
+.footer-bottom { display: flex; justify-content: space-between; align-items: center; font-size: 13px; }
+
+.back-to-top { position: fixed; bottom: 24px; right: 16px; z-index: 99; width: 44px; height: 44px; border-radius: 50%; background: var(--teal); color: white; display: flex; align-items: center; justify-content: center; font-size: 20px; cursor: pointer; border: none; box-shadow: 0 4px 16px rgba(58,122,119,0.4); opacity: 0; transform: translateY(16px); transition: opacity 0.3s, transform 0.3s, background 0.2s; pointer-events: none; }
+
+.back-to-top.visible { opacity: 1; transform: translateY(0); pointer-events: auto; }
+
+.back-to-top:hover { background: var(--teal-dark); }
+
+a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+      outline: 3px solid var(--gold);
+      outline-offset: 2px;
+      border-radius: 4px;
+    }
+
+.skip-link {
+      position: absolute; top: -100px; left: 16px; z-index: 1000;
+      background: var(--dark); color: white; padding: 12px 20px;
+      border-radius: 8px; font-weight: 600; font-size: 14px;
+      transition: top 0.2s;
+    }
+
+.skip-link:focus { top: 16px; }
+
+.page-hero-gradient { position: absolute; inset: 0; background: linear-gradient(135deg, rgba(30,44,19,0.88) 0%, rgba(58,122,119,0.25) 100%); }
+
+.page-hero-content { position: relative; z-index: 1; }
+
+.page-hero h1 { font-size: clamp(28px, 4vw, 48px); font-weight: 800; color: white; margin-bottom: 12px; }
+
+
+/* ===================================================================
+   BASIS VAN ELKE PAGINA
+   ===================================================================
+   Deze regels stonden tot nu toe in de <style> van elke pagina apart,
+   zes of zeven keer hetzelfde. Nu een keer hier. Pagina's die iets
+   afwijkends nodig hebben (bedankt.html, de hoogte van de page-hero op
+   aanmelden.html) zetten alleen dat ene verschil nog in hun eigen blok;
+   dat blok komt na dit bestand en wint dus vanzelf.
+   ------------------------------------------------------------------- */
+
+body { font-family: 'Inter', sans-serif; font-size: 16px; line-height: 1.6; color: var(--text-body); background: var(--bg); }
+
+.nav { position: sticky; top: 0; z-index: 100; background: var(--nav-bg); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); }
+
+.footer { background: var(--dark); color: rgba(255,255,255,0.6); padding: 48px 24px 32px; }
+
+.page-hero { background: var(--dark); padding: 80px 24px; text-align: center; position: relative; overflow: hidden; min-height: 280px; display: flex; align-items: center; justify-content: center; }
+
+.page-hero p { font-size: 17px; color: rgba(255,255,255,0.7); max-width: 600px; margin: 0 auto; line-height: 1.7; }
+
+@media (max-width: 700px) {
+  .nav-links { display: none; }
+  .nav-links.open { display: flex; flex-direction: column; position: absolute; top: 72px; left: 0; right: 0; background: var(--nav-bg-open); border-bottom: 1px solid var(--border); padding: 12px 24px 20px; gap: 4px; z-index: 99; }
+  .nav-hamburger { display: flex; }
+  .footer-top { grid-template-columns: 1fr; gap: 32px; }
+  .footer-bottom { flex-direction: column; gap: 8px; text-align: center; }
+}
+
+/* ===================================================================
+   DONKERE MODUS
+   ===================================================================
+   Alles staat in dit bestand, de pagina's zelf hoeven niet aangepast.
+   site-i18n.js zet data-thema="licht" of "donker" op het <html> element
+   en zet ook de knop in de navigatiebalk. De systeeminstelling van het
+   apparaat is de standaard; de knop kan die overschrijven.
+
+   Waarom een los data-thema in plaats van alleen prefers-color-scheme:
+   zo staat elke regel hieronder maar een keer in het bestand. De site
+   draait toch al volledig op JavaScript (taal, openingstijden, agenda,
+   sponsors), dus dat is geen extra beperking.
+
+   Let op: --dark blijft in beide standen donker. Die variabele is de
+   achtergrond van de hero, het reglementblok en de footer, en die horen
+   donker te zijn. Voor tekst die in de lichte stand --dark gebruikt is
+   --heading toegevoegd; die regels staan verderop bij elkaar.
+   ------------------------------------------------------------------- */
+
+:root { color-scheme: light; --heading: var(--dark); }
+
+:root[data-thema="donker"] {
+      color-scheme: dark;
+      --bg: #14180F; --white: #1C2116; --cream: #232A1B; --border: #2E3626;
+      --text: #E3DFD1; --muted: #98A18C; --heading: #F2EEE2;
+      --text-body: #E3DFD1;
+      --nav-bg: rgba(20,24,15,0.95); --nav-bg-open: rgba(20,24,15,0.98);
+      --teal: #458E8A; --teal-dark: #7FC2BE; --teal-light: #1B2C2B;
+      --gold: #D3A72B; --gold-light: #262112; --rust: #C25A3B;
+      --green: #4ADE80;
+      --shadow: 0 4px 20px rgba(0,0,0,0.45); --shadow-hover: 0 8px 32px rgba(0,0,0,0.60);
+    }
+
+/* Tekst die in de lichte stand var(--dark) is. Niet in deze lijst:
+   .announce-bar, .hours-row.is-animo .hours-closed-note en
+   .info-closed-note.is-animo. Die stonden op een massief gouden vlak en
+   hadden daarom vaste donkere tekst; nu gebruiken ze var(--text) en
+   var(--gold-light), die in deze stand zelf al omklappen. */
+:root[data-thema="donker"] .nav-logo-text,
+:root[data-thema="donker"] .section-title,
+:root[data-thema="donker"] .feature-card h4,
+:root[data-thema="donker"] .agenda-card h3,
+:root[data-thema="donker"] .nieuws-card h3,
+:root[data-thema="donker"] .iban-card h4,
+:root[data-thema="donker"] .iban-number,
+:root[data-thema="donker"] .faq-title,
+:root[data-thema="donker"] .modal-card h2,
+:root[data-thema="donker"] .modal-close:hover,
+:root[data-thema="donker"] .artikel-title,
+:root[data-thema="donker"] .sub-artikel-title,
+:root[data-thema="donker"] .story-card strong,
+:root[data-thema="donker"] .bedankt-card h1,
+:root[data-thema="donker"] .stap-text strong,
+:root[data-thema="donker"] .media-title,
+:root[data-thema="donker"] .album-detail-title { color: var(--heading); }
+
+/* Witte tekst op een roestkleurig vlak. --white is in de donkere stand
+   het kaartvlak geworden, dus deze twee moeten expliciet licht blijven. */
+:root[data-thema="donker"] .hours-closed-note,
+:root[data-thema="donker"] .info-closed-note { color: #F7F4EA; }
+
+/* De animo-markering is een open randje zonder vlak, dus daar hoort de
+   gewone tekstkleur bij en niet het wit van de gevulde markeringen. */
+:root[data-thema="donker"] .hours-row.is-animo .hours-closed-note,
+:root[data-thema="donker"] .info-closed-note.is-animo { color: var(--text); }
+
+/* Hover op de primaire knoppen gaat in de donkere stand juist dieper in
+   plaats van lichter, anders wordt witte tekst onleesbaar. */
+:root[data-thema="donker"] .btn-primary:hover,
+:root[data-thema="donker"] .modal-btn-primary:hover,
+:root[data-thema="donker"] .nav-links .nav-lid a:hover,
+:root[data-thema="donker"] .nav-links .nav-lid.nav-active a:hover,
+:root[data-thema="donker"] .back-to-top:hover { background: #2F6A66; }
+
+/* De sponsorkaartjes in de footer blijven licht: de meeste logo's zijn
+   donkere PNG's zonder eigen achtergrond. */
+:root[data-thema="donker"] .footer-sponsor-card { background: #F2EDE0; }
+
+/* .btn-white houdt een witte achtergrond (hij staat op de donkere
+   uitgelichte prijskaart). De tekst daarop is var(--teal-dark), en die
+   wordt in de donkere stand juist licht, dus hier terug naar donker. */
+:root[data-thema="donker"] .btn-white { color: #2D6260; }
+
+/* Statuskleuren en meldingen (per pagina hardgecodeerd). */
+:root[data-thema="donker"] .status-open { color: #4ADE80; }
+:root[data-thema="donker"] .status-closed { color: #F19393; }
+:root[data-thema="donker"] .status-closed::before { background: #F19393; }
+:root[data-thema="donker"] .status-animo { color: #D3A72B; }
+:root[data-thema="donker"] .agenda-card-tag.wedstrijd { background: rgba(194,90,59,0.20); color: #E9A78F; }
+:root[data-thema="donker"] .jeugdlid-badge.jeugd,
+:root[data-thema="donker"] .melding.warning { background: rgba(211,167,43,0.16); color: #E5C25A; }
+:root[data-thema="donker"] .melding.error { background: rgba(220,38,38,0.16); color: #F19393; }
+:root[data-thema="donker"] .field-error { color: #F19393; }
+:root[data-thema="donker"] .input-error { border-color: #E06767 !important; }
+:root[data-thema="donker"] .location-map { background: var(--cream); }
+
+/* Foto's blijven onaangeroerd, op volle sterkte, in beide standen.
+   Alleen de kaart van OpenStreetMap wordt gedempt, want dat is een felwit
+   vlak dat anders midden op een donkere pagina staat te schijnen. */
+:root[data-thema="donker"] .location-map iframe { filter: brightness(0.82) contrast(1.06); }
+
+/* ===== KNOP VOOR DE THEMAKEUZE (gezet door site-i18n.js) ===== */
+.nav-tools { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+.thema-switch {
+      display: flex; align-items: center; justify-content: center;
+      width: 36px; height: 33px; padding: 0; flex-shrink: 0;
+      border-radius: 8px; line-height: 1;
+      border: 1px solid var(--border); background: var(--white);
+      font-size: 15px; color: var(--text); cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+    }
+
+.thema-switch:hover { background: var(--teal-light); border-color: var(--teal); }
+
+@media (max-width: 480px) {
+  .nav-tools { gap: 6px; }
+  .thema-switch { width: 33px; }
+}

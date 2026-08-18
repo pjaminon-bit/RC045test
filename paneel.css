@@ -1,0 +1,660 @@
+:root {
+      --teal: #3A7A77; --teal-dark: #2D6260; --teal-light: #EAF4F3;
+      --gold: #C89A1A; --gold-light: #FBF4DF; --rust: #8B3319;
+      --dark: #1E2C13; --text: #2A3818; --muted: #6A7560;
+      --border: #DDD8C0; --bg: #FAF6EC; --white: #FFFFFF;
+    }
+
+    /* ===== Donker thema =====
+       Zelfde systeem als de publieke site: een data-thema attribuut op
+       <html>, gezet door het scriptje in de head hieronder ("systeem",
+       "licht" of "donker", onthouden per browsertab). Alle kleuren
+       hierboven zijn variabelen, dus de rest van dit stijlblok hoeft
+       niet te weten in welke stand de pagina staat. Badges en
+       meldingen die met vaste hexkleuren werken (niet met de
+       variabelen) krijgen verderop in dit bestand hun eigen donkere
+       versie. */
+    :root { color-scheme: light; }
+    :root[data-thema="donker"] {
+      color-scheme: dark;
+      --teal: #458E8A; --teal-dark: #7FC2BE; --teal-light: #1B2C2B;
+      --gold: #D3A72B; --gold-light: #262112; --rust: #C25A3B;
+      --dark: #F2EEE2; --text: #E3DFD1; --muted: #98A18C;
+      --border: #2E3626; --bg: #14180F; --white: #1C2116;
+    }
+    :root[data-thema="donker"] .kaart,
+    :root[data-thema="donker"] .logboek-filter-paneel,
+    :root[data-thema="donker"] .menu,
+    :root[data-thema="donker"] .multiselect-paneel { box-shadow: 0 4px 20px rgba(0,0,0,0.45); }
+    /* Het sticky menu heeft zelf een vaste crème achtergrond (voor het
+       blur-effect), niet de --white variabele. Alleen op breed scherm: de
+       mobiele versie (hieronder bij max-width:860px) gebruikt al var(--white)
+       en flipt daardoor vanzelf mee. */
+    @media (min-width: 861px) {
+      :root[data-thema="donker"] .menu { background: rgba(20,24,15,0.95); }
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; padding: 0 16px 40px; overflow-wrap: break-word; }
+    /* Vangnet: niets krijgt een eigen breedte mee die groter is dan de plek
+       waar het in staat. Zonder dit duwt één te breed onderdeel (een lange
+       bestandsnaam, een link zonder spaties, een invulveld met een eigen
+       standaardbreedte) de hele pagina horizontaal uit beeld. */
+    img, video, iframe, input, select, textarea, button { max-width: 100%; }
+    .wrap { width: 100%; max-width: 1200px; margin: 0 auto; padding-top: 24px; display: flex; flex-direction: column; gap: 16px; }
+    .kaart { background: var(--white); border: 1.5px solid var(--border); border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); width: 100%; padding: 28px; }
+    @media (max-width: 640px) { .kaart { padding: 20px; } }
+    h1 { font-size: 20px; color: var(--dark); margin-bottom: 4px; }
+    /* Uitklapbare kaarten (details/summary): voor tabbladen met veel velden
+       (Homepage, Ontstaan, Baanreglement, Bedankt-pagina), zodat je alleen
+       de sectie openklapt waar je aan wilt werken in plaats van alles
+       onder elkaar te zien staan. */
+    details.kaart { padding: 0; }
+    details.kaart > summary { list-style: none; cursor: pointer; padding: 20px 28px; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 16px; font-weight: 700; color: var(--dark); }
+    details.kaart > summary::-webkit-details-marker { display: none; }
+    details.kaart > summary:hover { color: var(--teal-dark); }
+    details.kaart > summary::after { content: '▾'; color: var(--muted); font-size: 13px; flex-shrink: 0; transition: transform 0.15s; }
+    details.kaart[open] > summary::after { transform: rotate(180deg); }
+    details.kaart > summary .kaart-uitklap-telling { font-size: 12px; font-weight: 400; color: var(--muted); }
+    details.kaart > .kaart-uitklap-inhoud { padding: 0 28px 28px; }
+    @media (max-width: 640px) { details.kaart > summary { padding: 16px 20px; } details.kaart > .kaart-uitklap-inhoud { padding: 0 20px 20px; } }
+    .sub { font-size: 14px; color: var(--muted); margin-bottom: 20px; }
+    label { display: block; font-size: 14px; font-weight: 700; margin-bottom: 6px; color: var(--dark); }
+    textarea, input[type="password"], input[type="text"], input[type="email"], input[type="date"], input[type="number"], select {
+      width: 100%; font-family: inherit; font-size: 16px; padding: 10px 12px; border: 1.5px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text);
+    }
+    textarea { min-height: 100px; resize: vertical; }
+    /* Bestandsvelden staan niet in de regel hierboven (ze krijgen geen kader),
+       maar moeten wel binnen hun kolom blijven bij een lange bestandsnaam. */
+    input[type="file"] { max-width: 100%; font-size: 14px; }
+    textarea:focus, input:focus, select:focus { outline: none; border-color: var(--teal); }
+    .veld { margin-bottom: 18px; }
+    .hint { font-size: 13px; color: var(--muted); margin-top: 6px; line-height: 1.5; }
+    button { width: 100%; background: var(--teal); color: white; font-size: 16px; font-weight: 700; padding: 12px; border: none; border-radius: 8px; cursor: pointer; }
+    button:hover { background: var(--teal-dark); }
+    .thema-switch { position: fixed; top: 16px; right: 16px; z-index: 50; width: 36px; height: 33px; padding: 0; display: flex; align-items: center; justify-content: center; border-radius: 8px; line-height: 1; border: 1px solid var(--border); background: var(--white); font-size: 15px; color: var(--text); cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.12); transition: background 0.15s, border-color 0.15s; }
+    .thema-switch:hover { background: var(--teal-light); border-color: var(--teal); }
+    @media (max-width: 420px) { .thema-switch { top: 10px; right: 10px; width: 33px; } }
+    .melding { padding: 12px 14px; border-radius: 8px; font-size: 14px; margin-bottom: 18px; }
+    .melding.ok { background: #E8F5E9; border: 1px solid #A5D6A7; color: #1B5E20; }
+    .melding.fout { background: #FDECEA; border: 1px solid #F5B7B1; color: #7B241C; }
+    .laatst { font-size: 13px; color: var(--muted); margin-top: 16px; text-align: center; }
+    .terug { display: block; text-align: center; margin-top: 12px; font-size: 14px; color: var(--teal-dark); }
+    table.reken { width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 4px; }
+    table.reken th { text-align: left; font-size: 13px; color: var(--muted); font-weight: 700; padding: 8px 6px; border-bottom: 2px solid var(--border); }
+    table.reken td { padding: 8px 6px; border-bottom: 1px solid var(--border); }
+    table.reken tr.nu td { background: var(--gold-light); font-weight: 700; }
+    table.reken tr.nu td:first-child { border-radius: 6px 0 0 6px; }
+    table.reken tr.nu td:last-child { border-radius: 0 6px 6px 0; }
+    .reken-noot { font-size: 13px; color: var(--muted); margin-top: 12px; line-height: 1.6; }
+    #logboek-tabel th { position: relative; }
+    .logboek-filter-knop { font-size: 12px; font-weight: 400; color: var(--muted); background: none; border: 1px solid var(--border); border-radius: 5px; padding: 2px 6px; cursor: pointer; margin-left: 4px; }
+    .logboek-filter-knop:hover { background: var(--teal-light); color: var(--teal-dark); }
+    .logboek-filter-knop.actief { background: var(--teal); color: white; border-color: var(--teal); }
+    .logboek-filter-paneel { position: absolute; top: 100%; left: 0; z-index: 20; max-width: calc(100vw - 40px); background: var(--white); border: 1.5px solid var(--border); border-radius: 8px; box-shadow: 0 6px 20px rgba(0,0,0,0.15); padding: 10px; min-width: 200px; max-height: 260px; overflow-y: auto; font-weight: 400; font-size: 13px; }
+    .logboek-filter-paneel-acties { display: flex; gap: 10px; margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+    .logboek-filter-paneel-acties button { width: auto; background: none; color: var(--teal); font-size: 12px; font-weight: 700; padding: 0; }
+    .logboek-filter-paneel-acties button:hover { text-decoration: underline; background: none; }
+    .logboek-filter-optie { display: flex; align-items: center; gap: 6px; padding: 3px 0; font-weight: 400; }
+    .logboek-filter-optie input { width: auto; }
+    .logboek-filter-optie label { font-weight: 400; margin: 0; color: var(--text); cursor: pointer; }
+    .logboek-geen-resultaten td { color: var(--muted); font-style: italic; }
+    .item-blok { border: 1.5px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 14px; transition: opacity 0.15s, background 0.15s; }
+    /* flex-wrap: anders duwt de inhoud van deze regel (bij Agenda: nummer,
+       badge, label "Volgorde" en de keuzelijst) de hele pagina breder dan het
+       scherm, want die onderdelen breken zelf niet af. */
+    .item-blok-nr { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 12px; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-width: 0; }
+    .item-blok.is-afgelopen { background: var(--bg); border-style: dashed; opacity: 0.7; }
+    .afgelopen-badge { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--rust); background: var(--gold-light); padding: 2px 8px; border-radius: 100px; }
+    .rij-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .rij-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+    .rij-titels { display: grid; grid-template-columns: 2fr 2fr 2fr 1fr; gap: 12px; }
+    @media (max-width: 720px) { .rij-3 { grid-template-columns: 1fr 1fr; } .rij-titels { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 480px) { .rij-2, .rij-3, .rij-titels { grid-template-columns: 1fr; } }
+    /* Datumvelden: het handmatige tekstveld (dd-mm-jjjj) blijft de hoofdinvoer,
+       ernaast staat een kalenderknopje. Dat is zelf gewoon een input[type=date],
+       alleen onzichtbaar gemaakt (opacity:0) en over het zichtbare icoontje heen
+       gelegd, zodat een klik overal op het knopje de systeemkalender opent. */
+    .datum-invoer-rij { display: flex; gap: 8px; align-items: stretch; }
+    .datum-invoer-rij input[type="text"] { flex: 1; min-width: 0; }
+    .datum-picker-wrap { position: relative; flex: 0 0 auto; width: 42px; padding: 0; border: 1.5px solid var(--border); border-radius: 8px; background: var(--bg); display: flex; align-items: center; justify-content: center; cursor: pointer; transition: background 0.15s, border-color 0.15s; font: inherit; }
+    .datum-picker-wrap:hover { background: var(--teal-light); border-color: var(--teal); }
+    .datum-picker-icoon { font-size: 16px; pointer-events: none; }
+    /* Het echte input[type=date] wordt niet zelf aangeklikt (dat opent de
+       kalender in Chrome/Edge/Brave wel maar in Firefox lang niet altijd),
+       maar programmatisch geopend via showPicker() vanuit de knop hierboven.
+       Daarom hier onzichtbaar én pointer-events:none, zodat de klik altijd
+       bij de knop terechtkomt. */
+    .datum-picker-wrap input.datum-picker { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; pointer-events: none; border: none; padding: 0; margin: 0; }
+    .item-blok .veld:last-child { margin-bottom: 0; }
+    .taal-groep { padding-top: 12px; margin-top: 12px; border-top: 1px dashed var(--border); }
+    .taal-groep:first-of-type { padding-top: 0; margin-top: 0; border-top: none; }
+    .taal-label { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 8px; }
+    .taal-label .optioneel { font-weight: 400; text-transform: none; letter-spacing: normal; }
+
+    /* ===== Vertalingen inklapbaar: alleen NL zichtbaar, per onderdeel een EN/DE-knopje
+       dat het vertaalblok ernaast openschuift. De knop zet een "toon-en"/"toon-de"
+       klasse op het dichtstbijzijnde onderdeel (data-taal-scope), niet globaal, zodat
+       je secties los van elkaar open kunt zetten. ===== */
+    .taal-rij { display: flex; align-items: flex-start; }
+    .taal-rij > .taal-nl { flex: 1 1 0; min-width: 0; }
+    .taal-rij > .taal-en, .taal-rij > .taal-de {
+      flex: 0 0 0; width: 0; min-width: 0; opacity: 0; overflow: hidden; margin-left: 0;
+      transition: flex-basis 0.25s ease, width 0.25s ease, opacity 0.2s ease 0.05s, margin-left 0.25s ease;
+    }
+    .toon-en .taal-rij > .taal-en,
+    .toon-de .taal-rij > .taal-de {
+      flex: 1 1 0; width: auto; opacity: 1; margin-left: 16px;
+    }
+    .taal-rij .taal-groep { padding-top: 0; margin-top: 0; border-top: none; height: 100%; }
+    /* Smalle schermen: geen kolommen naast elkaar meer, maar gewoon blokken
+       onder elkaar. Let op waarom dit géén flexbox met flex-wrap is: een
+       dichtgeklapt vertaalblok hield hierboven flex-basis 100% met
+       flex-shrink 0. Dat blok past dan samen met het NL-blok (flex-basis 0)
+       nog net op dezelfde regel, waarna er nul vrije ruimte overblijft en het
+       NL-veld naar breedte 0 wordt gedrukt: dat waren de invulvelden van één
+       letter breed. Bovendien bleef het dichtgeklapte blok (alleen opacity 0)
+       verticaal ruimte innemen, vandaar de grote gaten tussen de velden.
+       Met display:block en display:none is er niets meer te verdelen en kan
+       dit niet meer misgaan. De schuifanimatie vervalt op mobiel; het blok
+       klapt gewoon open en dicht. */
+    @media (max-width: 780px) {
+      .taal-rij { display: block; }
+      .taal-rij > .taal-nl { display: block; width: 100%; }
+      .taal-rij > .taal-en, .taal-rij > .taal-de {
+        display: none; width: 100%; opacity: 1; overflow: visible;
+        margin-left: 0; transition: none;
+      }
+      .toon-en .taal-rij > .taal-en,
+      .toon-de .taal-rij > .taal-de {
+        display: block; width: 100%; margin-left: 0; margin-top: 14px;
+      }
+      .taal-rij .taal-groep { height: auto; }
+    }
+    /* Bijschriften per foto staan onder elkaar (niet naast elkaar), dus daar
+       schuift het vertaalveld verticaal open in plaats van horizontaal. */
+    .fotoboek-foto-velden > .taal-en, .fotoboek-foto-velden > .taal-de {
+      flex: 0 0 0; height: 0; min-height: 0; opacity: 0; overflow: hidden; margin: 0;
+      transition: height 0.2s ease, opacity 0.15s ease, margin 0.2s ease;
+    }
+    .toon-en .fotoboek-foto-velden > .taal-en,
+    .toon-de .fotoboek-foto-velden > .taal-de {
+      height: auto; opacity: 1;
+    }
+
+    /* ===== Changelog ===== */
+    .cl-filterbalk { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 14px; }
+    .cl-filterbalk .cl-zoek { flex: 1 1 200px; min-width: 0; margin: 0; }
+    .cl-lijst { display: flex; flex-direction: column; }
+    .cl-regel { display: flex; gap: 12px; padding: 12px 0; border-top: 1px solid var(--border); }
+    .cl-regel:first-child { border-top: none; }
+    .cl-regel[hidden] { display: none; }
+    .cl-zij { flex: 0 0 128px; display: flex; flex-direction: column; gap: 5px; align-items: flex-start; }
+    .cl-datum { font-size: 13px; font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; }
+    .cl-hoofd { flex: 1 1 auto; min-width: 0; }
+    .cl-titel { font-size: 15px; font-weight: 700; color: var(--text); }
+    .cl-tekst { font-size: 14px; color: var(--muted); margin-top: 3px; line-height: 1.5; }
+    .cl-meta { font-size: 12px; color: var(--muted); margin-top: 5px; }
+    .cl-regel details { margin-top: 8px; }
+    .cl-regel details > summary { font-size: 12px; font-weight: 700; color: var(--teal-dark); cursor: pointer; list-style: none; }
+    .cl-regel details > summary::-webkit-details-marker { display: none; }
+    .cl-regel details > summary::before { content: '✎ '; }
+    .cl-regel details[open] > summary::before { content: '✕ '; }
+    .cl-bewerkvak { margin-top: 10px; padding: 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; }
+    .cl-bewerkvak .veld { margin-bottom: 10px; }
+    .cl-knoprij { display: flex; gap: 8px; flex-wrap: wrap; }
+    .cl-knoprij button { width: auto; padding: 8px 16px; font-size: 14px; }
+    .cl-knoprij .cl-verwijder { background: none; color: var(--rust); border: 1.5px solid var(--rust); }
+    .cl-knoprij .cl-verwijder:hover { background: var(--rust); color: white; }
+    .cl-leeg { color: var(--muted); font-size: 14px; padding: 12px 0; }
+    .leden-badge.cl-nieuw { background: #E8F5E9; color: #1B5E20; }
+    .leden-badge.cl-verbeterd { background: var(--teal-light); color: var(--teal-dark); }
+    .leden-badge.cl-opgelost { background: #FDE7D9; color: #8B3319; }
+    .leden-badge.cl-beveiliging { background: #EDE7F6; color: #4527A0; }
+    .leden-badge.cl-onderhoud { background: #ECEFF1; color: #455A64; }
+    .cl-bron { font-size: 11px; color: var(--muted); }
+    @media (max-width: 640px) {
+      .cl-regel { flex-direction: column; gap: 6px; }
+      .cl-zij { flex: 0 0 auto; flex-direction: row; align-items: center; gap: 8px; }
+    }
+
+    .taal-toggle-mini { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 4px; flex-shrink: 0; }
+    .taal-toggle-mini .taal-toggle-btn, .taal-toggle-mini .auto-vertaal-btn {
+      border: 1.5px solid var(--border); background: var(--white); border-radius: 100px; padding: 3px 10px;
+      font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em; cursor: pointer;
+      color: var(--muted); transition: background 0.15s, border-color 0.15s, color 0.15s;
+      white-space: nowrap; display: inline-flex; align-items: center; gap: 3px;
+    }
+    .taal-toggle-mini .taal-toggle-btn[aria-pressed="true"] { background: var(--teal); border-color: var(--teal); color: white; }
+    .taal-toggle-mini .auto-vertaal-btn { background: var(--teal-light); color: var(--teal-dark); border-color: var(--teal); }
+    .taal-toggle-mini .auto-vertaal-btn:disabled { opacity: 0.6; cursor: default; }
+    /* Blijft verborgen tot je EN of DE openklikt: in de standaardstand zie je
+       dus weer gewoon de twee toon-knopjes, niet standaard een derde erbij.
+       Zo blijft "gewoon handmatig typen" de standaardgang, en is vertalen
+       een keuze die je maakt zodra je het taalveld toch al open hebt. */
+    .taal-toggle-mini .auto-vertaal-btn { display: none; }
+    [data-taal-scope].toon-en .taal-toggle-mini .auto-vertaal-btn,
+    [data-taal-scope].toon-de .taal-toggle-mini .auto-vertaal-btn { display: inline-flex; }
+    details.kaart > summary .taal-toggle-mini, .fotoboek-album-kop .taal-toggle-mini { margin-left: auto; }
+    details.kaart > summary .taal-toggle-mini + .taal-toggle-mini { margin-left: 0; }
+    .taal-scope-kop { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+    .item-blok-kop { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 12px; margin-bottom: 12px; }
+    .item-blok-kop .item-blok-nr { margin-bottom: 0; }
+    .kaart-smal { max-width: 440px; margin: 0 auto; }
+    /* Zelfde patroon als .nav-links op de hoofdsite: platte tekst, lichte
+       achtergrond bij hover, en bij het actieve tabblad een lichte
+       achtergrond met een dun streepje eronder in plaats van een dichte
+       gekleurde knop. Compacter dan de hoofdsite-nav omdat hier 13 tabs
+       op dezelfde rij moeten passen. */
+    /* Menu als verticale kolom links, content ernaast. Op smalle schermen
+       (telefoon/tablet in portret) valt hij terug op een horizontale rij
+       bovenaan, anders is er te weinig breedte voor beide kolommen. */
+    .beheer-layout { display: flex; align-items: flex-start; gap: 24px; }
+    .beheer-inhoud { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 16px; }
+    .menu { position: sticky; top: 24px; z-index: 10; display: flex; flex-direction: column; gap: 2px; flex: 0 0 190px; width: 190px; align-self: flex-start; background: rgba(250,246,236,0.95); backdrop-filter: blur(10px); padding: 10px; border: 1px solid var(--border); border-radius: 12px; max-height: calc(100vh - 48px); overflow-y: auto; }
+    .menu-item { width: 100%; text-align: left; flex: 0 0 auto; background: none; border: none; padding: 8px 12px; font-size: 13px; font-weight: 500; color: var(--text); cursor: pointer; border-radius: 8px; transition: background 0.15s, color 0.15s; }
+    .menu-item:hover { background: var(--teal-light); color: var(--teal-dark); }
+    .menu-item.actief { background: var(--teal-light); color: var(--teal-dark); font-weight: 700; box-shadow: inset 2px 0 0 var(--teal); }
+    /* Klikbaar kopje boven elke groep in het menu: klapt de knoppen van die
+       groep in/uit. Standaard dicht (zie JS), puur om de 18 tabs in een
+       paar hapklare blokken te laten lezen in plaats van alles in één lange
+       kolom. Zelfde opmaak op mobiel, daar staat het gewoon in het
+       uitklappaneel. */
+    .menu-groep { display: flex; flex-direction: column; gap: 2px; }
+    .menu-groep-label { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; margin: 10px 0 6px; padding: 5px 12px; font-size: 12px; font-weight: 700; color: var(--teal-dark); text-transform: uppercase; letter-spacing: 0.04em; background: var(--teal-light); border: none; border-radius: 6px; cursor: pointer; font-family: inherit; }
+    /* Overschrijft de algemene "button:hover" regel (donkerteal achtergrond),
+       die hier de tekst onleesbaar maakte omdat de tekstkleur ook donkerteal
+       is. Hier blijft de achtergrond hetzelfde, alleen iets donkerder. */
+    .menu-groep-label:hover { background: var(--teal-light); color: var(--teal-dark); }
+    .menu-groep:first-child .menu-groep-label { margin-top: 0; }
+    .menu-groep-pijl { font-size: 10px; transition: transform 0.15s; }
+    .menu-groep-label[aria-expanded="true"] .menu-groep-pijl { transform: rotate(90deg); }
+    .menu-groep-items { display: flex; flex-direction: column; gap: 2px; }
+    .menu-groep-items[hidden] { display: none; }
+    /* Zelfde idee als de menu-groepslabels, maar dan binnen een tab: bindt
+       een aantal uitklapkaarten samen onder een hoofdstuk, puur visueel. */
+    .sectie-kop { margin: 22px 0 8px; padding: 7px 14px; font-size: 13px; font-weight: 700; color: var(--teal-dark); text-transform: uppercase; letter-spacing: 0.04em; background: var(--teal-light); border-radius: 6px; }
+    .sectie-kop:first-child { margin-top: 0; }
+    .beheer-menu-knop { display: none; }
+    @media (max-width: 860px) {
+      /* Op smalle schermen geen tweede kolom, en het menu wordt een
+         hamburger: dichtgeklapt standaard, open je hem dan valt hij als
+         paneel open onder de knop, net als het mobiele menu op de
+         hoofdsite. */
+      /* align-items: stretch hoort hier verplicht bij de omschakeling naar
+         een kolom. Met de flex-start van hierboven krijgt de contentkolom in
+         een kolom-flexbox namelijk shrink-to-fit als breedte, en dat betekent
+         bij te brede inhoud: net zo breed als die inhoud. Eén onderdeel dat
+         niet afbreekt maakte zo de hele kaart breder dan het scherm, terwijl
+         de balk erboven wel netjes bleef staan. */
+      .beheer-layout { flex-direction: column; align-items: stretch; }
+      .beheer-menu-knop { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; background: var(--white); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; font-size: 14px; font-weight: 700; color: var(--text); cursor: pointer; }
+      .beheer-menu-knop .streepjes { font-size: 18px; line-height: 1; }
+      .menu { position: static; display: none; flex-direction: column; gap: 2px; width: 100%; flex: 0 0 auto; max-height: 60vh; overflow-y: auto; background: var(--white); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 10px 24px rgba(0,0,0,0.12); padding: 8px; margin: 4px 0; }
+      .menu.open { display: flex; }
+      .menu-item { width: 100%; text-align: left; }
+      .menu-item.actief { box-shadow: inset 2px 0 0 var(--teal); }
+    }
+    .tab-paneel { display: none; flex-direction: column; gap: 16px; }
+
+    /* ===== Ledenadministratie ===== */
+    .leden-kop { font-family: 'Poppins', sans-serif; font-size: 15px; font-weight: 700; color: var(--dark); margin: 24px 0 6px; }
+    .leden-telling { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+    .leden-badge { display: inline-block; width: auto; padding: 3px 10px; border-radius: 100px; font-size: 12px; font-weight: 700; white-space: nowrap; background: #EEE; color: #444; }
+    .leden-badge-klikbaar { width: auto; border: none; font-family: inherit; cursor: pointer; box-shadow: 0 0 0 2px transparent; transition: box-shadow 0.1s; }
+    .leden-badge-klikbaar:hover { box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.12); }
+    .leden-badge-klikbaar[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--teal-dark); }
+    /* .leden-badge herhaald in de selector: hogere specificiteit dan de
+       algemene "button" en "button:hover" regel hierboven, anders wint die
+       op de achtergrondkleur zodra een badge als knop wordt gehover. */
+    .leden-badge.lb-nieuw, .leden-badge.lb-nieuw:hover { background: #EDE7F6; color: #4527A0; }
+    .leden-badge.lb-verificatie, .leden-badge.lb-verificatie:hover { background: #FEF3C7; color: #92400E; }
+    .leden-badge.lb-wacht_op_betaling, .leden-badge.lb-wacht_op_betaling:hover { background: #FDE7D9; color: #8B3319; }
+    .leden-badge.lb-actief, .leden-badge.lb-actief:hover { background: #E8F5E9; color: #1B5E20; }
+    .leden-badge.lb-opgezegd, .leden-badge.lb-opgezegd:hover { background: #ECEFF1; color: #455A64; }
+    .leden-badge.lb-geweigerd, .leden-badge.lb-geweigerd:hover { background: #FDECEA; color: #7B241C; }
+    .cb-open { background: #FEF3C7; color: #92400E; }
+    .cb-betaald { background: #E8F5E9; color: #1B5E20; }
+    .cb-kwijtgescholden { background: #E3F2FD; color: #0D47A1; }
+    .cb-vervallen { background: #ECEFF1; color: #455A64; }
+    .leden-filters { display: flex; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+    .leden-filters input[type="search"] { flex: 1 1 260px; }
+    .leden-filters select { flex: 0 1 200px; }
+    .leden-select-rij { font-size: 13px; color: var(--muted); margin-bottom: 8px; }
+    .leden-select-rij label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+    .leden-select-rij input { width: auto; }
+    /* Verborgen tot er iets is aangevinkt (JS zet display:flex), staat er
+       in rust niet standaard bij zodat de meeste bezoeken van dit tabblad
+       niet drukker worden dan nodig. */
+    .leden-bulk-balk { display: none; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 14px; margin-bottom: 14px; background: var(--teal-light); border: 1px solid var(--teal); border-radius: 10px; }
+    .leden-bulk-balk span { font-size: 13px; font-weight: 700; color: var(--teal-dark); }
+    .leden-bulk-balk select { width: auto; flex: 0 1 200px; }
+    .leden-bulk-balk button { width: auto; }
+    .leden-tabel th.lc-select-th, .leden-tabel td.lc-select { width: 32px; padding-right: 0; }
+    .leden-tabel td.lc-select input { width: auto; margin: 0; vertical-align: middle; }
+    .leden-tabel-wrap { overflow-x: auto; }
+    .leden-tabel { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .leden-tabel th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); padding: 8px 10px; border-bottom: 1.5px solid var(--border); white-space: nowrap; }
+    .leden-tabel th[data-kolom] { cursor: pointer; user-select: none; }
+    .leden-tabel th[data-kolom]:hover, .leden-tabel th[data-kolom]:focus-visible { color: var(--teal-dark); }
+    .leden-tabel th[data-kolom]::after { content: '\2195'; display: inline-block; margin-left: 5px; opacity: 0.35; font-size: 10px; }
+    .leden-tabel th[data-kolom].leden-sorteer-op::after { content: '\2191'; opacity: 1; }
+    .leden-tabel th[data-kolom].leden-sorteer-op.leden-sorteer-aflopend::after { content: '\2193'; }
+    .leden-tabel td { padding: 9px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    .leden-tabel tbody tr:hover { background: var(--teal-light); }
+    .leden-tabel tbody tr[data-href] { cursor: pointer; }
+    .leden-tabel .knop-klein { color: var(--teal-dark); display: inline-block; text-decoration: none; }
+    .leden-tabel .knop-klein:hover { background: var(--teal-light); border-color: var(--teal); }
+    .leden-contact { font-size: 12px; color: var(--muted); word-break: break-word; }
+    .leden-contact a { color: var(--teal-dark); }
+    .leden-leeg { color: var(--muted); font-style: italic; }
+    .leden-bedrag { color: var(--muted); margin-left: 4px; }
+    .leden-bron { display: block; font-size: 11px; color: var(--muted); }
+    .leden-bron.leden-let-op { color: var(--rust); font-weight: 600; }
+    /* Rol onder de naam in het overzicht. Bewust platte tekst en geen
+       badge: bij een lid met een functie én twee commissies staan er
+       anders drie gekleurde blokjes achter elke naam. */
+    .leden-rol { display: block; font-size: 11px; color: var(--teal-dark); font-weight: 600; }
+    /* Commissievinkjes onder elkaar in plaats van op een rij: de namen
+       verschillen te veel in lengte om netjes naast elkaar uit te lijnen. */
+    .leden-vinkgroep { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border: 1.5px solid var(--border); border-radius: 8px; }
+    .leden-commissie-regel { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px 16px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+    .leden-commissie-regel:first-of-type { padding-top: 0; }
+    .leden-commissie-regel .veld { flex: 1 1 min(260px, 100%); margin-bottom: 0; }
+    .leden-commissie-regel .leden-vink-weg { flex: 0 0 auto; }
+    .leden-commissie-aantal { flex: 0 0 auto; font-size: 13px; color: var(--muted); padding-bottom: 9px; }
+    /* Bestuursvergadering: presentielijst en agendapunten. */
+    .leden-badge.vb-gepland, .leden-badge.vb-gepland:hover { background: var(--teal-light); color: var(--teal-dark); }
+    .leden-badge.vb-afgerond, .leden-badge.vb-afgerond:hover { background: #E8F5E9; color: #1B5E20; }
+    .leden-badge.vb-geannuleerd, .leden-badge.vb-geannuleerd:hover { background: #ECEFF1; color: #455A64; }
+    .leden-badge.tk-open, .leden-badge.tk-open:hover { background: #FEF3C7; color: #92400E; }
+    .leden-badge.tk-in_behandeling, .leden-badge.tk-in_behandeling:hover { background: var(--teal-light); color: var(--teal-dark); }
+    .leden-badge.tk-afgerond, .leden-badge.tk-afgerond:hover { background: #E8F5E9; color: #1B5E20; }
+    .leden-badge.ot-te_doen, .leden-badge.ot-te_doen:hover { background: #FEF3C7; color: #92400E; }
+    .leden-badge.ot-gepland, .leden-badge.ot-gepland:hover { background: var(--teal-light); color: var(--teal-dark); }
+    .leden-badge.ot-gepauzeerd, .leden-badge.ot-gepauzeerd:hover { background: #ECEFF1; color: #455A64; }
+    .leden-badge.ev-aankomend, .leden-badge.ev-aankomend:hover { background: var(--teal-light); color: var(--teal-dark); }
+    .leden-badge.ev-geweest, .leden-badge.ev-geweest:hover { background: #ECEFF1; color: #455A64; }
+    .leden-badge.ev-vol, .leden-badge.ev-vol:hover { background: #FEF3C7; color: #92400E; }
+    .verg-aanwezig-regel { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+    .verg-aanwezig-naam { flex: 1 1 min(200px, 100%); font-size: 14px; }
+    .verg-aanwezig-naam .leden-rol { display: inline; margin-left: 8px; }
+    .verg-aanwezig-keuze { display: flex; flex-wrap: wrap; gap: 6px 16px; }
+    .verg-aanwezig-keuze .leden-vink { font-weight: 500; font-size: 13px; }
+    .verg-agendapunt { border: 1.5px solid var(--border); border-radius: 10px; padding: 16px; margin-bottom: 12px; }
+    .verg-agendapunt-kop { font-size: 13px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 10px; }
+    .leden-vink { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 500; }
+    .leden-vink input { width: auto; margin: 0; }
+    .leden-vink-weg { grid-column: 1 / -1; font-size: 13px; color: var(--rust); }
+    .leden-contributie { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; padding: 14px; margin-bottom: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); }
+    .leden-contributie .veld { margin-bottom: 0; }
+    .leden-contributie-jaar-kop { grid-column: 1 / -1; font-size: 12px; font-weight: 700; color: var(--teal-dark); text-transform: uppercase; letter-spacing: 0.04em; }
+    .leden-import-knoppen { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    .leden-import-knoppen form { margin: 0; }
+    .leden-import-knoppen button { width: auto; }
+    /* Sorteren via een keuzelijst in plaats van via de kolomkoppen. Alleen
+       zichtbaar zodra de tabel op smalle schermen als kaarten wordt getoond,
+       want dan is er geen kolomkop meer om op te klikken. */
+    .leden-sorteer-mobiel { display: none; gap: 8px; }
+    .leden-sorteer-mobiel select { flex: 1 1 auto; min-width: 0; }
+    .leden-sorteer-mobiel button { width: auto; flex: 0 0 46px; background: var(--bg); border: 1.5px solid var(--border); color: var(--text); font-size: 15px; padding: 10px 0; }
+    .leden-sorteer-mobiel button:hover { background: var(--teal-light); border-color: var(--teal); color: var(--teal-dark); }
+    .leden-sorteer-mobiel button:disabled { opacity: 0.4; cursor: default; }
+    .leden-sorteer-mobiel button:disabled:hover { background: var(--bg); border-color: var(--border); color: var(--text); }
+    @media (max-width: 760px) {
+      /* Zes kolommen passen niet op een telefoon. In plaats van horizontaal
+         schuiven wordt elke rij een kaartje: naam als kop, daaronder de
+         overige velden met hun kolomnaam ervoor. De tabel blijft in de HTML
+         een tabel, zodat zoeken, filteren en sorteren onveranderd werken. */
+      .leden-tabel-wrap { overflow-x: visible; }
+      .leden-tabel, .leden-tabel tbody, .leden-tabel tr, .leden-tabel td { display: block; width: 100%; }
+      .leden-tabel thead { display: none; }
+      /* Flexkolom in plaats van gewoon block, zodat de naam met order:-1
+         bovenaan het kaartje komt te staan terwijl in de HTML de kolommen
+         in dezelfde volgorde blijven staan als de kolomkoppen. */
+      .leden-tabel tbody tr { display: flex; flex-direction: column; border: 1.5px solid var(--border); border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; background: var(--bg); }
+      /* Zonder deze regel wint de display:block hierboven van het
+         hidden-attribuut waarmee het zoekfilter rijen wegzet. */
+      .leden-tabel tbody tr[hidden] { display: none; }
+      .leden-tabel tbody tr:hover { background: var(--bg); }
+      .leden-tabel td { padding: 4px 0; border-bottom: none; font-size: 14px; display: flex; gap: 10px; align-items: flex-start; }
+      .leden-tabel td::before { content: attr(data-label); flex: 0 0 84px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); padding-top: 3px; }
+      .leden-tabel td > .lc { flex: 1 1 auto; min-width: 0; }
+      .leden-tabel td.lc-kop { order: -1; display: flex; align-items: center; gap: 10px; font-size: 15px; padding: 0 0 8px; margin-bottom: 6px; border-bottom: 1px solid var(--border); }
+      .leden-tabel td.lc-kop::before { display: none; }
+      .leden-tabel td.lc-select { order: -2; padding: 0 0 6px; }
+      .leden-tabel td.lc-select::before { display: none; }
+      .leden-tabel td.lc-select input { width: auto; margin: 0; }
+      /* Pijltje als hint dat je op het kaartje kunt tikken om te bewerken.
+         Alleen in de ledenlijst; de rijen in het importoverzicht zijn niet
+         aanklikbaar. */
+      #leden-tabel td.lc-kop::after { content: '\203A'; margin-left: auto; color: var(--muted); font-size: 20px; line-height: 1; }
+      .leden-tabel td.lc-actie { display: none; }
+      .leden-tabel .leden-contact { font-size: 14px; }
+      .leden-filters { flex-direction: column; align-items: stretch; }
+      .leden-filters input[type="search"], .leden-filters select { flex: 1 1 auto; width: 100%; min-width: 0; }
+      .leden-sorteer-mobiel { display: flex; }
+      .leden-badge { font-size: 11px; padding: 3px 8px; }
+      .leden-import-knoppen { flex-direction: column; align-items: stretch; }
+      .leden-import-knoppen form, .leden-import-knoppen button { width: 100%; }
+      /* Twee kolommen in plaats van drie: jaar en status naast elkaar,
+         bedrag en inschrijfgeld naast elkaar. Zes velden onder elkaar per
+         contributiejaar wordt anders een erg lange lap op een telefoon. */
+      .leden-contributie { grid-template-columns: 1fr 1fr; gap: 10px; padding: 12px; }
+      .leden-contributie .veld-breed { grid-column: 1 / -1; }
+    }
+    @media (max-width: 380px) {
+      .leden-contributie { grid-template-columns: 1fr; }
+      .leden-tabel td { display: block; }
+      .leden-tabel td::before { display: block; margin-bottom: 1px; padding-top: 0; }
+    }
+
+    /* min(...) erin: zonder dat blijft een kolom 340px breed ook als het
+       scherm smaller is, en schuift de hele pagina horizontaal weg. */
+    .item-lijst { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr)); gap: 16px; align-items: start; }
+    /* min-width: 0 hoort bij het min(...) hierboven: een rasteritem is
+       standaard minstens zo breed als zijn breedste onderdeel, en duwt
+       daarmee alsnog de pagina uit beeld. */
+    .item-lijst .item-blok { margin-bottom: 0; min-width: 0; }
+    .fotoboek-foto-lijst { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr)); gap: 12px; }
+    .fotoboek-foto-lijst .fotoboek-foto-blok { margin-bottom: 0; min-width: 0; }
+    #tab-mededeling { display: flex; }
+    .ingelogd-balk { display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; align-items: center; font-size: 13px; color: var(--muted); }
+    .ingelogd-balk a { color: var(--teal-dark); font-weight: 600; text-decoration: none; }
+    .ingelogd-balk a:hover { text-decoration: underline; }
+    .link-knop { width: auto; background: none; border: none; padding: 0; margin: 0; font: inherit; font-weight: 600; color: var(--teal-dark); text-decoration: none; cursor: pointer; }
+    .link-knop:hover { text-decoration: underline; background: none; }
+    .gebruiker-rij { display: flex; flex-direction: column; gap: 10px; padding: 14px 0; border-bottom: 1px solid var(--border); }
+    .gebruiker-rij:last-child { border-bottom: none; }
+    .gebruiker-rij form { margin: 0; }
+    .gebruiker-rij-boven { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; }
+    .gebruiker-sinds { display: block; font-size: 12px; color: var(--muted); font-weight: 400; margin-top: 2px; }
+    .gebruiker-tabs-form { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; background: var(--bg); border-radius: 8px; padding: 10px; }
+    .gebruiker-tabs-form .veld { margin: 0; }
+    .gebruiker-tabs-form .multiselect { width: 220px; }
+    @media (max-width: 480px) { .gebruiker-tabs-form { align-items: stretch; } .gebruiker-tabs-form .multiselect { width: 100%; } }
+    .backup-herstel-form { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; margin-bottom: 4px; }
+    .backup-herstel-form .veld { margin: 0; flex: 1 1 220px; }
+    .backup-herstel-form button { width: auto; }
+    @media (max-width: 480px) { .backup-herstel-form { align-items: stretch; } .backup-herstel-form .veld { flex-basis: 100%; } }
+
+    /* ===== Multiselect (dropdown met zoekvak en vinkjes) =====
+       Gebruikt bij "Toegang tot" per gebruiker. De echte keuzes zijn gewone
+       checkboxes die meegaan met het formulier; dit is alleen de schil
+       eromheen (knop, paneel, zoekvak, alles/niets). Kan overal opnieuw
+       gebruikt worden door dezelfde structuur neer te zetten, de JS werkt
+       automatisch voor elke ".multiselect" op de pagina. */
+    .multiselect { position: relative; width: 100%; }
+    .multiselect-trigger { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; font-family: inherit; font-size: 14px; padding: 10px 12px; border: 1.5px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); cursor: pointer; text-align: left; }
+    .multiselect-trigger:hover { border-color: var(--teal); }
+    .multiselect-trigger[aria-expanded="true"] { border-color: var(--teal); }
+    .multiselect-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .multiselect-pijl { font-size: 11px; color: var(--muted); flex-shrink: 0; }
+    .multiselect-paneel { position: absolute; top: calc(100% + 4px); left: 0; z-index: 25; width: 100%; min-width: 230px; max-width: calc(100vw - 40px); background: var(--white); border: 1.5px solid var(--border); border-radius: 8px; box-shadow: 0 10px 28px rgba(0,0,0,0.15); display: flex; flex-direction: column; max-height: 300px; }
+    .multiselect-paneel[hidden] { display: none; }
+    .multiselect-zoek { border: none; border-bottom: 1px solid var(--border); border-radius: 8px 8px 0 0; font-size: 13px; padding: 10px 12px; background: var(--white); width: 100%; }
+    .multiselect-zoek:focus { outline: none; border-bottom-color: var(--teal); }
+    .multiselect-opties { overflow-y: auto; padding: 6px; flex: 1 1 auto; }
+    .multiselect-optie { display: flex; align-items: center; gap: 8px; padding: 6px; border-radius: 6px; font-size: 13px; font-weight: 400; color: var(--text); cursor: pointer; }
+    .multiselect-optie:hover { background: var(--teal-light); }
+    .multiselect-optie input { width: auto; accent-color: var(--teal); flex-shrink: 0; }
+    .multiselect-optie.verborgen { display: none; }
+    .multiselect-leeg { padding: 10px 6px; font-size: 13px; color: var(--muted); font-style: italic; }
+    .multiselect-acties { display: flex; gap: 6px; padding: 8px; border-top: 1px solid var(--border); }
+    .multiselect-acties button { width: auto; background: none; color: var(--teal); font-size: 12px; font-weight: 700; padding: 5px 10px; border-radius: 6px; }
+    .multiselect-acties button:hover { background: var(--teal-light); }
+    .knop-klein { width: auto; background: none; border: 1px solid var(--border); color: var(--rust); font-size: 13px; font-weight: 600; padding: 6px 12px; white-space: nowrap; }
+    .knop-klein:hover { background: #FDECEA; border-color: #F5B7B1; }
+    /* .sub binnen kaart-header staat zelf op margin-bottom 0 (geen extra
+       ruimte tussen titel+tekst en de knop ernaast in dezelfde rij), maar
+       zonder eigen margin-bottom hier plakte alles wat na de header komt
+       (melding, formulier) daardoor direct tegen de tekst aan. */
+    .kaart-header { display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 16px; margin-bottom: 20px; }
+    .kaart-header > div { min-width: 0; }
+    .kaart-header h1 { margin-bottom: 4px; }
+    .kaart-header .sub { margin-bottom: 0; }
+    .knop-toevoegen { width: auto; background: var(--gold); color: var(--dark); font-size: 14px; font-weight: 700; padding: 11px 20px; white-space: nowrap; flex-shrink: 0; box-shadow: 0 2px 8px rgba(200,154,26,0.35); }
+    .knop-toevoegen:hover { background: #B08A17; }
+    @media (max-width: 600px) {
+      .kaart-header { flex-direction: column; align-items: stretch; }
+      .knop-toevoegen { width: 100%; }
+    }
+    .fotoboek-foto-blok { border: 1px dashed var(--border); border-radius: 8px; padding: 12px; margin-bottom: 10px; display: flex; gap: 12px; }
+    .fotoboek-foto-volgorde { display: flex; flex-direction: column; gap: 2px; flex-shrink: 0; justify-content: center; }
+    .fotoboek-foto-volgorde button { width: auto; background: none; color: var(--muted); border: none; padding: 2px 4px; font-size: 12px; line-height: 1; border-radius: 4px; }
+    .fotoboek-foto-volgorde button:hover:not(:disabled) { background: var(--teal-light); color: var(--teal-dark); }
+    .fotoboek-foto-volgorde button:disabled { opacity: 0.25; cursor: default; }
+    .fotoboek-foto-blok img { width: 76px; height: 76px; object-fit: cover; border-radius: 6px; flex-shrink: 0; background: var(--bg); }
+    .sponsor-logo-preview { display: block; height: 32px; max-width: 160px; object-fit: contain; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; margin-bottom: 12px; }
+    .fotoboek-video-thumb { width: 76px; height: 76px; border-radius: 6px; flex-shrink: 0; background-color: var(--bg); background-size: cover; background-position: center; border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: 22px; color: var(--muted); }
+    .fotoboek-foto-velden { flex: 1; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+    .fotoboek-foto-velden input[type="text"] { font-size: 14px; padding: 8px 10px; }
+    .fotoboek-foto-rij { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 13px; flex-wrap: wrap; }
+    .fotoboek-check { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 400; color: var(--text); }
+    .fotoboek-check input { width: auto; }
+    .fotoboek-cover-badge { font-size: 11px; font-weight: 700; color: var(--teal-dark); background: var(--teal-light); padding: 2px 8px; border-radius: 100px; }
+    .fotoboek-upload-blok { border-top: 1px dashed var(--border); padding-top: 14px; margin-top: 4px; }
+    .fotoboek-verberg-blok { border-top: 1px solid var(--border); padding-top: 14px; margin-top: 14px; }
+    .fotoboek-verwijder-blok { border-top: 1px solid var(--border); padding-top: 14px; margin-top: 14px; }
+    .fotoboek-album-kop { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; cursor: pointer; list-style-position: outside; }
+    .fotoboek-album-kop::-webkit-details-marker { margin-right: 8px; }
+    .fotoboek-album-titel { font-size: 20px; font-weight: 700; color: var(--dark); }
+    .fotoboek-album-volgnummer { font-size: 15px; font-weight: 400; color: var(--muted); margin-right: 8px; }
+    .fotoboek-album-inhoud { margin-top: 16px; }
+    details.fotoboek-album-details:not([open]) .fotoboek-album-kop { margin-bottom: 0; }
+    .fotoboek-voortgang { margin-top: 10px; }
+    .fotoboek-voortgang-balk { width: 100%; height: 8px; border-radius: 100px; background: var(--teal-light); overflow: hidden; }
+    .fotoboek-voortgang-vulling { height: 100%; width: 0%; background: var(--teal); border-radius: 100px; transition: width 0.2s ease; }
+    .fotoboek-voortgang-tekst { font-size: 13px; color: var(--muted); margin-top: 6px; }
+    /* ===== Smalle schermen: de rest van de beheerpagina =====
+       De losse onderdelen hebben hierboven hun eigen breekpunten. Wat hier
+       staat geldt voor de hele pagina: het logboek (de laatste brede tabel),
+       raakvlakken die met een vinger te bedienen moeten zijn, en wat extra
+       schermbreedte terugwinnen op een telefoon. */
+    @media (max-width: 760px) {
+      /* Logboek net als de ledenlijst als kaartjes, met de drie
+         filterknoppen als balk erboven in plaats van als kolomkoppen. */
+      #logboek-tabel, #logboek-tabel tbody, #logboek-tabel tr, #logboek-tabel th, #logboek-tabel td { display: block; width: 100%; }
+      #logboek-tabel tr:first-child { position: relative; display: flex; flex-wrap: wrap; gap: 8px; padding-bottom: 10px; margin-bottom: 12px; border-bottom: 2px solid var(--border); }
+      #logboek-tabel tr:first-child th { width: auto; padding: 0; border-bottom: none; position: static; }
+      /* Het filterpaneel hangt daardoor onder de hele balk in plaats van
+         onder een losse kolomkop; bij de rechterkolom stak hij anders
+         buiten beeld. */
+      #logboek-tabel .logboek-filter-paneel { left: 0; right: 0; width: auto; min-width: 0; max-width: none; }
+      #logboek-tabel tr:not(:first-child) { border: 1.5px solid var(--border); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; background: var(--bg); }
+      #logboek-tabel td { display: flex; gap: 10px; align-items: flex-start; padding: 3px 0; border-bottom: none; }
+      #logboek-tabel td::before { content: attr(data-label); flex: 0 0 58px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); padding-top: 2px; }
+      .logboek-filter-knop { padding: 5px 10px; font-size: 13px; }
+      .knop-klein { padding: 9px 14px; font-size: 14px; }
+      table.reken th, table.reken td { padding: 8px 4px; }
+    }
+    @media (max-width: 420px) {
+      body { padding: 0 12px 32px; }
+      .kaart { padding: 16px; }
+      details.kaart > summary { padding: 14px 16px; }
+      details.kaart > .kaart-uitklap-inhoud { padding: 0 16px 16px; }
+      h1 { font-size: 18px; }
+      table.reken { font-size: 13px; }
+      .fotoboek-foto-blok { padding: 10px; gap: 8px; }
+      .fotoboek-foto-blok img, .fotoboek-video-thumb { width: 60px; height: 60px; }
+    }
+
+    /* ===== Donkere badges en meldingen =====
+       Deze klassen gebruiken vaste hexkleuren in plaats van de
+       variabelen hierboven (pastelvlak + verzadigde tekst), dus die
+       krijgen hier hun eigen donkere versie: een transparante tint van
+       dezelfde kleur met een lichtere tekstkleur erop. Gegroepeerd per
+       kleur in plaats van per klasse, want veel badges delen dezelfde
+       kleur. .leden-badge (de standaardgrijze) staat in de grijze groep. */
+    :root[data-thema="donker"] .sponsor-logo-preview { background: #F2EDE0; }
+    :root[data-thema="donker"] .melding.ok,
+    :root[data-thema="donker"] .leden-badge.cl-nieuw,
+    :root[data-thema="donker"] .leden-badge.lb-actief,
+    :root[data-thema="donker"] .leden-badge.lb-actief:hover,
+    :root[data-thema="donker"] .cb-betaald,
+    :root[data-thema="donker"] .leden-badge.vb-afgerond,
+    :root[data-thema="donker"] .leden-badge.vb-afgerond:hover,
+    :root[data-thema="donker"] .leden-badge.tk-afgerond,
+    :root[data-thema="donker"] .leden-badge.tk-afgerond:hover { background: rgba(74,222,128,0.16); color: #6FCF97; }
+    :root[data-thema="donker"] .melding.ok { border-color: rgba(74,222,128,0.35); }
+
+    :root[data-thema="donker"] .leden-badge.lb-verificatie,
+    :root[data-thema="donker"] .leden-badge.lb-verificatie:hover,
+    :root[data-thema="donker"] .cb-open,
+    :root[data-thema="donker"] .leden-badge.tk-open,
+    :root[data-thema="donker"] .leden-badge.tk-open:hover,
+    :root[data-thema="donker"] .leden-badge.ot-te_doen,
+    :root[data-thema="donker"] .leden-badge.ot-te_doen:hover,
+    :root[data-thema="donker"] .leden-badge.ev-vol,
+    :root[data-thema="donker"] .leden-badge.ev-vol:hover { background: rgba(211,167,43,0.18); color: #E5C25A; }
+
+    :root[data-thema="donker"] .leden-badge,
+    :root[data-thema="donker"] .leden-badge.cl-onderhoud,
+    :root[data-thema="donker"] .leden-badge.lb-opgezegd,
+    :root[data-thema="donker"] .leden-badge.lb-opgezegd:hover,
+    :root[data-thema="donker"] .cb-vervallen,
+    :root[data-thema="donker"] .leden-badge.vb-geannuleerd,
+    :root[data-thema="donker"] .leden-badge.vb-geannuleerd:hover,
+    :root[data-thema="donker"] .leden-badge.ot-gepauzeerd,
+    :root[data-thema="donker"] .leden-badge.ot-gepauzeerd:hover,
+    :root[data-thema="donker"] .leden-badge.ev-geweest,
+    :root[data-thema="donker"] .leden-badge.ev-geweest:hover { background: rgba(152,161,140,0.20); color: #C7CDBC; }
+
+    :root[data-thema="donker"] .leden-badge.cl-opgelost,
+    :root[data-thema="donker"] .leden-badge.lb-wacht_op_betaling,
+    :root[data-thema="donker"] .leden-badge.lb-wacht_op_betaling:hover { background: rgba(194,90,59,0.22); color: #E9A78F; }
+
+    :root[data-thema="donker"] .leden-badge.cl-beveiliging,
+    :root[data-thema="donker"] .leden-badge.lb-nieuw,
+    :root[data-thema="donker"] .leden-badge.lb-nieuw:hover { background: rgba(149,117,205,0.22); color: #C9B6F0; }
+
+    :root[data-thema="donker"] .melding.fout,
+    :root[data-thema="donker"] .leden-badge.lb-geweigerd,
+    :root[data-thema="donker"] .leden-badge.lb-geweigerd:hover { background: rgba(220,38,38,0.16); color: #F19393; }
+    :root[data-thema="donker"] .melding.fout { border-color: rgba(220,38,38,0.35); }
+    :root[data-thema="donker"] .knop-klein:hover { background: rgba(220,38,38,0.16); border-color: rgba(220,38,38,0.4); }
+
+    :root[data-thema="donker"] .cb-kwijtgescholden { background: rgba(59,130,246,0.20); color: #93C5FD; }
+
+/* ===== Ledenpagina: het tabblad "Mijn RC045" =====
+   Alleen voor leden.php. Alles onder #tab-mijn zodat het de opmaak van de
+   andere tabbladen nooit in de weg kan zitten. */
+#tab-mijn .regel { padding: 14px 0; border-bottom: 1px solid var(--border); }
+#tab-mijn .regel:last-child { border-bottom: 0; padding-bottom: 0; }
+#tab-mijn .regel:first-of-type { padding-top: 0; }
+#tab-mijn .regel-kop { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; }
+#tab-mijn .regel-titel { font-weight: 600; }
+#tab-mijn .regel-meta { font-size: 13px; color: var(--muted); }
+#tab-mijn .regel-tekst { font-size: 15px; margin-top: 4px; white-space: pre-wrap; }
+#tab-mijn .label { display: inline-block; font-size: 12px; font-weight: 600; letter-spacing: 0.03em; padding: 2px 8px; border-radius: 100px; background: var(--teal-light); color: var(--teal-dark); }
+#tab-mijn .label.grijs { background: rgba(0,0,0,0.06); color: var(--muted); }
+#tab-mijn .label.goud { background: var(--gold-light); color: #8A6A10; }
+#tab-mijn .label.rood { background: #FDECEA; color: var(--rust); }
+#tab-mijn .label.jij { background: var(--gold); color: #2A2000; }
+#tab-mijn .agenda { margin-top: 10px; padding-left: 18px; }
+#tab-mijn .agenda li { margin-bottom: 8px; }
+#tab-mijn .agenda .toel { font-size: 14px; color: var(--muted); white-space: pre-wrap; }
+#tab-mijn details { margin-top: 10px; }
+#tab-mijn details > summary { cursor: pointer; font-size: 14px; font-weight: 600; color: var(--teal-dark); }
+#tab-mijn details > div { margin-top: 8px; white-space: pre-wrap; font-size: 15px; }
+#tab-mijn .acties { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+#tab-mijn .leeg { font-size: 15px; color: var(--muted); }
