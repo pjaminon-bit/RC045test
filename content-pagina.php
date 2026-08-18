@@ -69,6 +69,24 @@ function contentPaginaHero(string $sleutel): array
     return is_array($hero) ? $hero : [];
 }
 
+function contentPaginaHeroCss(string $sleutel): string
+{
+    $hero = contentPaginaHero($sleutel);
+    $achtergrond = trim((string) ($hero['achtergrond'] ?? ''));
+    if ($achtergrond === '') return '';
+
+    $positie = trim((string) ($hero['positie'] ?? 'center')) ?: 'center';
+    $opacity = $hero['opacity'] ?? 0.35;
+    $opacity = is_numeric($opacity) ? max(0, min(1, (float) $opacity)) : 0.35;
+
+    // Alleen lokale, relatieve assets toelaten in deze eerste templatefase.
+    if (preg_match('~^(?:https?:)?//~i', $achtergrond) || str_contains($achtergrond, '..')) return '';
+
+    $url = htmlspecialchars($achtergrond, ENT_QUOTES, 'UTF-8');
+    $pos = htmlspecialchars($positie, ENT_QUOTES, 'UTF-8');
+    return ".page-hero-bg{background-image:url('{$url}')!important;background-position:{$pos}!important;opacity:{$opacity}!important;}";
+}
+
 function contentPaginaSeoSleutel(string $sleutel): string
 {
     $def = contentPaginaDefinitie($sleutel);
@@ -85,4 +103,34 @@ function contentPaginaType(string $sleutel): string
 {
     $def = contentPaginaDefinitie($sleutel);
     return trim((string) ($def['type'] ?? 'standaard'));
+}
+
+function contentPaginaSleutelVoorRequest(?string $scriptNaam = null): ?string
+{
+    $scriptNaam = $scriptNaam ?? (string) ($_SERVER['SCRIPT_NAME'] ?? '');
+    $bestand = pathinfo(basename($scriptNaam), PATHINFO_FILENAME);
+    if ($bestand === '') return null;
+
+    foreach (contentPaginaDefinities() as $sleutel => $def) {
+        $slug = trim((string) ($def['slug'] ?? $sleutel));
+        if ($bestand === $slug || $bestand === $sleutel) return (string) $sleutel;
+    }
+
+    return null;
+}
+
+function contentPaginaBootstrap(?string $sleutel = null): array
+{
+    $sleutel = $sleutel ?? contentPaginaSleutelVoorRequest();
+    if ($sleutel === null || !contentPaginaBestaat($sleutel)) return [];
+
+    return [
+        'sleutel' => $sleutel,
+        'definitie' => contentPaginaDefinitie($sleutel),
+        'data' => contentPaginaLees($sleutel),
+        'hero' => contentPaginaHero($sleutel),
+        'seo_sleutel' => contentPaginaSeoSleutel($sleutel),
+        'beheer_tab' => contentPaginaBeheerTab($sleutel),
+        'type' => contentPaginaType($sleutel),
+    ];
 }
