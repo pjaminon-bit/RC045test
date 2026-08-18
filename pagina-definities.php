@@ -46,36 +46,63 @@ foreach ($homepageGroepen as $groepVelden) {
     }
 }
 
+$aanmeldenGroepen = [
+    'Hero' => ['hero_label','hero_title','hero_sub'],
+    'Contributie' => ['contrib_title','contrib_placeholder'],
+    'Formulier (koppen)' => ['form_personal','form_address','form_contact','form_agreement'],
+    'Bevestiging na versturen' => ['success_title','success_sub'],
+    'FAQ' => ['faq_title'],
+];
+$aanmeldenVelden = [
+    'hero_label'=>['type'=>'tekst','label'=>'Hero: label boven de titel'],
+    'hero_title'=>['type'=>'tekst','label'=>'Hero: titel'],
+    'hero_sub'=>['type'=>'blok','label'=>'Hero: introtekst'],
+    'contrib_title'=>['type'=>'tekst','label'=>'Contributiekaart: titel ({jaar} blijft automatisch dynamisch)'],
+    'contrib_placeholder'=>['type'=>'blok','label'=>'Contributiekaart: tekst vóór invoeren geboortedatum'],
+    'form_personal'=>['type'=>'tekst','label'=>'Formulierkop: Persoonsgegevens'],
+    'form_address'=>['type'=>'tekst','label'=>'Formulierkop: Adresgegevens'],
+    'form_contact'=>['type'=>'tekst','label'=>'Formulierkop: Contactgegevens'],
+    'form_agreement'=>['type'=>'tekst','label'=>'Formulierkop: Akkoordverklaring'],
+    'success_title'=>['type'=>'blok','label'=>'Bevestiging na versturen: titel'],
+    'success_sub'=>['type'=>'blok','label'=>'Bevestiging na versturen: subtekst'],
+    'faq_title'=>['type'=>'tekst','label'=>'Titel boven de veelgestelde vragen'],
+];
+$aanmeldenStandaard = [
+    'hero_label'=>['nl'=>'Lidmaatschap','en'=>'Membership','de'=>'Mitgliedschaft'],
+    'hero_title'=>['nl'=>'Aanmelden als lid','en'=>'Register as a member','de'=>'Als Mitglied anmelden'],
+    'hero_sub'=>['nl'=>'Vul het formulier in om je aan te melden bij RC045. Na ontvangst nemen we zo snel mogelijk contact met je op.','en'=>'Fill in the form to register with RC045. We will contact you as soon as possible after receiving your registration.','de'=>'Fülle das Formular aus, um dich bei RC045 anzumelden. Nach Eingang melden wir uns so schnell wie möglich bei dir.'],
+    'contrib_title'=>['nl'=>'Jouw contributie {jaar}','en'=>'Your membership fee {jaar}','de'=>'Dein Mitgliedsbeitrag {jaar}'],
+    'contrib_placeholder'=>['nl'=>'Vul je geboortedatum in om de contributie te berekenen.','en'=>'Enter your date of birth to calculate the membership fee.','de'=>'Gib dein Geburtsdatum ein, um den Mitgliedsbeitrag zu berechnen.'],
+    'form_personal'=>['nl'=>'Persoonsgegevens','en'=>'Personal details','de'=>'Persönliche Daten'],
+    'form_address'=>['nl'=>'Adresgegevens','en'=>'Address details','de'=>'Adressdaten'],
+    'form_contact'=>['nl'=>'Contactgegevens','en'=>'Contact details','de'=>'Kontaktdaten'],
+    'form_agreement'=>['nl'=>'Akkoordverklaring','en'=>'Declaration of agreement','de'=>'Einverständniserklärung'],
+    'success_title'=>['nl'=>'✅ Aanmelding ontvangen! We nemen zo snel mogelijk contact met je op.','en'=>'✅ Registration received! We will contact you as soon as possible.','de'=>'✅ Anmeldung erhalten! Wir werden uns so schnell wie möglich bei dir melden.'],
+    'success_sub'=>['nl'=>'Vergeet niet de contributie over te maken via de betalingsinstructies hierboven.','en'=>"Don't forget to transfer the membership fee using the payment instructions above.",'de'=>'Vergiss nicht, den Mitgliedsbeitrag gemäß den obigen Zahlungsanweisungen zu überweisen.'],
+    'faq_title'=>['nl'=>'Veelgestelde vragen','en'=>'Frequently asked questions','de'=>'Häufig gestellte Fragen'],
+];
+
 return [
     'homepage' => [
-        'slug' => 'index',
-        'label' => 'Homepage teksten',
-        'type' => 'homepage',
-        'beheer_tab' => 'homepage',
-        'beheer_prefix' => 'hp',
-        'data_bestand' => 'data/homepage.json',
-        'velden' => $homepageVelden,
-        'groepen' => $homepageGroepen,
-        'max_lengte' => ['tekst' => 100, 'blok' => 600],
+        'slug' => 'index', 'label' => 'Homepage teksten', 'type' => 'homepage', 'beheer_tab' => 'homepage', 'beheer_prefix' => 'hp', 'data_bestand' => 'data/homepage.json',
+        'velden' => $homepageVelden, 'groepen' => $homepageGroepen, 'max_lengte' => ['tekst' => 100, 'blok' => 600],
     ],
     'ontstaan' => [
         'slug' => 'ontstaan','label' => 'Ontstaan / geschiedenis','type' => 'verhaal','seo_sleutel' => 'ontstaan','beheer_tab' => 'ontstaan','beheer_prefix' => 'ont','data_bestand' => 'data/ontstaan.json',
         'hero' => ['achtergrond'=>'images/crawlergroen.jpg','positie'=>'center','opacity'=>0.35,'label'=>['nl'=>'Onze geschiedenis','en'=>'Our history','de'=>'Unsere Geschichte'],'titel'=>['nl'=>'Het ontstaan van RC045','en'=>'The story of RC045','de'=>'Die Entstehung von RC045']],
-        'velden' => [
-            'hero_sub'=>['type'=>'tekst','label'=>'Ondertitel boven het verhaal'],'story_p1'=>['type'=>'blok','label'=>'Alinea 1'],'story_p2'=>['type'=>'blok','label'=>'Alinea 2'],'story_p3'=>['type'=>'blok','label'=>'Alinea 3'],'story_p4'=>['type'=>'blok','label'=>'Alinea 4'],'story_p5'=>['type'=>'blok','label'=>'Alinea 5'],'story_p6'=>['type'=>'blok','label'=>'Alinea 6'],'story_p7'=>['type'=>'blok','label'=>'Alinea 7'],
-        ],
-        'galerij' => ['titel'=>['nl'=>"Foto's door de jaren heen",'en'=>'Photos through the years','de'=>'Fotos im Laufe der Jahre'],'afbeeldingen'=>[
-            ['src'=>'images/basherbaaneersteaanleg.jpg','alt'=>'Eerste aanleg van de RC045 baan'],['src'=>'images/basherbaaneersteaanleghek.jpg','alt'=>'Plaatsen van het hek tijdens de eerste aanleg'],['src'=>'images/basherbaaneersteaanleglucht.jpg','alt'=>'Luchtfoto van de eerste aanleg van de baan'],['src'=>'images/basherbaaneersteaanlegmaaien.jpg','alt'=>'Maaien tijdens de eerste aanleg van de baan'],['src'=>'images/basherbaaneersteaanlegtrack.jpg','alt'=>'Aanleg van het parcours'],['src'=>'images/crawlerbaaneersteaanleg.jpg','alt'=>'Eerste aanleg van de crawlerbaan'],
-        ]],
+        'velden' => ['hero_sub'=>['type'=>'tekst','label'=>'Ondertitel boven het verhaal'],'story_p1'=>['type'=>'blok','label'=>'Alinea 1'],'story_p2'=>['type'=>'blok','label'=>'Alinea 2'],'story_p3'=>['type'=>'blok','label'=>'Alinea 3'],'story_p4'=>['type'=>'blok','label'=>'Alinea 4'],'story_p5'=>['type'=>'blok','label'=>'Alinea 5'],'story_p6'=>['type'=>'blok','label'=>'Alinea 6'],'story_p7'=>['type'=>'blok','label'=>'Alinea 7']],
+        'galerij' => ['titel'=>['nl'=>"Foto's door de jaren heen",'en'=>'Photos through the years','de'=>'Fotos im Laufe der Jahre'],'afbeeldingen'=>[['src'=>'images/basherbaaneersteaanleg.jpg','alt'=>'Eerste aanleg van de RC045 baan'],['src'=>'images/basherbaaneersteaanleghek.jpg','alt'=>'Plaatsen van het hek tijdens de eerste aanleg'],['src'=>'images/basherbaaneersteaanleglucht.jpg','alt'=>'Luchtfoto van de eerste aanleg van de baan'],['src'=>'images/basherbaaneersteaanlegmaaien.jpg','alt'=>'Maaien tijdens de eerste aanleg van de baan'],['src'=>'images/basherbaaneersteaanlegtrack.jpg','alt'=>'Aanleg van het parcours'],['src'=>'images/crawlerbaaneersteaanleg.jpg','alt'=>'Eerste aanleg van de crawlerbaan']]],
         'legacy_layout'=>false,
     ],
     'baanreglement' => [
         'slug'=>'baanreglement','label'=>'Reglement','type'=>'artikelen','seo_sleutel'=>'baanreglement','beheer_tab'=>'baanreglement','beheer_prefix'=>'br','data_bestand'=>'data/baanreglement.json',
         'hero'=>['achtergrond'=>'images/hero-achtergrond.jpg','positie'=>'center','opacity'=>0.35,'label'=>['nl'=>'RC045','en'=>'RC045','de'=>'RC045'],'titel'=>['nl'=>'Baanreglement','en'=>'Track rules','de'=>'Bahnordnung']],
         'velden'=>['hero_sub'=>['type'=>'tekst','label'=>'Ondertitel boven de pagina'],'intro_bold'=>['type'=>'tekst','label'=>'Vet woord vooraan de introtekst'],'intro_text'=>['type'=>'blok','label'=>'Introtekst']],
-        'artikelen'=>[
-            1=>['titel'=>'a1_title','inhoud'=>'a1_body'],2=>['titel'=>'a2_title','inhoud'=>'a2_body'],3=>['titel'=>'a3_title','inhoud'=>'a3_body'],4=>['titel'=>'a4_title','inhoud'=>'a4_body'],5=>['titel'=>'a5_title','inhoud'=>'a5_body'],6=>['titel'=>'a6_title','inhoud'=>'a6_body'],7=>['titel'=>'a7_title','inhoud'=>'a7_body'],8=>['titel'=>'a8_title','inhoud'=>'a8_body'],9=>['titel'=>'a9_title','inhoud'=>'a9_body'],10=>['titel'=>'a10_title','inhoud'=>'a10_body'],
-        ],
+        'artikelen'=>[1=>['titel'=>'a1_title','inhoud'=>'a1_body'],2=>['titel'=>'a2_title','inhoud'=>'a2_body'],3=>['titel'=>'a3_title','inhoud'=>'a3_body'],4=>['titel'=>'a4_title','inhoud'=>'a4_body'],5=>['titel'=>'a5_title','inhoud'=>'a5_body'],6=>['titel'=>'a6_title','inhoud'=>'a6_body'],7=>['titel'=>'a7_title','inhoud'=>'a7_body'],8=>['titel'=>'a8_title','inhoud'=>'a8_body'],9=>['titel'=>'a9_title','inhoud'=>'a9_body'],10=>['titel'=>'a10_title','inhoud'=>'a10_body']],
         'legacy_layout'=>false,
+    ],
+    'aanmelden' => [
+        'slug'=>'aanmelden','label'=>'Aanmelden','type'=>'formulier-content','seo_sleutel'=>'aanmelden','beheer_tab'=>'aanmelden','beheer_prefix'=>'am','data_bestand'=>'data/aanmelden.json',
+        'velden'=>$aanmeldenVelden,'groepen'=>$aanmeldenGroepen,'standaard'=>$aanmeldenStandaard,'max_lengte'=>['tekst'=>200,'blok'=>500],
     ],
 ];
