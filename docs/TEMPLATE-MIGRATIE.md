@@ -9,19 +9,23 @@ Van RC045test een herbruikbare codebase maken waarbij verenigingsspecifieke gege
 ## Werkwijze
 
 - Ontwikkeling gebeurt op `agent/template-foundation` en niet rechtstreeks op `main`.
+- DEV wordt vanaf 18-08-2026 expliciet vanaf `agent/template-foundation` naar `/dev` gedeployed.
+- Iedere DEV-deploy schrijft `dev-build.json`; in Beheer wordt commit, branch, runnummer en deploytijd zichtbaar gemaakt zodat de geteste build controleerbaar is.
 - Kleine, controleerbare stappen hebben voorkeur boven een grote herschrijving.
 - RC045-waarden blijven de veilige defaults zodat regressies beperkt blijven.
 - Verenigingsspecifieke configuratie kan server-only in `site-config.local.php` staan en hoort niet in Git.
 
+> **Validatiestatus na deployment-incident 18-08-2026:** de code van fase 1 is behouden en inhoudelijk afgerond, maar praktijktests die zijn uitgevoerd terwijl `/dev` niet meer vanaf `agent/template-foundation` werd bijgewerkt gelden niet als bewijs. Fase 1D en de fase-2 modules die op die tests leunden worden na herstel van de DEV-deploy opnieuw kort gevalideerd. Zie `docs/migratie-log/2026-08-18-dev-deployment-incident.md`.
+
 # Fase 1 — template-ready
 
-Status: **afgerond**
+Status: **code afgerond; DEV-regressiecontrole opnieuw uitvoeren**
 
-Fase 1 levert nu één gedeelde codebasis op die per vereniging kan verschillen in identiteit, branding, modules en content zonder een aparte fork te maken. De resterende RC045-namen en legacy-outputfilters zijn technische schuld voor fase 2, maar vormen geen blokkade meer voor templategebruik.
+Fase 1 levert één gedeelde codebasis op die per vereniging kan verschillen in identiteit, branding, modules en content zonder een aparte fork te maken. De resterende RC045-namen en legacy-outputfilters zijn technische schuld voor fase 2, maar vormen geen blokkade meer voor templategebruik.
 
 ## 1A. Centrale configuratielaag
 
-Status: **afgerond**
+Status: **code afgerond**
 
 - `site-config.php` bevat de gedeelde defaults voor identiteit, site-URL, tijdzone, talen, branding, themakleuren en feature flags.
 - `site.php` biedt generieke helpers voor configuratie, naam, URL, talen, assets en modules.
@@ -35,7 +39,7 @@ Compatibiliteitsnamen zoals `rc045Taal()`, `rc045Url()` en `rc045SeoHead()` blij
 
 ## 1B. Branding generiek maken
 
-Status: **afgerond**
+Status: **code afgerond**
 
 - Logo, social image, faviconvarianten, apple-touch-icon, manifest en theme color zijn centraal configureerbaar.
 - Verenigingsnaam en slogan worden centraal toegepast op de publieke site.
@@ -47,7 +51,7 @@ De outputfilter blijft tijdelijk bestaan als migratiehulpmiddel. In fase 2 wordt
 
 ## 1C. Modules configureerbaar maken
 
-Status: **afgerond**
+Status: **code afgerond**
 
 - `module-definities.php` is de centrale bron van waarheid voor modulekoppelingen.
 - Publieke pagina's, links en secties kunnen per module worden verborgen of geblokkeerd.
@@ -62,7 +66,7 @@ Zie `docs/migratie-log/2026-08-18-fase-1c-afronding.md`.
 
 ## 1D. Generieke contentpagina's
 
-Status: **afgerond**
+Status: **code afgerond; praktijktest opnieuw bevestigen na DEV-herstel**
 
 - `pagina-definities.php` is de centrale registry voor configureerbare contentpagina's.
 - `ontstaan` draait als paginatype `verhaal`.
@@ -71,7 +75,7 @@ Status: **afgerond**
 - `content-pagina.php` levert generieke bootstrap- en datahelpers.
 - `content-renderer.php` rendert herbruikbare paginatypen; de twee oorspronkelijke pagina's zijn dunne routes.
 - `content-beheer.php` is de generieke editor en gebruikt bestaand rechtenmodel, CSRF, centrale data-lock, back-ups en logging.
-- De generieke editor is praktisch op DEV getest voor Ontstaan en Baanreglement: lezen, opslaan, publieke weergave, logging en back-up werkten alle vier.
+- Eerdere DEV-tests voor Ontstaan/Baanreglement zijn wegens het deployment-incident niet langer als geldige eindvalidatie aangemerkt; deze worden kort opnieuw uitgevoerd op een zichtbaar geïdentificeerde DEV-build.
 - De oude Ontstaan/Baanreglement-beheerroutes zijn uit runtimegebruik gehaald. Fysieke dode code in `beheer.php` wordt verwijderd bij de structurele opsplitsing in fase 2.
 
 Zie `docs/migratie-log/2026-08-18-fase-1d-afronding.md`.
