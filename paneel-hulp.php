@@ -9,6 +9,14 @@
 // de contributie van een lid.
 // ============================================================
 
+// Beheer.php gebruikt vanaf fase 1C ook de centrale moduleconfiguratie. Alleen
+// op de beheerpagina laden we site.php hier in; leden.php blijft daardoor vrij
+// van de publieke template/outputfilter. site.php herkent beheer.php en past
+// daar uitsluitend modulezichtbaarheid toe, niet de publieke branding.
+if (strtolower(basename((string) ($_SERVER['SCRIPT_NAME'] ?? ''))) === 'beheer.php') {
+  require_once __DIR__ . '/site.php';
+}
+
 // jjjj-mm-dd naar dd-mm-jjjj. Ongeldig of leeg blijft leeg.
 function datumWeergave($iso) {
   if (preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', (string) $iso, $m)) {
