@@ -2,9 +2,8 @@
 // ============================================================
 // Beheermodule: Sponsors
 // ============================================================
-// Fase 2: haalt de actieve Sponsors-beheerroute uit het monolithische
-// beheer.php. De oude tab blijft fysiek nog aanwezig als dode code, maar is
-// niet meer zichtbaar en de oude POST-route wordt server-side geblokkeerd.
+// Haalt de actieve Sponsors-beheerroute uit het monolithische beheer.php.
+// De oude tab blijft fysiek aanwezig als dode code, maar is onbereikbaar.
 // ============================================================
 
 function beheerSponsorsBewaakLegacyPost(): void
@@ -39,20 +38,20 @@ function beheerSponsorsStartOutputFilter(): void
     ob_start(function ($html) {
         if (!is_string($html)) return $html;
 
-        if (stripos($html, '</head>') !== false) {
-            $css = '<style id="beheer-sponsors-legacy-hidden">'
-                . '#tab-sponsors,[href="#tab-sponsors"],[href="#sponsors"],'
-                . '[data-tab="sponsors"],[data-tab-target="sponsors"]'
-                . '{display:none!important}</style>';
-            $html = preg_replace('~</head>~i', $css . "\n</head>", $html, 1) ?? $html;
+        // Vervang de bestaande menu-knop op exact dezelfde plek door een link
+        // naar de modulaire editor. Zo blijft de huidige menugroepering intact.
+        if (beheerSponsorsMagOpenen()) {
+            $html = preg_replace(
+                '~<button\s+type="button"\s+class="menu-item"\s+data-tab="sponsors">.*?</button>~is',
+                '<a class="menu-item menu-item-link" href="beheer/sponsors.php">Sponsors</a>',
+                $html,
+                1
+            ) ?? $html;
         }
 
-        if (beheerSponsorsMagOpenen() && stripos($html, '</body>') !== false && strpos($html, 'id="beheer-sponsors-module-link"') === false) {
-            $link = '<a id="beheer-sponsors-module-link" href="beheer/sponsors.php" '
-                . 'style="position:fixed;left:18px;bottom:18px;z-index:9999;background:#3a7a77;color:#fff;text-decoration:none;'
-                . 'font:700 14px system-ui,-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;padding:11px 15px;border-radius:10px;'
-                . 'box-shadow:0 8px 24px rgba(0,0,0,.18)">Sponsors beheren →</a>';
-            $html = preg_replace('~</body>~i', $link . "\n</body>", $html, 1) ?? $html;
+        if (stripos($html, '</head>') !== false) {
+            $css = '<style id="beheer-sponsors-legacy-hidden">#tab-sponsors,[href="#tab-sponsors"],[href="#sponsors"],[data-tab-target="sponsors"]{display:none!important}</style>';
+            $html = preg_replace('~</head>~i', $css . "\n</head>", $html, 1) ?? $html;
         }
 
         return $html;
