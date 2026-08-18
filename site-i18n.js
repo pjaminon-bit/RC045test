@@ -20,17 +20,28 @@ function updateLiveDocumentTitle(lang) {
 function updateInternalLinks(lang) {
     document.querySelectorAll('a[href]').forEach(a => {
       const href = a.getAttribute('href');
-      // Alleen lokale .html links en lokale anchors, geen externe/mailto/tel links
+      // Externe/mailto/tel-links en puur lokale anchors blijven ongemoeid.
       if (!href || href.startsWith('http') || href.startsWith('mailto:') || href.startsWith('tel:') || href.startsWith('#')) return;
-      if (!href.endsWith('.html') && !href.includes('.html#') && !href.includes('.html?')) return;
-      const url = new URL(href, window.location.href);
+
+      // Legacy homepage-links (index.html) worden altijd map-relatief gemaakt.
+      // Daardoor wijst dezelfde code op productie naar / en in de testomgeving
+      // naar /dev/, zonder hardcoded omgevingspad.
+      const isLegacyHomepageLink = href === 'index.html' || href.startsWith('index.html#') || href.startsWith('index.html?');
+      const isHomepageLink = href === './' || href.startsWith('./#') || href.startsWith('./?');
+      const isHtmlLink = href.endsWith('.html') || href.includes('.html#') || href.includes('.html?');
+      if (!isLegacyHomepageLink && !isHomepageLink && !isHtmlLink) return;
+
+      const bronHref = isLegacyHomepageLink ? './' + href.slice('index.html'.length) : href;
+      const url = new URL(bronHref, window.location.href);
       if (lang === 'nl') {
         url.searchParams.delete('lang');
       } else {
         url.searchParams.set('lang', lang);
       }
-      // Bouw relatieve href terug op (pad + query + hash)
-      const newHref = url.pathname.split('/').pop() + url.search + url.hash;
+
+      const newHref = (isLegacyHomepageLink || isHomepageLink)
+        ? './' + url.search + url.hash
+        : url.pathname.split('/').pop() + url.search + url.hash;
       a.setAttribute('href', newHref);
     });
   }
@@ -233,13 +244,12 @@ var sponsorCtaDefault = {
 };
 var sponsorCtaKeyword = { nl: 'contactformulier', en: 'contact form', de: 'Kontaktformular' };
 // Op de homepage staat het contactformulier op dezelfde pagina, elders niet.
-// De homepage kan door de PHP-migratie zowel als /, /index.html (publieke
-// rewrite) als /index.php (direct pad) worden bezocht. Behandel alle drie als
-// dezelfde pagina, zodat de sponsor-CTA altijd rechtstreeks naar #contact gaat.
+// Zowel /, index.html en index.php behandelen we als homepage; eventuele oude
+// index.html-links worden door updateInternalLinks() map-relatief gemaakt.
 var sponsorContactLink = (function () {
   var bestand = window.location.pathname.split('/').pop().toLowerCase();
   var isHomepage = bestand === '' || bestand === 'index.html' || bestand === 'index.php';
-  return isHomepage ? '#contact' : 'index.html#contact';
+  return isHomepage ? '#contact' : './#contact';
 })();
 
 function sponsorTaal() {
