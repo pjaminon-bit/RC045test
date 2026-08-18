@@ -2,13 +2,14 @@
 // ============================================================
 // Centrale verenigingsconfiguratie
 // ============================================================
-// Alle gegevens die per vereniging kunnen verschillen horen uiteindelijk
-// hier (of later in de database / tenant-configuratie) thuis. De standaard-
-// waarden hieronder reproduceren bewust de huidige RC045-installatie, zodat
-// het introduceren van deze configuratielaag het bestaande gedrag niet wijzigt.
+// Dit bestand bevat veilige standaardwaarden waarmee RC045 blijft werken.
+// Per installatie/vereniging kan daarnaast een server-only bestand
+// `site-config.local.php` bestaan. Dat bestand wordt recursief over deze
+// defaults heen gelegd en hoeft dus alleen de afwijkende waarden te bevatten.
+// Zo kan dezelfde codebase meerdere verenigingen bedienen zonder fork.
 // ============================================================
 
-return [
+$config = [
     'vereniging' => [
         'naam' => 'RC045',
         'volledige_naam' => 'RC045 – Bashers of the South',
@@ -46,8 +47,6 @@ return [
         ],
     ],
 
-    // Hiermee kunnen we in een volgende stap onderdelen per vereniging aan-
-    // of uitzetten zonder aparte codebases te maken.
     'modules' => [
         'website' => true,
         'ledenadministratie' => true,
@@ -61,3 +60,18 @@ return [
         'aanmelden' => true,
     ],
 ];
+
+$lokaalPad = __DIR__ . '/site-config.local.php';
+if (is_file($lokaalPad)) {
+    $lokaal = require $lokaalPad;
+    if (is_array($lokaal)) {
+        $config = array_replace_recursive($config, $lokaal);
+    }
+}
+
+$timezone = trim((string) ($config['vereniging']['timezone'] ?? ''));
+if ($timezone !== '' && in_array($timezone, timezone_identifiers_list(), true)) {
+    date_default_timezone_set($timezone);
+}
+
+return $config;
