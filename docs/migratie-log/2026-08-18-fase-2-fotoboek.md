@@ -13,6 +13,7 @@ Datum: 2026-08-18
 - EXIF-oriëntatie, watermerk, coverkeuze, captions, verborgen albums en dubbele-uploadcontrole op SHA-1 inhoud blijven behouden.
 - Grote selecties worden client-side in losse verzoeken verwerkt om `post_max_size`/memory-problemen te beperken.
 - Paginatekst `data/fotoboek-pagina.json` is in dezelfde editor opgenomen.
+- DEV-workflow voert voortaan vóór iedere upload `php -l` uit op alle PHP-bestanden; syntactisch ongeldige PHP wordt dus niet meer naar `/dev` gedeployed.
 
 ## Veiligheids-/betrouwbaarheidsoptimalisaties
 
