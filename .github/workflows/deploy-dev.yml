@@ -1,9 +1,9 @@
-name: Deploy testsite naar Strato /dev
+name: Deploy template-foundation naar Strato /dev
 
 on:
   push:
     branches:
-      - main
+      - agent/template-foundation
   workflow_dispatch:
 
 permissions:
@@ -15,6 +15,21 @@ jobs:
     steps:
       - name: Checkout testcode
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Schrijf DEV buildinformatie
+        shell: bash
+        run: |
+          cat > dev-build.json <<EOF
+          {
+            "environment": "dev",
+            "branch": "${GITHUB_REF_NAME}",
+            "commit": "${GITHUB_SHA}",
+            "commit_short": "${GITHUB_SHA::8}",
+            "deployed_at_utc": "$(date -u +'%Y-%m-%dT%H:%M:%SZ')",
+            "run_id": "${GITHUB_RUN_ID}",
+            "run_number": "${GITHUB_RUN_NUMBER}"
+          }
+          EOF
 
       - name: Upload testsite via SFTP naar gekoppelde dev-root
         uses: wlixcc/SFTP-Deploy-Action@a5ccb9c6211a94cc59404f0fdb2a9936a6dfee64 # v1.2.6
