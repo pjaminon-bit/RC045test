@@ -87,6 +87,14 @@ RewriteRule ^(?:beheer|leden)/(vendor/heic2any/heic2any\.min\.js)$ $1 [L,QSA,NC]
 RewriteRule ^beheer/beheer\.php$ beheer.php [L,QSA,NC]
 RewriteRule ^leden/leden\.php$ leden.php [L,QSA,NC]
 
+# De zelfstandige beheermodules zijn echte bestanden in de map beheer/. Als
+# beheer.php via de virtuele URL /beheer/ is geopend, maakt een relatieve link
+# met "beheer/..." er in de browser /beheer/beheer/... van. Leg uitsluitend de
+# drie bekende publieke module-entrypoints terug naar hun echte bestand. Geen
+# generieke fallback: interne helpers in beheer/ mogen hiermee niet openbaar
+# worden gemaakt.
+RewriteRule ^beheer/beheer/(gebruikers|logboek|backups)\.php$ beheer/$1.php [L,QSA,NC]
+
 
 # ===== Fotoboek: nette album-URL's =====
 # Werkt zowel in de domeinroot als wanneer dezelfde .htaccess onder /dev staat:
