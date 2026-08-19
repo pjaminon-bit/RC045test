@@ -2,7 +2,11 @@
   "types": [
     {
       "id": "jeugd",
-      "label": "Jeugdlid",
+      "label": {
+        "nl": "Jeugdlid",
+        "en": "Youth member",
+        "de": "Jugendmitglied"
+      },
       "actief": true,
       "leeftijd_min": null,
       "leeftijd_max": 15,
@@ -12,7 +16,11 @@
     },
     {
       "id": "senior",
-      "label": "Lid",
+      "label": {
+        "nl": "Lid",
+        "en": "Member",
+        "de": "Mitglied"
+      },
       "actief": true,
       "leeftijd_min": 16,
       "leeftijd_max": null,
