@@ -2,8 +2,15 @@
 require_once dirname(__DIR__) . '/storage/domein-repositories.php';
 require_once dirname(__DIR__,2) . '/app/data-slot.php';
 
+function portaalModuleActief(string $module): bool
+{
+    $config = privateStoreConfig();
+    return (($config['modules'][$module] ?? false) === true);
+}
+
 function portaalVergaderingenVoorLid(): array
 {
+    if (!portaalModuleActief('vergaderingen')) return [];
     $lijst=[];
     foreach(vergaderingenVanSoort(repoVergaderingenLees(),'leden') as $v){
         if(vergaderingAgendaZichtbaarVoorLeden($v)||vergaderingNotulenZichtbaarVoorLeden($v))$lijst[]=$v;
@@ -12,19 +19,24 @@ function portaalVergaderingenVoorLid(): array
 }
 function portaalTakenVoorLid(string $lidId): array
 {
+    if (!portaalModuleActief('taken')) return [];
     $lijst=[];foreach((array)(repoTakenLees()['taken']??[]) as $t)if(is_array($t)&&($t['toegewezen_aan']??'')===$lidId)$lijst[]=$t;return$lijst;
 }
 function portaalOperationeleTakenVoorLid(string $lidId,bool $bestuurslid): array
 {
+    if (!portaalModuleActief('operationele_taken')) return [];
     $lijst=[];foreach((array)(repoOperationeleTakenLees()['taken']??[]) as $t)if(is_array($t)&&($t['toegewezen_aan']??'')===$lidId&&(($t['zichtbaarheid']??'leden')==='leden'||$bestuurslid))$lijst[]=$t;return$lijst;
 }
 function portaalEvenementenVoorLid(bool $bestuurslid): array
 {
+    if (!portaalModuleActief('evenementen')) return [];
     $lijst=[];foreach(evenementenGesorteerd(repoEvenementenLees()) as $e)if(evenementZichtbaarVoorLeden($e)||$bestuurslid)$lijst[]=$e;return$lijst;
 }
 function portaalEvenementDeelnameWijzigen(string $evenementId,string $lidId,bool $aanmelden,?string &$fout=null): bool
 {
-    $fout='';$evenementId=trim($evenementId);$lidId=trim($lidId);
+    $fout='';
+    if (!portaalModuleActief('evenementen')) { $fout='De evenementenmodule is niet beschikbaar.'; return false; }
+    $evenementId=trim($evenementId);$lidId=trim($lidId);
     if($evenementId===''||$lidId===''){$fout='Onbekend evenement of lid.';return false;}
     $slot=dataSlotOpen();
     try{
