@@ -1,6 +1,6 @@
 <?php
 // Centrale lijst van automatisch geback-upte beheerbestanden.
-// Gebruikt door de zelfstandige Back-ups-module.
+// `json` is publieke/configdata, `phpjson` is private data met PHP-voorloop.
 $root = dirname(__DIR__);
 $data = $root . '/data';
 return [
@@ -19,7 +19,17 @@ return [
     'media' => ['label'=>'Media','pad'=>$data.'/media.json','schrijffunctie'=>'json'],
     'fotoboek' => ['label'=>'Fotoboek','pad'=>$data.'/fotoboek.json','schrijffunctie'=>'json'],
     'nieuws' => ['label'=>'Nieuws','pad'=>$data.'/nieuws.json','schrijffunctie'=>'json'],
-    'rekentabel' => ['label'=>'Rekentabel contributie','pad'=>$data.'/rekentabel.json','schrijffunctie'=>'json'],
+    'rekentabel' => ['label'=>'Rekentabel contributie (legacy/compatibiliteit)','pad'=>$data.'/rekentabel.json','schrijffunctie'=>'json'],
+    'lidmaatschapstypen' => ['label'=>'Lidmaatschapstypen','pad'=>$data.'/lidmaatschapstypen.json','schrijffunctie'=>'json'],
     'changelog' => ['label'=>'Changelog (eigen regels)','pad'=>$data.'/changelog.json','schrijffunctie'=>'json'],
+
+    // Private verenigingsadministratie.
+    'leden' => ['label'=>'Ledenadministratie','pad'=>$root.'/leden-data.php','schrijffunctie'=>'phpjson'],
+    'aanmeldingen_inbox' => ['label'=>'Aanmeldingen-inbox','pad'=>$root.'/aanmeldingen-data.php','schrijffunctie'=>'phpjson'],
+    'vergaderingen' => ['label'=>'Vergaderingen','pad'=>$root.'/vergaderingen-data.php','schrijffunctie'=>'phpjson'],
+    'taken' => ['label'=>'Taken','pad'=>$root.'/taken-data.php','schrijffunctie'=>'phpjson'],
+    'operationele_taken' => ['label'=>'Operationele taken','pad'=>$root.'/operationele-taken-data.php','schrijffunctie'=>'phpjson'],
+    'evenementen' => ['label'=>'Evenementen','pad'=>$root.'/evenementen-data.php','schrijffunctie'=>'phpjson'],
+
     'gebruikers' => ['label'=>'Gebruikers','pad'=>$root.'/beheer-users.json','schrijffunctie'=>'gebruikers'],
 ];
