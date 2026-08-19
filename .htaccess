@@ -64,6 +64,30 @@ RewriteRule ^ https://rc045.nl%{REQUEST_URI} [R=301,L]
 DirectoryIndex index.php index.html
 
 
+# ===== Virtuele routes: relatieve assets en publieke endpoints =====
+# /beheer/ en /leden/ zijn vriendelijke, virtuele URL's en geen echte mappen.
+# Voor een browser is een URL die op / eindigt echter wél een mapbasis. Daardoor
+# wordt bijvoorbeeld href="paneel.css" op /beheer/ opgevraagd als
+# /beheer/paneel.css, terwijl het echte bestand naast beheer.php staat.
+#
+# Leg uitsluitend de bekende PUBLIEKE paneelbestanden terug naar de root van de
+# huidige installatie. Dit werkt daardoor hetzelfde in /dev als later in de
+# domeinroot, zonder een omgeving hard te coderen. Bewust geen generieke (.*)-
+# fallback: server-only PHP/JSON-bestanden mogen nooit via zo'n alias bereikbaar
+# worden.
+RewriteRule ^(?:beheer|leden)/(paneel\.css|paneel\.js|paneel-thema\.js|favicon-32x32\.png)$ $1 [L,QSA,NC]
+
+# JavaScript in paneel.js gebruikt deze twee publieke endpoints relatief.
+RewriteRule ^(?:beheer|leden)/(vertaal\.php)$ $1 [L,QSA,NC]
+RewriteRule ^(?:beheer|leden)/(vendor/heic2any/heic2any\.min\.js)$ $1 [L,QSA,NC]
+
+# Formulieren in beheer.php/leden.php posten historisch naar hun bestandsnaam.
+# Onder /beheer/ of /leden/ maakt de browser daar anders /beheer/beheer.php of
+# /leden/leden.php van. Ook die twee expliciete targets veilig terugleggen.
+RewriteRule ^beheer/beheer\.php$ beheer.php [L,QSA,NC]
+RewriteRule ^leden/leden\.php$ leden.php [L,QSA,NC]
+
+
 # ===== Fotoboek: nette album-URL's =====
 # Werkt zowel in de domeinroot als wanneer dezelfde .htaccess onder /dev staat:
 #   /fotoboek/                 -> fotoboek.php
