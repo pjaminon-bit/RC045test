@@ -5,6 +5,12 @@ $recent = [
   [
     'datum' => '2026-08-19',
     'cat' => 'onderhoud',
+    'titel' => 'Overbodige compatibility-loaders uit de webroot verwijderd',
+    'tekst' => 'De sitekern, SEO-configuratie en gedeelde data-slothelper worden nu uitsluitend rechtstreeks vanuit de afgeschermde app-map geladen. Vijf eenregelige tussenbestanden in de webroot en hun inmiddels overbodige blokkades zijn verwijderd. De publieke routes en opslaglocaties blijven ongewijzigd.',
+  ],
+  [
+    'datum' => '2026-08-19',
+    'cat' => 'onderhoud',
     'titel' => 'DEV-deployment controleert voortaan de gedeployde site zelf',
     'tekst' => 'Na de SFTP-upload voert GitHub Actions nu automatische smoke tests uit op de homepage, Beheer en Leden. Daarnaast wordt gecontroleerd dat interne app-code en dev-build.json daadwerkelijk met HTTP 403 afgeschermd blijven. De controles proberen enkele keren opnieuw zodat een korte vertraging bij Strato niet meteen een valse foutmelding veroorzaakt.',
   ],

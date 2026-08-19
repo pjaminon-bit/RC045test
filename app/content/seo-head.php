@@ -2,20 +2,20 @@
 // ============================================================
 // SEO-head: titel en meta-tags per taal, server-side
 // ============================================================
-// Technische site-identiteit komt uit site-config.php via site.php.
-// Verenigingsspecifieke pagina-SEO staat apart in site-seo.php.
+// Technische site-identiteit komt uit site-config.php via app/core/site.php.
+// Verenigingsspecifieke pagina-SEO staat apart in app/core/site-seo.php.
 // Configureerbare contentpagina's kunnen hun SEO-sleutel via de centrale
 // pagina-registry aanleveren. Bestaande RC045-functienamen blijven in fase 1
 // als compatibiliteitslaag bestaan.
 // ============================================================
 
-require_once dirname(__DIR__, 2) . '/site.php';
+require_once dirname(__DIR__) . '/core/site.php';
 require_once __DIR__ . '/content-pagina.php';
 require_once __DIR__ . '/content-pagina-runtime.php';
 
 $RC045_SITE = siteUrl();
 $RC045_TALEN = siteTalen();
-$RC045_PAGINAS = require dirname(__DIR__, 2) . '/site-seo.php';
+$RC045_PAGINAS = require dirname(__DIR__) . '/core/site-seo.php';
 
 function rc045Taal() {
   global $RC045_TALEN;

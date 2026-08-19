@@ -1,7 +1,7 @@
 <?php
 require_once dirname(__DIR__) . '/auth.php';
-require_once dirname(__DIR__) . '/site.php';
-require_once dirname(__DIR__) . '/data-slot.php';
+require_once dirname(__DIR__) . '/app/core/site.php';
+require_once dirname(__DIR__) . '/app/data-slot.php';
 
 if (!$ingelogd) { header('Location: ../beheer.php'); exit; }
 if (!siteModuleActief('media')) { http_response_code(404); echo 'De mediamodule is voor deze vereniging niet ingeschakeld.'; exit; }
