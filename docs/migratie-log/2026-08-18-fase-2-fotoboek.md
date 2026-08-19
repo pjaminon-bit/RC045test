@@ -16,41 +16,46 @@ Datum: 2026-08-18
 
 ## Veiligheids-/betrouwbaarheidsoptimalisaties
 
-- Album verwijderen: eerst `fotoboek.json` succesvol opslaan, daarna pas de fysieke albummap verwijderen. Een mislukte JSON-write kan daardoor geen administratie achterlaten die naar reeds verwijderde bestanden wijst.
+- Album verwijderen: eerst `fotoboek.json` succesvol opslaan, daarna pas de fysieke albummap verwijderen.
 - Foto verwijderen: dezelfde volgorde; eerst de nieuwe metadata opslaan, daarna pas de expliciet verwijderde foto-/thumbnailbestanden wissen.
 - Nieuwe upload: wanneer afbeeldingsbestanden wel zijn aangemaakt maar de JSON-write mislukt, worden de nieuw aangemaakte bestanden weer opgeruimd.
 - Albumverwijdering vereist naast een confirm-dialoog ook het letterlijk intypen van `VERWIJDER`.
-- Bestandsnamen uit POST-data worden altijd via `basename()` begrensd tot de albummap.
-- PNG/WEBP met transparantie worden bij JPEG-output bewust op wit afgevlakt, in plaats van een onvoorspelbare/zwarte achtergrond te kunnen krijgen.
-- Fotoboek-reader meldt nu onderscheid tussen ontbrekende data, ongeldige JSON en een onbekend formaat; een oud top-level album-arrayformaat wordt read-only herkend.
+- Bestandsnamen uit POST-data worden via `basename()` begrensd tot de albummap.
+- PNG/WEBP met transparantie worden bij JPEG-output bewust op wit afgevlakt.
+- Fotoboek-reader onderscheidt ontbrekende data, ongeldige JSON en onbekend formaat; een oud top-level album-arrayformaat wordt read-only herkend.
+- DEV-deployment controleert vooraf alle PHP-bestanden met `php -l`.
+- `.htaccess` wordt expliciet apart via SFTP geüpload, omdat de gewone `./*`-glob dotfiles niet meeneemt.
 
-## DEV-data
+## Publieke album-URL's
 
-`data/` en `images/fotoboek/` zijn server-only en staan bewust in `.gitignore`. Een verse DEV-installatie krijgt daardoor geen bestaande productiealbums mee via GitHub Actions.
+Het oude hashmodel `fotoboek.html#album=<slug>` is vervangen door nette routes:
 
-Voor validatie is een afgeschermde eenmalige hulp toegevoegd: `/beheer/fotoboek-live-naar-dev.php`.
-Deze hulp:
+- `/fotoboek/`
+- `/fotoboek/<album-slug>/`
 
-- werkt alleen wanneer de huidige installatie fysiek in een map `/dev` staat;
-- is alleen toegankelijk voor de hoofdbeheerder;
-- leest alleen uit de productie-root (de oudermap van `/dev`);
-- kopieert uitsluitend `data/fotoboek.json`, optioneel `data/fotoboek-pagina.json` en `images/fotoboek/` naar DEV;
-- overschrijft nooit bestaande DEV-Fotoboekdata;
-- vereist de expliciete bevestiging `KOPIEER`;
-- wijzigt of verwijdert nooit productiegegevens.
+Apache herschrijft een albumroute intern naar `fotoboek.php?album=<slug>`. Dezelfde configuratie werkt ook wanneer de installatie onder `/dev` staat. De pagina gebruikt een dynamische basis-URL zodat CSS, scripts, afbeeldingen en JSON-data onder geneste albumroutes correct blijven laden.
+
+Bestaande hashlinks worden alleen nog als achterwaartse compatibiliteit herkend en naar de nieuwe route omgezet; nieuwe navigatie maakt er geen gebruik meer van.
+
+## DEV-data en validatie
+
+`data/` en `images/fotoboek/` zijn server-only en staan bewust in `.gitignore`. Voor de migratietest is de bestaande LIVE-Fotoboekdata eenmalig naar DEV gekopieerd met een tijdelijk, afgeschermd hulpprogramma. Na succesvolle validatie zijn zowel dat hulpprogramma als de tijdelijke diagnosepagina weer uit de repository verwijderd.
+
+Praktisch gevalideerd op DEV op 2026-08-19:
+
+- editor opent vanuit het normale beheer-menu;
+- bestaande albums, covers en thumbnails worden correct geladen;
+- metadata/beschrijving opslaan behoudt alle bestaande foto-items;
+- testfoto uploaden werkt;
+- thumbnail wordt correct aangemaakt;
+- watermerk wordt correct toegepast;
+- cover wijzigen werkt;
+- testfoto verwijderen werkt zonder overige foto's te raken;
+- nette directe albumroute `/dev/fotoboek/crawlerbaan/` werkt;
+- `.htaccess` wordt aantoonbaar door de DEV-deployment meegenomen.
 
 ## Bewuste keuze
 
 Video-upload blijft uitgeschakeld, gelijk aan de bestaande situatie. Bestaande video-items blijven wel in het datamodel en de editor ondersteund.
 
-## Nog te valideren op DEV
-
-- LIVE-Fotoboek eenmalig veilig naar DEV seeden.
-- Editor opent vanuit het normale beheer-menu.
-- Bestaande albums, covers en thumbnails worden correct geladen.
-- Alleen metadata opslaan zonder upload.
-- Eén kleine testfoto uploaden en daarna weer verwijderen.
-- Cover wijzigen.
-- Eventueel een tijdelijk testalbum aanmaken en verwijderen om de nieuwe delete-flow te testen.
-
-Status: **wacht op DEV-validatie**.
+Status: **gevalideerd**.
