@@ -7,18 +7,18 @@ function paneelContext(): string
 {
   $script = str_replace('\\', '/', (string) ($_SERVER['SCRIPT_NAME'] ?? ''));
   $pad = strtolower((string) (parse_url($script, PHP_URL_PATH) ?: $script));
-  if (preg_match('~(?:^|/)beheer/(?:index\.php)?$~', $pad) || basename($pad) === 'beheer.php') return 'beheer';
-  if (preg_match('~(?:^|/)leden/(?:index\.php)?$~', $pad) || basename($pad) === 'leden.php') return 'leden';
+  if (preg_match('~(?:^|/)beheer/(?:index\.php)?$~', $pad) === 1 || basename($pad) === 'beheer.php') return 'beheer';
+  if (preg_match('~(?:^|/)leden/(?:index\.php)?$~', $pad) === 1 || basename($pad) === 'leden.php') return 'leden';
   return '';
 }
 
 $projectRoot = dirname(__DIR__);
 $huidigePaneelContext = paneelContext();
 if ($huidigePaneelContext === 'beheer') {
-  require_once $projectRoot . '/site.php';
+  require_once $projectRoot . '/app/core/site.php';
   require_once $projectRoot . '/beheer/bootstrap.php';
 } elseif ($huidigePaneelContext === 'leden') {
-  require_once $projectRoot . '/paneel-modules.php';
+  require_once $projectRoot . '/app/core/paneel-modules.php';
 }
 
 function datumWeergave($iso) {
@@ -50,18 +50,14 @@ function rekentabelJaarbedrag($rekentabelData, $jeugd, $jaar = null) {
   $sleutel = $jeugd ? 'jeugd_jaarbedrag' : 'senior_jaarbedrag';
   if ($jaar !== null && (int) $jaar === (int) $rekentabelData['jaar'] + 1) {
     $volgend = $rekentabelData[$sleutel . '_volgend'] ?? '';
-    if ($volgend !== '' && $volgend !== null && is_numeric($volgend)) {
-      return (float) $volgend;
-    }
+    if ($volgend !== '' && $volgend !== null && is_numeric($volgend)) return (float) $volgend;
   }
   return (float) $rekentabelData[$sleutel];
 }
 
 function rekentabelProRata($jaarbedrag) {
   $tabel = [];
-  for ($m = 1; $m <= 11; $m++) {
-    $tabel[$m] = (int) round($jaarbedrag * (12 - $m) / 12);
-  }
+  for ($m = 1; $m <= 11; $m++) $tabel[$m] = (int) round($jaarbedrag * (12 - $m) / 12);
   $tabel[12] = null;
   return $tabel;
 }
