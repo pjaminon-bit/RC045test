@@ -71,31 +71,7 @@ $fotoboekTekstBestand = $dataMap . '/fotoboek-pagina.json';
 $changelogBestand = $dataMap . '/changelog.json';
 $changelogVastPad = __DIR__ . '/changelog-historie.php';
 
-// Alle bestanden die automatisch back-upt worden (zie maakDataBackup()),
-// gebruikt door het tabblad "Back-ups" en de backup_herstellen-actie
-// verderop. "schrijffunctie" bepaalt via welke functie een herstelde back-up
-// weer wordt weggeschreven: gebruikers.json gaat via schrijfGebruikers, de
-// rest via het generieke schrijfJson.
-$dataBackupBestanden = [
-  'homepage'   => ['label' => 'Homepage teksten', 'pad' => $homepageBestand, 'schrijffunctie' => 'schrijfJson'],
-  'ontstaan'   => ['label' => 'Ontstaan (geschiedenis)', 'pad' => $ontstaanBestand, 'schrijffunctie' => 'schrijfJson'],
-  'baanreglement' => ['label' => 'Baanreglement', 'pad' => $baanreglementBestand, 'schrijffunctie' => 'schrijfJson'],
-  'bedankt'    => ['label' => 'Bedankt-pagina (betaalgegevens)', 'pad' => $bedanktBestand, 'schrijffunctie' => 'schrijfJson'],
-  'aanmelden'  => ['label' => 'Aanmelden (pagina)', 'pad' => $aanmeldenBestand, 'schrijffunctie' => 'schrijfJson'],
-  'media_pagina' => ['label' => 'Media (paginatekst)', 'pad' => $mediaTekstBestand, 'schrijffunctie' => 'schrijfJson'],
-  'fotoboek_pagina' => ['label' => 'Fotoboek (paginatekst)', 'pad' => $fotoboekTekstBestand, 'schrijffunctie' => 'schrijfJson'],
-  'mededeling' => ['label' => 'Openingstijden', 'pad' => $actueelBestand, 'schrijffunctie' => 'schrijfJson'],
-  'agenda'     => ['label' => 'Agenda', 'pad' => $agendaBestand, 'schrijffunctie' => 'schrijfJson'],
-  'faq'        => ['label' => 'Vragen (FAQ)', 'pad' => $faqBestand, 'schrijffunctie' => 'schrijfJson'],
-  'sponsors'   => ['label' => 'Sponsors', 'pad' => $sponsorBestand, 'schrijffunctie' => 'schrijfJson'],
-  'contact'    => ['label' => 'Contact', 'pad' => $contactBestand, 'schrijffunctie' => 'schrijfJson'],
-  'media'      => ['label' => 'Media', 'pad' => $mediaBestand, 'schrijffunctie' => 'schrijfJson'],
-  'fotoboek'   => ['label' => 'Fotoboek', 'pad' => $fotoboekBestand, 'schrijffunctie' => 'schrijfJson'],
-  'nieuws'     => ['label' => 'Nieuws', 'pad' => $nieuwsBestand, 'schrijffunctie' => 'schrijfJson'],
-  'rekentabel' => ['label' => 'Rekentabel contributie', 'pad' => $rekentabelBestand, 'schrijffunctie' => 'schrijfJson'],
-  'changelog'  => ['label' => 'Changelog (eigen regels)', 'pad' => $changelogBestand, 'schrijffunctie' => 'schrijfJson'],
-  'gebruikers' => ['label' => 'Gebruikers', 'pad' => $usersBestand, 'schrijffunctie' => 'schrijfGebruikers'],
-];
+// Back-upoverzicht en herstel staan in beheer/backups.php.
 
 // Formaten voor het fotoboek: volledige (web) versie max 1600px breed,
 // thumbnail voor de albumgrid max 400px breed. Alleen verkleinen, nooit
@@ -1236,21 +1212,7 @@ function schrijfJson($pad, $data) {
   return file_put_contents($pad, $inhoud, LOCK_EX) !== false;
 }
 
-// Geeft de beschikbare back-ups van precies één bestand terug (nieuwste
-// eerst), als array van ['bestand' => bestandsnaam zonder pad, 'tijd' =>
-// unix-timestamp]. $basisnaam is bijv. "fotoboek.json", zonder pad.
-function lijstDataBackups($backupMap, $basisnaam) {
-  $bestanden = @glob($backupMap . '/*_' . $basisnaam);
-  if ($bestanden === false) return [];
-  $resultaat = [];
-  foreach ($bestanden as $b) {
-    $tijd = @filemtime($b);
-    if ($tijd === false) continue;
-    $resultaat[] = ['bestand' => basename($b), 'tijd' => $tijd];
-  }
-  usort($resultaat, function($a, $b) { return $b['tijd'] <=> $a['tijd']; });
-  return $resultaat;
-}
+// Back-uplijsten worden door beheer/backups.php opgebouwd.
 
 // Leest de afmetingen van een sponsorlogo dat al op de server staat. Die gaan
 // mee in sponsors.json, zodat de website width/height op het <img> kan zetten
@@ -1866,8 +1828,8 @@ $toegestaneTabs         = $rechten['toegestaneTabs'];
 $eigenRol               = $rechten['eigenRol'];
 $isBestuurslid          = $rechten['isBestuurslid'];
 
-// Gebruikers, Log en Back-ups waren tot nu toe alleen bereikbaar met het
-// beheerderswachtwoord en zijn nu een vinkje net als de rest. Een account
+// Gebruikers, Log en Back-ups zijn zelfstandige beheermodules. Hun
+// rechten blijven hier onderdeel van dezelfde centrale toegangslijst. Een account
 // waarvoor nooit een selectie is opgeslagen mag volgens authRechten() alles,
 // en zou er daardoor stilzwijgend drie rechten bij krijgen die het nooit
 // heeft gehad. Dus: wie geen expliciete selectie heeft, krijgt deze drie
@@ -1934,10 +1896,6 @@ $formulierTab = [
   'fotoboek_album_aanmaken' => 'fotoboek', 'fotoboek_album_bewerken' => 'fotoboek',
   'changelog_toevoegen' => 'changelog', 'changelog_bewerken' => 'changelog',
   'changelog_verwijderen' => 'changelog',
-  'gebruiker_toevoegen' => 'gebruikers',
-  'gebruiker_tabs_bijwerken' => 'gebruikers',
-  'gebruiker_verwijderen' => 'gebruikers',
-  'backup_herstellen' => 'backups',
 ];
 
 // ===== Inhoud opslaan (openingstijden / agenda / faq / sponsors / gebruikers) =====
@@ -3014,163 +2972,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $ingelogd) {
       }
     }
 
-  } elseif ($formulier === 'gebruiker_toevoegen') {
-    $nieuweNaam = trim($_POST['nieuwe_gebruikersnaam'] ?? '');
-    $nieuwWachtwoord = $_POST['nieuw_wachtwoord'] ?? '';
-    $nieuwWachtwoordHerhaald = $_POST['nieuw_wachtwoord_herhaald'] ?? '';
-    // Alleen bekende tabsleutels overnemen; onbekende waarden (geknoei met
-    // het formulier) worden gewoon genegeerd.
-    $gekozenTabs = array_values(array_intersect(array_keys($beheerTabsToewijsbaar), (array) ($_POST['tabs'] ?? [])));
+  // Gebruikersbeheer en back-upherstel staan in zelfstandige modules.
 
-    if ($nieuweNaam === '' || !preg_match('/^[a-zA-Z0-9._-]{2,30}$/', $nieuweNaam)) {
-      $melding['gebruikers'] = 'Gebruikersnaam moet 2 tot 30 tekens zijn: letters, cijfers, punt, streepje of underscore.';
-      $meldingType['gebruikers'] = 'fout';
-    } elseif (strcasecmp($nieuweNaam, 'beheerder') === 0) {
-      $melding['gebruikers'] = '"beheerder" is gereserveerd voor het beheerderswachtwoord, kies een andere gebruikersnaam.';
-      $meldingType['gebruikers'] = 'fout';
-    } elseif (strlen($nieuwWachtwoord) < 8) {
-      $melding['gebruikers'] = 'Wachtwoord moet minstens 8 tekens zijn.';
-      $meldingType['gebruikers'] = 'fout';
-    } elseif ($nieuwWachtwoord !== $nieuwWachtwoordHerhaald) {
-      $melding['gebruikers'] = 'De twee wachtwoorden komen niet overeen.';
-      $meldingType['gebruikers'] = 'fout';
-    } else {
-      $gebruikers = laadGebruikers($usersBestand);
-      $bestondAl = false;
-      foreach ($gebruikers as &$g) {
-        if (strcasecmp($g['gebruikersnaam'], $nieuweNaam) === 0) {
-          // Alleen het wachtwoord: de toegang van een bestaande gebruiker
-          // pas je hierboven per gebruiker aan, niet hier. Dit formulier
-          // toont altijd alles aangevinkt (het is het "nieuwe gebruiker"-
-          // formulier), dus zou anders per ongeluk bestaande beperkingen
-          // resetten bij een simpele wachtwoord-reset.
-          $g['hash'] = password_hash($nieuwWachtwoord, PASSWORD_DEFAULT);
-          $bestondAl = true;
-          break;
-        }
-      }
-      unset($g);
-      if (!$bestondAl) {
-        $gebruikers[] = ['gebruikersnaam' => $nieuweNaam, 'hash' => password_hash($nieuwWachtwoord, PASSWORD_DEFAULT), 'aangemaakt' => date('c'), 'tabs' => $gekozenTabs];
-      }
-      if (schrijfGebruikers($usersBestand, $gebruikers)) {
-        $melding['gebruikers'] = $bestondAl ? ('Wachtwoord van "' . $nieuweNaam . '" is bijgewerkt.') : ('Gebruiker "' . $nieuweNaam . '" is aangemaakt.');
-        $meldingType['gebruikers'] = 'ok';
-        schrijfLog($logBestand, $huidigeGebruiker, $bestondAl ? 'wachtwoord_reset' : 'gebruiker_aangemaakt', $nieuweNaam);
-      } else {
-        $melding['gebruikers'] = 'Opslaan mislukt. Controleer de schrijfrechten in de hoofdmap van de server.';
-        $meldingType['gebruikers'] = 'fout';
-      }
-    }
-
-  } elseif ($formulier === 'gebruiker_tabs_bijwerken') {
-    // Alleen de toegang aanpassen, los van het wachtwoord: dit is de knop
-    // per gebruiker in het overzicht, niet het formulier hieronder.
-    $doelNaam = trim($_POST['gebruikersnaam'] ?? '');
-    $gekozenTabs = array_values(array_intersect(array_keys($beheerTabsToewijsbaar), (array) ($_POST['tabs'] ?? [])));
-    $gebruikers = laadGebruikers($usersBestand);
-    $gevonden = false;
-    foreach ($gebruikers as &$g) {
-      if (isset($g['gebruikersnaam']) && strcasecmp($g['gebruikersnaam'], $doelNaam) === 0) {
-        $g['tabs'] = $gekozenTabs;
-        $gevonden = true;
-        break;
-      }
-    }
-    unset($g);
-    if (!$gevonden) {
-      $melding['gebruikers'] = 'Gebruiker niet gevonden.';
-      $meldingType['gebruikers'] = 'fout';
-    } elseif (schrijfGebruikers($usersBestand, $gebruikers)) {
-      $melding['gebruikers'] = 'Toegang van "' . $doelNaam . '" is bijgewerkt.';
-      $meldingType['gebruikers'] = 'ok';
-      schrijfLog($logBestand, $huidigeGebruiker, 'toegang_bijgewerkt', $doelNaam . ': ' . ($gekozenTabs ? implode(', ', $gekozenTabs) : 'geen tabs'));
-    } else {
-      $melding['gebruikers'] = 'Opslaan mislukt. Controleer de schrijfrechten in de hoofdmap van de server.';
-      $meldingType['gebruikers'] = 'fout';
-    }
-
-  } elseif ($formulier === 'gebruiker_verwijderen') {
-    $teVerwijderen = trim($_POST['gebruikersnaam'] ?? '');
-    $gebruikers = laadGebruikers($usersBestand);
-    if (!$isMaster && strcasecmp($teVerwijderen, $huidigeGebruiker) === 0) {
-      // Jezelf verwijderen terwijl je ermee ingelogd bent: dat is nooit de
-      // bedoeling en je bent er meteen mee buitengesloten.
-      $melding['gebruikers'] = 'Je kunt je eigen account niet verwijderen.';
-      $meldingType['gebruikers'] = 'fout';
-      $gebruikers = null;
-    }
-    if ($gebruikers === null) {
-      // Al afgehandeld hierboven.
-    } else {
-    $nieuweLijst = array_values(array_filter($gebruikers, function($g) use ($teVerwijderen) {
-      return !isset($g['gebruikersnaam']) || strcasecmp($g['gebruikersnaam'], $teVerwijderen) !== 0;
-    }));
-    if (count($nieuweLijst) === count($gebruikers)) {
-      $melding['gebruikers'] = 'Gebruiker niet gevonden.';
-      $meldingType['gebruikers'] = 'fout';
-    } elseif (schrijfGebruikers($usersBestand, $nieuweLijst)) {
-      $melding['gebruikers'] = 'Gebruiker "' . $teVerwijderen . '" is verwijderd.';
-      $meldingType['gebruikers'] = 'ok';
-      schrijfLog($logBestand, $huidigeGebruiker, 'gebruiker_verwijderd', $teVerwijderen);
-    } else {
-      $melding['gebruikers'] = 'Verwijderen mislukt. Controleer de schrijfrechten in de hoofdmap van de server.';
-      $meldingType['gebruikers'] = 'fout';
-    }
-    }
-
-  } elseif ($formulier === 'backup_herstellen') {
-    $sleutel = $_POST['sleutel'] ?? '';
-    // basename() eerst: het POST-veld mag nooit een pad bevatten, alleen een
-    // kale bestandsnaam. Zo kan dit veld nooit gebruikt worden om buiten
-    // data-backups/ te lezen.
-    $backupBestandsnaam = basename($_POST['backup_bestand'] ?? '');
-    $info = $dataBackupBestanden[$sleutel] ?? null;
-    $verwachteUitgang = $info ? ('_' . basename($info['pad'])) : null;
-
-    if (!$info) {
-      $melding['backups'] = 'Onbekend databestand.';
-      $meldingType['backups'] = 'fout';
-    } elseif ($backupBestandsnaam === '' || substr($backupBestandsnaam, -strlen($verwachteUitgang)) !== $verwachteUitgang) {
-      // De bestandsnaam moet qua opbouw (tijdstempel_basisnaam) echt bij dit
-      // databestand horen, anders zou iemand met een aangepast formulier de
-      // back-up van het ene bestand in het andere kunnen proberen herstellen.
-      $melding['backups'] = 'Ongeldige back-up geselecteerd.';
-      $meldingType['backups'] = 'fout';
-    } else {
-      $backupPad = $dataBackupMap . '/' . $backupBestandsnaam;
-      if (!is_file($backupPad)) {
-        $melding['backups'] = 'Deze back-up bestaat niet meer.';
-        $meldingType['backups'] = 'fout';
-      } else {
-        $ruweInhoud = @file_get_contents($backupPad);
-        $herstelData = $ruweInhoud === false ? null : json_decode($ruweInhoud, true);
-        if ($ruweInhoud === false || json_last_error() !== JSON_ERROR_NONE) {
-          $melding['backups'] = 'Back-up kon niet gelezen worden (beschadigd bestand?).';
-          $meldingType['backups'] = 'fout';
-        } else {
-          $backupTijd = filemtime($backupPad);
-          // schrijfJson()/schrijfGebruikers() maken zelf, vóórdat ze
-          // overschrijven, ook weer een back-up: de huidige (net te vervangen)
-          // versie gaat dus niet verloren, ook dit herstel is terug te draaien.
-          $gelukt = $info['schrijffunctie'] === 'schrijfGebruikers'
-            ? schrijfGebruikers($info['pad'], $herstelData)
-            : schrijfJson($info['pad'], $herstelData);
-          if ($gelukt) {
-            schrijfLog($logBestand, $huidigeGebruiker, 'backup_hersteld', $info['label'] . ' (' . $backupBestandsnaam . ')');
-            $_SESSION['flash'] = ['backups' => [
-              'tekst' => $info['label'] . ' is teruggezet naar de versie van ' . date('d-m-Y H:i', $backupTijd ?: time()) . '. De versie van vlak vóór dit herstel is zelf ook als back-up bewaard.',
-              'type' => 'ok',
-            ]];
-            header('Location: beheer.php#backups');
-            exit;
-          } else {
-            $melding['backups'] = 'Terugzetten mislukt. Controleer de schrijfrechten op de server.';
-            $meldingType['backups'] = 'fout';
-          }
-        }
-      }
-    }
   // De opslag-acties van de ledenadministratie, commissies, vergaderingen,
   // taken en evenementen staan in leden.php.
   }
@@ -3447,12 +3250,6 @@ foreach ($changelogLijst as $clRegel) {
   if (isset($changelogTellingen[$clCatSleutel])) $changelogTellingen[$clCatSleutel]++;
 }
 
-$gebruikersLijst = in_array('gebruikers', $toegestaneTabs, true) ? laadGebruikers($usersBestand) : [];
-$logRegels = [];
-if (in_array('log', $toegestaneTabs, true) && file_exists($logBestand)) {
-  $json = json_decode(file_get_contents($logBestand), true);
-  if (is_array($json)) $logRegels = array_reverse($json);
-}
 ?>
 <!DOCTYPE html>
 <html lang="nl">
@@ -3518,7 +3315,7 @@ if (in_array('log', $toegestaneTabs, true) && file_exists($logBestand)) {
           ['label' => "Pagina's", 'tabs' => ['homepage', 'ontstaan', 'baanreglement', 'aanmelden', 'bedankt']],
           ['label' => 'Content', 'tabs' => ['mededeling', 'nieuws', 'agenda', 'contact', 'sponsors', 'faq', 'media', 'fotoboek']],
           ['label' => 'Contributie', 'tabs' => ['rekentabel']],
-          ['label' => 'Beheer', 'tabs' => ['changelog', 'gebruikers', 'log', 'backups']],
+          ['label' => 'Beheer', 'tabs' => ['changelog']],
         ];
       ?>
       <?php foreach ($menuGroepen as $groepIndex => $groep): ?>
@@ -3527,8 +3324,21 @@ if (in_array('log', $toegestaneTabs, true) && file_exists($logBestand)) {
           foreach ($groep['tabs'] as $tabSleutel) {
             if (in_array($tabSleutel, $toegestaneTabs, true)) $zichtbaar[] = $tabSleutel;
           }
+          $zichtbareModuleLinks = [];
+          if ($groep['label'] === 'Beheer') {
+            $moduleLinks = [
+              'gebruikers' => ['label' => 'Gebruikers', 'href' => 'beheer/gebruikers.php'],
+              'log'        => ['label' => 'Logboek', 'href' => 'beheer/logboek.php'],
+              'backups'    => ['label' => 'Back-ups', 'href' => 'beheer/backups.php'],
+            ];
+            foreach ($moduleLinks as $moduleSleutel => $moduleInfo) {
+              if ($isMaster || in_array($moduleSleutel, $toegestaneTabs, true)) {
+                $zichtbareModuleLinks[$moduleSleutel] = $moduleInfo;
+              }
+            }
+          }
         ?>
-        <?php if (!empty($zichtbaar)): ?>
+        <?php if (!empty($zichtbaar) || !empty($zichtbareModuleLinks)): ?>
       <div class="menu-groep">
         <button type="button" class="menu-groep-label" data-groep="<?php echo $groepIndex; ?>" aria-expanded="false" aria-controls="menu-groep-items-<?php echo $groepIndex; ?>">
           <span><?php echo htmlspecialchars($groep['label']); ?></span>
@@ -3537,6 +3347,9 @@ if (in_array('log', $toegestaneTabs, true) && file_exists($logBestand)) {
         <div class="menu-groep-items" id="menu-groep-items-<?php echo $groepIndex; ?>" data-groep="<?php echo $groepIndex; ?>" hidden>
           <?php foreach ($zichtbaar as $tabSleutel): ?>
       <button type="button" class="menu-item" data-tab="<?php echo $tabSleutel; ?>"><?php echo htmlspecialchars($menuLabels[$tabSleutel]); ?></button>
+          <?php endforeach; ?>
+          <?php foreach ($zichtbareModuleLinks as $moduleInfo): ?>
+      <a class="menu-module-link" href="<?php echo htmlspecialchars($moduleInfo['href']); ?>"><?php echo htmlspecialchars($moduleInfo['label']); ?></a>
           <?php endforeach; ?>
         </div>
       </div>
@@ -4655,205 +4468,6 @@ if (in_array('log', $toegestaneTabs, true) && file_exists($logBestand)) {
           </form>
           </div>
         </details>
-      </div>
-    <?php endforeach; ?>
-    </div>
-
-    <?php endif; ?>
-
-    <?php if (in_array('gebruikers', $toegestaneTabs, true)): ?>
-
-    <div class="tab-paneel" id="tab-gebruikers">
-    <!-- ===== GEBRUIKERS ===== -->
-    <div class="kaart">
-      <h1>Gebruikers</h1>
-      <p class="sub">Iedereen die kan inloggen. Zonder aangevinkte tabbladen komt iemand alleen op de ledenpagina; met vinkjes ook hier in het beheer. Koppel een account bij Leden aan het juiste lid, anders ziet die persoon op de ledenpagina niets persoonlijks.</p>
-
-      <?php if (isset($melding['gebruikers'])): ?>
-        <div class="melding <?php echo $meldingType['gebruikers']; ?>"><?php echo htmlspecialchars($melding['gebruikers']); ?></div>
-      <?php endif; ?>
-
-      <?php if (count($gebruikersLijst) === 0): ?>
-        <p class="hint">Nog geen gebruikers aangemaakt.</p>
-      <?php else: ?>
-        <?php foreach ($gebruikersLijst as $g): ?>
-          <?php
-            // Geen 'tabs'-veld opgeslagen (nog nooit ingesteld) betekent
-            // hier, net als bij het bepalen van de echte rechten hierboven,
-            // volledige toegang: alle vinkjes staan dan aan.
-            $gHeeftBeperking = isset($g['tabs']) && is_array($g['tabs']);
-            // Geen enkel tabblad aangevinkt betekent: alleen de ledenpagina,
-            // geen toegang tot dit beheerscherm. Accounts zonder 'tabs'-veld
-            // (van voor die instelling) mogen nog alles, zie authRechten().
-            $gAlleenLeden = $gHeeftBeperking && count($g['tabs']) === 0;
-          ?>
-          <div class="gebruiker-rij">
-            <div class="gebruiker-rij-boven">
-              <div>
-                <strong><?php echo htmlspecialchars($g['gebruikersnaam'] ?? ''); ?></strong>
-                <span class="gebruiker-sinds"><?php echo $gAlleenLeden ? 'alleen ledenpagina' : 'ook beheer'; ?></span>
-                <?php if (!empty($g['aangemaakt'])): ?>
-                  <span class="gebruiker-sinds">sinds <?php echo htmlspecialchars(date('d-m-Y', strtotime($g['aangemaakt']))); ?></span>
-                <?php endif; ?>
-              </div>
-              <form method="post" action="beheer.php#gebruikers" onsubmit="return confirm('Gebruiker &quot;<?php echo htmlspecialchars($g['gebruikersnaam'] ?? '', ENT_QUOTES); ?>&quot; verwijderen?');">
-                <input type="hidden" name="formulier" value="gebruiker_verwijderen">
-                <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrfToken); ?>">
-                <input type="hidden" name="gebruikersnaam" value="<?php echo htmlspecialchars($g['gebruikersnaam'] ?? ''); ?>">
-                <button type="submit" class="knop-klein">Verwijderen</button>
-              </form>
-            </div>
-            <form method="post" action="beheer.php#gebruikers" class="gebruiker-tabs-form">
-              <input type="hidden" name="formulier" value="gebruiker_tabs_bijwerken">
-              <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrfToken); ?>">
-              <input type="hidden" name="gebruikersnaam" value="<?php echo htmlspecialchars($g['gebruikersnaam'] ?? ''); ?>">
-              <div class="veld">
-                <label id="gebruiker-tabs-label-<?php echo htmlspecialchars($g['gebruikersnaam'] ?? ''); ?>">Toegang tot</label>
-                <div class="multiselect">
-                  <button type="button" class="multiselect-trigger" aria-expanded="false" aria-labelledby="gebruiker-tabs-label-<?php echo htmlspecialchars($g['gebruikersnaam'] ?? ''); ?>">
-                    <span class="multiselect-label">Alles</span>
-                    <span class="multiselect-pijl" aria-hidden="true">▾</span>
-                  </button>
-                  <div class="multiselect-paneel" hidden>
-                    <input type="text" class="multiselect-zoek" placeholder="Zoeken">
-                    <div class="multiselect-opties">
-                      <?php foreach ($beheerTabsToewijsbaar as $tabSleutel => $tabLabel): ?>
-                        <label class="multiselect-optie">
-                          <input type="checkbox" name="tabs[]" value="<?php echo $tabSleutel; ?>" <?php if (!$gHeeftBeperking || in_array($tabSleutel, $g['tabs'], true)) echo 'checked'; ?>>
-                          <span><?php echo htmlspecialchars($tabLabel); ?></span>
-                        </label>
-                      <?php endforeach; ?>
-                    </div>
-                    <div class="multiselect-acties">
-                      <button type="button" data-actie="alles">Alles</button>
-                      <button type="button" data-actie="niets">Niets</button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <button type="submit" class="knop-klein">Toegang opslaan</button>
-            </form>
-          </div>
-        <?php endforeach; ?>
-      <?php endif; ?>
-    </div>
-
-    <div class="kaart">
-      <h1>Nieuwe gebruiker</h1>
-      <p class="sub">Bestaat de gebruikersnaam al, dan wordt alleen het wachtwoord bijgewerkt.</p>
-      <form method="post" action="beheer.php#gebruikers">
-        <input type="hidden" name="formulier" value="gebruiker_toevoegen">
-        <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrfToken); ?>">
-        <div class="veld">
-          <label for="nieuwe-gebruikersnaam">Gebruikersnaam</label>
-          <input type="text" id="nieuwe-gebruikersnaam" name="nieuwe_gebruikersnaam" maxlength="30" placeholder="Bijv.: jan" autocapitalize="off" required>
-        </div>
-        <div class="veld">
-          <label for="nieuw-wachtwoord">Wachtwoord</label>
-          <input type="password" id="nieuw-wachtwoord" name="nieuw_wachtwoord" autocomplete="new-password" required>
-          <p class="hint">Minstens 8 tekens.</p>
-        </div>
-        <div class="veld">
-          <label for="nieuw-wachtwoord-herhaald">Wachtwoord herhalen</label>
-          <input type="password" id="nieuw-wachtwoord-herhaald" name="nieuw_wachtwoord_herhaald" autocomplete="new-password" required>
-        </div>
-        <div class="veld" id="nieuwe-gebruiker-tabs">
-          <label id="nieuwe-gebruiker-tabs-label">Toegang tot</label>
-          <div class="multiselect">
-            <button type="button" class="multiselect-trigger" aria-expanded="false" aria-labelledby="nieuwe-gebruiker-tabs-label">
-              <span class="multiselect-label">Niets geselecteerd</span>
-              <span class="multiselect-pijl" aria-hidden="true">▾</span>
-            </button>
-            <div class="multiselect-paneel" hidden>
-              <input type="text" class="multiselect-zoek" placeholder="Zoeken">
-              <div class="multiselect-opties">
-                <?php foreach ($beheerTabsToewijsbaar as $tabSleutel => $tabLabel): ?>
-                  <label class="multiselect-optie">
-                    <input type="checkbox" name="tabs[]" value="<?php echo $tabSleutel; ?>">
-                    <span><?php echo htmlspecialchars($tabLabel); ?></span>
-                  </label>
-                <?php endforeach; ?>
-              </div>
-              <div class="multiselect-acties">
-                <button type="button" data-actie="alles">Alles</button>
-                <button type="button" data-actie="niets">Niets</button>
-              </div>
-            </div>
-          </div>
-          <p class="hint">Standaard staat alles uit: dan kan deze persoon alleen op de ledenpagina, niet in dit beheerscherm. Vink aan waar hij of zij wél bij mag. Achteraf aanpassen kan altijd, hierboven in de lijst. Geldt alleen bij het aanmaken; bij een bestaande gebruikersnaam wordt hier alleen het wachtwoord bijgewerkt en blijft de toegang zoals hij was.</p>
-        </div>
-        <button type="submit">Gebruiker opslaan</button>
-      </form>
-    </div>
-    </div>
-    <?php endif; ?>
-
-    <?php if (in_array('log', $toegestaneTabs, true)): ?>
-    <div class="tab-paneel" id="tab-log">
-    <!-- ===== LOGBOEK ===== -->
-    <div class="kaart">
-      <h1>Logboek</h1>
-      <p class="sub">De laatste wijzigingen van de afgelopen 90 dagen, nieuwste bovenaan.</p>
-
-      <?php if (count($logRegels) === 0): ?>
-        <p class="hint">Nog geen activiteit gelogd.</p>
-      <?php else: ?>
-        <table class="reken" id="logboek-tabel">
-          <tr>
-            <th>Tijd <button type="button" class="logboek-filter-knop" data-kolom="0" aria-label="Filter op tijd">Filter ▾</button></th>
-            <th>Gebruiker <button type="button" class="logboek-filter-knop" data-kolom="1" aria-label="Filter op gebruiker">Filter ▾</button></th>
-            <th>Actie <button type="button" class="logboek-filter-knop" data-kolom="2" aria-label="Filter op actie">Filter ▾</button></th>
-          </tr>
-          <?php foreach (array_slice($logRegels, 0, 1000) as $regel): ?>
-            <tr>
-              <td data-label="Tijd" data-filterwaarde="<?php echo htmlspecialchars(date('d-m-Y', strtotime($regel['tijd'] ?? ''))); ?>"><?php echo htmlspecialchars(date('d-m-Y H:i', strtotime($regel['tijd'] ?? ''))); ?></td>
-              <td data-label="Wie" data-filterwaarde="<?php echo htmlspecialchars($regel['gebruiker'] ?? ''); ?>"><?php echo htmlspecialchars($regel['gebruiker'] ?? ''); ?></td>
-              <td data-label="Actie" data-filterwaarde="<?php echo htmlspecialchars($regel['actie'] ?? ''); ?>"><?php echo htmlspecialchars($regel['actie'] ?? ''); ?><?php echo !empty($regel['details']) ? ': ' . htmlspecialchars($regel['details']) : ''; ?></td>
-            </tr>
-          <?php endforeach; ?>
-        </table>
-        <p class="hint logboek-geen-resultaten-melding" hidden>Geen regels komen overeen met de filters.</p>
-      <?php endif; ?>
-    </div>
-    </div>
-    <?php endif; ?>
-
-    <?php if (in_array('backups', $toegestaneTabs, true)): ?>
-    <div class="tab-paneel" id="tab-backups">
-    <!-- ===== BACK-UPS ===== -->
-    <?php if (isset($melding['backups'])): ?>
-      <div class="melding <?php echo $meldingType['backups']; ?>"><?php echo htmlspecialchars($melding['backups']); ?></div>
-    <?php endif; ?>
-
-    <?php foreach ($dataBackupBestanden as $sleutel => $info): ?>
-      <div class="kaart">
-        <h1><?php echo htmlspecialchars($info['label']); ?></h1>
-        <p class="sub">Automatische back-up vlak vóór elke keer opslaan, bewaard voor 90 dagen.</p>
-        <?php
-          $volledigeBackupLijst = lijstDataBackups($dataBackupMap, basename($info['pad']));
-          $getoondeBackups = array_slice($volledigeBackupLijst, 0, 20);
-        ?>
-        <?php if (count($getoondeBackups) === 0): ?>
-          <p class="hint">Nog geen back-up van dit bestand.</p>
-        <?php else: ?>
-          <form method="post" action="beheer.php#backups" class="backup-herstel-form" onsubmit="return confirm('<?php echo htmlspecialchars($info['label'], ENT_QUOTES); ?> terugzetten naar de geselecteerde versie? De huidige versie wordt eerst zelf ook als back-up bewaard.');">
-            <input type="hidden" name="formulier" value="backup_herstellen">
-            <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrfToken); ?>">
-            <input type="hidden" name="sleutel" value="<?php echo htmlspecialchars($sleutel); ?>">
-            <div class="veld">
-              <label for="backup-kiezen-<?php echo $sleutel; ?>">Versie</label>
-              <select id="backup-kiezen-<?php echo $sleutel; ?>" name="backup_bestand">
-                <?php foreach ($getoondeBackups as $b): ?>
-                  <option value="<?php echo htmlspecialchars($b['bestand']); ?>"><?php echo htmlspecialchars(date('d-m-Y H:i', $b['tijd'])); ?></option>
-                <?php endforeach; ?>
-              </select>
-            </div>
-            <button type="submit" class="knop-klein">Terugzetten</button>
-          </form>
-          <?php if (count($volledigeBackupLijst) > count($getoondeBackups)): ?>
-            <p class="hint">Nieuwste 20 van de <?php echo count($volledigeBackupLijst); ?> getoond, nieuwste bovenaan in de lijst.</p>
-          <?php endif; ?>
-        <?php endif; ?>
       </div>
     <?php endforeach; ?>
     </div>
