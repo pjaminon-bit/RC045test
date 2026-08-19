@@ -17,9 +17,11 @@ function beheerLogboekStartOutputFilter(): void
         if (!is_string($html)) return $html;
 
         if (beheerLogboekMagOpenen()) {
+            // Logboek staat inmiddels als zelfstandige modulelink in het
+            // beheer-menu. Markeer gemigreerde modules zichtbaar met "* ".
             $html = preg_replace(
-                '~<button\s+type="button"\s+class="menu-item"\s+data-tab="log">.*?</button>~is',
-                '<a class="menu-item menu-item-link" style="display:block;text-decoration:none" href="logboek.php">* Logboek</a>',
+                '~<a\s+class="menu-module-link"\s+href="logboek\.php">\s*\*?\s*Logboek\s*</a>~is',
+                '<a class="menu-module-link" href="logboek.php">* Logboek</a>',
                 $html,
                 1
             ) ?? $html;
