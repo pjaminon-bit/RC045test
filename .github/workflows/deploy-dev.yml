@@ -4,17 +4,50 @@ on:
   push:
     branches:
       - agent/template-foundation
+      - agent/final-audit-hardening
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: rc045-dev-deploy
+  group: rc045-${{ github.ref_name }}
   cancel-in-progress: true
 
 jobs:
+  validate-staging:
+    if: github.ref_name == 'agent/final-audit-hardening'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout stagingcode
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Controleer volledige PHP syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          php -v
+          while IFS= read -r -d '' bestand; do
+            php -l "$bestand"
+          done < <(find . -type f -name '*.php' -print0)
+
+      - name: Controleer refactor-invarianten
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check HEAD~1 HEAD || true
+          test -f app/core/site.php
+          test -f app/core/module-definities.php
+          test -f app/core/paneel-modules.php
+          grep -Fq "app/content/content-pagina.php" beheer/modules/contentpaginas.php
+          ! grep -R -n --include='*.php' 'href="beheer/' beheer/modules
+          grep -Fq 'href="agenda.php">* Agenda' beheer/modules/agenda.php
+          grep -Fq 'href="gebruikers.php">* Gebruikers' beheer/modules/gebruikers.php
+          grep -Fq "preg_match('~(?:^|/)beheer/(?:index\\.php)?$~'" app/core/site.php
+          grep -Fq "preg_match('~(?:^|/)leden/(?:index\\.php)?$~'" app/core/paneel-modules.php
+
   deploy-dev:
+    if: github.ref_name == 'agent/template-foundation'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout testcode
@@ -54,8 +87,6 @@ jobs:
           local_path: './*'
           remote_path: '/'
 
-      # ./* neemt verborgen bestanden niet mee. .htaccess is onderdeel van de
-      # applicatie (rewrites + securityregels), dus upload dit bestand apart.
       - name: Upload .htaccess expliciet naar DEV
         uses: wlixcc/SFTP-Deploy-Action@a5ccb9c6211a94cc59404f0fdb2a9936a6dfee64 # v1.2.6
         with:
