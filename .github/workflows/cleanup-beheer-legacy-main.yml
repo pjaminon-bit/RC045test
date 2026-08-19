@@ -1,0 +1,53 @@
+name: One-time beheer legacy cleanup trigger
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/cleanup-beheer-legacy-main.yml
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup-dev-branch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout DEV branch
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: agent/template-foundation
+          fetch-depth: 0
+
+      - name: Cleanup migrated beheer modules
+        shell: bash
+        run: |
+          python3 tools/cleanup-beheer-legacy.py
+
+          php -l beheer.php
+          php -l beheer/gebruikers.php
+          php -l beheer/logboek.php
+          php -l beheer/backups.php
+          git diff --check
+
+          ! grep -q "id=\"tab-gebruikers\"" beheer.php
+          ! grep -q "id=\"tab-log\"" beheer.php
+          ! grep -q "id=\"tab-backups\"" beheer.php
+          ! grep -q "formulier === 'gebruiker_toevoegen'" beheer.php
+          ! grep -q "formulier === 'gebruiker_tabs_bijwerken'" beheer.php
+          ! grep -q "formulier === 'gebruiker_verwijderen'" beheer.php
+          ! grep -q "formulier === 'backup_herstellen'" beheer.php
+
+      - name: Commit cleanup naar DEV branch
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo 'Geen wijzigingen nodig.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add beheer.php paneel.css paneel.js
+          git commit -m 'Clean migrated modules from legacy beheer'
+          git push origin HEAD:agent/template-foundation
