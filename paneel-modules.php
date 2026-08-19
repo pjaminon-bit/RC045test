@@ -1,10 +1,6 @@
 <?php
 // ============================================================
-// Modulekoppeling voor afgeschermde panelen
-// ============================================================
-// beheer.php gebruikt de modulelaag via site.php. Dit bestand vult dezelfde
-// bescherming aan voor leden.php, zonder de publieke templatefilter op het
-// ledenpaneel los te laten.
+// Modulekoppeling voor afgeschermde ledenpaneel
 // ============================================================
 
 function paneelModuleConfig(): array
@@ -42,9 +38,17 @@ function paneelModuleVoorFormulier(string $formulier, string $veld): ?string
     return null;
 }
 
+function paneelIsLedenPagina(): bool
+{
+    $script = str_replace('\\', '/', (string) ($_SERVER['SCRIPT_NAME'] ?? ''));
+    $pad = strtolower((string) (parse_url($script, PHP_URL_PATH) ?: $script));
+    return basename($pad) === 'leden.php'
+        || preg_match('~(?:^|/)leden/(?:index\.php)?$~', $pad) === 1;
+}
+
 function paneelBewaakLedenModulePost(): void
 {
-    if (strtolower(basename((string) ($_SERVER['SCRIPT_NAME'] ?? ''))) !== 'leden.php') return;
+    if (!paneelIsLedenPagina()) return;
     if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') return;
 
     $formulier = isset($_POST['formulier']) && is_string($_POST['formulier']) ? $_POST['formulier'] : '';
@@ -86,7 +90,7 @@ function paneelLedenModuleVisibilityMarkup(): string
 
 function paneelStartLedenModuleFilter(): void
 {
-    if (strtolower(basename((string) ($_SERVER['SCRIPT_NAME'] ?? ''))) !== 'leden.php') return;
+    if (!paneelIsLedenPagina()) return;
     static $actief = false;
     if ($actief) return;
     $actief = true;
