@@ -64,6 +64,15 @@ RewriteRule ^ https://rc045.nl%{REQUEST_URI} [R=301,L]
 DirectoryIndex index.php index.html
 
 
+# ===== Fotoboek: nette album-URL's =====
+# Werkt zowel in de domeinroot als wanneer dezelfde .htaccess onder /dev staat:
+#   /fotoboek/                 -> fotoboek.php
+#   /fotoboek/crawlerbaan/     -> fotoboek.php?album=crawlerbaan
+# De browser blijft de nette URL zien; dit zijn alleen interne rewrites.
+RewriteRule ^fotoboek/?$ fotoboek.php [L,QSA]
+RewriteRule ^fotoboek/([a-z0-9][a-z0-9-]*)/?$ fotoboek.php?album=$1 [L,QSA,NC]
+
+
 # ===== Publieke pagina's draaien op PHP, URL's blijven .html =====
 # De publieke pagina's zijn PHP geworden voor server-side SEO.
 #
