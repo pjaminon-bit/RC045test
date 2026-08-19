@@ -3,7 +3,7 @@
 // Modulaire beheerpagina: Gebruikers
 // ============================================================
 require_once dirname(__DIR__) . '/auth.php';
-require_once dirname(__DIR__) . '/data-slot.php';
+require_once dirname(__DIR__) . '/app/data-slot.php';
 if (!$ingelogd) { header('Location: ../beheer.php'); exit; }
 if (!function_exists('authHeeftExplicietRecht') || !authHeeftExplicietRecht('gebruikers')) { http_response_code(403); echo 'Geen toegang tot Gebruikers.'; exit; }
 

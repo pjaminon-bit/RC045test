@@ -101,6 +101,12 @@ RewriteRule ^(.+)\.html$ $1.php [L]
 RewriteRule ^beheer-(config\.php|users\.json|log\.json|login-pogingen\.json)$ - [F,L]
 
 
+# ===== Interne applicatiecode =====
+# Technische helpers in app/ zijn alleen voor PHP includes en nooit publieke
+# endpoints. Eén mapregel vervangt losse bestandsblokkades.
+RewriteRule ^app(?:/|$) - [F,L,NC]
+
+
 # ===== Interne ledenapplicatie =====
 # De publieke entrypoint is leden/index.php. De omvangrijke bestaande app blijft
 # voorlopig op rootniveau staan zodat haar __DIR__-opslagpaden niet wijzigen,
@@ -144,7 +150,7 @@ RewriteRule ^data-backups(?:/|$) - [F,L,NC]
 #
 # paneel.css, paneel.js en paneel-thema.js staan hier bewust NIET tussen,
 # omdat de browser die rechtstreeks moet kunnen downloaden.
-<FilesMatch "^(auth\.php|auth-session-check\.php|paneel-hulp\.php|data-slot\.php|seo-head\.php|gebruikers-rechten\.php)$">
+<FilesMatch "^(auth\.php|seo-head\.php|gebruikers-rechten\.php)$">
   Require all denied
 </FilesMatch>
 

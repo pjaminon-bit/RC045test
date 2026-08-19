@@ -33,7 +33,7 @@ require_once __DIR__ . '/vergaderingen-opslag.php';
 require_once __DIR__ . '/taken-opslag.php';
 require_once __DIR__ . '/operationele-taken-opslag.php';
 require_once __DIR__ . '/evenementen-opslag.php';
-require_once __DIR__ . '/paneel-hulp.php';
+require_once __DIR__ . '/app/paneel-hulp.php';
 
 $dataMap = __DIR__ . '/data';
 $rekentabelBestand = $dataMap . '/rekentabel.json';

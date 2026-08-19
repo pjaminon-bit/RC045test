@@ -436,7 +436,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['formulier'] ?? '') === 'in
 $ingelogd = $configOk && isset($_SESSION['gebruiker']);
 $huidigeGebruiker = $_SESSION['gebruiker'] ?? '';
 $isMaster = $ingelogd && !empty($_SESSION['is_master']);
-require __DIR__ . '/auth-session-check.php';
+require __DIR__ . '/app/auth-session-check.php';
 
 // ===== Het gebruikersrecord =====
 // Onthouden na de eerste keer: zowel de rechten als de pagina's zelf hebben

@@ -27,7 +27,7 @@ if (!defined('RC045_LEDEN')) {
 // Eerste regel van leden-data.php. Alles daarna is JSON.
 define('LEDEN_VOORLOOP', "<?php exit; ?>\n");
 
-require_once __DIR__ . '/data-slot.php';
+require_once __DIR__ . '/app/data-slot.php';
 
 function ledenBestandPad() {
   return __DIR__ . '/leden-data.php';

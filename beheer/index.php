@@ -37,7 +37,7 @@ require_once dirname(__DIR__) . '/vergaderingen-opslag.php';
 require_once dirname(__DIR__) . '/taken-opslag.php';
 require_once dirname(__DIR__) . '/operationele-taken-opslag.php';
 require_once dirname(__DIR__) . '/evenementen-opslag.php';
-require_once dirname(__DIR__) . '/paneel-hulp.php';
+require_once dirname(__DIR__) . '/app/paneel-hulp.php';
 
 // De instellingen voor de lockout bij mislukte inlogpogingen en voor de
 // automatische back-up van databestanden ($dataBackupMap en de twee
