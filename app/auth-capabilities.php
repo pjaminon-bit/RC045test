@@ -82,9 +82,6 @@ function authLegacyBredeCapabilities(): array
 {
     $resultaat = [];
     foreach (authCapabilityDefinities() as $capability => $def) {
-        // De historische fallback gaf een oud account brede gewone toegang,
-        // maar gevoelige autorisatie-, audit-, privacy- en herstelrechten
-        // mochten ook toen niet impliciet worden toegekend.
         if (!empty($def['gevoelig'])) continue;
         $resultaat[] = (string) $capability;
     }
@@ -99,8 +96,6 @@ function authGebruikerCapabilities(array $record): array
     if (array_key_exists('tabs', $record) && is_array($record['tabs'])) {
         return authCapabilitiesVanTabs($record['tabs']);
     }
-    // Account van vóór het rechtenmodel: behoud de oude brede toegang voor
-    // niet-gevoelige functies, zodat een deploy niemand onverwacht buitensluit.
     return authLegacyBredeCapabilities();
 }
 
@@ -119,10 +114,11 @@ function authNieuwGebruikerId(): string
 
 function authGebruikerMigreerRecord(array $record): array
 {
-    if (trim((string) ($record['id'] ?? '')) === '') $record['id'] = authNieuwGebruikerId();
+    // Legacyaccounts krijgen een deterministische id op basis van hun huidige
+    // gebruikersnaam. Daardoor blijft een reeds gelegde member-user-koppeling
+    // geldig wanneer de capabilitymigratie pas later wordt opgeslagen.
+    if (trim((string) ($record['id'] ?? '')) === '') $record['id'] = authGebruikerId($record);
     $record['capabilities'] = authGebruikerCapabilities($record);
-    // Tijdelijke compatibiliteit voor authRechten() en nog niet omgezette
-    // routes. Zodra alle routes capabilities gebruiken kan `tabs` verdwijnen.
     $record['tabs'] = authLegacyTabsVoorCapabilities($record['capabilities']);
     if (!isset($record['sessie_versie'])) $record['sessie_versie'] = 1;
     if (!array_key_exists('actief', $record)) $record['actief'] = true;
