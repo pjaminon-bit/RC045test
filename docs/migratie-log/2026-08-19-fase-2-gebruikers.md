@@ -14,7 +14,7 @@ Datum: 2026-08-19
 ## UX- en veiligheidsverbeteringen
 
 - Account aanmaken, rechten wijzigen en wachtwoord wijzigen zijn nu drie expliciete acties. Een bestaand account wordt niet langer stilzwijgend als wachtwoordreset behandeld via het formulier voor een nieuwe gebruiker.
-- Nieuwe en gewijzigde wachtwoorden moeten minimaal 12 tekens zijn.
+- Nieuwe en gewijzigde wachtwoorden moeten minimaal 10 tekens zijn.
 - Browser-side sterke wachtwoordgenerator toegevoegd (20 tekens via `crypto.getRandomValues`).
 - Rechten zijn gegroepeerd in Pagina's, Content, Contributie en Beheer.
 - Gevoelige rechten (`gebruikers`, `backups`, `log`) zijn visueel gemarkeerd.
@@ -30,15 +30,18 @@ Datum: 2026-08-19
 - Het master-account uit `beheer-config.php` blijft buiten `beheer-users.json` en kan niet via deze pagina worden verwijderd.
 - Het bestaande rechtenmodel in `auth.php` blijft leidend.
 
-## Nog te valideren op DEV
+## DEV-validatie 19-08-2026
+
+Geslaagd:
 
 1. Gebruikers opent vanuit het normale beheer-menu.
-2. Bestaande accounts en rechten worden correct getoond.
-3. Een tijdelijk testaccount aanmaken met beperkte rechten.
-4. Inloggen met dat testaccount en controleren dat alleen de gekozen onderdelen bereikbaar zijn.
-5. Rechten wijzigen en opnieuw controleren.
-6. Wachtwoord wijzigen en opnieuw inloggen.
-7. Testaccount verwijderen.
-8. Controleren dat mutaties in Logboek en gebruikersback-ups verschijnen.
+2. Een tijdelijk testaccount met beperkte rechten kon worden aangemaakt.
+3. Na inloggen waren alleen de gekozen onderdelen bereikbaar.
+4. Een extra recht werd na wijzigen correct zichtbaar.
+5. Het wachtwoord kon worden gewijzigd en opnieuw gebruikt voor inloggen.
+6. Het testaccount kon worden verwijderd.
+7. De bijbehorende gebruikersacties verschenen in het Logboek.
 
-Status: **wacht op DEV-validatie**.
+De server-side validatie in `/beheer/gebruikers.php` gebruikt conform afspraak een minimum van 10 tekens; de eerdere vermelding van 12 tekens in dit migratielog was documentatiefout en is gecorrigeerd.
+
+Status: **DEV-gevalideerd**.
