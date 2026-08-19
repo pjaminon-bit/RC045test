@@ -31,6 +31,14 @@ function logQuery(array $extra = []): string {
     }
     return http_build_query($q);
 }
+// Spreadsheetprogramma's kunnen een CSV-cel die begint met =, +, -, @,
+// tab of CR als formule interpreteren. Logdetails kunnen beheerde tekst
+// bevatten; prefix zulke cellen daarom met een apostrof bij export.
+function logCsvVeilig($waarde): string {
+    $tekst = (string) $waarde;
+    if ($tekst !== '' && preg_match('/^[=+\-@\t\r]/', $tekst)) return "'" . $tekst;
+    return $tekst;
+}
 
 $regels = logLees($logBestand);
 $zoek = trim((string)($_GET['q'] ?? ''));
@@ -79,7 +87,12 @@ if (($_GET['export'] ?? '') === 'csv') {
     $out = fopen('php://output', 'w');
     fputcsv($out, ['Tijd', 'Gebruiker', 'Actie', 'Details'], ';');
     foreach ($regels as $r) {
-        fputcsv($out, [logDatumTijd((string)($r['tijd'] ?? '')), (string)($r['gebruiker'] ?? ''), (string)($r['actie'] ?? ''), (string)($r['details'] ?? '')], ';');
+        fputcsv($out, [
+            logCsvVeilig(logDatumTijd((string)($r['tijd'] ?? ''))),
+            logCsvVeilig((string)($r['gebruiker'] ?? '')),
+            logCsvVeilig((string)($r['actie'] ?? '')),
+            logCsvVeilig((string)($r['details'] ?? '')),
+        ], ';');
     }
     fclose($out);
     exit;
