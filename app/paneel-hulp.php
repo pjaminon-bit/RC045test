@@ -1,21 +1,26 @@
 <?php
 // ============================================================
-// RC045 gedeelde hulpjes voor beheer.php en leden.php
-// ------------------------------------------------------------
-// Kleine dingen die allebei de afgeschermde pagina's nodig hebben: hoe een
-// datum en een bedrag getoond worden, de maandnamen, en de contributie-
-// bedragen met de pro-ratatabel.
+// RC045 gedeelde hulpjes voor beheer en leden
 // ============================================================
 
-$huidigPaneelScript = strtolower(basename((string) ($_SERVER['SCRIPT_NAME'] ?? '')));
-if ($huidigPaneelScript === 'beheer.php') {
-  require_once __DIR__ . '/site.php';
-  require_once __DIR__ . '/beheer/bootstrap.php';
-} elseif ($huidigPaneelScript === 'leden.php') {
-  require_once __DIR__ . '/paneel-modules.php';
+function paneelContext(): string
+{
+  $script = str_replace('\\', '/', (string) ($_SERVER['SCRIPT_NAME'] ?? ''));
+  $pad = strtolower((string) (parse_url($script, PHP_URL_PATH) ?: $script));
+  if (preg_match('~(?:^|/)beheer/(?:index\.php)?$~', $pad) || basename($pad) === 'beheer.php') return 'beheer';
+  if (preg_match('~(?:^|/)leden/(?:index\.php)?$~', $pad) || basename($pad) === 'leden.php') return 'leden';
+  return '';
 }
 
-// jjjj-mm-dd naar dd-mm-jjjj. Ongeldig of leeg blijft leeg.
+$projectRoot = dirname(__DIR__);
+$huidigePaneelContext = paneelContext();
+if ($huidigePaneelContext === 'beheer') {
+  require_once $projectRoot . '/site.php';
+  require_once $projectRoot . '/beheer/bootstrap.php';
+} elseif ($huidigePaneelContext === 'leden') {
+  require_once $projectRoot . '/paneel-modules.php';
+}
+
 function datumWeergave($iso) {
   if (preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', (string) $iso, $m)) {
     return $m[3] . '-' . $m[2] . '-' . $m[1];
