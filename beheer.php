@@ -3306,6 +3306,9 @@ foreach ($changelogLijst as $clRegel) {
         // wijziging aan welke tabs een gebruiker mag zien. Groepslabel
         // verschijnt alleen als er in die groep ook echt iets zichtbaar is.
         $menuLabels = $beheerTabsAlle;
+        // Basis-URL van deze installatie. SCRIPT_NAME blijft ook bij de virtuele /beheer/ route naar beheer.php wijzen,
+        // zodat dit zowel onder /dev als in de domeinroot werkt.
+        $beheerInstallatieBasis = rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? '/beheer.php')), '/');
         // Volgorde binnen elke groep volgt nu ook de site: bij Pagina's
         // eerst de doorloop van de aanmeldflow (Aanmelden -> Bedankt, niet
         // andersom), bij Content de homepage top-naar-onder (mededeling
@@ -3327,9 +3330,9 @@ foreach ($changelogLijst as $clRegel) {
           $zichtbareModuleLinks = [];
           if ($groep['label'] === 'Beheer') {
             $moduleLinks = [
-              'gebruikers' => ['label' => 'Gebruikers', 'href' => 'beheer/gebruikers.php'],
-              'log'        => ['label' => 'Logboek', 'href' => 'beheer/logboek.php'],
-              'backups'    => ['label' => 'Back-ups', 'href' => 'beheer/backups.php'],
+              'gebruikers' => ['label' => 'Gebruikers', 'href' => $beheerInstallatieBasis . '/beheer/gebruikers.php'],
+              'log'        => ['label' => 'Logboek', 'href' => $beheerInstallatieBasis . '/beheer/logboek.php'],
+              'backups'    => ['label' => 'Back-ups', 'href' => $beheerInstallatieBasis . '/beheer/backups.php'],
             ];
             foreach ($moduleLinks as $moduleSleutel => $moduleInfo) {
               if ($isMaster || in_array($moduleSleutel, $toegestaneTabs, true)) {
