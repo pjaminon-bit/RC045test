@@ -66,7 +66,14 @@ return [
         'legacy_tabs' => ['fotoboek'],
         'legacy_formulieren' => ['fotoboek_tekst', 'fotoboek_album_aanmaken', 'fotoboek_album_bewerken'],
     ],
-    'gebruikers' => ['label' => 'Gebruikers', 'status' => 'legacy'],
+    'gebruikers' => [
+        'label' => 'Gebruikers',
+        'status' => 'module',
+        'bootstrap' => __DIR__ . '/modules/gebruikers.php',
+        'editor' => __DIR__ . '/gebruikers.php',
+        'legacy_tabs' => ['gebruikers'],
+        'legacy_formulieren' => ['gebruiker_toevoegen', 'gebruiker_tabs_bijwerken', 'gebruiker_verwijderen'],
+    ],
     'backups' => [
         'label' => 'Back-ups',
         'status' => 'module',
