@@ -1,0 +1,25 @@
+{
+  "types": [
+    {
+      "id": "jeugd",
+      "label": "Jeugdlid",
+      "actief": true,
+      "leeftijd_min": null,
+      "leeftijd_max": 15,
+      "jaarbedrag": 50,
+      "inschrijfgeld": 10,
+      "pro_rata": true
+    },
+    {
+      "id": "senior",
+      "label": "Lid",
+      "actief": true,
+      "leeftijd_min": 16,
+      "leeftijd_max": null,
+      "jaarbedrag": 100,
+      "inschrijfgeld": 10,
+      "pro_rata": true
+    }
+  ],
+  "updated": "2026-08-19T22:35:00+02:00"
+}
