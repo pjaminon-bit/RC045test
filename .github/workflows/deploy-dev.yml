@@ -54,8 +54,6 @@ jobs:
           local_path: './*'
           remote_path: '/'
 
-      # ./* neemt verborgen bestanden niet mee. .htaccess is onderdeel van de
-      # applicatie (rewrites + securityregels), dus upload dit bestand apart.
       - name: Upload .htaccess expliciet naar DEV
         uses: wlixcc/SFTP-Deploy-Action@a5ccb9c6211a94cc59404f0fdb2a9936a6dfee64 # v1.2.6
         with:

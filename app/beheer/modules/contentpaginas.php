@@ -2,11 +2,8 @@
 // ============================================================
 // Beheermodule: generieke contentpagina's
 // ============================================================
-// Verzorgt de menu-ingangen naar /beheer/content.php en schakelt de oude
-// gemigreerde contenttabs + POST-routes uit.
-// ============================================================
 
-require_once dirname(__DIR__, 2) . '/app/content/content-pagina.php';
+require_once dirname(__DIR__, 2) . '/content/content-pagina.php';
 
 function beheerContentLegacyTabs(): array
 {
