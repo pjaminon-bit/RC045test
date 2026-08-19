@@ -42,6 +42,10 @@ RewriteRule ^app(?:/|$) - [F,L,NC]
 RewriteRule ^leden-app\.php$ - [F,L,NC]
 RewriteRule ^data-backups(?:/|$) - [F,L,NC]
 
+# Helperbestanden onder /beheer zijn alleen bedoeld voor server-side require.
+# Ze zijn geen zelfstandige beheerroute en worden daarom rechtstreeks geblokkeerd.
+RewriteRule ^beheer/(?:backup-registry\.php|gebruikers-rechten\.php|fotoboek-lib\.php)$ - [F,L,NC]
+
 # Oude, niet-canonieke beheer-bootstrap/modulekopieën kunnen door de additieve
 # SFTP-deployment nog op de server staan. De actieve runtime gebruikt uitsluitend
 # app/beheer/*; blokkeer deze historische paden daarom ook als er nog stale files zijn.
