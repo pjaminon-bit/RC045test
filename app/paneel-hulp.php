@@ -16,7 +16,7 @@ $projectRoot = dirname(__DIR__);
 $huidigePaneelContext = paneelContext();
 if ($huidigePaneelContext === 'beheer') {
   require_once $projectRoot . '/app/core/site.php';
-  require_once $projectRoot . '/beheer/bootstrap.php';
+  require_once $projectRoot . '/app/beheer/bootstrap.php';
 } elseif ($huidigePaneelContext === 'leden') {
   require_once $projectRoot . '/app/core/paneel-modules.php';
 }
