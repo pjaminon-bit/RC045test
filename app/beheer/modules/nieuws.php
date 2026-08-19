@@ -1,0 +1,5 @@
+<?php
+function beheerNieuwsMagOpenen(): bool { if (empty($GLOBALS['ingelogd'])) return false; if (!empty($GLOBALS['isMaster'])) return true; return in_array('nieuws', (array)($GLOBALS['toegestaneTabs'] ?? []), true); }
+function beheerNieuwsBewaakLegacyPost(): void { if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST' || (string)($_POST['formulier'] ?? '') !== 'nieuws') return; $_POST['formulier']=''; if(function_exists('schrijfLog')) schrijfLog($GLOBALS['logBestand'],$GLOBALS['huidigeGebruiker'],'legacy_nieuws_geblokkeerd','nieuws'); }
+function beheerNieuwsStartOutputFilter(): void { ob_start(function($html){ if(!is_string($html))return $html; if(beheerNieuwsMagOpenen())$html=preg_replace('~<button\s+type="button"\s+class="menu-item"\s+data-tab="nieuws">.*?</button>~is','<a class="menu-item menu-item-link" style="display:block;text-decoration:none" href="nieuws.php">* Nieuws</a>',$html,1)??$html; if(stripos($html,'</head>')!==false)$html=preg_replace('~</head>~i','<style>#tab-nieuws{display:none!important}</style></head>',$html,1)??$html; return $html;}); }
+beheerNieuwsBewaakLegacyPost(); beheerNieuwsStartOutputFilter();
