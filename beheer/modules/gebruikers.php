@@ -2,10 +2,6 @@
 // ============================================================
 // Beheermodule: Gebruikers
 // ============================================================
-// Verbergt de historische gebruikers-tab en stuurt het menu naar de nieuwe
-// zelfstandige pagina. Oude POST-routes worden geblokkeerd zodra de module
-// actief is, zodat er maar één autorisatie-/opslagroute overblijft.
-// ============================================================
 
 function beheerGebruikersBewaakLegacyPost(): void
 {
@@ -32,7 +28,7 @@ function beheerGebruikersStartOutputFilter(): void
         if (beheerGebruikersMagOpenen()) {
             $html = preg_replace(
                 '~<button\s+type="button"\s+class="menu-item"\s+data-tab="gebruikers">.*?</button>~is',
-                '<a class="menu-item menu-item-link" style="display:block;text-decoration:none" href="beheer/gebruikers.php">Gebruikers</a>',
+                '<a class="menu-item menu-item-link" style="display:block;text-decoration:none" href="gebruikers.php">* Gebruikers</a>',
                 $html,
                 1
             ) ?? $html;
