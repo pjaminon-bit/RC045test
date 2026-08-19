@@ -42,6 +42,11 @@ RewriteRule ^app(?:/|$) - [F,L,NC]
 RewriteRule ^leden-app\.php$ - [F,L,NC]
 RewriteRule ^data-backups(?:/|$) - [F,L,NC]
 
+# Oude, niet-canonieke beheer-bootstrap/modulekopieën kunnen door de additieve
+# SFTP-deployment nog op de server staan. De actieve runtime gebruikt uitsluitend
+# app/beheer/*; blokkeer deze historische paden daarom ook als er nog stale files zijn.
+RewriteRule ^beheer/(?:bootstrap\.php|module-registry\.php|modules(?:/|$)) - [F,L,NC]
+
 <FilesMatch "^(leden-data\.php|leden-opslag\.php|aanmelden-pogingen\.php|vergaderingen-data\.php|vergaderingen-opslag\.php|taken-data\.php|taken-opslag\.php|operationele-taken-data\.php|operationele-taken-opslag\.php|evenementen-data\.php|evenementen-opslag\.php)$">
   Require all denied
 </FilesMatch>
