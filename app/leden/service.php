@@ -116,7 +116,7 @@ function ledenServiceVerwijderRelaties(string $lidId): bool
     $bronnen=[
         ['vergaderingenLees','vergaderingenSchrijf'],
         ['takenLees','takenSchrijf'],
-        ['operationeleTakenLees','operationeleTakenSchrijf'],
+        ['otakenLees','otakenSchrijf'],
         ['evenementenLees','evenementenSchrijf'],
     ];
     foreach($bronnen as [$lezer,$schrijver]){
