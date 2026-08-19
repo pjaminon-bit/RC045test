@@ -7,7 +7,7 @@ function fbEsc($v): string { return htmlspecialchars((string)$v, ENT_QUOTES, 'UT
 function fbKort($v,int $max): string { $t=trim(is_scalar($v)?(string)$v:''); return function_exists('mb_substr')?mb_substr($t,0,$max,'UTF-8'):substr($t,0,$max); }
 function fbDatumIso($v): string {
     $v=trim((string)$v);
-    if (preg_match('/^\d{4}-\d{2}-\d{2}$/',$v)) return $v;
+    if (preg_match('/^(\d{4})-(\d{2})-(\d{2})$/',$v,$m) && checkdate((int)$m[2],(int)$m[3],(int)$m[1])) return $v;
     if (preg_match('/^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{4})$/',$v,$m) && checkdate((int)$m[2],(int)$m[1],(int)$m[3])) return sprintf('%04d-%02d-%02d',(int)$m[3],(int)$m[2],(int)$m[1]);
     return '';
 }
@@ -71,7 +71,12 @@ function fbSchrijf(string $pad,array $data): bool {
     if(function_exists('maakDataBackup'))maakDataBackup($pad,$dataBackupMap,$dataBackupBewaardagen,$dataBackupMaxPerBestand);
     if(!is_dir(dirname($pad))&&!@mkdir(dirname($pad),0755,true))return false;
     $j=json_encode($data,JSON_UNESCAPED_UNICODE|JSON_PRETTY_PRINT);
-    return $j!==false&&file_put_contents($pad,$j,LOCK_EX)!==false;
+    if($j===false)return false;
+    try{$suffix=bin2hex(random_bytes(4));}catch(Throwable $e){$suffix=str_replace('.','',(string)microtime(true));}
+    $tmp=$pad.'.tmp.'.$suffix;
+    if(file_put_contents($tmp,$j,LOCK_EX)===false)return false;
+    if(!@rename($tmp,$pad)){@unlink($tmp);return false;}
+    return true;
 }
 function fbSchaalAf($bron,int $b,int $h,int $max){
     if($b<1||$h<1)return false;
@@ -92,6 +97,10 @@ function fbWatermerk($img,string $logoPad,string $tekst='rc045.nl'): void {
 }
 function fbVerwerkFoto(string $tmp,string $vol,string $thumb,bool $watermerk,string $logo,int $maxVol,int $maxThumb): array {
     $info=@getimagesize($tmp); if($info===false)return ['ok'=>false,'fout'=>'bestand is geen geldige afbeelding.'];
+    $pixelBreedte=(int)($info[0]??0);$pixelHoogte=(int)($info[1]??0);
+    if($pixelBreedte<1||$pixelHoogte<1||$pixelBreedte>16000||$pixelHoogte>16000||($pixelBreedte*$pixelHoogte)>60000000){
+        return ['ok'=>false,'fout'=>'afbeelding heeft te veel pixels voor veilige verwerking (maximaal 60 megapixel).'];
+    }
     $bron=false;
     if($info[2]===IMAGETYPE_JPEG)$bron=@imagecreatefromjpeg($tmp);
     elseif($info[2]===IMAGETYPE_PNG)$bron=@imagecreatefrompng($tmp);
