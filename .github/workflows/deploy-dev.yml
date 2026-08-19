@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: rc045-dev-deploy
@@ -19,6 +19,25 @@ jobs:
     steps:
       - name: Checkout testcode
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Eenmalige refactor leden naar echte directory
+        shell: bash
+        run: |
+          python3 tools/refactor-leden-real-directory.py
+          php -l leden.php
+          php -l leden/index.php
+          git diff --check
+
+          if ! git diff --quiet; then
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git add leden.php leden/index.php .htaccess
+            git commit -m 'Make leden a real directory application'
+            git push origin HEAD:agent/template-foundation
+            echo 'Refactor gecommit; de branch-push start automatisch een frisse DEV-deploy.'
+          fi
 
       - name: Controleer PHP syntax
         shell: bash
