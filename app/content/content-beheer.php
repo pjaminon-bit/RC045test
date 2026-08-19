@@ -3,6 +3,7 @@
 // Generieke beheerlaag voor configureerbare contentpagina's
 // ============================================================
 require_once __DIR__ . '/content-pagina.php';
+require_once dirname(__DIR__) . '/beheer/editor-hulp.php';
 
 function contentBeheerVelden(string $sleutel): array
 {
@@ -98,10 +99,7 @@ function contentBeheerHuidigeWaarde(array $data, string $veld, string $taal): st
 
 function contentBeheerSchrijfJson(string $pad, array $data): bool
 {
-    global $dataBackupMap, $dataBackupBewaardagen, $dataBackupMaxPerBestand;
-    if (function_exists('maakDataBackup')) maakDataBackup($pad, $dataBackupMap, $dataBackupBewaardagen, $dataBackupMaxPerBestand);
-    $json = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
-    return $json !== false && file_put_contents($pad, $json, LOCK_EX) !== false;
+    return beheerEditorSchrijfJson($pad, $data);
 }
 
 if (strtolower(basename((string) ($_SERVER['SCRIPT_FILENAME'] ?? ''))) !== 'content-beheer.php') return;
