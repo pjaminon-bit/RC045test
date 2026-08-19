@@ -2,9 +2,6 @@
 // ============================================================
 // Beheermodule: Agenda
 // ============================================================
-// Schakelt de historische Agenda-tab en POST-route in beheer.php uit en
-// gebruikt het bestaande beheer-menu als ingang naar de modulaire editor.
-// ============================================================
 
 function beheerAgendaBewaakLegacyPost(): void
 {
@@ -34,7 +31,7 @@ function beheerAgendaStartOutputFilter(): void
         if (beheerAgendaMagOpenen()) {
             $html = preg_replace(
                 '~<button\s+type="button"\s+class="menu-item"\s+data-tab="agenda">.*?</button>~is',
-                '<a class="menu-item menu-item-link" style="display:block;text-decoration:none" href="beheer/agenda.php">Agenda</a>',
+                '<a class="menu-item menu-item-link" style="display:block;text-decoration:none" href="agenda.php">* Agenda</a>',
                 $html,
                 1
             ) ?? $html;
