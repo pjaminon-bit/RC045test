@@ -1,0 +1,69 @@
+name: One-time beheer module link fix
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/fix-beheer-module-links-main.yml
+
+permissions:
+  contents: write
+
+jobs:
+  fix-dev-branch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout DEV branch
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: agent/template-foundation
+          fetch-depth: 0
+
+      - name: Fix module links for virtual beheer URL
+        shell: bash
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          p = Path('beheer.php')
+          s = p.read_text(encoding='utf-8')
+
+          marker = "        $menuLabels = $beheerTabsAlle;\n"
+          addition = "        // Basis-URL van deze installatie. SCRIPT_NAME blijft ook bij de virtuele /beheer/ route naar beheer.php wijzen,\n        // zodat dit zowel onder /dev als in de domeinroot werkt.\n        $beheerInstallatieBasis = rtrim(str_replace('\\\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? '/beheer.php')), '/');\n"
+          if '$beheerInstallatieBasis =' not in s:
+              if marker not in s:
+                  raise SystemExit('menuLabels marker ontbreekt')
+              s = s.replace(marker, marker + addition, 1)
+
+          replacements = {
+              "'gebruikers' => ['label' => 'Gebruikers', 'href' => 'beheer/gebruikers.php'],": "'gebruikers' => ['label' => 'Gebruikers', 'href' => $beheerInstallatieBasis . '/beheer/gebruikers.php'],",
+              "'log'        => ['label' => 'Logboek', 'href' => 'beheer/logboek.php'],": "'log'        => ['label' => 'Logboek', 'href' => $beheerInstallatieBasis . '/beheer/logboek.php'],",
+              "'backups'    => ['label' => 'Back-ups', 'href' => 'beheer/backups.php'],": "'backups'    => ['label' => 'Back-ups', 'href' => $beheerInstallatieBasis . '/beheer/backups.php'],",
+          }
+          for old, new in replacements.items():
+              if old in s:
+                  s = s.replace(old, new, 1)
+              elif new not in s:
+                  raise SystemExit('verwachte modulelink ontbreekt: ' + old)
+
+          p.write_text(s, encoding='utf-8')
+          PY
+
+          php -l beheer.php
+          git diff --check
+          grep -q "beheerInstallatieBasis.*beheer/logboek.php" beheer.php
+          ! grep -q "'href' => 'beheer/logboek.php'" beheer.php
+
+      - name: Commit fix naar DEV
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo 'Geen wijziging nodig.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add beheer.php
+          git commit -m 'Fix beheer module links under virtual route'
+          git push origin HEAD:agent/template-foundation
