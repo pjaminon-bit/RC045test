@@ -5,23 +5,10 @@ RewriteEngine On
 # ============================================================
 
 # ===== Directory listings uitschakelen =====
-# Voorkomt dat Apache een bestandenlijst toont wanneer een map geen indexbestand
-# bevat. Dit is vooral belangrijk voor mappen met data, uploads of interne
-# hulpprogramma's.
 Options -Indexes
 
 
 # ===== HTTPS afdwingen =====
-# Strato handelt de beveiligde verbinding af voordat PHP en Apache aan de
-# beurt zijn: bij een https-verzoek kan %{HTTPS} hier op "off" staan terwijl
-# SERVER_PORT wel 443 is.
-#
-# Daarom eerst een eigen vlag zetten zodra één van de indicatoren aangeeft
-# dat het oorspronkelijke verzoek via HTTPS kwam. Alleen als geen enkele
-# indicator HTTPS meldt én de poort niet 443 is, volgt een redirect.
-#
-# De hostname staat bewust vast op rc045.nl in plaats van %{HTTP_HOST}, zodat
-# een door de bezoeker aangeleverde Host-header nooit in een redirect terechtkomt.
 RewriteCond %{HTTPS} =on [OR]
 RewriteCond %{HTTP:X-Forwarded-Proto} =https [OR]
 RewriteCond %{HTTP:X-Forwarded-SSL} =on
@@ -33,9 +20,6 @@ RewriteRule ^ https://rc045.nl%{REQUEST_URI} [R=301,L]
 
 
 # ===== Algemene security headers =====
-# Bewust nog geen volledige Content-Security-Policy voor de publieke site:
-# daarvoor moeten eerst alle gebruikte externe bronnen en inline scripts/styles
-# exact worden opgenomen.
 <IfModule mod_headers.c>
   Header always set X-Content-Type-Options "nosniff"
   Header always set Referrer-Policy "strict-origin-when-cross-origin"
@@ -50,13 +34,11 @@ DirectoryIndex index.php index.html
 
 
 # ===== Fotoboek: nette album-URL's =====
-# Werkt zowel in de domeinroot als wanneer dezelfde .htaccess onder /dev staat.
 RewriteRule ^fotoboek/?$ fotoboek.php [L,QSA]
 RewriteRule ^fotoboek/([a-z0-9][a-z0-9-]*)/?$ fotoboek.php?album=$1 [L,QSA,NC]
 
 
 # ===== Publieke pagina's draaien op PHP, URL's blijven .html =====
-# Bijvoorbeeld /aanmelden.html wordt intern /aanmelden.php.
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteRule ^(.+)\.html$ $1.php [L]
 
@@ -68,31 +50,22 @@ RewriteRule ^(.+)\.html$ $1.php [L]
 # ===== Beheerconfiguratie, gebruikers en logboek =====
 RewriteRule ^beheer-(config\.php|users\.json|log\.json|login-pogingen\.json)$ - [F,L]
 
-
 # ===== Interne applicatiecode =====
-# Technische helpers in app/ zijn uitsluitend PHP-includes.
 RewriteRule ^app(?:/|$) - [F,L,NC]
 
-
 # ===== Interne ledenapplicatie =====
-# Publieke entrypoint is leden/index.php; deze implementatie is include-only.
 RewriteRule ^leden-app\.php$ - [F,L,NC]
-
 
 # ===== Back-ups =====
 RewriteRule ^data-backups(?:/|$) - [F,L,NC]
-
 
 # ===== Interne opslag- en databestanden =====
 <FilesMatch "^(leden-data\.php|leden-opslag\.php|aanmelden-pogingen\.php|vergaderingen-data\.php|vergaderingen-opslag\.php|taken-data\.php|taken-opslag\.php|operationele-taken-data\.php|operationele-taken-opslag\.php|evenementen-data\.php|evenementen-opslag\.php)$">
   Require all denied
 </FilesMatch>
 
-
-# ===== Interne configuratie en PHP-hulpprogramma's =====
-# Geen van deze bestanden is een zelfstandig web-endpoint. Ook de optionele
-# lokale siteconfig wordt hiermee afgeschermd wanneer die via FTP aanwezig is.
-<FilesMatch "^(auth\.php|seo-head\.php|gebruikers-rechten\.php|vertaal-config\.php|site-config(?:\.local)?\.php|module-definities\.php|pagina-definities\.php|content-beheer\.php|content-pagina\.php|content-pagina-runtime\.php|content-publieke-nav\.php|content-renderer\.php|changelog-historie\.php)$">
+# ===== Interne configuratie en resterende root-hulpprogramma's =====
+<FilesMatch "^(auth\.php|seo-head\.php|gebruikers-rechten\.php|vertaal-config\.php|site-config(?:\.local)?\.php|module-definities\.php|pagina-definities\.php|content-pagina\.php|content-pagina-runtime\.php|changelog-historie\.php)$">
   Require all denied
 </FilesMatch>
 
@@ -101,9 +74,5 @@ RewriteRule ^data-backups(?:/|$) - [F,L,NC]
 # VRIENDELIJKE URL'S
 # ============================================================
 
-# ===== Oude /Over-ons URL =====
 RewriteRule ^Over-ons/?$ /index.html#over-ons [R=301,L,NC,NE]
-
-
-# ===== Oude /Lidmaatschap URL =====
 RewriteRule ^Lidmaatschap/?$ /#lidmaatschap [R=301,L,NC,NE]
