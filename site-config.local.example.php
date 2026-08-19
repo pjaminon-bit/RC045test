@@ -1,11 +1,12 @@
 <?php
 // Voorbeeld van een server-only verenigingsconfiguratie.
 // Kopieer dit bestand op de server naar site-config.local.php en pas alleen
-// de waarden aan die voor die vereniging afwijken. site-config.local.php staat
-// in .gitignore en hoort nooit in de gedeelde repository.
+// afwijkende waarden aan. site-config.local.php staat in .gitignore.
 
 return [
     'vereniging' => [
+        // Vaste technische tenantsleutel. Na ingebruikname niet meer wijzigen.
+        'sleutel' => 'voorbeeldvereniging',
         'naam' => 'Voorbeeldvereniging',
         'volledige_naam' => 'Voorbeeldvereniging Nederland',
         'slogan' => 'Samen actief',
@@ -30,9 +31,28 @@ return [
         ],
     ],
     'modules' => [
+        'ledenadministratie' => true,
+        'vergaderingen' => true,
+        'taken' => true,
+        'operationele_taken' => true,
+        'evenementen' => true,
         'fotoboek' => true,
         'sponsors' => true,
         'media' => false,
         'aanmelden' => true,
+    ],
+
+    // Op gedeelde hosting blijft `json` de veilige default.
+    // Voor een VPS/PostgreSQL-installatie kan dit `pdo` worden. Gebruik hier
+    // alleen server-side geheimen; commit echte credentials nooit naar Git.
+    'opslag' => [
+        'private_driver' => 'json',
+        'pdo' => [
+            // PostgreSQL voorbeeld:
+            // 'dsn' => 'pgsql:host=127.0.0.1;port=5432;dbname=verenigingen',
+            'dsn' => '',
+            'user' => '',
+            'password' => '',
+        ],
     ],
 ];
