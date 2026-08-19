@@ -23,6 +23,12 @@ function beheerLogboekStartOutputFilter(): void
                 $html,
                 1
             ) ?? $html;
+            $html = preg_replace(
+                '~(<a\s+class="menu-module-link"\s+href="logboek\.php">)(?!\*\s*)(.*?</a>)~is',
+                '$1* $2',
+                $html,
+                1
+            ) ?? $html;
         }
 
         if (stripos($html, '</head>') !== false) {
