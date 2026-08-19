@@ -10,6 +10,7 @@ on:
 permissions:
   contents: write
 
+# Trigger commit for the one-time DEV refactor.
 jobs:
   refactor-dev:
     runs-on: ubuntu-latest
