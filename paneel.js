@@ -1,4 +1,6 @@
 (function() {
+      var PANEEL_SCRIPT_URL = document.currentScript && document.currentScript.src ? document.currentScript.src : location.href;
+      var PANEEL_ROOT_URL = new URL('.', PANEEL_SCRIPT_URL);
       // ===== Datumvelden: meteen herschrijven naar dd-mm-jjjj =====
       // Al deze velden hebben hetzelfde format-attribuut (placeholder
       // dd-mm-jjjj), ook de velden die pas later worden toegevoegd (extra
@@ -147,101 +149,6 @@
       toonTab((location.hash || '').replace('#', ''));
     })();
 
-    // ===== Multiselect (dropdown met zoekvak en vinkjes) =====
-    // Werkt voor elke ".multiselect" op de pagina onafhankelijk van elkaar,
-    // dus ook als er (zoals bij Gebruikers) meerdere op dezelfde pagina
-    // staan. De echte waarden zijn gewone checkboxes, dit is puur de schil
-    // eromheen: knop met "X geselecteerd", paneel met zoekvak en alles/niets.
-    (function () {
-      var instanties = Array.prototype.slice.call(document.querySelectorAll('.multiselect'));
-      if (instanties.length === 0) return;
-
-      function label(instantie) {
-        var vinkjes = Array.prototype.slice.call(instantie.querySelectorAll('.multiselect-optie input'));
-        var totaal = vinkjes.length;
-        var aan = vinkjes.filter(function (v) { return v.checked; }).length;
-        var el = instantie.querySelector('.multiselect-label');
-        if (!el) return;
-        if (totaal === 0) el.textContent = 'Geen opties';
-        else if (aan === totaal) el.textContent = 'Alles (' + totaal + ')';
-        else if (aan === 0) el.textContent = 'Niets geselecteerd';
-        else el.textContent = aan + ' van ' + totaal;
-      }
-
-      function sluiten(instantie) {
-        var paneel = instantie.querySelector('.multiselect-paneel');
-        var trigger = instantie.querySelector('.multiselect-trigger');
-        if (paneel) paneel.hidden = true;
-        if (trigger) trigger.setAttribute('aria-expanded', 'false');
-      }
-
-      function alleSluiten(behalve) {
-        instanties.forEach(function (i) { if (i !== behalve) sluiten(i); });
-      }
-
-      instanties.forEach(function (instantie) {
-        var trigger = instantie.querySelector('.multiselect-trigger');
-        var paneel = instantie.querySelector('.multiselect-paneel');
-        var zoek = instantie.querySelector('.multiselect-zoek');
-        var opties = Array.prototype.slice.call(instantie.querySelectorAll('.multiselect-optie'));
-        if (!trigger || !paneel) return;
-
-        label(instantie);
-
-        trigger.addEventListener('click', function (e) {
-          e.stopPropagation();
-          var openen = paneel.hidden;
-          alleSluiten(instantie);
-          paneel.hidden = !openen;
-          trigger.setAttribute('aria-expanded', openen ? 'true' : 'false');
-          if (openen) {
-            if (zoek) {
-              zoek.value = '';
-              opties.forEach(function (o) { o.classList.remove('verborgen'); });
-              zoek.focus();
-            }
-          }
-        });
-
-        opties.forEach(function (optie) {
-          var vinkje = optie.querySelector('input');
-          if (vinkje) vinkje.addEventListener('change', function () { label(instantie); });
-        });
-
-        if (zoek) {
-          zoek.addEventListener('input', function () {
-            var term = zoek.value.trim().toLowerCase();
-            opties.forEach(function (optie) {
-              var tekst = optie.textContent.trim().toLowerCase();
-              optie.classList.toggle('verborgen', term !== '' && tekst.indexOf(term) === -1);
-            });
-          });
-          // Klikken/typen in het zoekvak mag het paneel niet laten sluiten
-          // via de document-click-listener hieronder.
-          zoek.addEventListener('click', function (e) { e.stopPropagation(); });
-        }
-
-        Array.prototype.slice.call(instantie.querySelectorAll('.multiselect-acties button')).forEach(function (knop) {
-          knop.addEventListener('click', function (e) {
-            e.stopPropagation();
-            var aan = knop.getAttribute('data-actie') === 'alles';
-            opties.forEach(function (optie) {
-              if (optie.classList.contains('verborgen')) return; // alleen wat gefilterd zichtbaar is
-              var vinkje = optie.querySelector('input');
-              if (vinkje) vinkje.checked = aan;
-            });
-            label(instantie);
-          });
-        });
-      });
-
-      document.addEventListener('click', function (e) {
-        instanties.forEach(function (instantie) {
-          if (!instantie.contains(e.target)) sluiten(instantie);
-        });
-      });
-    })();
-
     // ===== Fotoboek: foto's herordenen met de pijltjes =====
     // De volgorde waarin de blokken hier in de pagina staan bepaalt de
     // volgorde waarin ze worden opgeslagen (formuliervelden worden in
@@ -295,7 +202,7 @@
       if (window.__heic2anyLaden) return window.__heic2anyLaden;
       window.__heic2anyLaden = new Promise(function(resolve, reject) {
         var script = document.createElement('script');
-        script.src = 'vendor/heic2any/heic2any.min.js';
+        script.src = new URL('vendor/heic2any/heic2any.min.js', PANEEL_ROOT_URL).href;
         script.onload = resolve;
         script.onerror = reject;
         document.head.appendChild(script);
@@ -1180,7 +1087,7 @@
           var oorspronkelijkeTekst = knop.textContent;
           knop.textContent = '\u2026';
 
-          fetch('vertaal.php', {
+          fetch(new URL('vertaal.php', PANEEL_ROOT_URL), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({

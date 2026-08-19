@@ -1,3 +1,6 @@
 Deploy RC045test to /dev after configuring repository secrets.
 Retry 2026-08-18.
 Retry 2 2026-08-18.
+Deploy real beheer and leden directories 2026-08-19.
+Trigger internal helper migration 2026-08-19.
+Trigger content core migration 2026-08-19.

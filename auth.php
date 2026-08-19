@@ -403,6 +403,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['formulier'] ?? '') === 'in
     session_regenerate_id(true);
     $_SESSION['gebruiker'] = 'beheerder';
     $_SESSION['is_master'] = true;
+    unset($_SESSION['user_session_version']);
     loginPogingenWissen($loginPogingenBestand, $lockoutGebruikerSleutel);
     schrijfLog($logBestand, 'beheerder', 'login', '');
     header('Location: ' . authHuidigePagina());
@@ -419,6 +420,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['formulier'] ?? '') === 'in
       session_regenerate_id(true);
       $_SESSION['gebruiker'] = $gevondenGebruiker['gebruikersnaam'];
       $_SESSION['is_master'] = false;
+      $_SESSION['user_session_version'] = max(1, (int)($gevondenGebruiker['sessie_versie'] ?? 1));
       loginPogingenWissen($loginPogingenBestand, $lockoutGebruikerSleutel);
       schrijfLog($logBestand, $gevondenGebruiker['gebruikersnaam'], 'login', '');
       header('Location: ' . authHuidigePagina());
@@ -434,6 +436,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['formulier'] ?? '') === 'in
 $ingelogd = $configOk && isset($_SESSION['gebruiker']);
 $huidigeGebruiker = $_SESSION['gebruiker'] ?? '';
 $isMaster = $ingelogd && !empty($_SESSION['is_master']);
+require __DIR__ . '/app/auth-session-check.php';
 
 // ===== Het gebruikersrecord =====
 // Onthouden na de eerste keer: zowel de rechten als de pagina's zelf hebben

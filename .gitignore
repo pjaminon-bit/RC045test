@@ -19,6 +19,10 @@ beheer-users.json
 beheer-log.json
 beheer-login-pogingen.json
 
+# Verenigings-/tenant-specifieke siteconfiguratie. De gedeelde defaults staan
+# in site-config.php; afwijkingen per installatie horen alleen lokaal/server-side.
+site-config.local.php
+
 # DeepL API-sleutel voor de automatische vertaalknopjes in beheer.php
 vertaal-config.php
 

@@ -4,160 +4,54 @@ RewriteEngine On
 # RC045 .htaccess
 # ============================================================
 
-# ===== Directory listings uitschakelen =====
-# Voorkomt dat Apache een bestandenlijst toont wanneer een map geen indexbestand
-# bevat. Dit is vooral belangrijk voor mappen met data, uploads of interne
-# hulpprogramma's.
 Options -Indexes
 
-
 # ===== HTTPS afdwingen =====
-# Strato handelt de beveiligde verbinding af voordat PHP en Apache aan de
-# beurt zijn: bij een https-verzoek kan %{HTTPS} hier op "off" staan terwijl
-# SERVER_PORT wel 443 is.
-#
-# Daarom eerst een eigen vlag zetten zodra één van de indicatoren aangeeft
-# dat het oorspronkelijke verzoek via HTTPS kwam. Alleen als geen enkele
-# indicator HTTPS meldt én de poort niet 443 is, volgt een redirect.
-#
-# De hostname staat bewust vast op rc045.nl in plaats van %{HTTP_HOST}, zodat
-# een door de bezoeker aangeleverde Host-header nooit in een redirect terechtkomt.
 RewriteCond %{HTTPS} =on [OR]
 RewriteCond %{HTTP:X-Forwarded-Proto} =https [OR]
 RewriteCond %{HTTP:X-Forwarded-SSL} =on
 RewriteRule ^ - [E=RC045_HTTPS:1]
-
 RewriteCond %{ENV:RC045_HTTPS} !=1
 RewriteCond %{SERVER_PORT} !=443
 RewriteRule ^ https://rc045.nl%{REQUEST_URI} [R=301,L]
 
-
 # ===== Algemene security headers =====
-# Bewust nog geen volledige Content-Security-Policy voor de publieke site:
-# daarvoor moeten eerst alle gebruikte externe bronnen en inline scripts/styles
-# exact worden opgenomen.
 <IfModule mod_headers.c>
-
-  # Browser mag een bestand niet zelf als een ander MIME-type proberen uit te
-  # voeren.
   Header always set X-Content-Type-Options "nosniff"
-
-  # Bij links naar een andere site alleen de herkomst meesturen, niet het
-  # volledige pad/query van de bezochte pagina.
   Header always set Referrer-Policy "strict-origin-when-cross-origin"
-
-  # De publieke website gebruikt deze browserrechten niet.
   Header always set Permissions-Policy "camera=(), microphone=(), geolocation=()"
-
-  # Publieke pagina's mogen alleen vanaf hetzelfde domein in een frame worden
-  # geplaatst. auth.php zet voor beheer/leden zelf nog de strengere DENY.
   Header always set X-Frame-Options "SAMEORIGIN"
-
-  # HSTS pas gebruiken omdat rc045.nl volledig via HTTPS draait.
-  # Geen includeSubDomains/preload: die keuzes moeten bewust apart gemaakt worden.
   Header always set Strict-Transport-Security "max-age=31536000"
-
 </IfModule>
 
-
-# ===== Standaard homepage =====
 DirectoryIndex index.php index.html
 
+# ===== Fotoboek: nette album-URL's =====
+RewriteRule ^fotoboek/?$ fotoboek.php [L,QSA]
+RewriteRule ^fotoboek/([a-z0-9][a-z0-9-]*)/?$ fotoboek.php?album=$1 [L,QSA,NC]
 
 # ===== Publieke pagina's draaien op PHP, URL's blijven .html =====
-# De publieke pagina's zijn PHP geworden voor server-side SEO.
-#
-# Bijvoorbeeld:
-#
-#   /aanmelden.html
-#
-# wordt intern:
-#
-#   /aanmelden.php
-#
-# Geen externe redirect: POST-formulieren moeten hun POST-data behouden.
-#
-# Alleen herschrijven als het aangevraagde .html-bestand niet werkelijk bestaat.
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteRule ^(.+)\.html$ $1.php [L]
-
 
 # ============================================================
 # SERVER-ONLY BESTANDEN
 # ============================================================
-
-# ===== Beheerconfiguratie, gebruikers en logboek =====
-# Deze bestanden bevatten gevoelige gegevens zoals wachtwoord-hashes,
-# gebruikersnamen, loginpogingen en activiteiten.
 RewriteRule ^beheer-(config\.php|users\.json|log\.json|login-pogingen\.json)$ - [F,L]
-
-
-# ===== Back-ups =====
-# De hele map is server-only. Hier kunnen onder andere kopieën van
-# gebruikersbestanden en andere interne data staan.
+RewriteRule ^app(?:/|$) - [F,L,NC]
+RewriteRule ^leden-app\.php$ - [F,L,NC]
 RewriteRule ^data-backups(?:/|$) - [F,L,NC]
 
-
-# ===== Ledenadministratie en openbare aanmeldbeveiliging =====
-<FilesMatch "^(leden-data\.php|leden-opslag\.php|aanmelden-pogingen\.php)$">
+<FilesMatch "^(leden-data\.php|leden-opslag\.php|aanmelden-pogingen\.php|vergaderingen-data\.php|vergaderingen-opslag\.php|taken-data\.php|taken-opslag\.php|operationele-taken-data\.php|operationele-taken-opslag\.php|evenementen-data\.php|evenementen-opslag\.php)$">
   Require all denied
 </FilesMatch>
 
-
-# ===== Vergaderingen en taken =====
-<FilesMatch "^(vergaderingen-data\.php|vergaderingen-opslag\.php|taken-data\.php|taken-opslag\.php)$">
+<FilesMatch "^(auth\.php|data-slot\.php|vertaal-config\.php|site-config(?:\.local)?\.php|site\.php|site-seo\.php|paneel-modules\.php|module-definities\.php|changelog-historie\.php|dev-build\.json)$">
   Require all denied
 </FilesMatch>
-
-
-# ===== Operationele taken =====
-<FilesMatch "^(operationele-taken-data\.php|operationele-taken-opslag\.php)$">
-  Require all denied
-</FilesMatch>
-
-
-# ===== Evenementen =====
-<FilesMatch "^(evenementen-data\.php|evenementen-opslag\.php)$">
-  Require all denied
-</FilesMatch>
-
-
-# ===== Interne PHP-hulpprogramma's =====
-# Geen zelfstandige pagina's. Ze worden alleen vanuit andere PHP-bestanden
-# ingeladen.
-#
-# paneel.css, paneel.js en paneel-thema.js staan hier bewust NIET tussen,
-# omdat de browser die rechtstreeks moet kunnen downloaden.
-<FilesMatch "^(auth\.php|paneel-hulp\.php|data-slot\.php|seo-head\.php)$">
-  Require all denied
-</FilesMatch>
-
-
-# ===== DeepL-configuratie =====
-<FilesMatch "^vertaal-config\.php$">
-  Require all denied
-</FilesMatch>
-
 
 # ============================================================
 # VRIENDELIJKE URL'S
 # ============================================================
-
-# ===== Oude /Over-ons URL =====
 RewriteRule ^Over-ons/?$ /index.html#over-ons [R=301,L,NC,NE]
-
-# ===== Oude /Lidmaatschap URL =====
-# De oude losse lidmaatschapspagina is vervallen. Verwijs oude bookmarks en
-# zoekresultaten rechtstreeks naar de lidmaatschapssectie op de homepage.
 RewriteRule ^Lidmaatschap/?$ /#lidmaatschap [R=301,L,NC,NE]
-
-
-# ===== Beheer =====
-# Intern herschrijven. Geen externe redirect, omdat formulieren naar beheer.php
-# posten en een redirect POST-data kan verliezen.
-RewriteRule ^beheer/?$ beheer.php [L]
-
-
-# ===== Ledenpagina =====
-# Zelfde principe als beheer.
-RewriteRule ^leden/?$ leden.php [L]

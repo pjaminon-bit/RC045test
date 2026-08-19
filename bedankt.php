@@ -1,4 +1,4 @@
-<?php require_once __DIR__ . '/seo-head.php'; ?><!DOCTYPE html>
+<?php require_once __DIR__ . '/app/content/seo-head.php'; ?><!DOCTYPE html>
 <html lang="<?php echo rc045Taal(); ?>">
 <head>
   <meta charset="UTF-8">
