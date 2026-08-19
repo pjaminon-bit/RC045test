@@ -106,14 +106,21 @@ function contentBeheerSchrijfJson(string $pad, array $data): bool
 
 if (strtolower(basename((string) ($_SERVER['SCRIPT_FILENAME'] ?? ''))) !== 'content-beheer.php') return;
 
-require_once __DIR__ . '/auth.php';
-require_once __DIR__ . '/data-slot.php';
+require_once dirname(__DIR__, 2) . '/auth.php';
+require_once dirname(__DIR__) . '/data-slot.php';
+require_once dirname(__DIR__) . '/core/site.php';
 if (!$ingelogd) { header('Location: beheer.php'); exit; }
 
 $paginaSleutel = isset($_GET['pagina']) && is_string($_GET['pagina']) ? trim($_GET['pagina']) : '';
 $def = contentPaginaDefinitie($paginaSleutel);
 if (!$def) { http_response_code(404); echo 'Onbekende contentpagina.'; exit; }
 $beheerTab = contentPaginaBeheerTab($paginaSleutel);
+$beheerModule = siteModuleVoorBeheerTab($beheerTab);
+if ($beheerModule !== null && !siteModuleActief($beheerModule)) {
+    http_response_code(404);
+    echo 'Deze module is voor deze vereniging niet ingeschakeld.';
+    exit;
+}
 $rechten = authRechten([$beheerTab => (string) ($def['label'] ?? $beheerTab)], []);
 if (!$isMaster && !in_array($beheerTab, $rechten['toegestaneTabs'] ?? [], true)) { http_response_code(403); echo 'Geen toegang tot deze contentpagina.'; exit; }
 
