@@ -4,6 +4,12 @@
 $recent = [
   [
     'datum' => '2026-08-19',
+    'cat' => 'beveiliging',
+    'titel' => 'Interne opslag- en buildbestanden opnieuw geaudit en afgeschermd',
+    'tekst' => 'De privacygevoelige opslaglaag is bewust op zijn bestaande projectroot gebleven omdat de databestanden en back-ups daarvan afhankelijk zijn. Interne root-loaders en dev-build.json zijn aanvullend rechtstreeks via HTTP geblokkeerd, terwijl een verouderde blokkade voor een inmiddels verwijderd bestand is opgeruimd.',
+  ],
+  [
+    'datum' => '2026-08-19',
     'cat' => 'opgelost',
     'titel' => 'Beheer- en ledenmodules herkennen de nieuwe directoryroutes weer',
     'tekst' => 'Na de overgang naar /beheer/ en /leden/ controleerden enkele beveiligings- en modulelagen nog uitsluitend op beheer.php en leden.php. De contextdetectie ondersteunt nu zowel de oude compatibiliteitsingangen als de nieuwe directory-entrypoints. Daarmee werken modulebewaking, verborgen tabs en de DEV build-indicator weer via de canonieke routes.',
