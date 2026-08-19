@@ -2,9 +2,6 @@
 // ============================================================
 // Beheermodule: Sponsors
 // ============================================================
-// Haalt de actieve Sponsors-beheerroute uit het monolithische beheer.php.
-// De oude tab blijft fysiek aanwezig als dode code, maar is onbereikbaar.
-// ============================================================
 
 function beheerSponsorsBewaakLegacyPost(): void
 {
@@ -14,12 +11,7 @@ function beheerSponsorsBewaakLegacyPost(): void
 
     $_POST['formulier'] = '';
     if (function_exists('schrijfLog') && isset($GLOBALS['logBestand'], $GLOBALS['huidigeGebruiker'])) {
-        schrijfLog(
-            $GLOBALS['logBestand'],
-            (string) $GLOBALS['huidigeGebruiker'],
-            'legacy_sponsors_geblokkeerd',
-            'sponsors'
-        );
+        schrijfLog($GLOBALS['logBestand'], (string) $GLOBALS['huidigeGebruiker'], 'legacy_sponsors_geblokkeerd', 'sponsors');
     }
 }
 
@@ -27,9 +19,7 @@ function beheerSponsorsMagOpenen(): bool
 {
     if (empty($GLOBALS['ingelogd'])) return false;
     if (!empty($GLOBALS['isMaster'])) return true;
-    $tabs = isset($GLOBALS['toegestaneTabs']) && is_array($GLOBALS['toegestaneTabs'])
-        ? $GLOBALS['toegestaneTabs']
-        : [];
+    $tabs = isset($GLOBALS['toegestaneTabs']) && is_array($GLOBALS['toegestaneTabs']) ? $GLOBALS['toegestaneTabs'] : [];
     return in_array('sponsors', $tabs, true);
 }
 
@@ -38,12 +28,10 @@ function beheerSponsorsStartOutputFilter(): void
     ob_start(function ($html) {
         if (!is_string($html)) return $html;
 
-        // Vervang de bestaande menu-knop op exact dezelfde plek door een link
-        // naar de modulaire editor. Zo blijft de huidige menugroepering intact.
         if (beheerSponsorsMagOpenen()) {
             $html = preg_replace(
                 '~<button\s+type="button"\s+class="menu-item"\s+data-tab="sponsors">.*?</button>~is',
-                '<a class="menu-item menu-item-link" style="display:block;text-decoration:none" href="beheer/sponsors.php">Sponsors</a>',
+                '<a class="menu-item menu-item-link" style="display:block;text-decoration:none" href="sponsors.php">* Sponsors</a>',
                 $html,
                 1
             ) ?? $html;
