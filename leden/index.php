@@ -1,43 +1,40 @@
 <?php
-// Echte entrypoint voor /leden/.
-//
-// De bestaande, omvangrijke ledenapplicatie blijft voorlopig als intern
-// rootbestand leden-app.php staan. Daardoor behouden alle bestaande __DIR__-
-// gebaseerde opslagpaden exact dezelfde betekenis, terwijl de publieke URL
-// wel een normale directory-app is en geen Apache rewrite meer nodig heeft.
-//
-// De oude applicatie gebruikt nog relatieve browserpaden alsof hij vanuit de
-// root wordt uitgevoerd. Alleen de uiteindelijke HTML en Location-header
-// worden daarom hier naar de echte /leden/-context vertaald. De opslag- en
-// autorisatielogica zelf wordt niet aangepast.
+// ============================================================
+// Mijn vereniging — persoonlijk ledenportaal
+// ============================================================
+// Geen bestuursadministratie meer op deze route. Leden zien uitsluitend hun
+// eigen context; beheerfuncties wonen onder /beheer/.
+// ============================================================
+require_once dirname(__DIR__) . '/auth.php';
+require_once dirname(__DIR__) . '/app/auth-capabilities.php';
+require_once dirname(__DIR__) . '/app/leden/service.php';
+require_once dirname(__DIR__) . '/vergaderingen-opslag.php';
+require_once dirname(__DIR__) . '/taken-opslag.php';
+require_once dirname(__DIR__) . '/operationele-taken-opslag.php';
+require_once dirname(__DIR__) . '/evenementen-opslag.php';
+require_once dirname(__DIR__) . '/app/core/site.php';
 
-// POST-Redirect-GET in leden-app.php verwijst historisch naar leden.php#... .
-// Zet zo'n Location vóór verzending om naar ./#..., ook wanneer de app exit
-// aanroept. De bestaande HTTP-status (normaal 302) blijft behouden.
-header_register_callback(function () {
-    foreach (headers_list() as $headerRegel) {
-        if (stripos($headerRegel, 'Location: leden.php') !== 0) continue;
-        $doel = trim(substr($headerRegel, strlen('Location:')));
-        $doel = preg_replace('#^leden\.php#i', './', $doel);
-        header_remove('Location');
-        header('Location: ' . $doel);
-        break;
-    }
-});
+function lpEsc($v):string{return htmlspecialchars((string)$v,ENT_QUOTES,'UTF-8');}
+function lpDatum($iso):string{$t=strtotime((string)$iso);return$t===false?(string)$iso:date('d-m-Y',$t);}
 
-// Pas uitsluitend browser-URL's in de gerenderde HTML aan. PHP-bestandspaden
-// blijven onaangeroerd omdat leden-app.php fysiek in de installatie-root staat.
-ob_start(function ($html) {
-    $html = str_replace('leden.php', './', $html);
-    $html = str_replace('href="beheer.php"', 'href="../beheer/"', $html);
-    $html = str_replace('href="index.html"', 'href="../index.html"', $html);
-    $html = str_replace('href="favicon-32x32.png"', 'href="../favicon-32x32.png"', $html);
-    $html = str_replace('href="paneel.css?', 'href="../paneel.css?', $html);
-    $html = str_replace('src="paneel-thema.js?', 'src="../paneel-thema.js?', $html);
-    $html = str_replace('src="paneel.js?', 'src="../paneel.js?', $html);
-    $html = str_replace('src="images/', 'src="../images/', $html);
-    $html = str_replace("url('images/", "url('../images/", $html);
-    return $html;
-});
+if(!$ingelogd){
+?><!DOCTYPE html><html lang="nl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Mijn <?=lpEsc(siteVerenigingNaam())?></title><style>body{margin:0;background:#f6f2e8;color:#26351d;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.wrap{max-width:520px;margin:70px auto;padding:0 20px}.kaart{background:#fff;border:1px solid #ddd8c0;border-radius:16px;padding:24px}.veld{margin:14px 0}.veld label{display:block;font-weight:700;margin-bottom:6px}.veld input{width:100%;box-sizing:border-box;padding:11px;border:1px solid #cfcab7;border-radius:9px;font:inherit}.kaart button{border:0;background:#3a7a77;color:#fff;border-radius:9px;padding:11px 16px;font:inherit;font-weight:750}.melding.fout{background:#fdeceb;color:#8b2e27;padding:11px;border-radius:8px}.sub,.hint{color:#68705f}</style></head><body><div class="wrap"><?php authInlogFormulier('Mijn '.siteVerenigingNaam());?></div></body></html><?php exit;}
 
-require dirname(__DIR__) . '/leden-app.php';
+$userId=authHuidigeGebruikerId();$lid=ledenServiceVindVoorAccount($userId,$huidigeGebruiker);$lidId=(string)($lid['id']??'');
+$flash=$_SESSION['leden_portaal_flash']??null;unset($_SESSION['leden_portaal_flash']);
+if(($_SERVER['REQUEST_METHOD']??'')==='POST'&&in_array($_POST['actie']??'',['evenement_inschrijven','evenement_uitschrijven'],true)){
+    if(!csrfOk())$_SESSION['leden_portaal_flash']=['type'=>'fout','tekst'=>'Sessie verlopen. Ververs de pagina.'];
+    elseif($lidId==='')$_SESSION['leden_portaal_flash']=['type'=>'fout','tekst'=>'Je account is nog niet aan een lid gekoppeld.'];
+    else{$aanmelden=($_POST['actie']??'')==='evenement_inschrijven';$fout='';if(evenementDeelnameWijzigen($_POST['evenement_id']??'',$lidId,$aanmelden,$fout)){schrijfLog($logBestand,$huidigeGebruiker,$aanmelden?'evenement_inschrijven':'evenement_uitschrijven',(string)($_POST['evenement_id']??''));$_SESSION['leden_portaal_flash']=['type'=>'ok','tekst'=>$aanmelden?'Je bent ingeschreven.':'Je inschrijving is ingetrokken.'];}else$_SESSION['leden_portaal_flash']=['type'=>'fout','tekst'=>$fout?:'Wijzigen mislukt.'];}
+    header('Location: ./#evenementen');exit;
+}
+
+$ledenVergaderingen=[];$taken=[];$otaken=[];$evenementen=[];
+if($lid){
+    foreach(vergaderingenVanSoort(vergaderingenLees(),'leden') as $v)if(vergaderingAgendaZichtbaarVoorLeden($v)||vergaderingNotulenZichtbaarVoorLeden($v))$ledenVergaderingen[]=$v;
+    foreach(takenLees()['taken']??[] as $t)if(is_array($t)&&($t['toegewezen_aan']??'')===$lidId)$taken[]=$t;
+    foreach(otakenLees()['taken']??[] as $t)if(is_array($t)&&($t['toegewezen_aan']??'')===$lidId&&(($t['zichtbaarheid']??'leden')==='leden'||ledenIsBestuurslid($lid)))$otaken[]=$t;
+    foreach(evenementenGesorteerd(evenementenLees()) as $e)if(evenementZichtbaarVoorLeden($e)||ledenIsBestuurslid($lid))$evenementen[]=$e;
+}
+$type=$lid?ledenServiceType($lid):null;$jaar=(string)date('Y');$contrib=$lid&&is_array($lid['contributie'][$jaar]??null)?$lid['contributie'][$jaar]:null;
+?><!DOCTYPE html><html lang="nl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Mijn <?=lpEsc(siteVerenigingNaam())?></title><style>body{margin:0;background:#f6f2e8;color:#26351d;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.top{background:#fff;border-bottom:1px solid #ddd8c0;padding:14px 22px}.topin{max-width:1100px;margin:auto;display:flex;justify-content:space-between;gap:15px}.top a{color:#2d6260;font-weight:750;text-decoration:none}.logout{border:0;background:none;color:#2d6260;font:inherit;font-weight:750}.wrap{max-width:1100px;margin:28px auto;padding:0 20px 70px}.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}.card{background:#fff;border:1px solid #ddd8c0;border-radius:14px;padding:20px;margin-bottom:16px}.meta{color:#68705f;font-size:13px}.flash{padding:12px;border-radius:9px;background:#eaf6ee;margin:12px 0}.flash.fout{background:#fdeceb;color:#8b2e27}.btn{border:1px solid #d3ccb7;background:#fff;color:#2d6260;border-radius:8px;padding:8px 11px;text-decoration:none;font:inherit;font-weight:750;cursor:pointer}.btn.primary{background:#3a7a77;color:#fff;border:0}.item{border-top:1px solid #eee9db;padding:12px 0}.item:first-child{border-top:0}@media(max-width:700px){.grid{grid-template-columns:1fr}.topin{flex-direction:column}}</style></head><body><header class="top"><div class="topin"><div><strong>Mijn <?=lpEsc(siteVerenigingNaam())?></strong> · <a href="../index.html">website</a><?php if($isMaster||authHeeftCapability('members.manage')||authHeeftCapability('system.users.manage',true)):?> · <a href="../beheer/">beheer</a><?php endif;?></div><form method="post"><input type="hidden" name="formulier" value="uitloggen"><input type="hidden" name="csrf" value="<?=lpEsc($csrfToken)?>"><button class="logout" type="submit">Uitloggen</button></form></div></header><main class="wrap"><h1>Welkom, <?=lpEsc($lid?($lid['voornaam']??$huidigeGebruiker):$huidigeGebruiker)?></h1><?php if($flash):?><div class="flash <?=lpEsc($flash['type']??'')?>"><?=lpEsc($flash['tekst']??'')?></div><?php endif;?><?php if(!$lid):?><section class="card"><h2>Account nog niet gekoppeld</h2><p>Je bent ingelogd, maar dit account is nog niet gekoppeld aan een lid. Een beheerder kan in Beheer → Leden de vaste user-id aan jouw lidrecord koppelen.</p><p class="meta">user_id: <?=lpEsc($userId)?></p></section><?php else:?><div class="grid"><section class="card"><h2>Mijn gegevens</h2><p><strong><?=lpEsc(ledenVolledigeNaam($lid))?></strong><br><?=lpEsc(($lid['straat']??'').' '.($lid['huisnummer']??''))?><br><?=lpEsc(($lid['postcode']??'').' '.($lid['gemeente']??''))?></p><p><?=lpEsc($lid['email']??'')?><br><?=lpEsc($lid['telefoon']??'')?></p><p class="meta">Lidnummer <?=lpEsc($lid['nummer']??'')?> · <?=lpEsc($type['label']??'Lid')?> · status <?=lpEsc(ledenStatussen()[$lid['status']??'']??($lid['status']??''))?></p></section><section class="card"><h2>Contributie <?=$jaar?></h2><?php if($contrib):?><p><strong><?=lpEsc(ledenContributieStatussen()[$contrib['status']??'']??($contrib['status']??''))?></strong></p><p>Contributie: €<?=lpEsc(number_format((float)($contrib['bedrag']??0),2,',','.'))?><br>Inschrijfgeld: €<?=lpEsc(number_format((float)($contrib['inschrijfgeld']??0),2,',','.'))?></p><?php if(!empty($contrib['betaald_op'])):?><p class="meta">Betaald op <?=lpEsc(lpDatum($contrib['betaald_op']))?></p><?php endif;?><?php else:?><p>Nog geen contributieregel voor dit jaar.</p><?php endif;?></section></div><section class="card"><h2>Ledenvergaderingen</h2><?php if(!$ledenVergaderingen):?><p>Geen documenten beschikbaar.</p><?php endif;?><?php foreach($ledenVergaderingen as $v):?><div class="item"><strong><?=lpEsc((($v['ledenvergadering_type']??'')==='alv'?'ALV':'Ledenvergadering').' '.($v['nummer']??''))?></strong> · <?=lpEsc(lpDatum($v['datum']??''))?><?php if(vergaderingAgendaZichtbaarVoorLeden($v)):?><p><strong>Agenda</strong><br><?=nl2br(lpEsc($v['agenda']??''))?></p><?php endif;?><?php if(vergaderingNotulenZichtbaarVoorLeden($v)):?><p><strong>Notulen</strong><br><?=nl2br(lpEsc($v['notulen']??''))?></p><?php endif;?></div><?php endforeach;?></section><div class="grid"><section class="card"><h2>Mijn taken</h2><?php if(!$taken&&!$otaken):?><p>Geen taken aan jou toegewezen.</p><?php endif;?><?php foreach($taken as $t):?><div class="item"><strong><?=lpEsc($t['omschrijving']??'Taak')?></strong><br><span class="meta"><?=lpEsc(takenStatussen()[$t['status']??'']??($t['status']??''))?></span></div><?php endforeach;?><?php foreach($otaken as $t):?><div class="item"><strong><?=lpEsc($t['omschrijving']??'Operationele taak')?></strong><br><span class="meta"><?=lpEsc(otaakStatusLabels()[otaakStatus($t)]??otaakStatus($t))?><?=!empty($t['volgende_uitvoering'])?' · '.lpEsc(lpDatum($t['volgende_uitvoering'])):''?></span></div><?php endforeach;?></section><section class="card" id="evenementen"><h2>Evenementen</h2><?php if(!$evenementen):?><p>Geen evenementen beschikbaar.</p><?php endif;?><?php foreach($evenementen as $e):$ingeschreven=evenementHeeftDeelnemer($e,$lidId);?><div class="item"><strong><?=lpEsc(evenementWeergavenaam($e))?></strong><br><span class="meta"><?=lpEsc(lpDatum($e['datum']??''))?> <?=lpEsc($e['tijd']??'')?> · <?=lpEsc(evenementAantalDeelnemers($e))?> deelnemer(s)</span><?php if(evenementInschrijvingOpen($e)||$ingeschreven):?><form method="post" style="margin-top:8px"><input type="hidden" name="csrf" value="<?=lpEsc($csrfToken)?>"><input type="hidden" name="actie" value="<?=$ingeschreven?'evenement_uitschrijven':'evenement_inschrijven'?>"><input type="hidden" name="evenement_id" value="<?=lpEsc($e['id']??'')?>"><button class="btn <?=$ingeschreven?'':'primary'?>" type="submit"><?=$ingeschreven?'Uitschrijven':'Inschrijven'?></button></form><?php endif;?></div><?php endforeach;?></section></div><?php endif;?></main></body></html>
