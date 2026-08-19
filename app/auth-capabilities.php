@@ -4,8 +4,8 @@
 // ============================================================
 // Nieuwe autorisaties gebruiken technische capabilities in plaats van UI-
 // tabnamen. Bestaande accounts met alleen `tabs` blijven werken: hun oude
-// rechten worden hier naar capabilities vertaald. Nieuwe writes mogen naast
-// `capabilities` tijdelijk een afgeleide `tabs`-lijst bewaren voor legacycode.
+// rechten worden hier naar capabilities vertaald. Nieuwe writes bewaren naast
+// `capabilities` tijdelijk een afgeleide `tabs`-lijst voor legacycode.
 // ============================================================
 
 function authPlatformDefinities(): array
@@ -78,12 +78,30 @@ function authLegacyTabsVoorCapabilities(array $capabilities): array
     return $tabs;
 }
 
+function authLegacyBredeCapabilities(): array
+{
+    $resultaat = [];
+    foreach (authCapabilityDefinities() as $capability => $def) {
+        // De historische fallback gaf een oud account brede gewone toegang,
+        // maar gevoelige autorisatie-, audit-, privacy- en herstelrechten
+        // mochten ook toen niet impliciet worden toegekend.
+        if (!empty($def['gevoelig'])) continue;
+        $resultaat[] = (string) $capability;
+    }
+    return authCapabilitiesNormaliseer($resultaat);
+}
+
 function authGebruikerCapabilities(array $record): array
 {
     if (isset($record['capabilities']) && is_array($record['capabilities'])) {
         return authCapabilitiesNormaliseer($record['capabilities']);
     }
-    return authCapabilitiesVanTabs(isset($record['tabs']) && is_array($record['tabs']) ? $record['tabs'] : []);
+    if (array_key_exists('tabs', $record) && is_array($record['tabs'])) {
+        return authCapabilitiesVanTabs($record['tabs']);
+    }
+    // Account van vóór het rechtenmodel: behoud de oude brede toegang voor
+    // niet-gevoelige functies, zodat een deploy niemand onverwacht buitensluit.
+    return authLegacyBredeCapabilities();
 }
 
 function authGebruikerId(array $record): string
@@ -97,6 +115,18 @@ function authGebruikerId(array $record): string
 function authNieuwGebruikerId(): string
 {
     return 'usr_' . bin2hex(random_bytes(10));
+}
+
+function authGebruikerMigreerRecord(array $record): array
+{
+    if (trim((string) ($record['id'] ?? '')) === '') $record['id'] = authNieuwGebruikerId();
+    $record['capabilities'] = authGebruikerCapabilities($record);
+    // Tijdelijke compatibiliteit voor authRechten() en nog niet omgezette
+    // routes. Zodra alle routes capabilities gebruiken kan `tabs` verdwijnen.
+    $record['tabs'] = authLegacyTabsVoorCapabilities($record['capabilities']);
+    if (!isset($record['sessie_versie'])) $record['sessie_versie'] = 1;
+    if (!array_key_exists('actief', $record)) $record['actief'] = true;
+    return $record;
 }
 
 function authGebruikerRecordOpNaam(string $naam): ?array
