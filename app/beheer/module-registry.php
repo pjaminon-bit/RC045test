@@ -24,6 +24,14 @@ return [
         'status' => 'module',
         'editor' => $beheerMap . '/content.php?pagina=homepage',
     ],
+    'bedankt' => [
+        'label' => 'Bedankt-pagina',
+        'status' => 'module',
+        'bootstrap' => __DIR__ . '/modules/bedankt.php',
+        'editor' => $beheerMap . '/bedankt.php',
+        'legacy_tabs' => ['bedankt'],
+        'legacy_formulieren' => ['bedankt'],
+    ],
     'agenda' => [
         'label' => 'Agenda',
         'status' => 'module',
