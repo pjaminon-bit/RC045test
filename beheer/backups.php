@@ -3,11 +3,9 @@
 // Modulaire beheerpagina: Back-ups
 // ============================================================
 require_once dirname(__DIR__) . '/auth.php';
-require_once dirname(__DIR__) . '/data-slot.php';
+require_once dirname(__DIR__) . '/app/data-slot.php';
 
-if (!$ingelogd) { header('Location: ../beheer.php'); exit; }
-// Back-ups is een gevoelig recht: oude accounts zonder expliciete tabselectie
-// mogen dit niet via de brede compatibiliteitsfallback verkrijgen.
+if (!$ingelogd) { header('Location: ./'); exit; }
 if (!$isMaster && !authHeeftExplicietRecht('backups')) {
     http_response_code(403); echo 'Geen toegang tot Back-ups.'; exit;
 }
@@ -55,8 +53,6 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         elseif ($naam === '' || $verwacht === '' || !str_ends_with($naam, $verwacht)) $fout = 'Ongeldige back-up geselecteerd.';
         else {
             $pad = $dataBackupMap . '/' . $naam;
-            // realpath-controle voorkomt dat zelfs een onverwachte bestandsnaam
-            // buiten data-backups gelezen kan worden.
             $realMap = realpath($dataBackupMap);
             $realPad = realpath($pad);
             if ($realMap === false || $realPad === false || dirname($realPad) !== $realMap || !is_file($realPad)) {
@@ -99,7 +95,7 @@ foreach ($bestanden as $sleutel=>$info) {
 }
 ?><!DOCTYPE html><html lang="nl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Back-ups</title>
 <style>body{margin:0;background:#f6f2e8;color:#26351d;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.top{position:sticky;top:0;background:#fff;border-bottom:1px solid #ddd8c0;padding:15px 22px}.topin,.wrap{max-width:1120px;margin:auto}.top a{font-weight:700;color:#2d6260;text-decoration:none}.wrap{padding:28px 22px 70px}.melding{padding:12px 14px;border-radius:9px;margin:14px 0}.ok{background:#e8f5ee;color:#205b38}.fout{background:#fdeceb;color:#8b2e27}.kaart{background:#fff;border:1px solid #ddd8c0;border-radius:14px;padding:20px;margin-bottom:16px}.kop{display:flex;justify-content:space-between;gap:16px;align-items:center}.meta{color:#66705e;font-size:14px}.backup{display:grid;grid-template-columns:minmax(230px,1fr) auto;gap:12px;align-items:center;border-top:1px solid #ece8dc;padding:12px 0}.naam{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:12px;word-break:break-all}.btn{background:#fff;border:1px solid #c9c2aa;border-radius:8px;padding:9px 12px;font-weight:700;cursor:pointer}.bevestig{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.bevestig input{width:100px;padding:8px;border:1px solid #c9c2aa;border-radius:7px}.waarschuwing{background:#fff4d6;padding:12px;border-radius:9px;margin:12px 0}@media(max-width:650px){.backup{grid-template-columns:1fr}.kop{align-items:flex-start;flex-direction:column}}</style></head><body>
-<div class="top"><div class="topin"><a href="../beheer.php">← Terug naar beheer</a></div></div><main class="wrap"><h1>Back-ups</h1><p class="meta">Automatische snapshots van beheerdata. Bij iedere gewone opslag én vóór een herstel wordt de huidige versie eerst veiliggesteld. Bewaartermijn: maximaal <?= (int)$dataBackupBewaardagen ?> dagen en maximaal <?= (int)$dataBackupMaxPerBestand ?> versies per bestand.</p>
+<div class="top"><div class="topin"><a href="./">← Terug naar beheer</a></div></div><main class="wrap"><h1>Back-ups</h1><p class="meta">Automatische snapshots van beheerdata. Bij iedere gewone opslag én vóór een herstel wordt de huidige versie eerst veiliggesteld. Bewaartermijn: maximaal <?= (int)$dataBackupBewaardagen ?> dagen en maximaal <?= (int)$dataBackupMaxPerBestand ?> versies per bestand.</p>
 <div class="waarschuwing"><strong>Herstellen overschrijft de huidige data.</strong> Daarom moet je per herstel expliciet <code>HERSTEL</code> typen. De huidige versie wordt vóór het overschrijven automatisch opnieuw geback-upt.</div>
 <?php if(is_array($flash)):?><div class="melding <?=buEsc($flash['type']??'ok')?>"><?=buEsc($flash['tekst']??'')?></div><?php endif;?>
 <?php foreach($overzicht as $sleutel=>$blok): $info=$blok['info']; $lijst=$blok['lijst']; ?>
