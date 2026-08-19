@@ -11,6 +11,7 @@
 
 $config = [
     'vereniging' => [
+        'sleutel' => 'rc045',
         'naam' => 'RC045',
         'volledige_naam' => 'RC045 – Bashers of the South',
         'slogan' => 'Bashers of the South',
@@ -58,6 +59,18 @@ $config = [
         'sponsors' => true,
         'media' => true,
         'aanmelden' => true,
+    ],
+
+    // Private verenigingsdata gebruikt nu standaard de bestaande bestanden.
+    // Op een VPS kan een tenant in site-config.local.php naar `pdo` schakelen.
+    // Geheimen horen uitsluitend in dat server-only bestand of environment.
+    'opslag' => [
+        'private_driver' => 'json', // json | pdo
+        'pdo' => [
+            'dsn' => '',
+            'user' => '',
+            'password' => '',
+        ],
     ],
 ];
 
