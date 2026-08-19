@@ -68,5 +68,11 @@ return [
     ],
     'gebruikers' => ['label' => 'Gebruikers', 'status' => 'legacy'],
     'backups' => ['label' => 'Back-ups', 'status' => 'legacy'],
-    'logboek' => ['label' => 'Logboek', 'status' => 'legacy'],
+    'logboek' => [
+        'label' => 'Logboek',
+        'status' => 'module',
+        'bootstrap' => __DIR__ . '/modules/logboek.php',
+        'editor' => __DIR__ . '/logboek.php',
+        'legacy_tabs' => ['log'],
+    ],
 ];
