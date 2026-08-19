@@ -18,6 +18,7 @@ function guFlash(string $tekst, string $type = 'ok'): void { $_SESSION['gebruike
 function guRedirect(): void { header('Location: gebruikers.php'); exit; }
 function guVindIndex(array $gebruikers, string $naam): ?int { foreach ($gebruikers as $i=>$g) if (isset($g['gebruikersnaam']) && strcasecmp((string)$g['gebruikersnaam'],$naam)===0) return $i; return null; }
 function guGekozenRechten(array $toegestaan): array { $gekozen=array_map('strval',(array)($_POST['tabs']??[])); return array_values(array_intersect(array_keys($toegestaan),$gekozen)); }
+function guTrekSessiesIn(array &$gebruiker): void { $gebruiker['sessie_versie'] = max(1,(int)($gebruiker['sessie_versie']??1)) + 1; }
 function guLeesLogins(string $pad): array {
     if (!is_file($pad)) return [];
     $raw=@file_get_contents($pad); $data=$raw===false?null:json_decode($raw,true); if(!is_array($data)) return [];
@@ -59,20 +60,20 @@ if(($_SERVER['REQUEST_METHOD']??'')==='POST'){
             elseif($w!==$h)guFlash('De twee wachtwoorden komen niet overeen.','fout');
             else{
                 $nu=date('c');
-                $gebruikers[]=['gebruikersnaam'=>$naam,'hash'=>password_hash($w,PASSWORD_DEFAULT),'aangemaakt'=>$nu,'wachtwoord_gewijzigd'=>$nu,'tabs'=>$tabs];
+                $gebruikers[]=['gebruikersnaam'=>$naam,'hash'=>password_hash($w,PASSWORD_DEFAULT),'aangemaakt'=>$nu,'wachtwoord_gewijzigd'=>$nu,'sessie_versie'=>1,'tabs'=>$tabs];
                 if(schrijfGebruikers($usersBestand,$gebruikers)){schrijfLog($logBestand,$huidigeGebruiker,'gebruiker_aangemaakt',$naam.' · '.count($tabs).' recht(en)');guFlash('Account “'.$naam.'” is aangemaakt.');}
                 else guFlash('Account kon niet worden opgeslagen.','fout');
             }
         }elseif($actie==='rechten'){
             $naam=trim((string)($_POST['gebruikersnaam']??'')); $tabs=guGekozenRechten($alleRechten); $idx=guVindIndex($gebruikers,$naam);
             if($idx===null)guFlash('Gebruiker niet gevonden.','fout');
-            else{$gebruikers[$idx]['tabs']=$tabs;if(schrijfGebruikers($usersBestand,$gebruikers)){schrijfLog($logBestand,$huidigeGebruiker,'toegang_bijgewerkt',$naam.': '.($tabs?implode(', ',$tabs):'geen beheerrechten'));guFlash('Rechten van “'.$naam.'” zijn bijgewerkt.');}else guFlash('Rechten konden niet worden opgeslagen.','fout');}
+            else{$gebruikers[$idx]['tabs']=$tabs;guTrekSessiesIn($gebruikers[$idx]);if(schrijfGebruikers($usersBestand,$gebruikers)){schrijfLog($logBestand,$huidigeGebruiker,'toegang_bijgewerkt',$naam.': '.($tabs?implode(', ',$tabs):'geen beheerrechten').' · bestaande sessies ingetrokken');guFlash('Rechten van “'.$naam.'” zijn bijgewerkt. Bestaande sessies zijn ingetrokken.');}else guFlash('Rechten konden niet worden opgeslagen.','fout');}
         }elseif($actie==='wachtwoord'){
             $naam=trim((string)($_POST['gebruikersnaam']??'')); $w=(string)($_POST['wachtwoord']??''); $h=(string)($_POST['wachtwoord_herhaald']??''); $idx=guVindIndex($gebruikers,$naam);
             if($idx===null)guFlash('Gebruiker niet gevonden.','fout');
             elseif(strlen($w)<10)guFlash('Het nieuwe wachtwoord moet minimaal 10 tekens lang zijn.','fout');
             elseif($w!==$h)guFlash('De twee wachtwoorden komen niet overeen.','fout');
-            else{$gebruikers[$idx]['hash']=password_hash($w,PASSWORD_DEFAULT);$gebruikers[$idx]['wachtwoord_gewijzigd']=date('c');if(schrijfGebruikers($usersBestand,$gebruikers)){schrijfLog($logBestand,$huidigeGebruiker,'wachtwoord_reset',$naam);guFlash('Wachtwoord van “'.$naam.'” is gewijzigd.');}else guFlash('Wachtwoord kon niet worden opgeslagen.','fout');}
+            else{$gebruikers[$idx]['hash']=password_hash($w,PASSWORD_DEFAULT);$gebruikers[$idx]['wachtwoord_gewijzigd']=date('c');guTrekSessiesIn($gebruikers[$idx]);if(schrijfGebruikers($usersBestand,$gebruikers)){schrijfLog($logBestand,$huidigeGebruiker,'wachtwoord_reset',$naam.' · bestaande sessies ingetrokken');guFlash('Wachtwoord van “'.$naam.'” is gewijzigd. Bestaande sessies zijn ingetrokken.');}else guFlash('Wachtwoord kon niet worden opgeslagen.','fout');}
         }elseif($actie==='login_vrijgeven'){
             $naam=trim((string)($_POST['gebruikersnaam']??'')); $idx=guVindIndex($gebruikers,$naam);
             if($idx===null)guFlash('Gebruiker niet gevonden.','fout');
@@ -83,7 +84,7 @@ if(($_SERVER['REQUEST_METHOD']??'')==='POST'){
             if($idx===null)guFlash('Gebruiker niet gevonden.','fout');
             elseif(strcasecmp($naam,$huidigeGebruiker)===0&&!$isMaster)guFlash('Je kunt het account waarmee je bent ingelogd niet verwijderen.','fout');
             elseif($bevestiging!==$naam)guFlash('Verwijderen geweigerd: typ de gebruikersnaam exact over ter bevestiging.','fout');
-            else{array_splice($gebruikers,$idx,1);if(schrijfGebruikers($usersBestand,$gebruikers)){loginPogingenWissen($loginPogingenBestand,'user:'.strtolower($naam));schrijfLog($logBestand,$huidigeGebruiker,'gebruiker_verwijderd',$naam);guFlash('Account “'.$naam.'” is verwijderd.');}else guFlash('Account kon niet worden verwijderd.','fout');}
+            else{array_splice($gebruikers,$idx,1);if(schrijfGebruikers($usersBestand,$gebruikers)){loginPogingenWissen($loginPogingenBestand,'user:'.strtolower($naam));schrijfLog($logBestand,$huidigeGebruiker,'gebruiker_verwijderd',$naam.' · bestaande sessies vervallen automatisch');guFlash('Account “'.$naam.'” is verwijderd. Eventuele bestaande sessies zijn niet meer geldig.');}else guFlash('Account kon niet worden verwijderd.','fout');}
         }else guFlash('Onbekende gebruikersactie.','fout');
     }finally{dataSlotDicht($slot);}
     guRedirect();
