@@ -4,6 +4,12 @@
 $recent = [
   [
     'datum' => '2026-08-19',
+    'cat' => 'onderhoud',
+    'titel' => 'DEV-deployment controleert voortaan de gedeployde site zelf',
+    'tekst' => 'Na de SFTP-upload voert GitHub Actions nu automatische smoke tests uit op de homepage, Beheer en Leden. Daarnaast wordt gecontroleerd dat interne app-code en dev-build.json daadwerkelijk met HTTP 403 afgeschermd blijven. De controles proberen enkele keren opnieuw zodat een korte vertraging bij Strato niet meteen een valse foutmelding veroorzaakt.',
+  ],
+  [
+    'datum' => '2026-08-19',
     'cat' => 'beveiliging',
     'titel' => 'Interne opslag- en buildbestanden opnieuw geaudit en afgeschermd',
     'tekst' => 'De privacygevoelige opslaglaag is bewust op zijn bestaande projectroot gebleven omdat de databestanden en back-ups daarvan afhankelijk zijn. Interne root-loaders en dev-build.json zijn aanvullend rechtstreeks via HTTP geblokkeerd, terwijl een verouderde blokkade voor een inmiddels verwijderd bestand is opgeruimd.',
