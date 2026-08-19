@@ -4,9 +4,10 @@
 // ============================================================
 require_once dirname(__DIR__) . '/auth.php';
 require_once dirname(__DIR__) . '/app/data-slot.php';
+require_once dirname(__DIR__) . '/app/auth-capabilities.php';
 
 if (!$ingelogd) { header('Location: ./'); exit; }
-if (!$isMaster && !authHeeftExplicietRecht('backups')) {
+if (!authHeeftCapability('system.backups.manage', true)) {
     http_response_code(403); echo 'Geen toegang tot Back-ups.'; exit;
 }
 
@@ -14,19 +15,30 @@ $bestanden = require __DIR__ . '/backup-registry.php';
 
 function buEsc($v): string { return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
 function buFlash(string $tekst, string $type='ok'): void { $_SESSION['flash_backups']=['tekst'=>$tekst,'type'=>$type]; }
-function buSchrijfJson(string $pad, $data): bool {
+function buSchrijfBestand(string $pad, $data, string $type): bool {
     global $dataBackupMap, $dataBackupBewaardagen, $dataBackupMaxPerBestand;
     $json = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
     if ($json === false) return false;
+    $inhoud = $type === 'phpjson' ? "<?php exit; ?>\n" . $json : $json;
     $map = dirname($pad);
     if (!is_dir($map) && !@mkdir($map, 0755, true)) return false;
     maakDataBackup($pad, $dataBackupMap, $dataBackupBewaardagen, $dataBackupMaxPerBestand);
-    $tmp = @tempnam($map, '.restore-');
-    if ($tmp === false) return false;
-    $ok = @file_put_contents($tmp, $json, LOCK_EX) !== false;
-    if ($ok) $ok = @rename($tmp, $pad);
-    if (!$ok && is_file($tmp)) @unlink($tmp);
-    return $ok;
+    try { $suffix = bin2hex(random_bytes(5)); } catch (Throwable $e) { $suffix = str_replace('.','',(string)microtime(true)); }
+    $tmp = $pad . '.restore.' . $suffix;
+    if (@file_put_contents($tmp, $inhoud, LOCK_EX) === false) return false;
+    if (!@rename($tmp, $pad)) { @unlink($tmp); return false; }
+    return true;
+}
+function buLeesBackupData(string $raw, string $type, ?string &$fout = null) {
+    $fout = null;
+    if ($type === 'phpjson') {
+        $start = strpos($raw, '{');
+        if ($start === false) { $fout = 'Private back-up bevat geen JSON-payload.'; return null; }
+        $raw = substr($raw, $start);
+    }
+    $data = json_decode($raw, true);
+    if (json_last_error() !== JSON_ERROR_NONE) { $fout = 'Back-up bevat beschadigde JSON: ' . json_last_error_msg(); return null; }
+    return $data;
 }
 function buBackupLijst(string $map, string $doelPad): array {
     $basis = basename($doelPad);
@@ -59,27 +71,27 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
                 $fout = 'Deze back-up bestaat niet meer.';
             } else {
                 $raw = @file_get_contents($realPad);
-                $herstelData = $raw === false ? null : json_decode($raw, true);
-                if ($raw === false || json_last_error() !== JSON_ERROR_NONE) {
-                    $fout = 'Back-up kon niet gelezen worden (beschadigd JSON-bestand).';
+                $parseFout = null;
+                $herstelData = $raw === false ? null : buLeesBackupData($raw, (string)($info['schrijffunctie'] ?? 'json'), $parseFout);
+                if ($raw === false || $parseFout !== null) {
+                    $fout = $parseFout ?: 'Back-up kon niet gelezen worden.';
+                } elseif (!is_array($herstelData)) {
+                    $fout = 'Back-up heeft geen geldig object/array-formaat.';
                 } else {
                     $slot = dataSlotOpen();
-                    if (!$slot) {
-                        $fout = 'Herstellen tijdelijk niet mogelijk: dataslot kon niet worden verkregen.';
-                    } else {
-                        try {
-                            $ok = ($info['schrijffunctie'] === 'gebruikers')
-                                ? schrijfGebruikers($info['pad'], $herstelData)
-                                : buSchrijfJson($info['pad'], $herstelData);
-                        } finally { dataSlotDicht($slot); }
-                        if ($ok) {
-                            $tijd = @filemtime($realPad) ?: time();
-                            schrijfLog($logBestand, $huidigeGebruiker, 'backup_hersteld', $info['label'] . ' (' . $naam . ')');
-                            buFlash($info['label'] . ' is teruggezet naar de versie van ' . date('d-m-Y H:i', $tijd) . '. De versie van vlak vóór het herstel is automatisch ook als back-up bewaard.');
-                            header('Location: backups.php'); exit;
-                        }
-                        $fout = 'Terugzetten mislukt. Controleer de schrijfrechten op de server.';
+                    try {
+                        $type = (string)($info['schrijffunctie'] ?? 'json');
+                        $ok = $type === 'gebruikers'
+                            ? schrijfGebruikers($info['pad'], $herstelData)
+                            : buSchrijfBestand($info['pad'], $herstelData, $type);
+                    } finally { dataSlotDicht($slot); }
+                    if ($ok) {
+                        $tijd = @filemtime($realPad) ?: time();
+                        schrijfLog($logBestand, $huidigeGebruiker, 'backup_hersteld', $info['label'] . ' (' . $naam . ')');
+                        buFlash($info['label'] . ' is teruggezet naar de versie van ' . date('d-m-Y H:i', $tijd) . '. De versie van vlak vóór het herstel is automatisch ook als back-up bewaard.');
+                        header('Location: backups.php'); exit;
                     }
+                    $fout = 'Terugzetten mislukt. Controleer de schrijfrechten op de server.';
                 }
             }
         }
@@ -95,8 +107,8 @@ foreach ($bestanden as $sleutel=>$info) {
 }
 ?><!DOCTYPE html><html lang="nl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Back-ups</title>
 <style>body{margin:0;background:#f6f2e8;color:#26351d;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.top{position:sticky;top:0;background:#fff;border-bottom:1px solid #ddd8c0;padding:15px 22px}.topin,.wrap{max-width:1120px;margin:auto}.top a{font-weight:700;color:#2d6260;text-decoration:none}.wrap{padding:28px 22px 70px}.melding{padding:12px 14px;border-radius:9px;margin:14px 0}.ok{background:#e8f5ee;color:#205b38}.fout{background:#fdeceb;color:#8b2e27}.kaart{background:#fff;border:1px solid #ddd8c0;border-radius:14px;padding:20px;margin-bottom:16px}.kop{display:flex;justify-content:space-between;gap:16px;align-items:center}.meta{color:#66705e;font-size:14px}.backup{display:grid;grid-template-columns:minmax(230px,1fr) auto;gap:12px;align-items:center;border-top:1px solid #ece8dc;padding:12px 0}.naam{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:12px;word-break:break-all}.btn{background:#fff;border:1px solid #c9c2aa;border-radius:8px;padding:9px 12px;font-weight:700;cursor:pointer}.bevestig{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.bevestig input{width:100px;padding:8px;border:1px solid #c9c2aa;border-radius:7px}.waarschuwing{background:#fff4d6;padding:12px;border-radius:9px;margin:12px 0}@media(max-width:650px){.backup{grid-template-columns:1fr}.kop{align-items:flex-start;flex-direction:column}}</style></head><body>
-<div class="top"><div class="topin"><a href="./">← Terug naar beheer</a></div></div><main class="wrap"><h1>Back-ups</h1><p class="meta">Automatische snapshots van beheerdata. Bij iedere gewone opslag én vóór een herstel wordt de huidige versie eerst veiliggesteld. Bewaartermijn: maximaal <?= (int)$dataBackupBewaardagen ?> dagen en maximaal <?= (int)$dataBackupMaxPerBestand ?> versies per bestand.</p>
-<div class="waarschuwing"><strong>Herstellen overschrijft de huidige data.</strong> Daarom moet je per herstel expliciet <code>HERSTEL</code> typen. De huidige versie wordt vóór het overschrijven automatisch opnieuw geback-upt.</div>
+<div class="top"><div class="topin"><a href="./">← Terug naar beheer</a></div></div><main class="wrap"><h1>Back-ups</h1><p class="meta">Automatische snapshots van website- én verenigingsdata. Private PHP+JSON-data wordt bij herstel opnieuw met de server-side beschermingsregel geschreven.</p>
+<div class="waarschuwing"><strong>Herstellen overschrijft de huidige data.</strong> Typ per herstel expliciet <code>HERSTEL</code>. De huidige versie wordt vóór het overschrijven opnieuw geback-upt.</div>
 <?php if(is_array($flash)):?><div class="melding <?=buEsc($flash['type']??'ok')?>"><?=buEsc($flash['tekst']??'')?></div><?php endif;?>
 <?php foreach($overzicht as $sleutel=>$blok): $info=$blok['info']; $lijst=$blok['lijst']; ?>
 <section class="kaart"><div class="kop"><div><h2><?=buEsc($info['label'])?></h2><div class="meta"><?=count($lijst)?> back-up(s) · huidig bestand: <?=is_file($info['pad'])?'aanwezig':'nog niet aangemaakt'?></div></div></div>
