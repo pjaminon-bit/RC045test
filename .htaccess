@@ -75,18 +75,8 @@ RewriteRule ^fotoboek/([a-z0-9][a-z0-9-]*)/?$ fotoboek.php?album=$1 [L,QSA,NC]
 
 # ===== Publieke pagina's draaien op PHP, URL's blijven .html =====
 # De publieke pagina's zijn PHP geworden voor server-side SEO.
-#
-# Bijvoorbeeld:
-#
-#   /aanmelden.html
-#
-# wordt intern:
-#
-#   /aanmelden.php
-#
+# Bijvoorbeeld /aanmelden.html wordt intern /aanmelden.php.
 # Geen externe redirect: POST-formulieren moeten hun POST-data behouden.
-#
-# Alleen herschrijven als het aangevraagde .html-bestand niet werkelijk bestaat.
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteRule ^(.+)\.html$ $1.php [L]
 
@@ -115,48 +105,19 @@ RewriteRule ^leden-app\.php$ - [F,L,NC]
 
 
 # ===== Back-ups =====
-# De hele map is server-only. Hier kunnen onder andere kopieën van
-# gebruikersbestanden en andere interne data staan.
 RewriteRule ^data-backups(?:/|$) - [F,L,NC]
 
 
-# ===== Ledenadministratie en openbare aanmeldbeveiliging =====
-<FilesMatch "^(leden-data\.php|leden-opslag\.php|aanmelden-pogingen\.php)$">
+# ===== Interne opslag- en databestanden =====
+# De opslagmodules en hun private databestanden zijn nooit zelfstandige
+# webpagina's. Eén regel houdt de hele server-only opslaglaag afgeschermd.
+<FilesMatch "^(leden-data\.php|leden-opslag\.php|aanmelden-pogingen\.php|vergaderingen-data\.php|vergaderingen-opslag\.php|taken-data\.php|taken-opslag\.php|operationele-taken-data\.php|operationele-taken-opslag\.php|evenementen-data\.php|evenementen-opslag\.php)$">
   Require all denied
 </FilesMatch>
 
 
-# ===== Vergaderingen en taken =====
-<FilesMatch "^(vergaderingen-data\.php|vergaderingen-opslag\.php|taken-data\.php|taken-opslag\.php)$">
-  Require all denied
-</FilesMatch>
-
-
-# ===== Operationele taken =====
-<FilesMatch "^(operationele-taken-data\.php|operationele-taken-opslag\.php)$">
-  Require all denied
-</FilesMatch>
-
-
-# ===== Evenementen =====
-<FilesMatch "^(evenementen-data\.php|evenementen-opslag\.php)$">
-  Require all denied
-</FilesMatch>
-
-
-# ===== Interne PHP-hulpprogramma's =====
-# Geen zelfstandige pagina's. Ze worden alleen vanuit andere PHP-bestanden
-# ingeladen.
-#
-# paneel.css, paneel.js en paneel-thema.js staan hier bewust NIET tussen,
-# omdat de browser die rechtstreeks moet kunnen downloaden.
-<FilesMatch "^(auth\.php|seo-head\.php|gebruikers-rechten\.php)$">
-  Require all denied
-</FilesMatch>
-
-
-# ===== DeepL-configuratie =====
-<FilesMatch "^vertaal-config\.php$">
+# ===== Overige interne PHP-hulpprogramma's =====
+<FilesMatch "^(auth\.php|seo-head\.php|gebruikers-rechten\.php|vertaal-config\.php)$">
   Require all denied
 </FilesMatch>
 
