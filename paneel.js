@@ -1,4 +1,6 @@
 (function() {
+      var PANEEL_SCRIPT_URL = document.currentScript && document.currentScript.src ? document.currentScript.src : location.href;
+      var PANEEL_ROOT_URL = new URL('.', PANEEL_SCRIPT_URL);
       // ===== Datumvelden: meteen herschrijven naar dd-mm-jjjj =====
       // Al deze velden hebben hetzelfde format-attribuut (placeholder
       // dd-mm-jjjj), ook de velden die pas later worden toegevoegd (extra
@@ -200,7 +202,7 @@
       if (window.__heic2anyLaden) return window.__heic2anyLaden;
       window.__heic2anyLaden = new Promise(function(resolve, reject) {
         var script = document.createElement('script');
-        script.src = 'vendor/heic2any/heic2any.min.js';
+        script.src = new URL('vendor/heic2any/heic2any.min.js', PANEEL_ROOT_URL).href;
         script.onload = resolve;
         script.onerror = reject;
         document.head.appendChild(script);
@@ -1085,7 +1087,7 @@
           var oorspronkelijkeTekst = knop.textContent;
           knop.textContent = '\u2026';
 
-          fetch('vertaal.php', {
+          fetch(new URL('vertaal.php', PANEEL_ROOT_URL), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
