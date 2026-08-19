@@ -65,7 +65,7 @@ RewriteRule ^data-backups(?:/|$) - [F,L,NC]
 </FilesMatch>
 
 # ===== Interne configuratie en resterende root-hulpprogramma's =====
-<FilesMatch "^(auth\.php|seo-head\.php|gebruikers-rechten\.php|vertaal-config\.php|site-config(?:\.local)?\.php|module-definities\.php|pagina-definities\.php|content-pagina\.php|content-pagina-runtime\.php|changelog-historie\.php)$">
+<FilesMatch "^(auth\.php|gebruikers-rechten\.php|vertaal-config\.php|site-config(?:\.local)?\.php|module-definities\.php|changelog-historie\.php)$">
   Require all denied
 </FilesMatch>
 

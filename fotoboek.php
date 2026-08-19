@@ -1,5 +1,5 @@
 <?php
-require_once __DIR__ . '/seo-head.php';
+require_once __DIR__ . '/app/content/seo-head.php';
 
 // Bepaal de publieke basis-URL van deze installatie. Dezelfde code draait
 // zowel in de domeinroot als onder /dev. Bij een nette album-URL zoals
