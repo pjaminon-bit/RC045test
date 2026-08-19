@@ -64,16 +64,6 @@ RewriteRule ^ https://rc045.nl%{REQUEST_URI} [R=301,L]
 DirectoryIndex index.php index.html
 
 
-# ===== Virtuele ledenroute: relatieve assets en publieke endpoints =====
-# /leden/ is voorlopig nog een interne rewrite naar leden.php. Alleen voor die
-# legacy-route blijven expliciete publieke fallbacks nodig. Beheer is nu een
-# echte directory en heeft deze regels niet meer nodig.
-RewriteRule ^leden/(paneel\.css|paneel\.js|paneel-thema\.js|favicon-32x32\.png)$ $1 [L,QSA,NC]
-RewriteRule ^leden/(vertaal\.php)$ $1 [L,QSA,NC]
-RewriteRule ^leden/(vendor/heic2any/heic2any\.min\.js)$ $1 [L,QSA,NC]
-RewriteRule ^leden/leden\.php$ leden.php [L,QSA,NC]
-
-
 # ===== Fotoboek: nette album-URL's =====
 # Werkt zowel in de domeinroot als wanneer dezelfde .htaccess onder /dev staat:
 #   /fotoboek/                 -> fotoboek.php
@@ -109,6 +99,13 @@ RewriteRule ^(.+)\.html$ $1.php [L]
 # Deze bestanden bevatten gevoelige gegevens zoals wachtwoord-hashes,
 # gebruikersnamen, loginpogingen en activiteiten.
 RewriteRule ^beheer-(config\.php|users\.json|log\.json|login-pogingen\.json)$ - [F,L]
+
+
+# ===== Interne ledenapplicatie =====
+# De publieke entrypoint is leden/index.php. De omvangrijke bestaande app blijft
+# voorlopig op rootniveau staan zodat haar __DIR__-opslagpaden niet wijzigen,
+# maar mag nooit rechtstreeks vanuit de browser worden uitgevoerd.
+RewriteRule ^leden-app\.php$ - [F,L,NC]
 
 
 # ===== Back-ups =====
@@ -170,10 +167,3 @@ RewriteRule ^Over-ons/?$ /index.html#over-ons [R=301,L,NC,NE]
 # De oude losse lidmaatschapspagina is vervallen. Verwijs oude bookmarks en
 # zoekresultaten rechtstreeks naar de lidmaatschapssectie op de homepage.
 RewriteRule ^Lidmaatschap/?$ /#lidmaatschap [R=301,L,NC,NE]
-
-
-
-
-# ===== Ledenpagina =====
-# Zelfde principe als beheer.
-RewriteRule ^leden/?$ leden.php [L]
