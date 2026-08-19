@@ -17,6 +17,7 @@ function beheerAgendaBewaakLegacyPost(): void
 
 function beheerAgendaMagOpenen(): bool
 {
+    if (function_exists('siteModuleActief') && !siteModuleActief('evenementen')) return false;
     if (empty($GLOBALS['ingelogd'])) return false;
     if (!empty($GLOBALS['isMaster'])) return true;
     $tabs = isset($GLOBALS['toegestaneTabs']) && is_array($GLOBALS['toegestaneTabs']) ? $GLOBALS['toegestaneTabs'] : [];
