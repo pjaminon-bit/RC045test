@@ -43,15 +43,15 @@ RewriteRule ^leden-app\.php$ - [F,L,NC]
 RewriteRule ^data-backups(?:/|$) - [F,L,NC]
 
 # Helperbestanden onder /beheer zijn alleen bedoeld voor server-side require.
-# Ze zijn geen zelfstandige beheerroute en worden daarom rechtstreeks geblokkeerd.
 RewriteRule ^beheer/(?:backup-registry\.php|gebruikers-rechten\.php|fotoboek-lib\.php)$ - [F,L,NC]
 
 # Oude, niet-canonieke beheer-bootstrap/modulekopieën kunnen door de additieve
-# SFTP-deployment nog op de server staan. De actieve runtime gebruikt uitsluitend
-# app/beheer/*; blokkeer deze historische paden daarom ook als er nog stale files zijn.
+# SFTP-deployment nog op de server staan.
 RewriteRule ^beheer/(?:bootstrap\.php|module-registry\.php|modules(?:/|$)) - [F,L,NC]
 
-<FilesMatch "^(leden-data\.php|leden-opslag\.php|aanmelden-pogingen\.php|vergaderingen-data\.php|vergaderingen-opslag\.php|taken-data\.php|taken-opslag\.php|operationele-taken-data\.php|operationele-taken-opslag\.php|evenementen-data\.php|evenementen-opslag\.php)$">
+# Private domeindata. De PHP-voorloop in deze bestanden is een tweede laag;
+# Apache weigert ze al voordat PHP de inhoud kan uitvoeren.
+<FilesMatch "^(leden-data\.php|aanmeldingen-data\.php|leden-opslag\.php|aanmeldingen-opslag\.php|aanmelden-pogingen\.php|vergaderingen-data\.php|vergaderingen-opslag\.php|taken-data\.php|taken-opslag\.php|operationele-taken-data\.php|operationele-taken-opslag\.php|evenementen-data\.php|evenementen-opslag\.php)$">
   Require all denied
 </FilesMatch>
 
