@@ -137,7 +137,7 @@ RewriteRule ^data-backups(?:/|$) - [F,L,NC]
 #
 # paneel.css, paneel.js en paneel-thema.js staan hier bewust NIET tussen,
 # omdat de browser die rechtstreeks moet kunnen downloaden.
-<FilesMatch "^(auth\.php|paneel-hulp\.php|data-slot\.php|seo-head\.php)$">
+<FilesMatch "^(auth\.php|auth-session-check\.php|paneel-hulp\.php|data-slot\.php|seo-head\.php|gebruikers-rechten\.php)$">
   Require all denied
 </FilesMatch>
 
@@ -154,6 +154,7 @@ RewriteRule ^data-backups(?:/|$) - [F,L,NC]
 
 # ===== Oude /Over-ons URL =====
 RewriteRule ^Over-ons/?$ /index.html#over-ons [R=301,L,NC,NE]
+
 
 # ===== Oude /Lidmaatschap URL =====
 # De oude losse lidmaatschapspagina is vervallen. Verwijs oude bookmarks en
