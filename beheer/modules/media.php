@@ -2,9 +2,6 @@
 // ============================================================
 // Beheermodule: Media
 // ============================================================
-// Schakelt de historische Media-tab en beide oude POST-routes uit en laat
-// het bestaande beheer-menu naar de zelfstandige editor wijzen.
-// ============================================================
 
 function beheerMediaBewaakLegacyPost(): void
 {
@@ -34,7 +31,7 @@ function beheerMediaStartOutputFilter(): void
         if (beheerMediaMagOpenen()) {
             $html = preg_replace(
                 '~<button\s+type="button"\s+class="menu-item"\s+data-tab="media">.*?</button>~is',
-                '<a class="menu-item menu-item-link" style="display:block;text-decoration:none" href="beheer/media.php">Media</a>',
+                '<a class="menu-item menu-item-link" style="display:block;text-decoration:none" href="media.php">* Media</a>',
                 $html,
                 1
             ) ?? $html;
