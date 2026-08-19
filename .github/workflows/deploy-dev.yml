@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: rc045-dev-deploy
@@ -19,6 +19,31 @@ jobs:
     steps:
       - name: Checkout testcode
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Eenmalige migratie interne helpers naar app
+        shell: bash
+        run: |
+          python3 tools/refactor-app-helpers.py
+          php -l auth.php
+          php -l app/auth-session-check.php
+          php -l app/data-slot.php
+          php -l app/paneel-hulp.php
+          php -l leden-opslag.php
+          php -l beheer/gebruikers.php
+          php -l beheer/index.php
+          php -l leden-app.php
+          git diff --check
+
+          if ! git diff --quiet; then
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git add -A auth-session-check.php data-slot.php paneel-hulp.php app auth.php leden-opslag.php beheer/gebruikers.php beheer/index.php leden-app.php .htaccess
+            git commit -m 'Move internal helpers into app directory'
+            git push origin HEAD:agent/template-foundation
+            echo 'Migratie gecommit; de branch-push start automatisch een frisse DEV-deploy.'
+          fi
 
       - name: Controleer PHP syntax
         shell: bash
