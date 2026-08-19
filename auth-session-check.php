@@ -6,13 +6,12 @@
 // $huidigeGebruiker zijn bepaald.
 //
 // Doel:
-// - een verwijderd account verliest bij het eerstvolgende verzoek toegang;
+// - een verwijderd of geblokkeerd account verliest bij het eerstvolgende
+//   verzoek toegang;
 // - na een rechten- of wachtwoordwijziging kan de bestaande sessie worden
 //   ingetrokken door sessie_versie in beheer-users.json te verhogen;
 // - bestaande accounts zonder sessie_versie gelden als versie 1;
 // - bestaande sessies van vóór deze uitbreiding gelden óók als versie 1.
-//   Daardoor kan zo'n oude sessie nooit een inmiddels verhoogde versie
-//   "overnemen" nadat rechten of wachtwoord al zijn gewijzigd.
 // ============================================================
 
 if (!$ingelogd || $isMaster) {
@@ -28,22 +27,26 @@ foreach (laadGebruikers($usersBestand) as $sessionGebruiker) {
     }
 }
 
-// Geen record meer = account verwijderd. Laat de legacy-rechtenfallback
-// nooit op een verweesde sessie los.
-if (!is_array($sessionAccount)) {
+// Geen record meer = account verwijderd. Een expliciet geblokkeerd account
+// wordt op exact dezelfde fail-closed manier behandeld. Oude accounts zonder
+// 'actief'-veld blijven voor compatibiliteit actief.
+$accountActief = is_array($sessionAccount) && (($sessionAccount['actief'] ?? true) !== false);
+if (!$accountActief) {
     unset($_SESSION['gebruiker'], $_SESSION['is_master'], $_SESSION['user_session_version']);
     $ingelogd = false;
     $huidigeGebruiker = '';
     $isMaster = false;
+    $inlogFout = is_array($sessionAccount)
+        ? 'Dit account is tijdelijk niet beschikbaar. Neem contact op met de beheerder.'
+        : '';
     return;
 }
 
 $actueleVersie = max(1, (int)($sessionAccount['sessie_versie'] ?? 1));
 
 // Sessies die al bestonden vóór invoering van dit veld zijn versie 1.
-// Belangrijk: neem hier NIET de actuele accountversie over. Als een beheerder
-// het account na deployment al heeft gewijzigd en het record daardoor op
-// versie 2+ staat, moet de oude sessie juist ongeldig zijn.
+// Neem hier nooit de actuele accountversie over: na een beveiligingswijziging
+// moet een oude sessie juist ongeldig worden.
 if (!isset($_SESSION['user_session_version'])) {
     $_SESSION['user_session_version'] = 1;
 }
@@ -53,4 +56,5 @@ if ((int)$_SESSION['user_session_version'] !== $actueleVersie) {
     $ingelogd = false;
     $huidigeGebruiker = '';
     $isMaster = false;
+    $inlogFout = 'Je sessie is beëindigd. Log opnieuw in.';
 }
