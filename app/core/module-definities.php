@@ -99,10 +99,13 @@ return [
     'aanmelden' => [
         'label' => 'Aanmelden',
         'type' => 'publiek',
-        'publieke_paginas' => ['aanmelden'],
-        'publieke_links' => ['aanmelden.html'],
-        'beheer_tabs' => ['aanmelden'],
-        'beheer_formulieren' => ['aanmelden'],
+        // Aanmelden, de bevestigingspagina en de FAQ vormen samen één flow.
+        // Staat de module uit, dan zijn zowel de publieke routes als alle drie
+        // beheeronderdelen niet beschikbaar.
+        'publieke_paginas' => ['aanmelden', 'bedankt'],
+        'publieke_links' => ['aanmelden.html', 'bedankt.html'],
+        'beheer_tabs' => ['aanmelden', 'bedankt', 'faq'],
+        'beheer_formulieren' => ['aanmelden', 'bedankt', 'faq'],
         'leden_tabs' => [],
         'leden_formulieren' => [],
         'publieke_selectors' => [],
