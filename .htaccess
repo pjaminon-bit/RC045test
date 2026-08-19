@@ -37,26 +37,11 @@ RewriteRule ^ https://rc045.nl%{REQUEST_URI} [R=301,L]
 # daarvoor moeten eerst alle gebruikte externe bronnen en inline scripts/styles
 # exact worden opgenomen.
 <IfModule mod_headers.c>
-
-  # Browser mag een bestand niet zelf als een ander MIME-type proberen uit te
-  # voeren.
   Header always set X-Content-Type-Options "nosniff"
-
-  # Bij links naar een andere site alleen de herkomst meesturen, niet het
-  # volledige pad/query van de bezochte pagina.
   Header always set Referrer-Policy "strict-origin-when-cross-origin"
-
-  # De publieke website gebruikt deze browserrechten niet.
   Header always set Permissions-Policy "camera=(), microphone=(), geolocation=()"
-
-  # Publieke pagina's mogen alleen vanaf hetzelfde domein in een frame worden
-  # geplaatst. auth.php zet voor beheer/leden zelf nog de strengere DENY.
   Header always set X-Frame-Options "SAMEORIGIN"
-
-  # HSTS pas gebruiken omdat rc045.nl volledig via HTTPS draait.
-  # Geen includeSubDomains/preload: die keuzes moeten bewust apart gemaakt worden.
   Header always set Strict-Transport-Security "max-age=31536000"
-
 </IfModule>
 
 
@@ -65,18 +50,13 @@ DirectoryIndex index.php index.html
 
 
 # ===== Fotoboek: nette album-URL's =====
-# Werkt zowel in de domeinroot als wanneer dezelfde .htaccess onder /dev staat:
-#   /fotoboek/                 -> fotoboek.php
-#   /fotoboek/crawlerbaan/     -> fotoboek.php?album=crawlerbaan
-# De browser blijft de nette URL zien; dit zijn alleen interne rewrites.
+# Werkt zowel in de domeinroot als wanneer dezelfde .htaccess onder /dev staat.
 RewriteRule ^fotoboek/?$ fotoboek.php [L,QSA]
 RewriteRule ^fotoboek/([a-z0-9][a-z0-9-]*)/?$ fotoboek.php?album=$1 [L,QSA,NC]
 
 
 # ===== Publieke pagina's draaien op PHP, URL's blijven .html =====
-# De publieke pagina's zijn PHP geworden voor server-side SEO.
 # Bijvoorbeeld /aanmelden.html wordt intern /aanmelden.php.
-# Geen externe redirect: POST-formulieren moeten hun POST-data behouden.
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteRule ^(.+)\.html$ $1.php [L]
 
@@ -86,21 +66,16 @@ RewriteRule ^(.+)\.html$ $1.php [L]
 # ============================================================
 
 # ===== Beheerconfiguratie, gebruikers en logboek =====
-# Deze bestanden bevatten gevoelige gegevens zoals wachtwoord-hashes,
-# gebruikersnamen, loginpogingen en activiteiten.
 RewriteRule ^beheer-(config\.php|users\.json|log\.json|login-pogingen\.json)$ - [F,L]
 
 
 # ===== Interne applicatiecode =====
-# Technische helpers in app/ zijn alleen voor PHP includes en nooit publieke
-# endpoints. Eén mapregel vervangt losse bestandsblokkades.
+# Technische helpers in app/ zijn uitsluitend PHP-includes.
 RewriteRule ^app(?:/|$) - [F,L,NC]
 
 
 # ===== Interne ledenapplicatie =====
-# De publieke entrypoint is leden/index.php. De omvangrijke bestaande app blijft
-# voorlopig op rootniveau staan zodat haar __DIR__-opslagpaden niet wijzigen,
-# maar mag nooit rechtstreeks vanuit de browser worden uitgevoerd.
+# Publieke entrypoint is leden/index.php; deze implementatie is include-only.
 RewriteRule ^leden-app\.php$ - [F,L,NC]
 
 
@@ -109,15 +84,15 @@ RewriteRule ^data-backups(?:/|$) - [F,L,NC]
 
 
 # ===== Interne opslag- en databestanden =====
-# De opslagmodules en hun private databestanden zijn nooit zelfstandige
-# webpagina's. Eén regel houdt de hele server-only opslaglaag afgeschermd.
 <FilesMatch "^(leden-data\.php|leden-opslag\.php|aanmelden-pogingen\.php|vergaderingen-data\.php|vergaderingen-opslag\.php|taken-data\.php|taken-opslag\.php|operationele-taken-data\.php|operationele-taken-opslag\.php|evenementen-data\.php|evenementen-opslag\.php)$">
   Require all denied
 </FilesMatch>
 
 
-# ===== Overige interne PHP-hulpprogramma's =====
-<FilesMatch "^(auth\.php|seo-head\.php|gebruikers-rechten\.php|vertaal-config\.php)$">
+# ===== Interne configuratie en PHP-hulpprogramma's =====
+# Geen van deze bestanden is een zelfstandig web-endpoint. Ook de optionele
+# lokale siteconfig wordt hiermee afgeschermd wanneer die via FTP aanwezig is.
+<FilesMatch "^(auth\.php|seo-head\.php|gebruikers-rechten\.php|vertaal-config\.php|site-config(?:\.local)?\.php|module-definities\.php|pagina-definities\.php|content-beheer\.php|content-pagina\.php|content-pagina-runtime\.php|content-publieke-nav\.php|content-renderer\.php|changelog-historie\.php)$">
   Require all denied
 </FilesMatch>
 
@@ -131,6 +106,4 @@ RewriteRule ^Over-ons/?$ /index.html#over-ons [R=301,L,NC,NE]
 
 
 # ===== Oude /Lidmaatschap URL =====
-# De oude losse lidmaatschapspagina is vervallen. Verwijs oude bookmarks en
-# zoekresultaten rechtstreeks naar de lidmaatschapssectie op de homepage.
 RewriteRule ^Lidmaatschap/?$ /#lidmaatschap [R=301,L,NC,NE]
