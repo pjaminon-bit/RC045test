@@ -16,7 +16,6 @@ t25(is_array($features) && $features, 'platform features aanwezig');
 t25(is_array($beheer) && $beheer, 'beheerregistry aanwezig');
 t25(is_array($caps) && $caps, 'capabilityregistry aanwezig');
 
-// Eén bron van waarheid: adapters moeten hetzelfde opleveren.
 $featureAdapter = require $root . '/app/core/module-definities.php';
 $beheerAdapter = require $root . '/app/beheer/module-registry.php';
 t25($featureAdapter === $features, 'module-definities is zuivere platformadapter');
@@ -49,7 +48,6 @@ t25(!empty($caps['system.users.manage']['gevoelig']), 'gebruikersbeheer is gevoe
 t25(!empty($caps['system.audit.read']['gevoelig']), 'auditlog is gevoelige capability');
 t25(!empty($caps['system.backups.manage']['gevoelig']), 'backupherstel is gevoelige capability');
 
-// Beheer is een shell, geen verborgen monolith meer.
 $beheerIndex = t25file($root . '/beheer/index.php');
 t25(strlen($beheerIndex) < 50000, 'beheer/index.php is een dunne shell');
 t25(strpos($beheerIndex, 'formulier ===') === false && strpos($beheerIndex, "formulier'] ===") === false, 'beheer-shell bevat geen inhoudelijke legacy POST-handlers');
@@ -59,13 +57,11 @@ $ledenIndex = t25file($root . '/leden/index.php');
 t25(strpos($ledenIndex, 'leden-app.php') === false, '/leden/ is geen wrapper meer om legacy leden-app');
 t25(strpos($ledenIndex, 'Mijn ') !== false && strpos($ledenIndex, 'portaal-service.php') !== false, '/leden/ is persoonlijk portaal');
 
-// Geen bekende verkeerde helpernaam uit de migratie terug laten sluipen.
 $it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS));
 $verkeerdeHelper = [];
 foreach($it as $file){if(!$file->isFile()||strtolower($file->getExtension())!=='php'||strpos($file->getPathname(),DIRECTORY_SEPARATOR.'.git'.DIRECTORY_SEPARATOR)!==false)continue;$txt=(string)file_get_contents($file->getPathname());if(strpos($txt,'siteVerenigingNaam(')!==false)$verkeerdeHelper[]=$file->getPathname();}
 t25(!$verkeerdeHelper, 'geen niet-bestaande siteVerenigingNaam-helper gebruikt');
 
-// Muterende nieuwe routes moeten CSRF én capabilitycontrole bevatten.
 $muterend = [
     'beheer/leden.php'=>'members.', 'beheer/leden-import.php'=>'members.manage',
     'beheer/commissies.php'=>'committees.manage','beheer/vergaderingen.php'=>'meetings.manage',
@@ -76,24 +72,20 @@ $muterend = [
 ];
 foreach($muterend as $rel=>$needle){$txt=t25file($root.'/'.$rel);t25($txt!=='',"$rel bestaat");t25(strpos($txt,'csrfOk(')!==false,"$rel controleert CSRF");t25(strpos($txt,$needle)!==false,"$rel controleert capability $needle");}
 
-// Openbare aanmelding: inbox, geen directe member insert.
 $ontvangst = t25file($root . '/aanmelden-ontvangst.php');
 t25(strpos($ontvangst,'aanmeldingenSchrijf')!==false, 'openbare aanmelding schrijft naar inbox');
 t25(strpos($ontvangst,"['leden'][]")===false && strpos($ontvangst,'ledenSchrijf(')===false, 'openbare aanmelding maakt niet rechtstreeks een lid');
 t25(strpos($ontvangst,'lidmaatschapBedragVoorMaand')!==false, 'openbare aanmelding berekent bedrag server-side');
 
-// Privacyflow: archief verplicht vóór erase.
 $service = t25file($root . '/app/leden/service.php');
-t25(strpos($service,"empty($gevonden['gearchiveerd_op'])")!==false, 'definitief wissen vereist eerst archiveren');
+t25(strpos($service,"empty(\$gevonden['gearchiveerd_op'])")!==false, 'definitief wissen vereist eerst archiveren');
 t25(strpos($service,'ledenServiceVerwijderRelaties')!==false, 'definitief wissen ruimt bekende relaties op');
 
-// Private data moet op webserverniveau én in backupregistry beschermd zijn.
 $ht = t25file($root . '/.htaccess');
 foreach(['leden-data\\.php','aanmeldingen-data\\.php','vergaderingen-data\\.php','taken-data\\.php','operationele-taken-data\\.php','evenementen-data\\.php'] as $needle)t25(strpos($ht,$needle)!==false,".htaccess beschermt $needle");
 $backup = require $root . '/beheer/backup-registry.php';
 foreach(['leden','aanmeldingen_inbox','vergaderingen','taken','operationele_taken','evenementen','lidmaatschapstypen'] as $key)t25(isset($backup[$key]),"backupregistry bevat $key");
 
-// Membership types: defaults zijn geldig en zonder dubbele sleutels.
 require_once $root . '/app/leden/lidmaatschap.php';
 $types = lidmaatschapLees()['types'] ?? [];
 $ids = array_map(static fn($t)=>(string)($t['id']??''),$types);
@@ -101,11 +93,9 @@ t25(count($ids) === count(array_unique($ids)), 'lidmaatschapstype-id’s zijn un
 t25(count($types) >= 1, 'minstens één lidmaatschapstype beschikbaar');
 foreach($types as $type){$min=$type['leeftijd_min'];$max=$type['leeftijd_max'];t25($min===null||$max===null||$min<=$max,'leeftijdsgrens lidmaatschapstype is geldig');t25(($type['jaarbedrag']??-1)>=0,'jaarbedrag is niet negatief');}
 
-// Tenant/storageconfig moet expliciet zijn.
 t25(trim((string)($config['vereniging']['sleutel']??''))!=='','tenant heeft vaste technische sleutel');
 t25(in_array((string)($config['opslag']['private_driver']??''),['json','pdo'],true),'private storage driver is geldig');
 
-// Capability legacy mapping moet leden-tab naar alle historische beheerrechten kunnen vertalen.
 require_once $root . '/app/auth-capabilities.php';
 $ledenCaps=authCapabilitiesVanTabs(['leden']);
 foreach(['members.view','members.manage','members.fees.manage'] as $c)t25(in_array($c,$ledenCaps,true),"legacy ledenrecht behoudt $c");
