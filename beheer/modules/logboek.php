@@ -2,8 +2,6 @@
 // ============================================================
 // Beheermodule: Logboek
 // ============================================================
-// Vervangt de historische Logboek-tab door de zelfstandige read-only editor.
-// ============================================================
 
 function beheerLogboekMagOpenen(): bool
 {
@@ -21,7 +19,7 @@ function beheerLogboekStartOutputFilter(): void
         if (beheerLogboekMagOpenen()) {
             $html = preg_replace(
                 '~<button\s+type="button"\s+class="menu-item"\s+data-tab="log">.*?</button>~is',
-                '<a class="menu-item menu-item-link" style="display:block;text-decoration:none" href="beheer/logboek.php">Logboek</a>',
+                '<a class="menu-item menu-item-link" style="display:block;text-decoration:none" href="logboek.php">* Logboek</a>',
                 $html,
                 1
             ) ?? $html;
