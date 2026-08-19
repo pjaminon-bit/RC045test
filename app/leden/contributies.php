@@ -1,0 +1,81 @@
+<?php
+// ============================================================
+// Aparte contributie-administratie per lid / jaar
+// ============================================================
+// Persoonsgegevens en financiële jaarregels zijn vanaf fase 2.5 verschillende
+// domeinen. Legacy regels die nog onder een lidrecord staan worden bij lezen
+// samengevoegd als migratiebron, maar nieuwe beheeracties schrijven hierheen.
+// ============================================================
+require_once dirname(__DIR__) . '/storage/private-store.php';
+require_once dirname(__DIR__) . '/storage/domein-repositories.php';
+require_once __DIR__ . '/lidmaatschap.php';
+
+function contributiesBestandPad(): string { return dirname(__DIR__,2) . '/contributies-data.php'; }
+function contributiesLeeg(): array { return ['updated'=>date('c'),'regels'=>[]]; }
+function contributieStatussen(): array
+{
+    return [
+        'open'=>'Open',
+        'deels_betaald'=>'Deels betaald',
+        'betaald'=>'Betaald',
+        'kwijtgescholden'=>'Kwijtgescholden / vrijgesteld',
+        'vervallen'=>'Vervallen',
+    ];
+}
+function contributiesJsonLees(): array
+{
+    $pad=contributiesBestandPad();if(!is_file($pad))return contributiesLeeg();
+    $raw=@file_get_contents($pad);if($raw===false)return contributiesLeeg();$start=strpos($raw,'{');if($start===false)return contributiesLeeg();
+    $data=json_decode(substr($raw,$start),true);return is_array($data)&&isset($data['regels'])&&is_array($data['regels'])?$data:contributiesLeeg();
+}
+function contributiesJsonSchrijf(array $data): bool
+{
+    $data['updated']=date('c');$json=json_encode($data,JSON_UNESCAPED_UNICODE|JSON_PRETTY_PRINT);if($json===false)return false;
+    $pad=contributiesBestandPad();
+    if(function_exists('maakDataBackup')){global $dataBackupMap,$dataBackupBewaardagen,$dataBackupMaxPerBestand;maakDataBackup($pad,$dataBackupMap,$dataBackupBewaardagen,$dataBackupMaxPerBestand);}
+    try{$suffix=bin2hex(random_bytes(5));}catch(Throwable $e){$suffix=str_replace('.','',(string)microtime(true));}
+    $tmp=$pad.'.tmp.'.$suffix;if(@file_put_contents($tmp,"<?php exit; ?>\n".$json,LOCK_EX)===false)return false;if(!@rename($tmp,$pad)){@unlink($tmp);return false;}return true;
+}
+function contributieId(string $lidId,int $jaar): string { return 'contrib_' . substr(hash('sha256',$lidId.'|'.$jaar),0,24); }
+function contributieKort($v,int $max): string{$s=trim(is_scalar($v)?(string)$v:'');return function_exists('mb_substr')?mb_substr($s,0,$max,'UTF-8'):substr($s,0,$max);}
+function contributieNormaliseer(array $invoer,?array $bestaand=null): array
+{
+    $r=is_array($bestaand)?$bestaand:[];$lidId=contributieKort($invoer['lid_id']??($r['lid_id']??''),60);$jaar=(int)($invoer['jaar']??($r['jaar']??0));
+    if($jaar<2000||$jaar>2099)$jaar=(int)date('Y');$status=(string)($invoer['status']??($r['status']??'open'));if(!isset(contributieStatussen()[$status]))$status='open';
+    $verschuldigd=max(0,round((float)($invoer['verschuldigd_bedrag']??($r['verschuldigd_bedrag']??0)),2));$inschrijf=max(0,round((float)($invoer['inschrijfgeld']??($r['inschrijfgeld']??0)),2));$betaald=max(0,round((float)($invoer['betaald_bedrag']??($r['betaald_bedrag']??0)),2));
+    $totaal=$verschuldigd+$inschrijf;if($status==='betaald'&&$betaald<$totaal)$betaald=$totaal;if($status==='open'&&$betaald>0&&$betaald<$totaal)$status='deels_betaald';if($betaald>=$totaal&&$totaal>0&&!in_array($status,['kwijtgescholden','vervallen'],true))$status='betaald';
+    return [
+        'id'=>contributieId($lidId,$jaar),'lid_id'=>$lidId,'jaar'=>$jaar,
+        'lidmaatschap_type'=>contributieKort($invoer['lidmaatschap_type']??($r['lidmaatschap_type']??''),40),
+        'status'=>$status,'verschuldigd_bedrag'=>$verschuldigd,'inschrijfgeld'=>$inschrijf,'betaald_bedrag'=>$betaald,
+        'betaald_op'=>ledenParseDatum($invoer['betaald_op']??($r['betaald_op']??'')),
+        'vrijstelling_reden'=>contributieKort($invoer['vrijstelling_reden']??($r['vrijstelling_reden']??''),300),
+        'opmerking'=>contributieKort($invoer['opmerking']??($r['opmerking']??''),1000),
+        'aangemaakt'=>(string)($r['aangemaakt']??date('c')),'gewijzigd'=>date('c'),
+    ];
+}
+function contributiesLegacyRegels(): array
+{
+    $regels=[];$leden=repoLedenLees();
+    foreach((array)($leden['leden']??[]) as $lid){if(!is_array($lid))continue;$lidId=(string)($lid['id']??'');if($lidId==='')continue;foreach((array)($lid['contributie']??[]) as $jaar=>$oud){if(!is_array($oud))continue;$status=(string)($oud['status']??'open');$bedrag=(float)($oud['bedrag']??0);$inschrijf=(float)($oud['inschrijfgeld']??0);$betaald=$status==='betaald'?$bedrag+$inschrijf:0;$regels[]=contributieNormaliseer(['lid_id'=>$lidId,'jaar'=>(int)$jaar,'lidmaatschap_type'=>$lid['lidmaatschap_type']??'','status'=>$status,'verschuldigd_bedrag'=>$bedrag,'inschrijfgeld'=>$inschrijf,'betaald_bedrag'=>$betaald,'betaald_op'=>$oud['betaald_op']??'','vrijstelling_reden'=>$status==='kwijtgescholden'?($oud['opmerking']??''):'','opmerking'=>$oud['opmerking']??'']);}}
+    return $regels;
+}
+function contributiesLees(): array
+{
+    $data=privateStoreLees('contributies','contributiesJsonLees');if(!isset($data['regels'])||!is_array($data['regels']))$data=contributiesLeeg();
+    // Vul alleen ontbrekende lid/jaar-combinaties vanuit legacy aan; eigen
+    // contributieregels zijn leidend zodra ze bestaan.
+    $index=[];foreach($data['regels'] as $i=>$r)if(is_array($r))$index[(string)($r['lid_id']??'').'|'.(int)($r['jaar']??0)]=$i;
+    foreach(contributiesLegacyRegels() as $legacy){$k=$legacy['lid_id'].'|'.$legacy['jaar'];if(!isset($index[$k])){$data['regels'][]=$legacy;$index[$k]=count($data['regels'])-1;}}
+    return $data;
+}
+function contributiesSchrijf(array $data): bool
+{
+    $uniek=[];$regels=[];foreach((array)($data['regels']??[]) as $r){if(!is_array($r))continue;$n=contributieNormaliseer($r,$r);if($n['lid_id']==='')continue;$k=$n['lid_id'].'|'.$n['jaar'];$uniek[$k]=count($regels);$regels[$uniek[$k]]=$n;}
+    return privateStoreSchrijf('contributies',['updated'=>date('c'),'regels'=>array_values($regels)],'contributiesJsonSchrijf');
+}
+function contributieVindIndex(array $data,string $lidId,int $jaar): ?int{foreach((array)($data['regels']??[]) as $i=>$r)if(is_array($r)&&($r['lid_id']??'')===$lidId&&(int)($r['jaar']??0)===$jaar)return$i;return null;}
+function contributieVoorLidJaar(string $lidId,int $jaar): ?array{$data=contributiesLees();$i=contributieVindIndex($data,$lidId,$jaar);return$i===null?null:$data['regels'][$i];}
+function contributieUpsert(array &$data,array $invoer): array{$lidId=(string)($invoer['lid_id']??'');$jaar=(int)($invoer['jaar']??0);$i=contributieVindIndex($data,$lidId,$jaar);$oud=$i===null?null:$data['regels'][$i];$r=contributieNormaliseer($invoer,$oud);if($i===null)$data['regels'][]=$r;else$data['regels'][$i]=$r;return$r;}
+function contributieTotaal(array $r): float{return round((float)($r['verschuldigd_bedrag']??0)+(float)($r['inschrijfgeld']??0),2);}
+function contributieRestant(array $r): float{if(($r['status']??'')==='kwijtgescholden')return 0.0;return max(0,round(contributieTotaal($r)-(float)($r['betaald_bedrag']??0),2));}
