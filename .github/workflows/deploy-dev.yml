@@ -4,63 +4,17 @@ on:
   push:
     branches:
       - agent/template-foundation
-      - agent/final-audit-hardening
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: rc045-${{ github.ref_name }}
+  group: rc045-dev-deploy
   cancel-in-progress: true
 
 jobs:
-  validate-staging:
-    if: github.ref_name == 'agent/final-audit-hardening'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout stagingcode
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          fetch-depth: 0
-
-      - name: Voer bewaakte eindmigratie uit
-        shell: bash
-        run: python3 tools/final-audit-migrate.py
-
-      - name: Controleer volledige PHP syntax en refactor-invarianten
-        shell: bash
-        run: |
-          set -euo pipefail
-          while IFS= read -r -d '' bestand; do php -l "$bestand"; done < <(find . -type f -name '*.php' -print0)
-          git diff --check
-          test -f app/core/site.php
-          test -f app/core/paneel-modules.php
-          test -f app/beheer/bootstrap.php
-          test -f app/beheer/module-registry.php
-          test ! -e beheer/modules
-          test ! -e beheer/bootstrap.php
-          test ! -e beheer/module-registry.php
-          ! grep -R -n --include='*.php' "'/data-slot.php'" .
-          grep -Fq "app/beheer/bootstrap.php" app/paneel-hulp.php
-          grep -Fq 'href="agenda.php">* Agenda' app/beheer/modules/agenda.php
-          grep -Fq 'href="gebruikers.php">* Gebruikers' app/beheer/modules/gebruikers.php
-          grep -Fq "preg_match('~(?:^|/)beheer/(?:index\\.php)?$~'" app/core/site.php
-          grep -Fq "preg_match('~(?:^|/)leden/(?:index\\.php)?$~'" app/core/paneel-modules.php
-
-      - name: Commit alleen bij geslaagde validatie
-        shell: bash
-        run: |
-          set -euo pipefail
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -A
-          git diff --cached --quiet && exit 0
-          git commit -m 'Complete audited app structure cleanup'
-          git push
-
   deploy-dev:
-    if: github.ref_name == 'agent/template-foundation'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout testcode
@@ -70,7 +24,9 @@ jobs:
         shell: bash
         run: |
           php -v
-          while IFS= read -r -d '' bestand; do php -l "$bestand"; done < <(find . -type f -name '*.php' -print0)
+          while IFS= read -r -d '' bestand; do
+            php -l "$bestand"
+          done < <(find . -type f -name '*.php' -print0)
 
       - name: Schrijf DEV buildinformatie
         shell: bash
