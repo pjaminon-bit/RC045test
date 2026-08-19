@@ -18,11 +18,14 @@ Datum: 2026-08-19
 
 Het logboek blijft auditdata. De module biedt daarom geen mogelijkheid om regels vanuit de webinterface te verwijderen of te wijzigen. De bestaande bewaartermijn van maximaal 90 dagen blijft geregeld door `schrijfLog()` in `auth.php`.
 
-## Nog te valideren op DEV
+## DEV-validatie
 
-- Menu-item Logboek opent `/beheer/logboek.php`.
+Op 2026-08-19 gecontroleerd in de draaiende DEV-omgeving:
+
+- Menu-item Logboek opent de nieuwe zelfstandige module.
 - Bestaande logregels worden correct weergegeven.
-- Zoek- en filterfuncties werken.
-- CSV-export levert de gefilterde regels.
+- Zoeken en filteren werken.
+- Filteren op actie werkt.
+- CSV-export respecteert de actieve filters en levert de verwachte regels.
 
-Status: **wacht op DEV-validatie**.
+Status: **DEV-gevalideerd**.
