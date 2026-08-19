@@ -64,3 +64,44 @@ jobs:
           sftp_only: true
           local_path: './.htaccess'
           remote_path: '/'
+
+      - name: Smoke test gedeployde DEV-site
+        shell: bash
+        run: |
+          set -euo pipefail
+          basis='https://rc045.nl/dev'
+
+          wacht_op_status() {
+            local url="$1"
+            local verwacht="$2"
+            local volg_redirects="${3:-nee}"
+            local poging status
+
+            for poging in 1 2 3 4 5 6; do
+              if [[ "$volg_redirects" == 'ja' ]]; then
+                status="$(curl --silent --show-error --location --output /dev/null --write-out '%{http_code}' --connect-timeout 10 --max-time 30 "$url" || true)"
+              else
+                status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --connect-timeout 10 --max-time 30 "$url" || true)"
+              fi
+
+              if [[ "$status" == "$verwacht" ]]; then
+                echo "OK: $url -> HTTP $status"
+                return 0
+              fi
+
+              echo "Poging $poging: $url gaf HTTP ${status:-geen}, verwacht $verwacht"
+              sleep 5
+            done
+
+            echo "FOUT: $url gaf na meerdere pogingen niet HTTP $verwacht" >&2
+            return 1
+          }
+
+          # Kernroutes moeten na eventuele redirects gewoon renderen.
+          wacht_op_status "$basis/" 200 ja
+          wacht_op_status "$basis/beheer/" 200 ja
+          wacht_op_status "$basis/leden/" 200 ja
+
+          # Interne applicatiecode en buildmetadata mogen nooit publiek leesbaar zijn.
+          wacht_op_status "$basis/app/paneel-hulp.php" 403 nee
+          wacht_op_status "$basis/dev-build.json" 403 nee
