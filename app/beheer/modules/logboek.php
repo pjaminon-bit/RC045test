@@ -6,9 +6,8 @@
 function beheerLogboekMagOpenen(): bool
 {
     if (empty($GLOBALS['ingelogd'])) return false;
-    if (!empty($GLOBALS['isMaster'])) return true;
-    $tabs = isset($GLOBALS['toegestaneTabs']) && is_array($GLOBALS['toegestaneTabs']) ? $GLOBALS['toegestaneTabs'] : [];
-    return in_array('log', $tabs, true);
+    if (function_exists('authHeeftExplicietRecht')) return authHeeftExplicietRecht('log');
+    return !empty($GLOBALS['isMaster']);
 }
 
 function beheerLogboekStartOutputFilter(): void
@@ -22,6 +21,16 @@ function beheerLogboekStartOutputFilter(): void
             $html = preg_replace(
                 '~<a\s+class="menu-module-link"\s+href="logboek\.php">\s*\*?\s*Logboek\s*</a>~is',
                 '<a class="menu-module-link" href="logboek.php">* Logboek</a>',
+                $html,
+                1
+            ) ?? $html;
+        } else {
+            // De link staat in de historische menu-HTML. Een account zonder
+            // expliciet logboekrecht mag hem niet alleen niet openen, maar ook
+            // niet als beschikbare beheerfunctie zien.
+            $html = preg_replace(
+                '~<a\s+class="menu-module-link"\s+href="logboek\.php">.*?</a>~is',
+                '',
                 $html,
                 1
             ) ?? $html;
