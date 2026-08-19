@@ -32,6 +32,12 @@ function beheerBackupsStartOutputFilter(): void
                 $html,
                 1
             ) ?? $html;
+            $html = preg_replace(
+                '~(<a\s+class="menu-module-link"\s+href="backups\.php">)(?!\*\s*)(.*?</a>)~is',
+                '$1* $2',
+                $html,
+                1
+            ) ?? $html;
         }
         if (stripos($html, '</head>') !== false) {
             $css = '<style id="beheer-backups-legacy-hidden">#tab-backups,[href="#tab-backups"],[href="#backups"],[data-tab-target="backups"]{display:none!important}</style>';
