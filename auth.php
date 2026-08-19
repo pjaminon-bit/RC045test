@@ -128,7 +128,11 @@ function maakDataBackup($pad, $backupMap, $bewaardagen, $maxPerBestand) {
     @mkdir($backupMap, 0755, true);
   }
   $basisnaam = basename($pad);
-  $doelpad = $backupMap . '/' . date('Y-m-d_His') . '_' . $basisnaam;
+  // Seconden alleen zijn niet uniek genoeg: twee snelle opslagacties kunnen
+  // binnen dezelfde seconde vallen. De microseconden houden snapshots apart
+  // terwijl het bestaande glob-patroon *_{bestandsnaam} geldig blijft.
+  $micro = (int) round((microtime(true) - floor(microtime(true))) * 1000000);
+  $doelpad = $backupMap . '/' . date('Y-m-d_His') . '_' . sprintf('%06d', $micro) . '_' . $basisnaam;
   @copy($pad, $doelpad);
 
   $bestanden = @glob($backupMap . '/*_' . $basisnaam);
@@ -161,31 +165,66 @@ function laadGebruikers($pad) {
 function schrijfGebruikers($pad, $gebruikers) {
   global $dataBackupMap, $dataBackupBewaardagen, $dataBackupMaxPerBestand;
   maakDataBackup($pad, $dataBackupMap, $dataBackupBewaardagen, $dataBackupMaxPerBestand);
-  return file_put_contents($pad, json_encode($gebruikers, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT), LOCK_EX) !== false;
+  $json = json_encode($gebruikers, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+  if ($json === false) return false;
+  try {
+    $suffix = bin2hex(random_bytes(4));
+  } catch (Throwable $e) {
+    $suffix = str_replace('.', '', (string) microtime(true));
+  }
+  $tmp = $pad . '.tmp.' . $suffix;
+  if (file_put_contents($tmp, $json, LOCK_EX) === false) return false;
+  if (!@rename($tmp, $pad)) {
+    @unlink($tmp);
+    return false;
+  }
+  return true;
 }
 
+// Auditlog is een read-modify-write-bestand. LOCK_EX alleen op de uiteindelijke
+// file_put_contents() voorkomt niet dat twee requests eerst dezelfde oude
+// versie lezen en daarna één van beide nieuwe regels verliezen. Houd daarom
+// één flock vast vanaf het lezen tot en met truncate/write/flush.
 function schrijfLog($pad, $gebruiker, $actie, $details = '') {
-  $log = [];
-  if (file_exists($pad)) {
-    $json = json_decode(file_get_contents($pad), true);
-    if (is_array($json)) $log = $json;
-  }
-  $log[] = ['tijd' => date('c'), 'gebruiker' => $gebruiker, 'actie' => $actie, 'details' => $details];
-
-  // Bewaren op tijd (een paar maanden), niet op een vast aantal regels: bij
-  // een vast aantal duwt een drukke dag (bijv. een grote foto-upload) meteen
-  // oudere, nog prima relevante regels eruit. De harde bovengrens van 5000 is
-  // alleen een noodrem tegen onbeperkte bestandsgroei, geen streefwaarde.
-  $bewaarGrens = strtotime('-90 days');
-  $log = array_values(array_filter($log, function($regel) use ($bewaarGrens) {
-    $tijd = strtotime($regel['tijd'] ?? '');
-    return $tijd === false || $tijd >= $bewaarGrens;
-  }));
-  if (count($log) > 5000) {
-    $log = array_slice($log, -5000);
+  $handvat = @fopen($pad, 'c+');
+  if ($handvat === false) return false;
+  if (!flock($handvat, LOCK_EX)) {
+    fclose($handvat);
+    return false;
   }
 
-  file_put_contents($pad, json_encode($log, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT), LOCK_EX);
+  try {
+    rewind($handvat);
+    $ruw = stream_get_contents($handvat);
+    $log = $ruw !== false && $ruw !== '' ? json_decode($ruw, true) : [];
+    if (!is_array($log)) $log = [];
+
+    $log[] = ['tijd' => date('c'), 'gebruiker' => $gebruiker, 'actie' => $actie, 'details' => $details];
+
+    // Bewaren op tijd (een paar maanden), niet op een vast aantal regels: bij
+    // een vast aantal duwt een drukke dag (bijv. een grote foto-upload) meteen
+    // oudere, nog prima relevante regels eruit. De harde bovengrens van 5000 is
+    // alleen een noodrem tegen onbeperkte bestandsgroei, geen streefwaarde.
+    $bewaarGrens = strtotime('-90 days');
+    $log = array_values(array_filter($log, function($regel) use ($bewaarGrens) {
+      $tijd = strtotime($regel['tijd'] ?? '');
+      return $tijd === false || $tijd >= $bewaarGrens;
+    }));
+    if (count($log) > 5000) {
+      $log = array_slice($log, -5000);
+    }
+
+    $json = json_encode($log, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+    if ($json === false) return false;
+    rewind($handvat);
+    if (!ftruncate($handvat, 0)) return false;
+    $geschreven = fwrite($handvat, $json);
+    if ($geschreven === false || $geschreven < strlen($json)) return false;
+    return fflush($handvat);
+  } finally {
+    flock($handvat, LOCK_UN);
+    fclose($handvat);
+  }
 }
 
 // ===== Lockout bij mislukte inlogpogingen =====
