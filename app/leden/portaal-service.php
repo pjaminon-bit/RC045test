@@ -8,6 +8,18 @@ function portaalModuleActief(string $module): bool
     return (($config['modules'][$module] ?? false) === true);
 }
 
+// Dit bestand wordt uitsluitend door /leden/ geladen. Een uitgeschakelde
+// ledenadministratie betekent daarom ook: geen persoonlijk ledenportaal.
+if (!portaalModuleActief('ledenadministratie')) {
+    if (!headers_sent()) {
+        http_response_code(404);
+        header('X-Robots-Tag: noindex, nofollow');
+        header('Cache-Control: no-store');
+    }
+    echo 'Het ledenportaal is voor deze vereniging niet ingeschakeld.';
+    exit;
+}
+
 function portaalVergaderingenVoorLid(): array
 {
     if (!portaalModuleActief('vergaderingen')) return [];
