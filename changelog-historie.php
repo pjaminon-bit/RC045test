@@ -6,7 +6,7 @@ $recent = [
     'datum' => '2026-08-19',
     'cat' => 'onderhoud',
     'titel' => 'Overbodige compatibility-loaders uit de webroot verwijderd',
-    'tekst' => 'De sitekern, SEO-configuratie en gedeelde data-slothelper worden nu uitsluitend rechtstreeks vanuit de afgeschermde app-map geladen. Vijf eenregelige tussenbestanden in de webroot en hun inmiddels overbodige blokkades zijn verwijderd. De publieke routes en opslaglocaties blijven ongewijzigd.',
+    'tekst' => 'De sitekern, SEO-configuratie en gedeelde data-slothelper worden nu uitsluitend rechtstreeks vanuit de afgeschermde app-map geladen. Vijf eenregelige tussenbestanden zijn uit de codebase verwijderd. Hun webblokkades blijven bewust actief omdat de additieve SFTP-deployment eerder gedeployde bestanden niet automatisch van de server verwijdert. De publieke routes en opslaglocaties blijven ongewijzigd.',
   ],
   [
     'datum' => '2026-08-19',

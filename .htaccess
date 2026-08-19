@@ -46,7 +46,7 @@ RewriteRule ^data-backups(?:/|$) - [F,L,NC]
   Require all denied
 </FilesMatch>
 
-<FilesMatch "^(auth\.php|vertaal-config\.php|site-config(?:\.local)?\.php|changelog-historie\.php|dev-build\.json)$">
+<FilesMatch "^(auth\.php|data-slot\.php|vertaal-config\.php|site-config(?:\.local)?\.php|site\.php|site-seo\.php|paneel-modules\.php|module-definities\.php|changelog-historie\.php|dev-build\.json)$">
   Require all denied
 </FilesMatch>
 
