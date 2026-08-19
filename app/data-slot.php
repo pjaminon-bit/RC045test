@@ -29,11 +29,14 @@
 // Bewust fail-closed: een zichtbare, tijdelijke opslagfout is veiliger dan
 // stil doorgaan zonder lock en daardoor wijzigingen van een ander verliezen.
 //
-// Het lockbestand staat in data-backups/, want die map is server-only.
+// Het lockbestand staat in de centrale data-backups/-map in de projectroot,
+// want die map is server-only. Dit bestand zelf staat sinds de template-
+// migratie onder app/; gebruik daarom expliciet de projectroot en niet
+// __DIR__/data-backups.
 // ============================================================
 
 function dataSlotPad() {
-  return __DIR__ . '/data-backups/.data.lock';
+  return dirname(__DIR__) . '/data-backups/.data.lock';
 }
 
 // Stopt een schrijfrequest veilig wanneer de centrale lock niet beschikbaar
