@@ -1,40 +1,18 @@
 <?php
 // ============================================================
-// Centrale rechtenlijst voor het modulaire gebruikersbeheer
+// Centrale rechtenpresentatie voor gebruikersbeheer
 // ============================================================
-// Sleutels blijven gelijk aan de bestaande beheer-tabs; alleen presentatie
-// en groepering staat hier. 'gevoelig' markeert rechten waarmee auditdata,
-// herstelacties of autorisaties zelf toegankelijk worden.
+// Geen eigen rechtenlijst meer: de platformdefinities zijn de bron.
 // ============================================================
+require_once dirname(__DIR__) . '/app/auth-capabilities.php';
+
+$groepen = authCapabilityGroepen();
+$gevoelig = [];
+foreach (authCapabilityDefinities() as $capability => $def) {
+    if (!empty($def['gevoelig'])) $gevoelig[] = (string) $capability;
+}
 
 return [
-    'groepen' => [
-        'Pagina’s' => [
-            'homepage' => 'Homepage',
-            'ontstaan' => 'Ontstaan',
-            'baanreglement' => 'Baanreglement',
-            'aanmelden' => 'Aanmelden',
-            'bedankt' => 'Bedankt-pagina',
-        ],
-        'Content' => [
-            'mededeling' => 'Openingstijden',
-            'nieuws' => 'Nieuws',
-            'agenda' => 'Agenda',
-            'contact' => 'Contact',
-            'sponsors' => 'Sponsors',
-            'faq' => 'Vragen',
-            'media' => 'Media',
-            'fotoboek' => 'Fotoboek',
-        ],
-        'Contributie' => [
-            'rekentabel' => 'Rekentabel',
-        ],
-        'Beheer' => [
-            'changelog' => 'Changelog',
-            'log' => 'Logboek',
-            'backups' => 'Back-ups',
-            'gebruikers' => 'Gebruikers',
-        ],
-    ],
-    'gevoelig' => ['gebruikers', 'backups', 'log'],
+    'groepen' => $groepen,
+    'gevoelig' => $gevoelig,
 ];
