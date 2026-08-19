@@ -1,8 +1,10 @@
 <?php
 require_once dirname(__DIR__) . '/auth.php';
 require_once dirname(__DIR__) . '/app/data-slot.php';
+require_once dirname(__DIR__) . '/app/core/site.php';
 
 if (!$ingelogd) { header('Location: ../beheer.php'); exit; }
+if (!siteModuleActief('aanmelden')) { http_response_code(404); echo 'De aanmeldmodule is voor deze vereniging niet ingeschakeld.'; exit; }
 $rechten = authRechten(['bedankt' => 'Bedankt-pagina'], []);
 if (!$isMaster && !in_array('bedankt', $rechten['toegestaneTabs'] ?? [], true)) { http_response_code(403); echo 'Geen toegang tot Bedankt-pagina.'; exit; }
 
