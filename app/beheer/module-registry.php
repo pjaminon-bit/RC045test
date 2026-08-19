@@ -1,145 +1,30 @@
 <?php
 // ============================================================
-// Beheer module-registry
+// Compatibiliteitsadapter beheerregistry
+// ============================================================
+// De beheerarchitectuur heeft vanaf fase 2.5 één bron van waarheid:
+// app/core/platform-definities.php. Dit bestand blijft alleen bestaan voor
+// helpers die beheerModuleRegistry() gebruiken; er staat geen eigen module-
+// configuratie meer in.
 // ============================================================
 
-$beheerMap = dirname(__DIR__, 2) . '/beheer';
+$platform = require dirname(__DIR__) . '/core/platform-definities.php';
+$componenten = isset($platform['beheer']) && is_array($platform['beheer']) ? $platform['beheer'] : [];
+$beheerRoot = dirname(__DIR__, 2) . '/beheer';
+$registry = [];
 
-return [
-    'devbuild' => [
-        'label' => 'DEV build-indicator',
+foreach ($componenten as $sleutel => $definitie) {
+    if (!is_array($definitie)) continue;
+    $route = trim((string) ($definitie['route'] ?? ''));
+    $registry[(string) $sleutel] = [
+        'label' => (string) ($definitie['label'] ?? $sleutel),
         'status' => 'module',
-        'bootstrap' => __DIR__ . '/modules/dev-build.php',
-    ],
-    'contentpaginas' => [
-        'label' => 'Contentpagina\'s',
-        'status' => 'module',
-        'bootstrap' => __DIR__ . '/modules/contentpaginas.php',
-        'editor' => $beheerMap . '/content.php',
-        'legacy_tabs' => ['homepage', 'ontstaan', 'baanreglement', 'aanmelden'],
-        'legacy_formulieren' => ['homepage', 'ontstaan', 'baanreglement', 'aanmelden'],
-    ],
-    'homepage' => [
-        'label' => 'Homepage',
-        'status' => 'module',
-        'editor' => $beheerMap . '/content.php?pagina=homepage',
-    ],
-    'bedankt' => [
-        'label' => 'Bedankt-pagina',
-        'status' => 'module',
-        'bootstrap' => __DIR__ . '/modules/bedankt.php',
-        'editor' => $beheerMap . '/bedankt.php',
-        'legacy_tabs' => ['bedankt'],
-        'legacy_formulieren' => ['bedankt'],
-    ],
-    'actueel' => [
-        'label' => 'Mededeling',
-        'status' => 'module',
-        'bootstrap' => __DIR__ . '/modules/actueel.php',
-        'editor' => $beheerMap . '/actueel.php',
-        'legacy_tabs' => ['mededeling'],
-        'legacy_formulieren' => ['actueel'],
-    ],
-    'nieuws' => [
-        'label' => 'Nieuws',
-        'status' => 'module',
-        'bootstrap' => __DIR__ . '/modules/nieuws.php',
-        'editor' => $beheerMap . '/nieuws.php',
-        'legacy_tabs' => ['nieuws'],
-        'legacy_formulieren' => ['nieuws'],
-    ],
-    'agenda' => [
-        'label' => 'Agenda',
-        'status' => 'module',
-        'bootstrap' => __DIR__ . '/modules/agenda.php',
-        'editor' => $beheerMap . '/agenda.php',
-        'legacy_tabs' => ['agenda'],
-        'legacy_formulieren' => ['agenda'],
-    ],
-    'contact' => [
-        'label' => 'Contact',
-        'status' => 'module',
-        'bootstrap' => __DIR__ . '/modules/contact.php',
-        'editor' => $beheerMap . '/contact.php',
-        'legacy_tabs' => ['contact'],
-        'legacy_formulieren' => ['contact'],
-    ],
-    'sponsors' => [
-        'label' => 'Sponsors',
-        'status' => 'module',
-        'bootstrap' => __DIR__ . '/modules/sponsors.php',
-        'editor' => $beheerMap . '/sponsors.php',
-        'legacy_tabs' => ['sponsors'],
-        'legacy_formulieren' => ['sponsors'],
-    ],
-    'faq' => [
-        'label' => 'Vragen',
-        'status' => 'module',
-        'bootstrap' => __DIR__ . '/modules/faq.php',
-        'editor' => $beheerMap . '/faq.php',
-        'legacy_tabs' => ['faq'],
-        'legacy_formulieren' => ['faq'],
-    ],
-    'media' => [
-        'label' => 'Media',
-        'status' => 'module',
-        'bootstrap' => __DIR__ . '/modules/media.php',
-        'editor' => $beheerMap . '/media.php',
-        'legacy_tabs' => ['media'],
-        'legacy_formulieren' => ['media', 'media_tekst'],
-    ],
-    'aanmelden' => [
-        'label' => 'Aanmelden',
-        'status' => 'module',
-        'editor' => $beheerMap . '/content.php?pagina=aanmelden',
-        'legacy_tabs' => ['aanmelden'],
-        'legacy_formulieren' => ['aanmelden'],
-    ],
-    'fotoboek' => [
-        'label' => 'Fotoboek',
-        'status' => 'module',
-        'bootstrap' => __DIR__ . '/modules/fotoboek.php',
-        'editor' => $beheerMap . '/fotoboek.php',
-        'legacy_tabs' => ['fotoboek'],
-        'legacy_formulieren' => ['fotoboek_tekst', 'fotoboek_album_aanmaken', 'fotoboek_album_bewerken'],
-    ],
-    'rekentabel' => [
-        'label' => 'Rekentabel',
-        'status' => 'module',
-        'bootstrap' => __DIR__ . '/modules/rekentabel.php',
-        'editor' => $beheerMap . '/rekentabel.php',
-        'legacy_tabs' => ['rekentabel'],
-        'legacy_formulieren' => ['rekentabel'],
-    ],
-    'changelog' => [
-        'label' => 'Changelog',
-        'status' => 'module',
-        'bootstrap' => __DIR__ . '/modules/changelog.php',
-        'editor' => $beheerMap . '/changelog.php',
-        'legacy_tabs' => ['changelog'],
-        'legacy_formulieren' => ['changelog_toevoegen', 'changelog_bewerken', 'changelog_verwijderen'],
-    ],
-    'gebruikers' => [
-        'label' => 'Gebruikers',
-        'status' => 'module',
-        'bootstrap' => __DIR__ . '/modules/gebruikers.php',
-        'editor' => $beheerMap . '/gebruikers.php',
-        'legacy_tabs' => ['gebruikers'],
-        'legacy_formulieren' => ['gebruiker_toevoegen', 'gebruiker_tabs_bijwerken', 'gebruiker_verwijderen'],
-    ],
-    'backups' => [
-        'label' => 'Back-ups',
-        'status' => 'module',
-        'bootstrap' => __DIR__ . '/modules/backups.php',
-        'editor' => $beheerMap . '/backups.php',
-        'legacy_tabs' => ['backups'],
-        'legacy_formulieren' => ['backup_herstellen'],
-    ],
-    'logboek' => [
-        'label' => 'Logboek',
-        'status' => 'module',
-        'bootstrap' => __DIR__ . '/modules/logboek.php',
-        'editor' => $beheerMap . '/logboek.php',
-        'legacy_tabs' => ['log'],
-    ],
-];
+        'bootstrap' => isset($definitie['bootstrap']) ? (string) $definitie['bootstrap'] : null,
+        'editor' => $route === '' ? null : $beheerRoot . '/' . $route,
+        'feature' => isset($definitie['feature']) ? (string) $definitie['feature'] : null,
+        'capability' => isset($definitie['capability']) ? (string) $definitie['capability'] : null,
+        'categorie' => (string) ($definitie['categorie'] ?? 'Overig'),
+    ];
+}
+
+return $registry;
