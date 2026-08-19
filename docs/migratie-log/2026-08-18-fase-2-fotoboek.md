@@ -13,7 +13,6 @@ Datum: 2026-08-18
 - EXIF-oriëntatie, watermerk, coverkeuze, captions, verborgen albums en dubbele-uploadcontrole op SHA-1 inhoud blijven behouden.
 - Grote selecties worden client-side in losse verzoeken verwerkt om `post_max_size`/memory-problemen te beperken.
 - Paginatekst `data/fotoboek-pagina.json` is in dezelfde editor opgenomen.
-- DEV-workflow voert voortaan vóór iedere upload `php -l` uit op alle PHP-bestanden; syntactisch ongeldige PHP wordt dus niet meer naar `/dev` gedeployed.
 
 ## Veiligheids-/betrouwbaarheidsoptimalisaties
 
@@ -23,6 +22,22 @@ Datum: 2026-08-18
 - Albumverwijdering vereist naast een confirm-dialoog ook het letterlijk intypen van `VERWIJDER`.
 - Bestandsnamen uit POST-data worden altijd via `basename()` begrensd tot de albummap.
 - PNG/WEBP met transparantie worden bij JPEG-output bewust op wit afgevlakt, in plaats van een onvoorspelbare/zwarte achtergrond te kunnen krijgen.
+- Fotoboek-reader meldt nu onderscheid tussen ontbrekende data, ongeldige JSON en een onbekend formaat; een oud top-level album-arrayformaat wordt read-only herkend.
+
+## DEV-data
+
+`data/` en `images/fotoboek/` zijn server-only en staan bewust in `.gitignore`. Een verse DEV-installatie krijgt daardoor geen bestaande productiealbums mee via GitHub Actions.
+
+Voor validatie is een afgeschermde eenmalige hulp toegevoegd: `/beheer/fotoboek-live-naar-dev.php`.
+Deze hulp:
+
+- werkt alleen wanneer de huidige installatie fysiek in een map `/dev` staat;
+- is alleen toegankelijk voor de hoofdbeheerder;
+- leest alleen uit de productie-root (de oudermap van `/dev`);
+- kopieert uitsluitend `data/fotoboek.json`, optioneel `data/fotoboek-pagina.json` en `images/fotoboek/` naar DEV;
+- overschrijft nooit bestaande DEV-Fotoboekdata;
+- vereist de expliciete bevestiging `KOPIEER`;
+- wijzigt of verwijdert nooit productiegegevens.
 
 ## Bewuste keuze
 
@@ -30,6 +45,7 @@ Video-upload blijft uitgeschakeld, gelijk aan de bestaande situatie. Bestaande v
 
 ## Nog te valideren op DEV
 
+- LIVE-Fotoboek eenmalig veilig naar DEV seeden.
 - Editor opent vanuit het normale beheer-menu.
 - Bestaande albums, covers en thumbnails worden correct geladen.
 - Alleen metadata opslaan zonder upload.
