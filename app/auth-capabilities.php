@@ -114,9 +114,6 @@ function authNieuwGebruikerId(): string
 
 function authGebruikerMigreerRecord(array $record): array
 {
-    // Legacyaccounts krijgen een deterministische id op basis van hun huidige
-    // gebruikersnaam. Daardoor blijft een reeds gelegde member-user-koppeling
-    // geldig wanneer de capabilitymigratie pas later wordt opgeslagen.
     if (trim((string) ($record['id'] ?? '')) === '') $record['id'] = authGebruikerId($record);
     $record['capabilities'] = authGebruikerCapabilities($record);
     $record['tabs'] = authLegacyTabsVoorCapabilities($record['capabilities']);
@@ -151,9 +148,21 @@ function authHuidigeGebruikerId(): string
 
 function authRolCapabilities(): array
 {
-    if (empty($GLOBALS['ingelogd']) || !empty($GLOBALS['isMaster']) || !function_exists('ledenRolVanGebruiker')) return [];
-    $rol = ledenRolVanGebruiker((string) ($GLOBALS['huidigeGebruiker'] ?? ''));
-    if (empty($rol['bestuurslid'])) return [];
+    if (empty($GLOBALS['ingelogd']) || !empty($GLOBALS['isMaster'])) return [];
+    require_once __DIR__ . '/storage/domein-repositories.php';
+    $userId = authHuidigeGebruikerId();
+    $naam = (string) ($GLOBALS['huidigeGebruiker'] ?? '');
+    $bestuurslid = false;
+    foreach ((array) (repoLedenLees()['leden'] ?? []) as $lid) {
+        if (!is_array($lid) || !empty($lid['gearchiveerd_op'])) continue;
+        $matchId = $userId !== '' && trim((string) ($lid['user_id'] ?? '')) === $userId;
+        $matchLegacy = !$matchId && $naam !== '' && strcasecmp(trim((string) ($lid['beheer_account'] ?? '')), $naam) === 0;
+        if (($matchId || $matchLegacy) && function_exists('ledenIsBestuurslid') && ledenIsBestuurslid($lid)) {
+            $bestuurslid = true;
+            break;
+        }
+    }
+    if (!$bestuurslid) return [];
     $platform = authPlatformDefinities();
     return authCapabilitiesNormaliseer((array) ($platform['rol_capabilities']['bestuur'] ?? []));
 }
