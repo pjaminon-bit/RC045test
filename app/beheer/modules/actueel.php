@@ -1,0 +1,5 @@
+<?php
+function beheerActueelMagOpenen(): bool { if (empty($GLOBALS['ingelogd'])) return false; if (!empty($GLOBALS['isMaster'])) return true; return in_array('mededeling', (array)($GLOBALS['toegestaneTabs'] ?? []), true); }
+function beheerActueelBewaakLegacyPost(): void { if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST' || (string)($_POST['formulier'] ?? '') !== 'actueel') return; $_POST['formulier']=''; if(function_exists('schrijfLog')) schrijfLog($GLOBALS['logBestand'],$GLOBALS['huidigeGebruiker'],'legacy_actueel_geblokkeerd','actueel'); }
+function beheerActueelStartOutputFilter(): void { ob_start(function($html){ if(!is_string($html))return $html; if(beheerActueelMagOpenen())$html=preg_replace('~<button\s+type="button"\s+class="menu-item"\s+data-tab="mededeling">.*?</button>~is','<a class="menu-item menu-item-link" style="display:block;text-decoration:none" href="actueel.php">* Mededeling</a>',$html,1)??$html; if(stripos($html,'</head>')!==false)$html=preg_replace('~</head>~i','<style>#tab-mededeling{display:none!important}</style></head>',$html,1)??$html; return $html;}); }
+beheerActueelBewaakLegacyPost(); beheerActueelStartOutputFilter();
