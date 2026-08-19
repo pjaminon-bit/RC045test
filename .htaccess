@@ -4,20 +4,16 @@ RewriteEngine On
 # RC045 .htaccess
 # ============================================================
 
-# ===== Directory listings uitschakelen =====
 Options -Indexes
-
 
 # ===== HTTPS afdwingen =====
 RewriteCond %{HTTPS} =on [OR]
 RewriteCond %{HTTP:X-Forwarded-Proto} =https [OR]
 RewriteCond %{HTTP:X-Forwarded-SSL} =on
 RewriteRule ^ - [E=RC045_HTTPS:1]
-
 RewriteCond %{ENV:RC045_HTTPS} !=1
 RewriteCond %{SERVER_PORT} !=443
 RewriteRule ^ https://rc045.nl%{REQUEST_URI} [R=301,L]
-
 
 # ===== Algemene security headers =====
 <IfModule mod_headers.c>
@@ -28,51 +24,34 @@ RewriteRule ^ https://rc045.nl%{REQUEST_URI} [R=301,L]
   Header always set Strict-Transport-Security "max-age=31536000"
 </IfModule>
 
-
-# ===== Standaard homepage =====
 DirectoryIndex index.php index.html
-
 
 # ===== Fotoboek: nette album-URL's =====
 RewriteRule ^fotoboek/?$ fotoboek.php [L,QSA]
 RewriteRule ^fotoboek/([a-z0-9][a-z0-9-]*)/?$ fotoboek.php?album=$1 [L,QSA,NC]
 
-
 # ===== Publieke pagina's draaien op PHP, URL's blijven .html =====
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteRule ^(.+)\.html$ $1.php [L]
 
-
 # ============================================================
 # SERVER-ONLY BESTANDEN
 # ============================================================
-
-# ===== Beheerconfiguratie, gebruikers en logboek =====
 RewriteRule ^beheer-(config\.php|users\.json|log\.json|login-pogingen\.json)$ - [F,L]
-
-# ===== Interne applicatiecode =====
 RewriteRule ^app(?:/|$) - [F,L,NC]
-
-# ===== Interne ledenapplicatie =====
 RewriteRule ^leden-app\.php$ - [F,L,NC]
-
-# ===== Back-ups =====
 RewriteRule ^data-backups(?:/|$) - [F,L,NC]
 
-# ===== Interne opslag- en databestanden =====
 <FilesMatch "^(leden-data\.php|leden-opslag\.php|aanmelden-pogingen\.php|vergaderingen-data\.php|vergaderingen-opslag\.php|taken-data\.php|taken-opslag\.php|operationele-taken-data\.php|operationele-taken-opslag\.php|evenementen-data\.php|evenementen-opslag\.php)$">
   Require all denied
 </FilesMatch>
 
-# ===== Interne configuratie en resterende root-hulpprogramma's =====
-<FilesMatch "^(auth\.php|gebruikers-rechten\.php|vertaal-config\.php|site-config(?:\.local)?\.php|module-definities\.php|changelog-historie\.php)$">
+<FilesMatch "^(auth\.php|data-slot\.php|gebruikers-rechten\.php|vertaal-config\.php|site-config(?:\.local)?\.php|module-definities\.php|changelog-historie\.php)$">
   Require all denied
 </FilesMatch>
-
 
 # ============================================================
 # VRIENDELIJKE URL'S
 # ============================================================
-
 RewriteRule ^Over-ons/?$ /index.html#over-ons [R=301,L,NC,NE]
 RewriteRule ^Lidmaatschap/?$ /#lidmaatschap [R=301,L,NC,NE]
