@@ -2,143 +2,35 @@
 // ============================================================
 // Capability-laag voor beheer en verenigingsadministratie
 // ============================================================
-function authPlatformDefinities(): array
+function authPlatformDefinities(): array{static $p=null;if($p===null){$x=require __DIR__.'/core/platform-definities.php';$p=is_array($x)?$x:[];}return$p;}
+function authCapabilityDefinities(): array{$p=authPlatformDefinities();return is_array($p['capabilities']??null)?$p['capabilities']:[];}
+function authCapabilityLegacyMap(): array{static $m=null;if($m!==null)return$m;$m=[];foreach(authCapabilityDefinities() as $c=>$d)foreach((array)($d['legacy']??[]) as $l){$l=trim((string)$l);if($l==='')continue;if(!isset($m[$l]))$m[$l]=[];if(!in_array((string)$c,$m[$l],true))$m[$l][]=(string)$c;}return$m;}
+function authCapabilitiesNormaliseer(array $caps): array{$g=authCapabilityDefinities();$r=[];foreach($caps as $c){$c=trim((string)$c);if($c!==''&&isset($g[$c])&&!in_array($c,$r,true))$r[]=$c;}sort($r,SORT_STRING);return$r;}
+function authCapabilitiesVanTabs(array $tabs): array{$m=authCapabilityLegacyMap();$r=[];foreach($tabs as $t)foreach((array)($m[trim((string)$t)]??[]) as $c)$r[]=$c;return authCapabilitiesNormaliseer($r);}
+function authLegacyTabsVoorCapabilities(array $caps): array{$d=authCapabilityDefinities();$r=[];foreach(authCapabilitiesNormaliseer($caps) as $c)foreach((array)($d[$c]['legacy']??[]) as $l){$l=trim((string)$l);if($l!==''&&!in_array($l,$r,true))$r[]=$l;}sort($r,SORT_STRING);return$r;}
+function authLegacyBredeCapabilities(): array{$r=[];foreach(authCapabilityDefinities() as $c=>$d)if(empty($d['gevoelig']))$r[]=(string)$c;return authCapabilitiesNormaliseer($r);}
+function authGebruikerCapabilities(array $r): array{if(isset($r['capabilities'])&&is_array($r['capabilities']))return authCapabilitiesNormaliseer($r['capabilities']);if(array_key_exists('tabs',$r)&&is_array($r['tabs']))return authCapabilitiesVanTabs($r['tabs']);return authLegacyBredeCapabilities();}
+function authGebruikerId(array $r): string{$id=trim((string)($r['id']??''));if(preg_match('/^usr_[a-zA-Z0-9_-]{8,64}$/',$id))return$id;$n=strtolower(trim((string)($r['gebruikersnaam']??'')));return$n===''?'':'usr_legacy_'.substr(hash('sha256',$n),0,16);}
+function authNieuwGebruikerId(): string{return'usr_'.bin2hex(random_bytes(10));}
+function authGebruikerMigreerRecord(array $r): array{if(trim((string)($r['id']??''))==='')$r['id']=authGebruikerId($r);$r['capabilities']=authGebruikerCapabilities($r);$r['tabs']=authLegacyTabsVoorCapabilities($r['capabilities']);if(!isset($r['sessie_versie']))$r['sessie_versie']=1;if(!array_key_exists('actief',$r))$r['actief']=true;return$r;}
+function authGebruikerRecordOpNaam(string $naam): ?array{$naam=trim($naam);if($naam==='')return null;if(function_exists('authGebruikerRecord')&&isset($GLOBALS['huidigeGebruiker'])&&strcasecmp($naam,(string)$GLOBALS['huidigeGebruiker'])===0){$r=authGebruikerRecord();if(is_array($r))return$r;}if(!isset($GLOBALS['usersBestand'])||!function_exists('laadGebruikers'))return null;foreach(laadGebruikers($GLOBALS['usersBestand']) as $r)if(is_array($r)&&isset($r['gebruikersnaam'])&&strcasecmp((string)$r['gebruikersnaam'],$naam)===0)return$r;return null;}
+function authHuidigeGebruikerId(): string{if(empty($GLOBALS['ingelogd'])||!empty($GLOBALS['isMaster']))return'';$r=authGebruikerRecordOpNaam((string)($GLOBALS['huidigeGebruiker']??''));return is_array($r)?authGebruikerId($r):'';}
+function authRolCapabilities(): array{if(empty($GLOBALS['ingelogd'])||!empty($GLOBALS['isMaster']))return[];require_once __DIR__.'/storage/domein-repositories.php';$uid=authHuidigeGebruikerId();$naam=(string)($GLOBALS['huidigeGebruiker']??'');$bestuur=false;foreach((array)(repoLedenLees()['leden']??[]) as $l){if(!is_array($l)||!empty($l['gearchiveerd_op']))continue;$idMatch=$uid!==''&&trim((string)($l['user_id']??''))===$uid;$legacy=!$idMatch&&$naam!==''&&strcasecmp(trim((string)($l['beheer_account']??'')),$naam)===0;if(($idMatch||$legacy)&&function_exists('ledenIsBestuurslid')&&ledenIsBestuurslid($l)){$bestuur=true;break;}}if(!$bestuur)return[];$p=authPlatformDefinities();return authCapabilitiesNormaliseer((array)($p['rol_capabilities']['bestuur']??[]));}
+function authCapabilityImplicaties(string $c): array{$m=['members.manage'=>['members.view'],'members.fees.manage'=>['members.view'],'members.erase'=>['members.view']];return(array)($m[$c]??[]);}
+function authCapabilityFeatureActief(string $capability): bool
 {
-    static $platform = null;
-    if ($platform === null) {
-        $geladen = require __DIR__ . '/core/platform-definities.php';
-        $platform = is_array($geladen) ? $geladen : [];
-    }
-    return $platform;
-}
-function authCapabilityDefinities(): array
-{
-    $platform = authPlatformDefinities();
-    return isset($platform['capabilities']) && is_array($platform['capabilities']) ? $platform['capabilities'] : [];
-}
-function authCapabilityLegacyMap(): array
-{
-    static $map = null;
-    if ($map !== null) return $map;
-    $map = [];
-    foreach (authCapabilityDefinities() as $capability => $def) {
-        foreach ((array)($def['legacy'] ?? []) as $legacy) {
-            $legacy = trim((string)$legacy);
-            if ($legacy === '') continue;
-            if (!isset($map[$legacy])) $map[$legacy] = [];
-            if (!in_array((string)$capability, $map[$legacy], true)) $map[$legacy][] = (string)$capability;
-        }
-    }
-    return $map;
-}
-function authCapabilitiesNormaliseer(array $capabilities): array
-{
-    $geldig = authCapabilityDefinities(); $resultaat = [];
-    foreach ($capabilities as $capability) {
-        $capability = trim((string)$capability);
-        if ($capability === '' || !isset($geldig[$capability]) || in_array($capability,$resultaat,true)) continue;
-        $resultaat[] = $capability;
-    }
-    sort($resultaat,SORT_STRING); return $resultaat;
-}
-function authCapabilitiesVanTabs(array $tabs): array
-{
-    $map = authCapabilityLegacyMap(); $resultaat = [];
-    foreach ($tabs as $tab) {
-        $tab = trim((string)$tab);
-        foreach ((array)($map[$tab] ?? []) as $capability) $resultaat[] = $capability;
-    }
-    return authCapabilitiesNormaliseer($resultaat);
-}
-function authLegacyTabsVoorCapabilities(array $capabilities): array
-{
-    $defs = authCapabilityDefinities(); $tabs = [];
-    foreach (authCapabilitiesNormaliseer($capabilities) as $capability) {
-        foreach ((array)($defs[$capability]['legacy'] ?? []) as $legacy) {
-            $legacy = trim((string)$legacy);
-            if ($legacy !== '' && !in_array($legacy,$tabs,true)) $tabs[] = $legacy;
-        }
-    }
-    sort($tabs,SORT_STRING); return $tabs;
-}
-function authLegacyBredeCapabilities(): array
-{
-    $resultaat = [];
-    foreach (authCapabilityDefinities() as $capability => $def) if (empty($def['gevoelig'])) $resultaat[] = (string)$capability;
-    return authCapabilitiesNormaliseer($resultaat);
-}
-function authGebruikerCapabilities(array $record): array
-{
-    if (isset($record['capabilities']) && is_array($record['capabilities'])) return authCapabilitiesNormaliseer($record['capabilities']);
-    if (array_key_exists('tabs',$record) && is_array($record['tabs'])) return authCapabilitiesVanTabs($record['tabs']);
-    return authLegacyBredeCapabilities();
-}
-function authGebruikerId(array $record): string
-{
-    $id = trim((string)($record['id'] ?? ''));
-    if (preg_match('/^usr_[a-zA-Z0-9_-]{8,64}$/',$id)) return $id;
-    $naam = strtolower(trim((string)($record['gebruikersnaam'] ?? '')));
-    return $naam === '' ? '' : 'usr_legacy_' . substr(hash('sha256',$naam),0,16);
-}
-function authNieuwGebruikerId(): string { return 'usr_' . bin2hex(random_bytes(10)); }
-function authGebruikerMigreerRecord(array $record): array
-{
-    if (trim((string)($record['id'] ?? '')) === '') $record['id'] = authGebruikerId($record);
-    $record['capabilities'] = authGebruikerCapabilities($record);
-    $record['tabs'] = authLegacyTabsVoorCapabilities($record['capabilities']);
-    if (!isset($record['sessie_versie'])) $record['sessie_versie'] = 1;
-    if (!array_key_exists('actief',$record)) $record['actief'] = true;
-    return $record;
-}
-function authGebruikerRecordOpNaam(string $naam): ?array
-{
-    $naam=trim($naam); if($naam==='')return null;
-    if(function_exists('authGebruikerRecord')&&isset($GLOBALS['huidigeGebruiker'])&&strcasecmp($naam,(string)$GLOBALS['huidigeGebruiker'])===0){$record=authGebruikerRecord();if(is_array($record))return$record;}
-    if(!isset($GLOBALS['usersBestand'])||!function_exists('laadGebruikers'))return null;
-    foreach(laadGebruikers($GLOBALS['usersBestand']) as $record)if(is_array($record)&&isset($record['gebruikersnaam'])&&strcasecmp((string)$record['gebruikersnaam'],$naam)===0)return$record;
-    return null;
-}
-function authHuidigeGebruikerId(): string
-{
-    if(empty($GLOBALS['ingelogd'])||!empty($GLOBALS['isMaster']))return'';
-    $record=authGebruikerRecordOpNaam((string)($GLOBALS['huidigeGebruiker']??''));return is_array($record)?authGebruikerId($record):'';
-}
-function authRolCapabilities(): array
-{
-    if(empty($GLOBALS['ingelogd'])||!empty($GLOBALS['isMaster']))return[];
-    require_once __DIR__.'/storage/domein-repositories.php';
-    $userId=authHuidigeGebruikerId();$naam=(string)($GLOBALS['huidigeGebruiker']??'');$bestuurslid=false;
-    foreach((array)(repoLedenLees()['leden']??[]) as $lid){
-        if(!is_array($lid)||!empty($lid['gearchiveerd_op']))continue;
-        $matchId=$userId!==''&&trim((string)($lid['user_id']??''))===$userId;
-        $matchLegacy=!$matchId&&$naam!==''&&strcasecmp(trim((string)($lid['beheer_account']??'')),$naam)===0;
-        if(($matchId||$matchLegacy)&&function_exists('ledenIsBestuurslid')&&ledenIsBestuurslid($lid)){$bestuurslid=true;break;}
-    }
-    if(!$bestuurslid)return[];$platform=authPlatformDefinities();return authCapabilitiesNormaliseer((array)($platform['rol_capabilities']['bestuur']??[]));
-}
-function authCapabilityImplicaties(string $capability): array
-{
-    $map = [
-        'members.manage'=>['members.view'],
-        'members.fees.manage'=>['members.view'],
-        'members.erase'=>['members.view'],
-    ];
-    return (array)($map[$capability] ?? []);
+    $p=authPlatformDefinities();$gevonden=false;$actief=false;$config=require dirname(__DIR__).'/site-config.php';
+    foreach((array)($p['beheer']??[]) as $d){if(!is_array($d)||($d['capability']??'')!==$capability)continue;$f=trim((string)($d['feature']??''));if($f==='')continue;$gevonden=true;if(($config['modules'][$f]??false)===true)$actief=true;}
+    return !$gevonden||$actief;
 }
 function authHeeftCapability(string $capability,bool $expliciet=false): bool
 {
+    // Feature flags staan boven autorisatie, ook voor masteraccounts.
+    if(!authCapabilityFeatureActief($capability))return false;
     if(empty($GLOBALS['ingelogd']))return false;if(!empty($GLOBALS['isMaster']))return true;
-    $record=authGebruikerRecordOpNaam((string)($GLOBALS['huidigeGebruiker']??''));if(!is_array($record))return false;
-    $caps=authGebruikerCapabilities($record);
-    if(in_array($capability,$caps,true))return true;
-    foreach($caps as $gegeven)if(in_array($capability,authCapabilityImplicaties($gegeven),true))return true;
-    if($expliciet)return false;
-    $rol=authRolCapabilities();if(in_array($capability,$rol,true))return true;
-    foreach($rol as $gegeven)if(in_array($capability,authCapabilityImplicaties($gegeven),true))return true;
-    return false;
+    $r=authGebruikerRecordOpNaam((string)($GLOBALS['huidigeGebruiker']??''));if(!is_array($r))return false;$caps=authGebruikerCapabilities($r);
+    if(in_array($capability,$caps,true))return true;foreach($caps as $g)if(in_array($capability,authCapabilityImplicaties($g),true))return true;if($expliciet)return false;
+    $rol=authRolCapabilities();if(in_array($capability,$rol,true))return true;foreach($rol as $g)if(in_array($capability,authCapabilityImplicaties($g),true))return true;return false;
 }
-function authCapabilityGevoelig(string $capability): bool{$defs=authCapabilityDefinities();return!empty($defs[$capability]['gevoelig']);}
-function authCapabilityGroepen(): array
-{
-    $groepen=[];foreach(authCapabilityDefinities() as $capability=>$def){$categorie=(string)($def['categorie']??'Overig');if(!isset($groepen[$categorie]))$groepen[$categorie]=[];$groepen[$categorie][$capability]=(string)($def['label']??$capability);}return$groepen;
-}
+function authCapabilityGevoelig(string $c): bool{$d=authCapabilityDefinities();return!empty($d[$c]['gevoelig']);}
+function authCapabilityGroepen(): array{$g=[];foreach(authCapabilityDefinities() as $c=>$d){$cat=(string)($d['categorie']??'Overig');if(!isset($g[$cat]))$g[$cat]=[];$g[$cat][$c]=(string)($d['label']??$c);}return$g;}
