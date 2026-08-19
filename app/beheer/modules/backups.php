@@ -26,9 +26,11 @@ function beheerBackupsStartOutputFilter(): void
     ob_start(function ($html) {
         if (!is_string($html)) return $html;
         if (beheerBackupsMagOpenen()) {
+            // Back-ups staat inmiddels als zelfstandige modulelink in het
+            // beheer-menu. Markeer gemigreerde modules zichtbaar met "* ".
             $html = preg_replace(
-                '~<button\s+type="button"\s+class="menu-item"\s+data-tab="backups">.*?</button>~is',
-                '<a class="menu-item menu-item-link" style="display:block;text-decoration:none" href="backups.php">* Back-ups</a>',
+                '~<a\s+class="menu-module-link"\s+href="backups\.php">\s*\*?\s*Back-ups\s*</a>~is',
+                '<a class="menu-module-link" href="backups.php">* Back-ups</a>',
                 $html,
                 1
             ) ?? $html;
