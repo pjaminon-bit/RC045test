@@ -24,11 +24,15 @@ Datum: 2026-08-19
 - Gewone JSON-doelbestanden worden via een tijdelijk bestand in dezelfde map en daarna `rename()` vervangen; gebruikersdata blijft via `schrijfGebruikers()` lopen.
 - Ieder succesvol herstel wordt in het activiteitenlogboek vastgelegd.
 
-## Nog te valideren op DEV
+## DEV-validatie — 2026-08-19
+
+Geslaagd:
 
 - Back-ups opent vanuit het normale beheer-menu.
 - Bestaande snapshots worden correct per databestand getoond.
-- Een herstel van een onschuldige testwijziging werkt en maakt vóór herstel opnieuw een snapshot van de huidige versie.
-- Het logboek bevat na herstel een regel `backup_hersteld`.
+- Een onschuldige testwijziging kon worden hersteld naar de vorige snapshot.
+- De oorspronkelijke waarde kwam na herstel correct terug.
+- Voor herstel wordt opnieuw een snapshot van de huidige versie gemaakt.
+- Het logboek bevat na herstel de actie `backup_hersteld`.
 
-Status: **wacht op DEV-validatie**.
+Status: **DEV-gevalideerd**.
