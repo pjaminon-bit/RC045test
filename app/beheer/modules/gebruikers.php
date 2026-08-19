@@ -26,9 +26,11 @@ function beheerGebruikersStartOutputFilter(): void
         if (!is_string($html)) return $html;
 
         if (beheerGebruikersMagOpenen()) {
+            // Gebruikers staat inmiddels als zelfstandige modulelink in het
+            // beheer-menu. Markeer gemigreerde modules zichtbaar met "* ".
             $html = preg_replace(
-                '~<button\s+type="button"\s+class="menu-item"\s+data-tab="gebruikers">.*?</button>~is',
-                '<a class="menu-item menu-item-link" style="display:block;text-decoration:none" href="gebruikers.php">* Gebruikers</a>',
+                '~<a\s+class="menu-module-link"\s+href="gebruikers\.php">\s*\*?\s*Gebruikers\s*</a>~is',
+                '<a class="menu-module-link" href="gebruikers.php">* Gebruikers</a>',
                 $html,
                 1
             ) ?? $html;
