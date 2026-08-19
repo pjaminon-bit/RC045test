@@ -67,7 +67,14 @@ return [
         'legacy_formulieren' => ['fotoboek_tekst', 'fotoboek_album_aanmaken', 'fotoboek_album_bewerken'],
     ],
     'gebruikers' => ['label' => 'Gebruikers', 'status' => 'legacy'],
-    'backups' => ['label' => 'Back-ups', 'status' => 'legacy'],
+    'backups' => [
+        'label' => 'Back-ups',
+        'status' => 'module',
+        'bootstrap' => __DIR__ . '/modules/backups.php',
+        'editor' => __DIR__ . '/backups.php',
+        'legacy_tabs' => ['backups'],
+        'legacy_formulieren' => ['backup_herstellen'],
+    ],
     'logboek' => [
         'label' => 'Logboek',
         'status' => 'module',
