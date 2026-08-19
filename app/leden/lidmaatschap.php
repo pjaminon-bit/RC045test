@@ -77,8 +77,8 @@ function lidmaatschapSchrijf(array $types): bool
         $id = trim((string)preg_replace('/[^a-z0-9_-]+/','-',$id),'-');
         if ($id==='' || isset($ids[$id])) continue;
         $ids[$id]=true;
-        $min = ($type['leeftijd_min']??'') === '' ? null : max(0,(int)$type['leeftijd_min'];
-        $max = ($type['leeftijd_max']??'') === '' ? null : max(0,(int)$type['leeftijd_max'];
+        $min = ($type['leeftijd_min']??'') === '' ? null : max(0,(int)$type['leeftijd_min']);
+        $max = ($type['leeftijd_max']??'') === '' ? null : max(0,(int)$type['leeftijd_max']);
         if ($min !== null && $max !== null && $min > $max) [$min,$max]=[$max,$min];
         $opschonen[]=[
             'id'=>$id,
