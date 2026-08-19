@@ -5,8 +5,7 @@
 require_once dirname(__DIR__) . '/auth.php';
 
 if (!$ingelogd) { header('Location: ../beheer.php'); exit; }
-$rechten = authRechten(['log' => 'Logboek'], []);
-if (!$isMaster && !in_array('log', $rechten['toegestaneTabs'] ?? [], true)) {
+if (!function_exists('authHeeftExplicietRecht') || !authHeeftExplicietRecht('log')) {
     http_response_code(403);
     echo 'Geen toegang tot Logboek.';
     exit;
