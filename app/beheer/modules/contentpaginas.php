@@ -39,6 +39,9 @@ function beheerContentVervangMenuItems(string $html): string
     ];
 
     foreach ($koppelingen as $tab => $info) {
+        $module = function_exists('siteModuleVoorBeheerTab') ? siteModuleVoorBeheerTab($tab) : null;
+        if ($module !== null && function_exists('siteModuleActief') && !siteModuleActief($module)) continue;
+
         $patroon = '~<button\s+type="button"\s+class="menu-item"\s+data-tab="' . preg_quote($tab, '~') . '">.*?</button>~is';
         $link = '<a class="menu-item menu-item-link" style="display:block;text-decoration:none" href="content.php?pagina=' . rawurlencode($info['pagina']) . '">* '
             . htmlspecialchars($info['label'], ENT_QUOTES, 'UTF-8') . '</a>';
