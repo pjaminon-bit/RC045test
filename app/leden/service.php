@@ -2,16 +2,12 @@
 // ============================================================
 // Ledenservice fase 2.5
 // ============================================================
-// Nieuwe beheer- en portaalroutes gebruiken deze service in plaats van zelf
-// rechtstreeks leden-data.php te muteren. De bestaande opslagfuncties blijven
-// als compatibility backend beschikbaar.
-// ============================================================
-require_once dirname(__DIR__, 2) . '/leden-opslag.php';
 require_once dirname(__DIR__) . '/auth-capabilities.php';
+require_once dirname(__DIR__) . '/storage/domein-repositories.php';
 require_once __DIR__ . '/lidmaatschap.php';
 
-function ledenServiceLees(): array { return ledenLees(); }
-function ledenServiceSchrijf(array $data,bool $backup=true): bool { return ledenSchrijf($data,$backup); }
+function ledenServiceLees(): array { return repoLedenLees(); }
+function ledenServiceSchrijf(array $data,bool $backup=true): bool { return repoLedenSchrijf($data,$backup); }
 
 function ledenServiceUserId(array $lid): string
 {
@@ -51,9 +47,7 @@ function ledenServiceMigreerUserLinks(array &$data): int
 function ledenServiceKoppelAccount(array &$lid,string $userId,string $gebruikersnaam=''): void
 {
     $lid['user_id']=trim($userId);
-    // Tijdelijke compatibiliteit zolang auth.php de oude username-koppeling
-    // nog ondersteunt. Nieuwe logica gebruikt user_id als primaire sleutel.
-    $lid['beheer_account']=trim($gebruikersnaam);
+    $lid['beheer_account']=trim($gebruikersnaam); // tijdelijke legacy-spiegel
     $lid['gewijzigd']=date('c');
 }
 
@@ -100,7 +94,7 @@ function ledenServicePurgeId(&$waarde,string $id): void
         }
         $waarde=$nieuw;return;
     }
-    foreach($waarde as $k=>&$item){
+    foreach($waarde as &$item){
         if(is_string($item)&&hash_equals($item,$id)){$item='';continue;}
         if(is_array($item))ledenServicePurgeId($item,$id);
     }
@@ -109,18 +103,13 @@ function ledenServicePurgeId(&$waarde,string $id): void
 
 function ledenServiceVerwijderRelaties(string $lidId): bool
 {
-    require_once dirname(__DIR__,2).'/vergaderingen-opslag.php';
-    require_once dirname(__DIR__,2).'/taken-opslag.php';
-    require_once dirname(__DIR__,2).'/operationele-taken-opslag.php';
-    require_once dirname(__DIR__,2).'/evenementen-opslag.php';
     $bronnen=[
-        ['vergaderingenLees','vergaderingenSchrijf'],
-        ['takenLees','takenSchrijf'],
-        ['otakenLees','otakenSchrijf'],
-        ['evenementenLees','evenementenSchrijf'],
+        ['repoVergaderingenLees','repoVergaderingenSchrijf'],
+        ['repoTakenLees','repoTakenSchrijf'],
+        ['repoOperationeleTakenLees','repoOperationeleTakenSchrijf'],
+        ['repoEvenementenLees','repoEvenementenSchrijf'],
     ];
     foreach($bronnen as [$lezer,$schrijver]){
-        if(!function_exists($lezer)||!function_exists($schrijver))continue;
         $data=$lezer();if(!is_array($data))continue;
         $voor=json_encode($data);ledenServicePurgeId($data,$lidId);$na=json_encode($data);
         if($voor!==$na&&!$schrijver($data))return false;
