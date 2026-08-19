@@ -1,5 +1,8 @@
 <?php
-// Zelfstandige Back-ups-module: vervangt menu-item en blokkeert de oude herstel-POST.
+// ============================================================
+// Beheermodule: Back-ups
+// ============================================================
+
 function beheerBackupsMagOpenen(): bool
 {
     if (empty($GLOBALS['ingelogd'])) return false;
@@ -25,7 +28,7 @@ function beheerBackupsStartOutputFilter(): void
         if (beheerBackupsMagOpenen()) {
             $html = preg_replace(
                 '~<button\s+type="button"\s+class="menu-item"\s+data-tab="backups">.*?</button>~is',
-                '<a class="menu-item menu-item-link" style="display:block;text-decoration:none" href="beheer/backups.php">Back-ups</a>',
+                '<a class="menu-item menu-item-link" style="display:block;text-decoration:none" href="backups.php">* Back-ups</a>',
                 $html,
                 1
             ) ?? $html;
