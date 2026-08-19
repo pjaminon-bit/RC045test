@@ -1,9 +1,9 @@
-name: Deploy template-foundation naar Strato /dev
+name: Deploy RC045test main naar Strato /dev
 
 on:
   push:
     branches:
-      - agent/template-foundation
+      - main
   workflow_dispatch:
 
 permissions:
