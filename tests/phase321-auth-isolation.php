@@ -24,6 +24,7 @@ require getenv('TEST_PROJECT_ROOT').'/auth.php';
 $users=laadGebruikers($usersBestand);
 schrijfLog($logBestand,'test-runner','tenant-audit','');
 schrijfLoginPogingen($loginPogingenBestand,['user:test-runner'=>[time()]]);
+if($users){schrijfGebruikers($usersBestand,$users);}
 echo "RESULT=".json_encode([
   'config_ok'=>$configOk,
   'config'=>$configPad,
@@ -31,7 +32,8 @@ echo "RESULT=".json_encode([
   'audit'=>$logBestand,
   'attempts'=>$loginPogingenBestand,
   'lock'=>$loginPogingenSlotBestand,
-  'backups'=>$dataBackupMap,
+  'auth_backups'=>$authBackupMap,
+  'general_backups'=>$dataBackupMap,
   'usernames'=>array_values(array_map(static fn($u)=>(string)($u['gebruikersnaam']??''),$users)),
 ],JSON_UNESCAPED_SLASHES)."\n";
 PHP);
@@ -60,9 +62,11 @@ PHP);
     check321auth(($resA['audit']??'')===$privateA.'/audit/log.json','tenant A auditpad is tenant-lokaal');
     check321auth(($resA['attempts']??'')===$privateA.'/security/login-attempts.json','tenant A lockoutdata is tenant-lokaal');
     check321auth(($resA['lock']??'')===$privateA.'/security/.login-attempts.lock','tenant A lockbestand is tenant-lokaal');
-    check321auth(($resA['backups']??'')===$privateA.'/backups/auth','tenant A authbackups zijn tenant-lokaal');
+    check321auth(($resA['auth_backups']??'')===$privateA.'/backups/auth','tenant A authbackups zijn tenant-lokaal');
+    check321auth(($resA['general_backups']??'')===$root.'/data-backups','algemene backupmap blijft buiten optie 3 ongemoeid');
     check321auth(($resA['usernames']??[])===['tenant-a-user'],'tenant A ziet uitsluitend eigen gebruiker');
     check321auth(is_file($privateA.'/audit/log.json')&&is_file($privateA.'/security/login-attempts.json'),'tenant A writes landen fysiek in eigen private root');
+    check321auth(count(glob($privateA.'/backups/auth/*_users.json')?:[])===1,'tenant A gebruikersbackup blijft in eigen auth-backupmap');
 
     [$codeB,$outB]=run321auth($cfgB,$runner);
     preg_match('/RESULT=(\{.*\})/',$outB,$mB);$resB=json_decode($mB[1]??'',true);
