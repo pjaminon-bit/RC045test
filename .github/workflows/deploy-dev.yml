@@ -52,6 +52,7 @@ jobs:
           php tests/phase321-session-tenant-binding.php
           php tests/phase321-provisioner-path-security.php
           php tests/phase321-public-content-isolation.php
+          php tests/phase321-public-assets-isolation.php
           php -m | grep -qi '^pdo_sqlite$' || { echo 'pdo_sqlite ontbreekt op de runner' >&2; exit 1; }
           php tests/private-store-pdo-sqlite.php
           php tests/phase321-pdo-isolation.php
@@ -139,6 +140,8 @@ jobs:
           wacht_op_status "$basis/data/lidmaatschapstypen.json" 200 nee
           wacht_op_status "$basis/public-content.php?key=lidmaatschapstypen" 200 nee
           wacht_op_status "$basis/public-content.php?key=../auth/users" 404 nee
+          wacht_op_status "$basis/public-asset.php?scope=sponsors&path=missing.jpg" 404 nee
+          wacht_op_status "$basis/public-asset.php?scope=sponsors&path=shell.php" 404 nee
           wacht_op_status "$basis/app/paneel-hulp.php" 403 nee
           wacht_op_status "$basis/aanmeldingen-opslag.php" 403 nee
           wacht_op_status "$basis/groepen-opslag.php" 403 nee
