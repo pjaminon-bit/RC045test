@@ -48,10 +48,16 @@ function apply44Dirs(array $plan): array
     foreach($dirs as $dir){if(runtime41SymlinkInPad($dir)!==null)apply44Stop('VPS TLS/ACME-pad mag niet via symlink lopen: '.$dir);if(!is_dir($dir)&&!@mkdir($dir,0755,true)&&!is_dir($dir))apply44Stop('VPS TLS/ACME-map kon niet worden aangemaakt: '.$dir);@chown($dir,'root');@chgrp($dir,'root');@chmod($dir,0755);}
     return ['sa'=>$sa,'se'=>$se];
 }
-function apply44RootWrite(string $doel,string $inhoud,int $mode,bool $force,?string $toegestaneVoorganger=null): string
+function apply44RootWrite(string $doel,string $inhoud,int $mode,bool $force,?string $toegestaneVoorganger=null,?string $actiefPad=null): string
 {
     if(is_link($doel))apply44Stop('Root-configdoel mag geen symlink zijn: '.$doel);$map=dirname($doel);if(!is_dir($map)||is_link($map))apply44Stop('Onveilige root-configmap.');
-    if(is_file($doel)){$h=@file_get_contents($doel);if(!is_string($h))apply44Stop('Bestaand root-configbestand is onleesbaar.');if(hash_equals(hash('sha256',$h),hash('sha256',$inhoud)))return'ongewijzigd';$voorganger=$toegestaneVoorganger!==null&&hash_equals(hash('sha256',$h),hash('sha256',$toegestaneVoorganger));if(!$voorganger&&!$force)apply44Stop('Afwijkend root-configbestand bestaat; gebruik --force na controle: '.$doel);}elseif(file_exists($doel))apply44Stop('Root-configdoel is geen regulier bestand.');
+    $actief=$actiefPad!==null&&(is_link($actiefPad)||file_exists($actiefPad));
+    if(is_file($doel)){
+        $h=@file_get_contents($doel);if(!is_string($h))apply44Stop('Bestaand root-configbestand is onleesbaar.');if(hash_equals(hash('sha256',$h),hash('sha256',$inhoud)))return'ongewijzigd';
+        if($actief)apply44Stop('Afwijkend Apache-vhostbestand is al actief en wordt nooit in-place overschreven: '.$doel);
+        $voorganger=$toegestaneVoorganger!==null&&hash_equals(hash('sha256',$h),hash('sha256',$toegestaneVoorganger));if(!$voorganger&&!$force)apply44Stop('Afwijkend root-configbestand bestaat; gebruik --force na controle: '.$doel);
+    }elseif(file_exists($doel))apply44Stop('Root-configdoel is geen regulier bestand.');
+    elseif($actief)apply44Stop('sites-enabled bevat een actief/dangling doel zonder veilig sites-available bronbestand.');
     $tmp=$map.'/.'.basename($doel).'.tmp.'.bin2hex(random_bytes(8));if(runtime41SymlinkInPad($tmp)!==null)apply44Stop('Onveilig tijdelijk root-configpad.');if(@file_put_contents($tmp,$inhoud,LOCK_EX)===false)apply44Stop('Root-config kon niet tijdelijk worden geschreven.');
     if(!@chown($tmp,'root')||!@chgrp($tmp,'root')||!@chmod($tmp,$mode)){@unlink($tmp);apply44Stop('Root-config kreeg niet de vereiste rechten.');}clearstatcache(true,$doel);if(is_link($doel)){@unlink($tmp);apply44Stop('Root-configdoel werd tijdens write een symlink.');}if(!@rename($tmp,$doel)){@unlink($tmp);apply44Stop('Root-config kon niet atomisch worden geplaatst.');}return'geschreven';
 }
@@ -59,8 +65,22 @@ function apply44Link(string $source,string $link): bool
 {
     if(is_link($link)){if(realpath($link)!==realpath($source))apply44Stop('sites-enabled symlink wijst naar onverwacht doel: '.$link);return false;}if(file_exists($link))apply44Stop('sites-enabled doel bestaat maar is geen veilige symlink: '.$link);if(!@symlink($source,$link))apply44Stop('Apache-site kon niet worden enabled: '.$link);return true;
 }
-function apply44Configtest(array $plan): void { [$c,$o,$e]=apply44Run([$plan['apache']['control_binary'],'configtest']);if($c!==0)apply44Stop('Apache configtest faalde: '.trim($o."\n".$e)); }
-function apply44Reload(): void { [$c,$o,$e]=apply44Run(['/usr/bin/systemctl','reload','apache2']);if($c!==0)apply44Stop('Apache reload faalde: '.trim($o."\n".$e)); }
+function apply44ConfigtestResult(array $plan): array
+{
+    [$c,$o,$e]=apply44Run([$plan['apache']['control_binary'],'configtest']);return[$c===0,trim($o."\n".$e)];
+}
+function apply44ReloadResult(): array
+{
+    [$c,$o,$e]=apply44Run(['/usr/bin/systemctl','reload','apache2']);return[$c===0,trim($o."\n".$e)];
+}
+function apply44HerstelLinks(array $links): void { foreach($links as $link=>$nieuw)if($nieuw&&is_link($link))@unlink($link); }
+function apply44CandidateOfStop(array $plan,array $nieuweLinks,string $fase): void
+{
+    [$ok,$melding]=apply44ConfigtestResult($plan);
+    if(!$ok){apply44HerstelLinks($nieuweLinks);[$herstelOk]=apply44ConfigtestResult($plan);if(!$herstelOk)apply44Stop($fase.' configtest faalde én rollbackconfig is niet geldig; handmatige interventie vereist: '.$melding);apply44Stop($fase.' configtest faalde; nieuw geplaatste site-links zijn teruggedraaid: '.$melding);}
+    [$reloadOk,$reloadMelding]=apply44ReloadResult();
+    if(!$reloadOk){apply44HerstelLinks($nieuweLinks);[$herstelOk]=apply44ConfigtestResult($plan);if($herstelOk)apply44ReloadResult();apply44Stop($fase.' Apache reload faalde; nieuw geplaatste site-links zijn zo mogelijk teruggedraaid: '.$reloadMelding);}
+}
 function apply44EersteCatchall(array $plan,string $se): void
 {
     $f=[];foreach(scandir($se)?:[] as $x){if($x==='.'||$x==='..'||!str_ends_with($x,'.conf'))continue;$f[]=$x;}sort($f,SORT_STRING);
@@ -71,7 +91,8 @@ function apply44DefaultCertValideer(array $plan): bool
 {
     $crt=$plan['apache']['default_cert'];$key=$plan['apache']['default_key'];if(!is_file($crt)||!is_file($key)||is_link($crt)||is_link($key))return false;
     $cr=@file_get_contents($crt);$kr=@file_get_contents($key);if(!is_string($cr)||!is_string($kr))return false;$c=@openssl_x509_read($cr);$k=@openssl_pkey_get_private($kr);if($c===false||$k===false||!openssl_x509_check_private_key($c,$k))return false;
-    $i=openssl_x509_parse($c);$san=(string)($i['extensions']['subjectAltName']??'');return is_array($i)&&str_contains($san,'DNS:invalid.verenigingsplatform.invalid')&&((@fileperms($key)&0077)===0);
+    $i=openssl_x509_parse($c);if(!is_array($i))return false;$san=(string)($i['extensions']['subjectAltName']??'');$now=time();$perm=@fileperms($key);
+    return str_contains($san,'DNS:invalid.verenigingsplatform.invalid')&&(int)($i['validFrom_time_t']??PHP_INT_MAX)<=$now+300&&(int)($i['validTo_time_t']??0)>$now+86400&&$perm!==false&&(($perm&0077)===0);
 }
 function apply44DefaultCert(array $plan): void
 {
@@ -89,12 +110,12 @@ function apply44CertValideer(array $plan): void
     $certRaw=@file_get_contents($fc);$keyRaw=@file_get_contents($pk);$cert=is_string($certRaw)?@openssl_x509_read($certRaw):false;$key=is_string($keyRaw)?@openssl_pkey_get_private($keyRaw):false;if($cert===false||$key===false||!openssl_x509_check_private_key($cert,$key))apply44Stop('TLS private key hoort niet bij het uitgegeven certificaat.');
     $info=openssl_x509_parse($cert);if(!is_array($info))apply44Stop('Certificaat kon niet worden geparseerd.');$now=time();if((int)($info['validFrom_time_t']??PHP_INT_MAX)>$now+300||(int)($info['validTo_time_t']??0)<$now+(int)$plan['certificate']['minimum_remaining_seconds'])apply44Stop('Certificaat is nog niet geldig of heeft te weinig resterende geldigheid.');
     $dns=[];foreach(explode(',',(string)($info['extensions']['subjectAltName']??'')) as $x){$x=trim($x);if(str_starts_with($x,'DNS:'))$dns[]=strtolower(substr($x,4));}sort($dns,SORT_STRING);if($dns!==[$plan['canonical_host']])apply44Stop('Certificaat-SAN is niet exact de canonical tenant-host.');
-    $realKey=realpath($pk);$perm=$realKey!==false?@fileperms($realKey):false;if($perm===false||($perm&0077)!==0)apply44Stop('Certbot private key is groep/wereld-toegankelijk.');
+    $realKey=realpath($pk);$perm=$realKey!==false?@fileperms($realKey):false;if($perm===false||($perm&0077)!==0)apply44Stop('Certbot private key is onleesbaar of groep/wereld-toegankelijk.');
     $renew=$plan['certificate']['renewal_conf'];if(!is_file($renew)||is_link($renew))apply44Stop('Certbot renewal-config ontbreekt of is een symlink.');$rr=@file_get_contents($renew);if(!is_string($rr)||preg_match('/^authenticator\s*=\s*webroot\s*$/mi',$rr)!==1)apply44Stop('Certbot renewal-config gebruikt niet aantoonbaar webroot-authenticatie.');
 }
 function apply44RollbackHttp(array $plan,array $dirs,bool $tenantWas,bool $catchWas): void
 {
-    if(!$tenantWas)@unlink($dirs['se'].'/'.$plan['apache']['tenant_http_filename']);if(!$catchWas)@unlink($dirs['se'].'/'.$plan['apache']['http_catchall_filename']);[$c]=apply44Run([$plan['apache']['control_binary'],'configtest']);if($c===0)apply44Run(['/usr/bin/systemctl','reload','apache2']);
+    if(!$tenantWas)@unlink($dirs['se'].'/'.$plan['apache']['tenant_http_filename']);if(!$catchWas)@unlink($dirs['se'].'/'.$plan['apache']['http_catchall_filename']);[$ok]=apply44ConfigtestResult($plan);if($ok)apply44ReloadResult();
 }
 
 foreach($_SERVER['argv']??[] as $arg)if(preg_match('/^--(?:password|hash|secret|dsn|db-password|token|key|certificate|private-key|email)(?:=|$)/i',(string)$arg)===1)apply44Stop('Secrets/contactdata horen niet in fase-4.4 CLI-argumenten.');
@@ -103,8 +124,8 @@ $ctx=apply44Bundle($planPad,true);$plan=$ctx['plan'];if($check){echo 'CHECK OK  
 apply44ApachePreflight($plan);apply44CertbotPreflight($plan);$dirs=apply44Dirs($plan);$force=isset($opt['force']);
 if(@filetype((string)$ctx['context']['web']['php_fpm']['socket'])!=='socket')apply44Stop('Tenant PHP-FPM socket is niet actief; voer fase 4.1 root-runtime eerst uit.');
 $frag=$plan['apache']['routing_fragment_installed'];$src=(string)$ctx['context']['routing_fragment_source'];if(!is_file($frag)||!is_file($src)||!hash_equals(hash_file('sha256',$frag),hash_file('sha256',$src)))apply44Stop('Geïnstalleerd 4.2 HTTPS-routingfragment ontbreekt of wijkt af.');
-apply44DefaultCert($plan);$sa=$dirs['sa'];$se=$dirs['se'];$doelHC=$sa.'/'.$plan['apache']['http_catchall_filename'];$doelHT=$sa.'/'.$plan['apache']['tenant_http_filename'];$doelSC=$sa.'/'.$plan['apache']['https_catchall_filename'];$doelST=$sa.'/'.$plan['apache']['tenant_https_filename'];$oudeHttp=web42TenantHttpConfig($ctx['context']['web']);
-apply44RootWrite($doelHC,tls44HttpCatchall($plan),0644,$force);apply44RootWrite($doelHT,tls44TenantHttp($plan),0644,$force,$oudeHttp);$catchLink=$se.'/'.$plan['apache']['http_catchall_filename'];$tenantLink=$se.'/'.$plan['apache']['tenant_http_filename'];$catchWas=is_link($catchLink);$tenantWas=is_link($tenantLink);apply44Link($doelHC,$catchLink);apply44Link($doelHT,$tenantLink);apply44EersteCatchall($plan,$se);apply44Configtest($plan);apply44Reload();
+apply44DefaultCert($plan);$sa=$dirs['sa'];$se=$dirs['se'];$doelHC=$sa.'/'.$plan['apache']['http_catchall_filename'];$doelHT=$sa.'/'.$plan['apache']['tenant_http_filename'];$doelSC=$sa.'/'.$plan['apache']['https_catchall_filename'];$doelST=$sa.'/'.$plan['apache']['tenant_https_filename'];$linkHC=$se.'/'.$plan['apache']['http_catchall_filename'];$linkHT=$se.'/'.$plan['apache']['tenant_http_filename'];$linkSC=$se.'/'.$plan['apache']['https_catchall_filename'];$linkST=$se.'/'.$plan['apache']['tenant_https_filename'];$oudeHttp=web42TenantHttpConfig($ctx['context']['web']);
+apply44RootWrite($doelHC,tls44HttpCatchall($plan),0644,$force,null,$linkHC);apply44RootWrite($doelHT,tls44TenantHttp($plan),0644,$force,$oudeHttp,$linkHT);$catchWas=is_link($linkHC);$tenantWas=is_link($linkHT);$newHC=apply44Link($doelHC,$linkHC);$newHT=apply44Link($doelHT,$linkHT);apply44EersteCatchall($plan,$se);apply44CandidateOfStop($plan,[$linkHC=>$newHC,$linkHT=>$newHT],'HTTP-01 kandidaat');
 apply44DnsNu($ctx);[$cc,$co,$ce]=apply44Run(['certbot','certonly','--webroot','--webroot-path',$plan['acme']['webroot'],'--cert-name',$plan['acme']['cert_name'],'-d',$plan['canonical_host'],'--preferred-challenges','http','--non-interactive','--agree-tos','--keep-until-expiring']);if($cc!==0){apply44RollbackHttp($plan,$dirs,$tenantWas,$catchWas);apply44Stop('Certbot HTTP-01 uitgifte faalde; nieuwe HTTP-activatie is zo mogelijk teruggedraaid: '.trim($co."\n".$ce),2);}apply44CertValideer($plan);
-apply44RootWrite($plan['apache']['renewal_hook'],tls44RenewalHook($plan),0755,$force);apply44RootWrite($doelSC,tls44HttpsCatchall($plan),0644,$force);apply44RootWrite($doelST,tls44TenantHttps($plan),0644,$force);apply44Link($doelSC,$se.'/'.$plan['apache']['https_catchall_filename']);apply44Link($doelST,$se.'/'.$plan['apache']['tenant_https_filename']);apply44EersteCatchall($plan,$se);apply44Configtest($plan);apply44Reload();
+apply44RootWrite($plan['apache']['renewal_hook'],tls44RenewalHook($plan),0755,$force);apply44RootWrite($doelSC,tls44HttpsCatchall($plan),0644,$force,null,$linkSC);apply44RootWrite($doelST,tls44TenantHttps($plan),0644,$force,null,$linkST);$newSC=apply44Link($doelSC,$linkSC);$newST=apply44Link($doelST,$linkST);apply44EersteCatchall($plan,$se);apply44CandidateOfStop($plan,[$linkSC=>$newSC,$linkST=>$newST],'HTTPS kandidaat');
 echo 'APPLY OK  tenant='.$plan['tenant_key'].' host='.$plan['canonical_host'].' HTTPS actief. Renewal hook doet configtest vóór reload.' . "\n";
