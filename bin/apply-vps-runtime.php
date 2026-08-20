@@ -32,6 +32,7 @@ function apply41Help(): void
     echo "  --force               vervang afwijkende bestaande FPM-poolconfig na validatie\n";
     echo "  --help                toon deze hulp\n\n";
     echo "--check en --apply zijn wederzijds uitsluitend. De tool reloadt PHP-FPM niet automatisch.\n";
+    echo "Bij een herhaalde --apply moet de tenant-PHP-FPM pool eerst gestopt zijn.\n";
 }
 
 function apply41Bundle(string $planPad): array
@@ -75,6 +76,23 @@ function apply41Getent(string $database, string $sleutel): ?array
     return explode(':', strtok($out, "\n"));
 }
 
+function apply41GetentAlle(string $database): array
+{
+    [$code, $out, $err] = apply41Run(['getent', $database]);
+    if ($code !== 0 || $out === '') {
+        apply41Stop("getent {$database} kon niet volledig worden uitgelezen: " . ($err !== '' ? $err : 'onbekende fout'));
+    }
+    $records = [];
+    foreach (preg_split('/\r?\n/', trim($out)) ?: [] as $regel) {
+        if ($regel === '') continue;
+        $record = explode(':', $regel);
+        if (count($record) < 4) apply41Stop("getent {$database} bevat een onvolledig record.");
+        $records[] = $record;
+    }
+    if ($records === []) apply41Stop("getent {$database} leverde geen controleerbare records op.");
+    return $records;
+}
+
 function apply41EnsureGroup(string $groep): int
 {
     $record = apply41Getent('group', $groep);
@@ -85,7 +103,28 @@ function apply41EnsureGroup(string $groep): int
     }
     $gid = isset($record[2]) && ctype_digit((string)$record[2]) ? (int)$record[2] : -1;
     if ($gid < 0) apply41Stop('System group heeft geen geldige GID.');
+    if (trim((string)($record[3] ?? '')) !== '') {
+        apply41Stop('Tenant system group mag geen expliciete groepsleden bevatten.');
+    }
     return $gid;
+}
+
+function apply41ControleerGroepExclusief(string $groep, int $gid, string $tenantUser): void
+{
+    foreach (apply41GetentAlle('group') as $record) {
+        $naam = (string)($record[0] ?? '');
+        $recordGid = isset($record[2]) && ctype_digit((string)$record[2]) ? (int)$record[2] : -1;
+        if ($recordGid === $gid && !hash_equals($groep, $naam)) {
+            apply41Stop('Tenant-GID wordt ook door een andere groepsnaam gebruikt; isolatie kan niet worden bewezen.');
+        }
+    }
+    foreach (apply41GetentAlle('passwd') as $record) {
+        $naam = (string)($record[0] ?? '');
+        $primaryGid = isset($record[3]) && ctype_digit((string)$record[3]) ? (int)$record[3] : -1;
+        if ($primaryGid === $gid && !hash_equals($tenantUser, $naam)) {
+            apply41Stop('Tenant-GID is primary group van een andere account; tenantdata zou groep-leesbaar zijn.');
+        }
+    }
 }
 
 function apply41EnsureUser(array $os, int $gid): int
@@ -112,6 +151,27 @@ function apply41EnsureUser(array $os, int $gid): int
     $groepen = array_values(array_filter(preg_split('/\s+/', trim($idOut)) ?: [], static fn($v) => $v !== ''));
     if ($groepen !== [(string)$gid]) apply41Stop('Tenant-runtimeuser mag geen supplementary groups hebben.');
     return $uid;
+}
+
+function apply41ControleerUidExclusief(string $tenantUser, int $uid): void
+{
+    foreach (apply41GetentAlle('passwd') as $record) {
+        $naam = (string)($record[0] ?? '');
+        $recordUid = isset($record[2]) && ctype_digit((string)$record[2]) ? (int)$record[2] : -1;
+        if ($recordUid === $uid && !hash_equals($tenantUser, $naam)) {
+            apply41Stop('Tenant-UID wordt ook door een andere account gebruikt; filesystemisolatie kan niet worden bewezen.');
+        }
+    }
+}
+
+function apply41RuntimeMoetInactiefZijn(string $tenantUser): void
+{
+    [$code, $out, $err] = apply41Run(['pgrep', '-u', $tenantUser]);
+    if ($code === 1) return;
+    if ($code === 0 && $out !== '') {
+        apply41Stop('Tenant-runtimeuser heeft actieve processen. Stop eerst de tenant-PHP-FPM pool en voer --apply daarna opnieuw uit.');
+    }
+    apply41Stop('Actieve tenantprocessen konden niet fail-closed worden gecontroleerd: ' . ($err !== '' ? $err : 'pgrep ontbreekt of gaf een onverwachte status'));
 }
 
 function apply41SymlinksVerboden(string $root): void
@@ -268,8 +328,13 @@ if (!function_exists('posix_geteuid') || posix_geteuid() !== 0) apply41Stop('--a
 $fpmPoolDir = trim((string)($opt['fpm-pool-dir'] ?? ''));
 if ($fpmPoolDir === '') apply41Stop('--fpm-pool-dir=/etc/.../pool.d is verplicht bij --apply.');
 
-$gid = apply41EnsureGroup((string)$plan['os']['group']);
+$tenantUser = (string)$plan['os']['user'];
+$tenantGroup = (string)$plan['os']['group'];
+$gid = apply41EnsureGroup($tenantGroup);
+apply41ControleerGroepExclusief($tenantGroup, $gid, $tenantUser);
 $uid = apply41EnsureUser($plan['os'], $gid);
+apply41ControleerUidExclusief($tenantUser, $uid);
+apply41RuntimeMoetInactiefZijn($tenantUser);
 apply41SharedCodeControle($plan, $uid, $gid);
 apply41MetadataRechten($plan);
 apply41PrivateRechten($plan);
