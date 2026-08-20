@@ -9,6 +9,19 @@ function privateStoreTenant(): string{$config=privateStoreConfig();return tenant
 function privateStoreDriver(): string{$config=privateStoreConfig();$driver=strtolower(trim((string)($config['opslag']['private_driver']??'json')));return$driver==='pdo'?'pdo':'json';}
 function privateStoreJsonRoot(): ?string{return tenantRuntimePrivateRoot(privateStoreConfig());}
 
+/**
+ * Legacy JSON/PHP fallback is uitsluitend bedoeld voor de bestaande losse
+ * RC045-installatie tijdens de migratie. Zodra een tenant expliciet via een
+ * extern configbestand draait, of een eigen private_root heeft, is terugvallen
+ * op projectrootdata verboden. Een ontbrekende PDO-collectie betekent dan
+ * bewust: deze tenant heeft nog geen data.
+ */
+function privateStoreLegacyFallbackToegestaan(): bool
+{
+    $externConfig = trim((string)(getenv('VERENIGING_CONFIG_FILE') ?: ''));
+    return $externConfig === '' && privateStoreJsonRoot() === null;
+}
+
 function privateStoreJsonLees(string $collectie): array
 {
     $root=privateStoreJsonRoot();if($root===null)return[];$pad=tenantRuntimeCollectiePad($root,$collectie);
@@ -71,7 +84,11 @@ function privateStoreLees(string $collectie,callable $jsonLezer): array
     $pdo=privateStorePdo();
     try{$stmt=$pdo->prepare('SELECT payload FROM vereniging_private_store WHERE tenant_key = :tenant AND collection_key = :collection');$stmt->execute(['tenant'=>privateStoreTenant(),'collection'=>$collectie]);$rij=$stmt->fetch();}
     catch(Throwable $e){error_log('[platform] private store read mislukt voor '.$collectie.': '.$e->getMessage());throw new RuntimeException('Private verenigingsopslag kon niet worden gelezen.',0,$e);}
-    if(!$rij){$fallback=$jsonLezer();return is_array($fallback)?$fallback:[];}$payload=(string)($rij['payload']??'');$data=json_decode($payload,true);if(json_last_error()!==JSON_ERROR_NONE||!is_array($data)){error_log('[platform] ongeldige private-store payload voor tenant '.privateStoreTenant().', collectie '.$collectie);throw new RuntimeException('Private verenigingsopslag bevat ongeldige data.');}return$data;
+    if(!$rij){
+        if(!privateStoreLegacyFallbackToegestaan())return[];
+        $fallback=$jsonLezer();return is_array($fallback)?$fallback:[];
+    }
+    $payload=(string)($rij['payload']??'');$data=json_decode($payload,true);if(json_last_error()!==JSON_ERROR_NONE||!is_array($data)){error_log('[platform] ongeldige private-store payload voor tenant '.privateStoreTenant().', collectie '.$collectie);throw new RuntimeException('Private verenigingsopslag bevat ongeldige data.');}return$data;
 }
 function privateStoreSchrijf(string $collectie,array $data,callable $jsonSchrijver): bool
 {
