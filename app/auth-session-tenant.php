@@ -19,33 +19,6 @@ function authSessionTenantSleutel(array $siteConfig): string
 }
 
 /**
- * Niet-secret sessiefingerprint van de actuele password_hash van de master.
- * Een password_hash bevat al een willekeurige salt; iedere veilige rotatie
- * levert dus een andere fingerprint op. De plaintext credential wordt nergens
- * voor deze binding gebruikt of opgeslagen.
- */
-function authSessionMasterFingerprint($passwordHash): ?string
-{
-    if (!is_string($passwordHash) || $passwordHash === '') return null;
-    $info = password_get_info($passwordHash);
-    if (($info['algoName'] ?? 'unknown') === 'unknown') return null;
-    return hash('sha256', "master-session-v1\0" . $passwordHash);
-}
-
-/**
- * Activeert/bewaakt de fingerprint op een succesvolle masterlogin.
- * Bestaande sessies zonder fingerprint worden niet stil geüpgraded: zij moeten
- * opnieuw authenticeren. Zo trekt invoering of rotatie van de masterhash alle
- * reeds bestaande mastersessies fail-closed in.
- */
-function authSessionMasterBewaak(?string $verwacht): bool
-{
-    if ($verwacht === null) return true; // alleen legacy/plaintext compatibility
-    $actueel = $_SESSION['master_credential_fingerprint'] ?? null;
-    return is_string($actueel) && hash_equals($verwacht, $actueel);
-}
-
-/**
  * Laat een mogelijk vreemde sessie los zonder die op schijf te wijzigen en
  * start daarna een schone sessie voor de actieve tenant.
  *
