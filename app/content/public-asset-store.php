@@ -52,6 +52,13 @@ function publicAssetPadVoorVergelijk(string $pad): string
     return rtrim($pad, '/');
 }
 
+function publicAssetPadBinnen(string $pad, string $root): bool
+{
+    $pad = publicAssetPadVoorVergelijk($pad);
+    $root = publicAssetPadVoorVergelijk($root);
+    return $pad === $root || strncmp($pad, $root . '/', strlen($root) + 1) === 0;
+}
+
 function publicAssetLegacyRoot(): string
 {
     return siteProjectRoot() . DIRECTORY_SEPARATOR . 'images';
@@ -69,6 +76,47 @@ function publicAssetTenantRoot(): ?string
         tenantRuntimeConfiguratieFout('Externe tenant heeft geen private_root voor publieke assets.');
     }
     return null;
+}
+
+/**
+ * Defense-in-depth voor alle tenantassetpaden. De geconfigureerde private_root
+ * is de harde filesystemgrens. Geen enkele component daaronder mag een
+ * symlink zijn, ook public-assets zelf niet. Voor nog niet bestaande doelen
+ * wordt de dichtstbijzijnde bestaande ancestor fysiek gecontroleerd.
+ */
+function publicAssetTenantPadVeilig(string $pad): bool
+{
+    $tenantRoot = publicAssetTenantRoot();
+    if ($tenantRoot === null) return true;
+
+    $privateRoot = tenantRuntimePrivateRoot(siteConfig());
+    if ($privateRoot === null || !is_dir($privateRoot) || is_link($privateRoot)) return false;
+    if (!publicAssetPadBinnen($pad, $privateRoot)) return false;
+
+    $privateReal = realpath($privateRoot);
+    if ($privateReal === false) return false;
+
+    $cursor = rtrim($pad, '/\\');
+    if ($cursor === '') return false;
+    while (true) {
+        if (is_link($cursor)) return false;
+        if (publicAssetPadVoorVergelijk($cursor) === publicAssetPadVoorVergelijk($privateRoot)) break;
+        $parent = dirname($cursor);
+        if ($parent === $cursor || !publicAssetPadBinnen($parent, $privateRoot)) return false;
+        $cursor = $parent;
+    }
+
+    $bestaand = rtrim($pad, '/\\');
+    while (!file_exists($bestaand) && !is_link($bestaand)) {
+        $parent = dirname($bestaand);
+        if ($parent === $bestaand || !publicAssetPadBinnen($parent, $privateRoot)) return false;
+        $bestaand = $parent;
+    }
+    if (is_link($bestaand)) return false;
+    $bestaandReal = realpath($bestaand);
+    if ($bestaandReal === false || !publicAssetPadBinnen($bestaandReal, $privateReal)) return false;
+
+    return true;
 }
 
 function publicAssetNamespaceRoot(string $scope): ?string
@@ -140,9 +188,7 @@ function publicAssetIsTenantPad(string $pad): bool
 {
     $tenantRoot = publicAssetTenantRoot();
     if ($tenantRoot === null) return false;
-    $pad = publicAssetPadVoorVergelijk($pad);
-    $root = publicAssetPadVoorVergelijk($tenantRoot);
-    return $pad === $root || strncmp($pad, $root . '/', strlen($root) + 1) === 0;
+    return publicAssetPadBinnen($pad, $tenantRoot);
 }
 
 /**
@@ -154,7 +200,9 @@ function publicAssetVeiligLeesPad(string $scope, string $relatief): ?string
 {
     $root = publicAssetNamespaceRoot($scope);
     $pad = publicAssetPad($scope, $relatief);
-    if ($root === null || $pad === null || !is_file($pad) || !is_readable($pad)) return null;
+    if ($root === null || $pad === null) return null;
+    if (!publicAssetTenantPadVeilig($root) || !publicAssetTenantPadVeilig($pad)) return null;
+    if (!is_file($pad) || !is_readable($pad)) return null;
 
     $rootReal = realpath($root);
     $padReal = realpath($pad);
@@ -178,15 +226,17 @@ function publicAssetVeiligLeesPad(string $scope, string $relatief): ?string
 function publicAssetMaakNamespaceMap(string $scope): ?string
 {
     $root = publicAssetNamespaceRoot($scope);
-    if ($root === null) return null;
-    $mode = publicAssetTenantRoot() !== null ? 0750 : 0755;
+    if ($root === null || !publicAssetTenantPadVeilig($root)) return null;
+    $tenant = publicAssetTenantRoot() !== null;
+    $mode = $tenant ? 0750 : 0755;
     if (!is_dir($root) && !@mkdir($root, $mode, true)) return null;
-    if (is_link($root) || !is_dir($root)) return null;
-    if (publicAssetTenantRoot() !== null) @chmod($root, 0750);
+    clearstatcache(true, $root);
+    if (!publicAssetTenantPadVeilig($root) || is_link($root) || !is_dir($root)) return null;
+    if ($tenant) @chmod($root, 0750);
     return $root;
 }
 
 function publicAssetBeveiligBestand(string $pad): void
 {
-    if (publicAssetIsTenantPad($pad) && is_file($pad) && !is_link($pad)) @chmod($pad, 0640);
+    if (publicAssetIsTenantPad($pad) && publicAssetTenantPadVeilig($pad) && is_file($pad) && !is_link($pad)) @chmod($pad, 0640);
 }
