@@ -1,18 +1,41 @@
 <?php
 // ============================================================
-// Sessiebeveiliging voor gewone beheeraccounts
+// Sessiebeveiliging voor beheeraccounts
 // ============================================================
 // Wordt vanuit auth.php geladen nadat $ingelogd, $isMaster en
 // $huidigeGebruiker zijn bepaald.
 //
 // Doel:
+// - iedere sessie hoort expliciet bij precies één tenant;
+// - een sessie van tenant A wordt bij tenant B fail-closed verworpen;
 // - een verwijderd of geblokkeerd account verliest bij het eerstvolgende
 //   verzoek toegang;
 // - na een rechten- of wachtwoordwijziging kan de bestaande sessie worden
 //   ingetrokken door sessie_versie in beheer-users.json te verhogen;
 // - bestaande accounts zonder sessie_versie gelden als versie 1;
-// - bestaande sessies van vóór deze uitbreiding gelden óók als versie 1.
+// - bestaande standalone RC045-sessies zonder tenant_key worden eenmalig
+//   compatibel aan RC045 gebonden.
 // ============================================================
+
+require_once __DIR__ . '/auth-session-tenant.php';
+
+$authSessionTenantKey = authSessionTenantSleutel($authSiteConfig ?? []);
+$authSessionTenantOk = authSessionTenantBewaak(
+    $authSessionTenantKey,
+    !empty($authPaden['tenant_private']),
+    $csrfToken
+);
+
+if (!$authSessionTenantOk) {
+    // De helper heeft de vreemde sessie met session_abort() losgelaten en een
+    // volledig schone sessie voor deze tenant gestart. Geen authstate uit de
+    // oorspronkelijke sessie mag daarna nog door auth.php gebruikt worden.
+    $ingelogd = false;
+    $huidigeGebruiker = '';
+    $isMaster = false;
+    $inlogFout = 'Je sessie hoort niet bij deze vereniging. Log opnieuw in.';
+    return;
+}
 
 if (!$ingelogd || $isMaster) {
     return;
