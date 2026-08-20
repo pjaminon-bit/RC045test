@@ -5,7 +5,6 @@
 
 return [
     'vereniging' => [
-        // Vaste technische tenantsleutel. Na ingebruikname niet meer wijzigen.
         'sleutel' => 'voorbeeldvereniging',
         'naam' => 'Voorbeeldvereniging',
         'volledige_naam' => 'Voorbeeldvereniging Nederland',
@@ -15,44 +14,27 @@ return [
         'standaard_taal' => 'nl',
     ],
     'branding' => [
-        'logo' => 'vereniging-logo.png',
-        'social_image' => 'vereniging-social.png',
-        'theme_color' => '#245A4A',
-        'kleuren' => [
-            'primary' => '#357C68',
-            'primary_dark' => '#245A4A',
-            'primary_light' => '#E8F3EF',
-            'accent' => '#D19B2A',
-            'accent_light' => '#FBF3DC',
-            'dark' => '#1E3028',
-            'text' => '#26352F',
-            'muted' => '#68756F',
-            'background' => '#F7F5EF',
-        ],
+        'logo' => 'vereniging-logo.png','social_image' => 'vereniging-social.png','theme_color' => '#245A4A',
+        'kleuren' => ['primary'=>'#357C68','primary_dark'=>'#245A4A','primary_light'=>'#E8F3EF','accent'=>'#D19B2A','accent_light'=>'#FBF3DC','dark'=>'#1E3028','text'=>'#26352F','muted'=>'#68756F','background'=>'#F7F5EF'],
     ],
     'modules' => [
-        'ledenadministratie' => true,
-        'vergaderingen' => true,
-        'taken' => true,
-        'operationele_taken' => true,
-        'evenementen' => true,
-        'fotoboek' => true,
-        'sponsors' => true,
-        'media' => false,
-        'aanmelden' => true,
+        'ledenadministratie'=>true,
+        'werkgroepen'=>true,
+        'vergaderingen'=>true,
+        'taken'=>true,
+        'operationele_taken'=>true,
+        'evenementen'=>true,
+        'fotoboek'=>true,
+        'sponsors'=>true,
+        'media'=>false,
+        'aanmelden'=>true,
     ],
-
-    // Op gedeelde hosting blijft `json` de veilige default.
-    // Voor een VPS/PostgreSQL-installatie kan dit `pdo` worden. Gebruik hier
-    // alleen server-side geheimen; commit echte credentials nooit naar Git.
     'opslag' => [
-        'private_driver' => 'json',
-        'pdo' => [
+        'private_driver'=>'json',
+        'pdo'=>[
             // PostgreSQL voorbeeld:
             // 'dsn' => 'pgsql:host=127.0.0.1;port=5432;dbname=verenigingen',
-            'dsn' => '',
-            'user' => '',
-            'password' => '',
+            'dsn'=>'','user'=>'','password'=>'',
         ],
     ],
 ];
