@@ -1,7 +1,10 @@
-name: Deploy RC045test main naar Strato /dev
+name: Validate and deploy RC045test
 
 on:
   push:
+    branches:
+      - main
+  pull_request:
     branches:
       - main
   workflow_dispatch:
@@ -10,14 +13,14 @@ permissions:
   contents: read
 
 concurrency:
-  group: rc045-dev-deploy
+  group: rc045test-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  deploy-dev:
+  validate:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout testcode
+      - name: Checkout code
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Controleer PHP syntax
@@ -29,11 +32,28 @@ jobs:
             php -l "$bestand"
           done < <(find . -type f -name '*.php' -print0)
 
-      - name: Fase 2.5 architectuur- en securitytests
+      - name: Basis architectuurtest
+        run: php tests/phase25-architecture.php
+
+      - name: Uitgebreide fase 2.5 PR-tests
+        if: github.event_name == 'pull_request'
         shell: bash
         run: |
           set -euo pipefail
-          php tests/phase25-architecture.php
+          node --check lidmaatschap-aanmelden.js
+          php tests/phase25-domain-integrity.php
+          php -m | grep -qi '^pdo_sqlite$' || { echo 'pdo_sqlite ontbreekt op de runner' >&2; exit 1; }
+          php tests/private-store-pdo-sqlite.php
+          php tests/private-store-pdo-failclosed.php
+          test ! -e site-config.local.php
+
+  deploy-dev:
+    if: github.event_name != 'pull_request'
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout testcode
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Schrijf DEV buildinformatie
         shell: bash
@@ -77,7 +97,6 @@ jobs:
         run: |
           set -euo pipefail
           basis='https://rc045.nl/dev'
-
           wacht_op_status() {
             local url="$1"
             local verwacht="$2"
@@ -95,19 +114,15 @@ jobs:
             echo "FOUT: $url gaf na meerdere pogingen niet HTTP $verwacht" >&2; return 1
           }
 
-          # Kernroutes moeten renderen; dit vangt runtime fatals die php -l niet ziet.
           wacht_op_status "$basis/" 200 ja
           wacht_op_status "$basis/beheer/" 200 ja
           wacht_op_status "$basis/leden/" 200 ja
           wacht_op_status "$basis/aanmelden.html" 200 ja
 
-          # Nieuwe beheercontrollers moeten zonder sessie gecontroleerd terugsturen,
-          # niet crashen met HTTP 500.
           for route in leden.php leden-import.php commissies.php vergaderingen.php taken.php operationele-taken.php evenementen.php aanmeldingen.php lidmaatschap.php gebruikers.php logboek.php backups.php; do
             wacht_op_status "$basis/beheer/$route" 302 nee
           done
 
-          # Configureerbare publieke tariefdata is leesbaar; private helpers/data niet.
           wacht_op_status "$basis/data/lidmaatschapstypen.json" 200 nee
           wacht_op_status "$basis/app/paneel-hulp.php" 403 nee
           wacht_op_status "$basis/aanmeldingen-opslag.php" 403 nee
