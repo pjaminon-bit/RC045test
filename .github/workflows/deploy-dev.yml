@@ -44,6 +44,7 @@ jobs:
           php tests/phase251-groups.php
           php tests/phase252-ux.php
           php tests/phase26-ui.php
+          php tests/phase262-ui.php
           php -m | grep -qi '^pdo_sqlite$' || { echo 'pdo_sqlite ontbreekt op de runner' >&2; exit 1; }
           php tests/private-store-pdo-sqlite.php
           php tests/private-store-pdo-failclosed.php
