@@ -12,9 +12,11 @@ Fix:
 - de bootstrap valideert nu ook `private/sessions` als tenantgebonden symlinkvrije map;
 - vóór de nieuwe masterhash wordt geplaatst worden alle bestaande reguliere sessiebestanden van die tenant verwijderd;
 - onverwachte bestanden/symlinks of een mislukte unlink stoppen de rotatie fail-closed;
-- de CLI meldt hoeveel sessies zijn ingetrokken.
+- de CLI meldt hoeveel sessies zijn ingetrokken;
+- de tenant-cookie-namespace bevat daarnaast een SHA-256 generatie van de actieve `private/auth/master.php`;
+- iedere password-hashrotatie verandert daardoor automatisch de sessiecookie-namespace, ook als precies tijdens de rotatie een login/request loopt.
 
-Gevolg: na masterwachtwoordrotatie loggen master én gewone gebruikers opnieuw in.
+Gevolg: na masterwachtwoordrotatie loggen master én gewone gebruikers opnieuw in. Het verwijderen van sessiebestanden is defense-in-depth; de mastergeneratie in de cookie-namespace sluit ook het loginrace-randgeval.
 
 ## 2. Gebruikersrestore kon een oude sessieversie terugzetten
 
@@ -76,16 +78,19 @@ Bevinding: snapshots bevatten een tenant-key/onderdeelbinding en die wordt stren
 Fix:
 - de UI zegt nu expliciet dat tenant- en onderdeelbinding vóór restore wordt gevalideerd en **geen cryptografische ondertekening** is.
 
-## Regressietest
+## Regressietests
 
 Nieuw:
 
-`tests/phase351-security-reaudit.php`
+- `tests/phase351-security-reaudit.php`
+- `tests/phase351-master-session-generation.php`
 
-Deze test reproduceert de herauditpunten met onder meer:
+Deze tests reproduceren de herauditpunten met onder meer:
 - Linux backslash-schijnroot;
 - echte provisioner + bootstrap;
 - canary master- en usersessies vóór masterrotatie;
+- wijziging van de sessiecookie-namespace bij iedere nieuwe masterhash;
+- stabiliteit van die namespace zolang de masterconfig ongewijzigd blijft;
 - users-snapshot met oudere sessieversies;
 - statische Host-header/.git guards;
 - auth/master microtime-regressie;
@@ -100,6 +105,6 @@ Fase 3.5.1 mag pas als afgerond worden beschouwd wanneer:
 
 1. PHP syntaxcontrole groen is;
 2. alle bestaande fase 2/3 tests groen blijven;
-3. `Phase 3.5.1 security reaudit` 0 fouten meldt;
+3. beide fase-3.5.1 regressietests 0 fouten melden;
 4. de PR-run exact op de uiteindelijke head-SHA groen is;
 5. pas daarna naar `main` wordt gemerged en DEV de nieuwe main-build toont.
