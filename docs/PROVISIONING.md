@@ -33,6 +33,32 @@ Dit maakt aan:
 
 De provisioner kopieert de applicatiecode **niet**.
 
+## Tenant-key is permanente technische identiteit
+
+`--key` wordt niet meer genormaliseerd of gecorrigeerd. De opgegeven waarde moet al exact canoniek zijn voordat provisioning start.
+
+Contract:
+
+- 3 tot en met 63 ASCII-tekens;
+- alleen lowercase `a-z`, cijfers `0-9` en het koppelteken `-`;
+- geen koppelteken aan begin of einde;
+- geen dubbele koppeltekens (`--`);
+- geen spaties, underscores, hoofdletters, Unicode of andere speciale tekens;
+- `default` is gereserveerd en mag niet als tenant-key worden gebruikt.
+
+Voorbeelden:
+
+```text
+geldig:   rc045
+geldig:   test-club-2026
+ongeldig: Test-Club
+ongeldig: test_club
+ongeldig: test--club
+ongeldig: default
+```
+
+Een ongeldige key wordt fail-closed geweigerd voordat tenantmappen, configuratie of manifesten worden aangemaakt. De weergavenaam van de vereniging hoort in `--name`; de technische key is niet bedoeld als vrij tekstveld.
+
 ## Runtime koppelen
 
 De webserver/PHP-runtime van deze vereniging krijgt minimaal:
@@ -89,6 +115,7 @@ De provisioner is een beheertool en veronderstelt dat de filesystemhiërarchie w
 
 ## Veiligheidsregels
 
+- `--key` moet exact aan het vaste tenant-key-contract voldoen; de provisioner normaliseert keys niet.
 - `--root` moet absoluut en symlinkvrij zijn en mag geen `.`/`..`-segmenten bevatten.
 - Tenantdata binnen de applicatie/documentroot wordt op het fysiek gecanonicaliseerde pad geweigerd.
 - Nieuwe geprovisioneerde tenants krijgen altijd `VERENIGING_REQUIRE_TENANT_CONFIG=1` in `runtime.env`.
@@ -98,7 +125,7 @@ De provisioner is een beheertool en veronderstelt dat de filesystemhiërarchie w
 - Een onbekende waarde voor `VERENIGING_REQUIRE_TENANT_CONFIG` wordt als configuratiefout geweigerd in plaats van stil als aan/uit geïnterpreteerd.
 - Een bestaande afwijkende `config.php`, `runtime.env` of `tenant.json` wordt zonder `--force` niet overschreven.
 - Dezelfde opdracht nogmaals uitvoeren is idempotent: identieke bestanden blijven ongewijzigd.
-- `--dry-run` voert dezelfde padveiligheidscontroles uit, maar maakt geen mappen of bestanden aan.
+- `--dry-run` voert dezelfde key- en padveiligheidscontroles uit, maar maakt geen mappen of bestanden aan.
 - De provisioner weigert uitvoering via HTTP en is alleen voor CLI bedoeld.
 
 ## Opties

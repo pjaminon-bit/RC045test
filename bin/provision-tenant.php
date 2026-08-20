@@ -18,6 +18,8 @@ function provisionHelp(): void
 {
     echo "Gebruik:\n";
     echo "  php bin/provision-tenant.php --key=vereniging --name=\"Vereniging\" --url=https://vereniging.example --root=/srv/verenigingen [opties]\n\n";
+    echo "Tenant-key:\n";
+    echo "  3-63 tekens; alleen a-z, 0-9 en enkele koppeltekens; geen --; 'default' is gereserveerd.\n\n";
     echo "Opties:\n";
     echo "  --timezone=Europe/Amsterdam\n";
     echo "  --driver=json|pdo\n";
@@ -28,6 +30,38 @@ function provisionHelp(): void
 function provisionAbsoluut(string $pad): bool
 {
     return tenantRuntimeIsAbsoluutPad($pad);
+}
+
+/**
+ * Een tenant-key is een permanente technische identiteit, geen gebruikerslabel.
+ * Daarom wordt invoer hier nooit getrimd, lowercased of anders genormaliseerd.
+ * Wat niet exact aan het contract voldoet wordt geweigerd voordat een pad,
+ * configbestand of manifest wordt aangemaakt.
+ */
+function provisionValideTenantKey(string $waarde): string
+{
+    if ($waarde !== trim($waarde)) {
+        provisionStop('--key mag geen voor- of achterliggende whitespace bevatten.');
+    }
+    if (strlen($waarde) < 3 || strlen($waarde) > 63) {
+        provisionStop('--key moet tussen 3 en 63 ASCII-tekens lang zijn.');
+    }
+    if (preg_match('/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/D', $waarde) !== 1) {
+        provisionStop('--key mag alleen lowercase a-z, cijfers en koppeltekens bevatten en niet met een koppelteken beginnen/eindigen.');
+    }
+    if (str_contains($waarde, '--')) {
+        provisionStop('--key mag geen dubbele koppeltekens bevatten.');
+    }
+    if ($waarde === 'default') {
+        provisionStop("--key 'default' is gereserveerd en mag niet als tenantidentiteit worden gebruikt.");
+    }
+
+    // Defense-in-depth: het bestaande runtime-normalisatiepad moet voor iedere
+    // nieuw geprovisioneerde key exact dezelfde waarde opleveren.
+    if (!hash_equals($waarde, tenantRuntimeVeiligeSleutel($waarde))) {
+        provisionStop('--key is niet canoniek voor de tenant-runtime.');
+    }
+    return $waarde;
 }
 
 function provisionPadVoorVergelijk(string $pad): string
@@ -212,7 +246,7 @@ $opt = getopt('', ['key:', 'name:', 'url:', 'root:', 'timezone::', 'driver::', '
 if (isset($opt['help'])) { provisionHelp(); exit(0); }
 foreach (['key','name','url','root'] as $vereist) if (!isset($opt[$vereist]) || trim((string)$opt[$vereist]) === '') provisionStop("--{$vereist} is verplicht.");
 
-$key = tenantRuntimeVeiligeSleutel((string)$opt['key']);
+$key = provisionValideTenantKey((string)$opt['key']);
 $naam = trim((string)$opt['name']);
 $url = rtrim(trim((string)$opt['url']), '/');
 $baseRoot = provisionNormalizeBase((string)$opt['root']);
