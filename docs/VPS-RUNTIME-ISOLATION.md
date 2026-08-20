@@ -1,6 +1,6 @@
 # Fase 4.1 — VPS runtime & Linux-isolatie
 
-Status per **20-08-2026**: implementatie voor de VPS-runtime-laag.
+Status per **20-08-2026**: implementatie voor de VPS-runtime-laag, inclusief fase 4.1.1 re-audit hardening.
 
 Fase 3.5/3.5.1 legt vast **welke tenant** bij welke gedeelde release, host en PHP-FPM-identiteit hoort. Fase 4.1 vertaalt dat contract naar concrete Linux- en PHP-FPM-artifacts zonder secrets in Git of in de runtimebundle te plaatsen.
 
@@ -13,6 +13,7 @@ Iedere vereniging krijgt op de VPS:
 - geen interactieve login (`/usr/sbin/nologin`);
 - geen home directory (`/nonexistent`);
 - geen supplementary groups;
+- een UID en GID die niet door een andere account/groepsnaam gedeeld mogen worden;
 - één eigen PHP-FPM pool;
 - één eigen Unix socket;
 - een tenant-private PHP session directory;
@@ -137,19 +138,38 @@ sudo php bin/apply-vps-runtime.php \
 De tool:
 
 1. maakt de unieke system group aan als die nog niet bestaat;
-2. maakt de unieke system user aan met `/usr/sbin/nologin` en zonder home;
-3. controleert bij bestaande accounts dat primary group, home en shell exact kloppen;
-4. weigert iedere supplementary group;
-5. controleert de fysieke shared release voordat ownership wordt aangepast;
-6. maakt de shared release **nooit** tenant-owned;
-7. maakt tenantmetadata `root:<tenantgroup>` mode `0640`;
-8. maakt tenantroot `root:<tenantgroup>` mode `0750`;
-9. maakt `private/` tenant-owned, directories `0750`, bestanden `0640`;
-10. maakt `sessions/` en `tmp/` strenger: directory `0700`, bestanden `0600`;
-11. weigert symlinks in de tenantboom vóór recursieve ownershipwijzigingen;
-12. plaatst de FPM poolconfig atomisch als `root:root` mode `0644`.
+2. weigert een bestaande tenantgroep met expliciete groepsleden;
+3. weigert dezelfde GID onder een andere groepsnaam of als primary group van een andere account;
+4. maakt de unieke system user aan met `/usr/sbin/nologin` en zonder home;
+5. controleert bij bestaande accounts dat primary group, home en shell exact kloppen;
+6. weigert iedere supplementary group;
+7. weigert een UID die ook door een andere accountnaam wordt gebruikt;
+8. controleert dat de tenant-runtimeuser **geen actieve processen** heeft voordat ownership/modes worden aangepast; bij reapply moet de tenant-FPM-pool dus eerst worden gestopt;
+9. controleert de fysieke shared release voordat ownership wordt aangepast;
+10. maakt de shared release **nooit** tenant-owned;
+11. maakt tenantmetadata `root:<tenantgroup>` mode `0640`;
+12. maakt tenantroot `root:<tenantgroup>` mode `0750`;
+13. maakt `private/` tenant-owned, directories `0750`, bestanden `0640`;
+14. maakt `sessions/` en `tmp/` strenger: directory `0700`, bestanden `0600`;
+15. weigert symlinks in de tenantboom vóór recursieve ownershipwijzigingen;
+16. plaatst de FPM poolconfig atomisch als `root:root` mode `0644`.
 
 Een afwijkende bestaande FPM poolconfig wordt niet overschreven zonder expliciet `--force`.
+
+### Waarom UID/GID-exclusiviteit expliciet wordt gecontroleerd
+
+Linux filesystemrechten werken op numerieke UID/GID. Alleen een moeilijk te raden tenantgroepsnaam is daarom geen voldoende bewijs van isolatie wanneer een beheerder of externe directory vooraf al een account met dezelfde numerieke identiteit heeft. Fase 4.1.1 controleert via NSS/`getent` dat:
+
+- de tenant-GID niet onder een andere groepsnaam bestaat;
+- geen andere account de tenant-GID als primary group gebruikt;
+- de tenantgroep geen expliciete leden bevat;
+- de tenant-UID niet onder een andere accountnaam bestaat.
+
+Kan de volledige NSS-database niet fail-closed worden uitgelezen, dan wordt root-toepassing geweigerd.
+
+### Waarom een reapply een stilstaande runtime vereist
+
+Na de eerste livegang is `private/` eigendom van de tenant-runtimeuser. Een actieve PHP-FPM worker zou tijdens een recursieve ownership/mode-run bestanden kunnen creëren of vervangen. Daarom weigert `--apply` sinds fase 4.1.1 zolang `pgrep -u <tenantuser>` actieve processen vindt. Eerst de tenantpool stoppen, daarna toepassen, config testen en pas vervolgens gecontroleerd starten/reloaden.
 
 ## 6. Shared-code grens
 

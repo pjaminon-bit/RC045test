@@ -26,12 +26,16 @@ Omvat:
 
 - deterministische system user + unieke primary group per tenant;
 - geen login/home/supplementary groups;
+- UID/GID zijn exclusief voor die tenantidentity;
 - per-tenant PHP-FPM pool en Unix socket;
 - tenant-private PHP sessions en upload tmp;
 - ownership- en modecontract voor tenantmetadata en private opslag;
 - shared release blijft centraal beheerd en nooit tenant-writable;
 - root-vrije `--check` en aparte Linux-root `--apply`;
+- herhaalde `--apply` vereist een stilstaande tenant-runtime;
 - geen automatische PHP-FPM reload voordat de complete serverconfig is getest.
+
+**4.1.1 — runtime-isolatie re-audit:** afgerond; bestaande groeps-/UID/GID-collisions en live-process races worden fail-closed geweigerd vóór filesystemmutaties.
 
 Zie `docs/VPS-RUNTIME-ISOLATION.md`.
 
