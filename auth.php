@@ -33,7 +33,11 @@ $usersBestand = $authPaden['users'];
 $logBestand = $authPaden['audit'];
 $loginPogingenBestand = $authPaden['login_attempts'];
 $loginPogingenSlotBestand = $authPaden['login_lock'];
-$dataBackupMap = $authPaden['backups'];
+$authBackupMap = $authPaden['backups'];
+
+// De algemene backupmap blijft in deze fase bewust ongemoeid. Alleen auth-
+// backups zijn tenant-lokaal; de brede backupmigratie is een aparte auditstap.
+$dataBackupMap = __DIR__ . '/data-backups';
 $dataBackupBewaardagen = 90;
 $dataBackupMaxPerBestand = 200;
 
@@ -70,8 +74,6 @@ $loginLockoutVenster   = 15 * 60;
 $loginLockoutDrempel   = 5;
 $loginLockoutIpDrempel = 20;
 
-// Zet een tijdgestempelde kopie van $pad in $backupMap en ruimt daarna de
-// oude kopieën van datzelfde bestand op.
 function maakDataBackup($pad, $backupMap, $bewaardagen, $maxPerBestand) {
   if (!file_exists($pad)) return;
 
@@ -114,9 +116,9 @@ function laadGebruikers($pad) {
 }
 
 function schrijfGebruikers($pad, $gebruikers) {
-  global $dataBackupMap, $dataBackupBewaardagen, $dataBackupMaxPerBestand;
+  global $authBackupMap, $dataBackupBewaardagen, $dataBackupMaxPerBestand;
   if (!authStorageMaakSchrijfmap($pad)) return false;
-  maakDataBackup($pad, $dataBackupMap, $dataBackupBewaardagen, $dataBackupMaxPerBestand);
+  maakDataBackup($pad, $authBackupMap, $dataBackupBewaardagen, $dataBackupMaxPerBestand);
   $json = json_encode($gebruikers, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
   if ($json === false) return false;
   try {
@@ -135,8 +137,6 @@ function schrijfGebruikers($pad, $gebruikers) {
   return true;
 }
 
-// Auditlog is een read-modify-write-bestand. Houd één flock vast vanaf het
-// lezen tot en met truncate/write/flush.
 function schrijfLog($pad, $gebruiker, $actie, $details = '') {
   if (!authStorageMaakSchrijfmap($pad)) return false;
   $handvat = @fopen($pad, 'c+');
