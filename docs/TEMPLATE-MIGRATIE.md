@@ -14,8 +14,8 @@ Van RC045test een herbruikbare codebase maken waarbij verenigingsspecifieke gege
 - Iedere DEV-deploy schrijft `dev-build.json`; in Beheer wordt commit, branch, runnummer en deploytijd zichtbaar gemaakt zodat de geteste build controleerbaar is.
 - De deployworkflow voert vóór upload `php -l` uit op alle PHP-bestanden en daarna HTTP-smoketests.
 - Kleine, controleerbare stappen hebben voorkeur boven een grote herschrijving.
-- RC045-waarden blijven voorlopig veilige defaults zodat regressies beperkt blijven.
-- Verenigingsspecifieke configuratie kan server-only in `site-config.local.php` staan en hoort niet in Git.
+- RC045-waarden blijven voorlopig veilige defaults voor de standalone-installatie zodat regressies beperkt blijven; externe tenants erven die identiteit niet.
+- Tenantconfiguratie staat voor VPS-tenants buiten de gedeelde code/documentroot en hoort niet in Git.
 
 ### Historische branchnotitie
 
@@ -173,10 +173,11 @@ Deze punten blokkeren de template niet, maar horen bij verdere platformisering/o
 - Agenda, Sponsors en Media gebruiken nog hun eigen bestaande JSON-writer. Ze draaien onder het centrale dataslot en maken vooraf back-ups; later uniformeren op de gedeelde atomische writer.
 - Publieke legacy-pagina's bevatten nog vaste markup die runtime door de templatefilter wordt vervangen.
 - Diverse functies, variabelen, comments en data-labels gebruiken nog de prefix/naam `rc045`.
-- `styles.css` bevat RC045-kleuren als fallback-defaults; runtime worden de hoofdvariabelen per tenant overschreven.
-- Het server-only masterconfig ondersteunt tijdelijk nog een plaintext compatibility-variabele wanneer geen hash aanwezig is. Nieuwe tenants moeten uitsluitend met een password hash worden geprovisioned.
-- De huidige `.htaccess` HTTPS-redirect bevat nog `rc045.nl`; op de toekomstige VPS moet dit tenant-/webservergestuurd worden.
-- De huidige tenantoverride is bestand-gebaseerd. Een toekomstige VPS/multi-tenantlaag kan dezelfde configuratie-API uit database/provisioning voeden zonder pagina's opnieuw te herschrijven.
+- `styles.css` bevat RC045-kleuren als fallback-defaults; externe tenants krijgen sinds fase 3.3 neutrale brandingconfig en erven die identiteit niet als eigen branding.
+- Het standalone/legacy masterconfig ondersteunt tijdelijk nog een plaintext compatibility-variabele wanneer geen hash aanwezig is; nieuwe tenants gebruiken sinds fase 3.4 uitsluitend een password hash.
+- De tenantconfiguratie is bestand-gebaseerd. Een latere centrale control-plane kan dezelfde configuratie-API uit database/provisioning voeden zonder pagina's opnieuw te herschrijven.
+
+De eerdere technische schuld dat `.htaccess` voor HTTPS vast naar `rc045.nl` verwees is in fase 3.5 opgelost: de gedeelde fallback is tenant-neutraal en canonical-host/TLS wordt voor de VPS een deploymentverantwoordelijkheid.
 
 # Belangrijkste besluiten
 
@@ -194,18 +195,32 @@ Legacyfunctienamen en outputfilters mogen tijdelijk blijven zolang hun interne b
 
 ## Tenantconfiguratie buiten Git
 
-`site-config.php` bevat gedeelde defaults. Afwijkingen per vereniging staan in `site-config.local.php`, dat server-only en Git-genegeerd is. Dit is de eerste praktische stap naar meerdere verenigingen op één codebasis.
+`site-config.php` bevat gedeelde standalone defaults. Externe tenants krijgen een expliciete server-only `config.php` buiten de code/documentroot, gekoppeld via het fail-closed runtimecontract.
 
-# Volgende fase
+# Fase 3 — multi-tenant platformisering
 
-De volgende mijlpaal is het bewijs dat dit werkelijk een verenigingsplatform is: **een tweede fictieve vereniging op dezelfde gedeelde code starten zonder RC045-specifieke wijzigingen in de applicatiecode**.
+Status t/m **20-08-2026**:
 
-Daarvoor moeten minimaal worden uitgewerkt:
+- **3.1 — tenant boundary:** afgerond; private data en runtime krijgen een harde tenantgrens.
+- **3.2 — tenant provisioner:** afgerond; herhaalbare tenantconfig/private structuur zonder codekopie.
+- **3.2.1 — security hardening:** afgerond; fail-closed runtime, auth/sessies, padbeveiliging, publieke content/assets, backups en PDO-isolatie.
+- **3.3 — tweede tenantbewijs:** afgerond; twee fictieve verenigingen draaien op dezelfde code met gescheiden identiteit, modules, data en assets.
+- **3.4 — veilige eerste beheerder:** afgerond; server-only bootstrap zonder plaintext secret in Git of argv.
+- **3.5 — VPS deploymentcontract:** afgerond; gedeelde release-root, tenantgebonden runtimecontract, per-tenant PHP-FPM identiteit/socket, HTTPS/canonical-hostvoorwaarden en machineleesbaar `deployment.json`.
 
-1. tenant-identiteit/configuratie;
-2. gescheiden data-opslag;
-3. gescheiden uploads/assets;
-4. eerste beheerder per tenant;
-5. modulekeuze per tenant;
-6. provisioning/herhaalbaar installatieproces;
-7. voorbereiding op een VPS-layout waarin meerdere verenigingen dezelfde applicatiecode veilig delen.
+Fase 3.5 maakt bovendien de gedeelde Apache-fallback tenant-neutraal en haalt `bin`, `tests`, `docs` en `.github` uit het HTTP-oppervlak. De concrete VPS-layout staat in `docs/VPS-DEPLOYMENT.md`.
+
+# Open na fase 3.5
+
+De applicatie en deploymentmetadata zijn nu voorbereid voor een echte multi-tenant VPS. Nog niet geautomatiseerd zijn de infrastructuuracties zelf:
+
+1. DNS-records;
+2. TLS-certificaten en renewal;
+3. concrete Apache/Nginx-vhostinstallatie en reload;
+4. Linux users/groups en filesystem ownership per tenant;
+5. PDO/database-secret provisioning;
+6. monitoring, healthchecks en centrale logging;
+7. tenant lifecycle zoals disable, export en verwijderen;
+8. release- en rollbackautomation rond de gedeelde `current`-release.
+
+Deze vervolgstappen kunnen nu op het vaste `deployment.json`-contract bouwen zonder per vereniging applicatiecode te kopiëren.
