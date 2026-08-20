@@ -224,12 +224,20 @@ function publicAssetVeiligLeesPad(string $scope, string $relatief): ?string
     return $padReal;
 }
 
-/** Eén pre-write assetsnapshot per scope per POST-request. */
+/** Eén pre-write snapshot per assetscope per POST-request, inclusief metadata. */
 function publicAssetMaakPreWriteSnapshot(string $scope): void
 {
     static $gedaan = [];
     if (($gedaan[$scope] ?? false) || ($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST' || publicAssetTenantRoot() === null) return;
     $gedaan[$scope] = true;
+
+    require_once __DIR__ . '/public-content-store.php';
+    $metadata = $scope === 'fotoboek' ? ['fotoboek', 'fotoboek-pagina'] : ($scope === 'sponsors' ? ['sponsors'] : []);
+    foreach ($metadata as $sleutel) {
+        $data = publicContentLees($sleutel);
+        if (is_array($data)) tenantBackupMaakArray('public-' . $sleutel, $data);
+    }
+
     $root = publicAssetNamespaceRoot($scope);
     if ($root !== null && is_dir($root)) tenantBackupMaakAssetSnapshot($scope);
 }
