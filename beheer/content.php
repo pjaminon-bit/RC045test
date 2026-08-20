@@ -22,11 +22,15 @@ $_SERVER['SCRIPT_FILENAME'] = dirname(__DIR__) . '/app/content/content-beheer.ph
 // De editor bevat nog links die relatief aan de webroot zijn geschreven.
 // Omdat deze route één map dieper staat, zetten we een base-tag op de root
 // van de huidige installatie. Formulieren zonder action posten naar de
-// huidige /beheer/content.php-route.
+// huidige /beheer/content.php-route. De 2026-beheerlaag wordt als laatste
+// stylesheet toegevoegd zodat oudere inline editor-CSS veilig kan blijven.
 ob_start(static function ($html) {
     if (!is_string($html)) return $html;
     if (stripos($html, '<head>') !== false && stripos($html, '<base ') === false) {
         $html = preg_replace('~<head>~i', "<head>\n<base href=\"../\">", $html, 1) ?? $html;
+    }
+    if (stripos($html, '</head>') !== false && stripos($html, 'beheer/ui-2026.css') === false) {
+        $html = preg_replace('~</head>~i', '<link rel="stylesheet" href="beheer/ui-2026.css"></head>', $html, 1) ?? $html;
     }
     return $html;
 });
