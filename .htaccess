@@ -26,6 +26,13 @@ RewriteRule ^ https://rc045.nl%{REQUEST_URI} [R=301,L]
 
 DirectoryIndex index.php index.html
 
+# ===== Tenant-aware publieke JSON =====
+# Dynamische openbare content staat voor externe tenants buiten de documentroot.
+# Ook legacy /data/*.json-verzoeken lopen daarom via één whitelisted PHP-endpoint.
+# De bestaande standalone RC045-installatie blijft via datzelfde endpoint de
+# bestanden uit /data lezen. Media/fotoboek volgen apart in optie 8.
+RewriteRule ^data/(homepage|ontstaan|baanreglement|aanmelden|bedankt|actueel|agenda|faq|sponsors|contact|nieuws|rekentabel|lidmaatschapstypen|changelog)\.json$ public-content.php?key=$1 [L,QSA]
+
 # ===== Fotoboek: nette album-URL's =====
 RewriteRule ^fotoboek/?$ fotoboek.php [L,QSA]
 RewriteRule ^fotoboek/([a-z0-9][a-z0-9-]*)/?$ fotoboek.php?album=$1 [L,QSA,NC]
