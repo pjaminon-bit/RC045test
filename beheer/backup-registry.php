@@ -22,15 +22,14 @@ return [
     'rekentabel' => ['label'=>'Rekentabel contributie (legacy/compatibiliteit)','pad'=>$data.'/rekentabel.json','schrijffunctie'=>'json'],
     'lidmaatschapstypen' => ['label'=>'Lidmaatschapstypen','pad'=>$data.'/lidmaatschapstypen.json','schrijffunctie'=>'json'],
     'changelog' => ['label'=>'Changelog (eigen regels)','pad'=>$data.'/changelog.json','schrijffunctie'=>'json'],
-
-    // Private verenigingsadministratie.
     'leden' => ['label'=>'Ledenadministratie','pad'=>$root.'/leden-data.php','schrijffunctie'=>'phpjson'],
     'aanmeldingen_inbox' => ['label'=>'Aanmeldingen-inbox','pad'=>$root.'/aanmeldingen-data.php','schrijffunctie'=>'phpjson'],
     'contributies' => ['label'=>'Contributie-administratie','pad'=>$root.'/contributies-data.php','schrijffunctie'=>'phpjson'],
+    'groepen' => ['label'=>'Commissies en werkgroepen','pad'=>$root.'/groepen-data.php','schrijffunctie'=>'phpjson'],
+    'ledenlabels' => ['label'=>'Ledenlabels en segmenten','pad'=>$root.'/ledenlabels-data.php','schrijffunctie'=>'phpjson'],
     'vergaderingen' => ['label'=>'Vergaderingen','pad'=>$root.'/vergaderingen-data.php','schrijffunctie'=>'phpjson'],
     'taken' => ['label'=>'Taken','pad'=>$root.'/taken-data.php','schrijffunctie'=>'phpjson'],
     'operationele_taken' => ['label'=>'Operationele taken','pad'=>$root.'/operationele-taken-data.php','schrijffunctie'=>'phpjson'],
     'evenementen' => ['label'=>'Evenementen','pad'=>$root.'/evenementen-data.php','schrijffunctie'=>'phpjson'],
-
     'gebruikers' => ['label'=>'Gebruikers','pad'=>$root.'/beheer-users.json','schrijffunctie'=>'gebruikers'],
 ];
