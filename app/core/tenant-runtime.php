@@ -20,11 +20,24 @@ function tenantRuntimeVeiligeSleutel(string $waarde): string
     return trim($waarde, '-') ?: 'default';
 }
 
+/**
+ * Alleen fysiek volledige absolute paden zijn toegestaan.
+ *
+ * POSIX: uitsluitend een pad vanaf `/`.
+ * Windows: drive-root (C:\\...) of UNC (\\\\server\\share\\...).
+ * Een losse backslash is op POSIX geen root en op Windows slechts drive-
+ * relatief; die mag dus nooit als absolute tenantgrens worden behandeld.
+ */
 function tenantRuntimeIsAbsoluutPad(string $pad): bool
 {
-    if ($pad === '') return false;
-    if ($pad[0] === '/' || $pad[0] === '\\') return true;
-    return preg_match('/^[A-Za-z]:[\\\\\/]/', $pad) === 1;
+    if ($pad === '' || str_contains($pad, "\0")) return false;
+
+    if (DIRECTORY_SEPARATOR === '/') {
+        return $pad[0] === '/';
+    }
+
+    if (preg_match('/^[A-Za-z]:[\\\\\/]/', $pad) === 1) return true;
+    return str_starts_with($pad, '\\\\') || str_starts_with($pad, '//');
 }
 
 /**
