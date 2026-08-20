@@ -10,8 +10,6 @@ $legacyBestanden=[$legacyMaster,$legacyUsers,$legacyLog,$legacyAttempts];
 foreach($legacyBestanden as $pad)if(file_exists($pad)){fwrite(STDERR,"FOUT: test weigert bestaand server-only bestand te overschrijven: $pad\n");exit(1);}
 @mkdir($tmp,0750,true);
 try{
-    // Canarydata in de gedeelde projectroot. Externe tenants mogen deze onder
-    // geen beding als fallback gebruiken.
     file_put_contents($legacyMaster,"<?php \$BEHEER_WACHTWOORD_HASH=password_hash('RC045-CANARY-MASTER', PASSWORD_DEFAULT);\n");
     file_put_contents($legacyUsers,json_encode([['gebruikersnaam'=>'rc045-canary','hash'=>password_hash('RC045-CANARY-USER',PASSWORD_DEFAULT)]],JSON_PRETTY_PRINT));
     file_put_contents($legacyLog,json_encode([['tijd'=>date('c'),'gebruiker'=>'rc045-canary','actie'=>'CANARY']],JSON_PRETTY_PRINT));
@@ -84,7 +82,6 @@ PHP);
     check321auth(($legacy['config']??'')===$root.'/beheer-config.php'&&($legacy['tenant_private']??true)===false,'standalone legacy authpad blijft compatibel');
 }finally{
     foreach($legacyBestanden as $pad)@unlink($pad);
-    rrmdir321auth($root.'/data-backups'); // alleen als test deze map heeft aangemaakt; CI checkout bevat hem normaal niet
     rrmdir321auth($tmp);
 }
 
