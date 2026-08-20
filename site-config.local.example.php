@@ -1,7 +1,14 @@
 <?php
 // Voorbeeld van een server-only verenigingsconfiguratie.
-// Kopieer dit bestand op de server naar site-config.local.php en pas alleen
-// afwijkende waarden aan. site-config.local.php staat in .gitignore.
+//
+// Bestaande losse installatie:
+//   kopieer naar site-config.local.php (staat in .gitignore).
+//
+// Gedeelde multi-tenant codebase:
+//   bewaar dit bestand buiten de code/documentroot en zet per vhost/process:
+//   VERENIGING_CONFIG_FILE=/srv/verenigingen/<tenant>/config.php
+//
+// `private_root` hoort eveneens buiten de publieke documentroot te staan.
 
 return [
     'vereniging' => [
@@ -31,8 +38,10 @@ return [
     ],
     'opslag' => [
         'private_driver'=>'json',
+        'private_root'=>'/srv/verenigingen/voorbeeldvereniging/private',
         'pdo'=>[
-            // PostgreSQL voorbeeld:
+            // PostgreSQL voorbeeld. Bij private_driver=pdo is tenant_key in
+            // de tabel onderdeel van de primaire sleutel.
             // 'dsn' => 'pgsql:host=127.0.0.1;port=5432;dbname=verenigingen',
             'dsn'=>'','user'=>'','password'=>'',
         ],
