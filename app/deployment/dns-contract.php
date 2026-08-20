@@ -11,9 +11,7 @@ require_once __DIR__ . '/webserver-contract.php';
 function dns43Naam(string $naam): string
 {
     $naam = strtolower(rtrim(trim($naam), '.'));
-    if (!web42CanoniekeHost($naam)) {
-        throw new RuntimeException('DNS-naam is niet canoniek of veilig.');
-    }
+    if (!web42CanoniekeHost($naam)) throw new RuntimeException('DNS-naam is niet canoniek of veilig.');
     return $naam;
 }
 
@@ -24,8 +22,7 @@ function dns43Ip(string $ip, int $family): string
     if ($ip === '' || filter_var($ip, FILTER_VALIDATE_IP, $flag) === false) {
         throw new RuntimeException('Ongeldig IPv' . $family . '-adres in DNS-plan.');
     }
-    $bin = @inet_pton($ip);
-    $norm = $bin === false ? false : @inet_ntop($bin);
+    $bin = @inet_pton($ip); $norm = $bin === false ? false : @inet_ntop($bin);
     if (!is_string($norm) || $norm === '') throw new RuntimeException('IP-adres kon niet canoniek worden gemaakt.');
     return strtolower($norm);
 }
@@ -34,13 +31,8 @@ function dns43IpLijst(string $csv, int $family): array
 {
     if (trim($csv) === '') return [];
     $uit = [];
-    foreach (explode(',', $csv) as $deel) {
-        $ip = dns43Ip($deel, $family);
-        $uit[$ip] = true;
-    }
-    $lijst = array_keys($uit);
-    sort($lijst, SORT_STRING);
-    return $lijst;
+    foreach (explode(',', $csv) as $deel) $uit[dns43Ip($deel, $family)] = true;
+    $lijst = array_keys($uit); sort($lijst, SORT_STRING); return $lijst;
 }
 
 function dns43WebContext(string $webPlanPad): array
@@ -68,8 +60,7 @@ function dns43OutputDir(string $pad, string $tenantRoot): string
     if (!runtime41IsAbsoluutPad($pad) || runtime41HeeftRelatieveSegmenten($pad)) {
         throw new RuntimeException('DNS outputmap moet een absoluut veilig POSIX-pad zijn.');
     }
-    $pad = runtime41NormPad($pad);
-    $tenantRoot = runtime41NormPad($tenantRoot);
+    $pad = runtime41NormPad($pad); $tenantRoot = runtime41NormPad($tenantRoot);
     if (!runtime41Binnen($pad, $tenantRoot) || $pad === $tenantRoot) {
         throw new RuntimeException('DNS outputmap moet een eigen submap binnen de tenantroot zijn.');
     }
@@ -81,9 +72,7 @@ function dns43OutputDir(string $pad, string $tenantRoot): string
 function dns43Plan(array $context, string $outputDir, string $strategy, array $ipv4, array $ipv6, string $cname): array
 {
     $strategy = strtolower(trim($strategy));
-    if (!in_array($strategy, ['direct', 'cname'], true)) {
-        throw new RuntimeException('DNS-strategie moet direct of cname zijn.');
-    }
+    if (!in_array($strategy, ['direct', 'cname'], true)) throw new RuntimeException('DNS-strategie moet direct of cname zijn.');
     $outputDir = dns43OutputDir($outputDir, $context['tenant_root']);
     $host = $context['canonical_host'];
     $ipv4 = array_values(array_unique(array_map(fn($v) => dns43Ip((string)$v, 4), $ipv4)));
@@ -129,6 +118,8 @@ function dns43Plan(array $context, string $outputDir, string $strategy, array $i
             'mixed_cname_and_address_forbidden' => true,
             'cname_chain_depth' => $strategy === 'cname' ? 1 : 0,
             'live_system_resolver_required_for_readiness' => true,
+            'minimum_readiness_samples' => 3,
+            'minimum_sample_interval_seconds' => 2,
             'readiness_max_age_seconds' => 900,
         ],
         'bundle' => [
@@ -160,19 +151,14 @@ function dns43PlanLeesEnValideer(string $planPad): array
     if (!is_array($plan) || (int)($plan['schema'] ?? 0) !== 1 || ($plan['phase'] ?? '') !== '4.3') {
         throw new RuntimeException('dns-plan.json heeft een onbekend fase-4.3 schema.');
     }
-
     $context = dns43WebContext((string)($plan['source']['web_plan_file'] ?? ''));
     if (!hash_equals($context['web_plan_sha256'], (string)($plan['source']['web_plan_sha256'] ?? ''))) {
         throw new RuntimeException('web-plan.json is gewijzigd sinds dit DNS-plan is gemaakt.');
     }
     $outputDir = (string)($plan['bundle']['output_dir'] ?? '');
-    if (runtime41NormPad(dirname($planPad)) !== runtime41NormPad($outputDir)) {
-        throw new RuntimeException('dns-plan.json staat niet in zijn gebonden outputmap.');
-    }
-    $expected = $plan['expected'] ?? [];
-    $strategy = (string)($plan['strategy'] ?? '');
-    $ipv4 = (array)($expected['terminal']['a'] ?? []);
-    $ipv6 = (array)($expected['terminal']['aaaa'] ?? []);
+    if (runtime41NormPad(dirname($planPad)) !== runtime41NormPad($outputDir)) throw new RuntimeException('dns-plan.json staat niet in zijn gebonden outputmap.');
+    $expected = $plan['expected'] ?? []; $strategy = (string)($plan['strategy'] ?? '');
+    $ipv4 = (array)($expected['terminal']['a'] ?? []); $ipv6 = (array)($expected['terminal']['aaaa'] ?? []);
     $cname = $strategy === 'cname' ? (string)(($expected['owner']['cname'][0] ?? '')) : '';
     $verwacht = dns43Plan($context, $outputDir, $strategy, $ipv4, $ipv6, $cname);
     if (!hash_equals(hash('sha256', dns43Json($verwacht)), hash('sha256', dns43Json($plan)))) {
@@ -207,30 +193,70 @@ function dns43Resolve(string $naam): array
 
 function dns43RrsetsGelijk(array $a, array $b): bool
 {
-    $a = array_values($a); $b = array_values($b);
-    sort($a, SORT_STRING); sort($b, SORT_STRING);
-    return $a === $b;
+    $a = array_values($a); $b = array_values($b); sort($a, SORT_STRING); sort($b, SORT_STRING); return $a === $b;
 }
 
 function dns43Beoordeel(array $plan, array $owner, ?array $terminal = null): array
 {
-    $fouten = [];
-    $eOwner = $plan['expected']['owner'];
+    $fouten = []; $eOwner = $plan['expected']['owner'];
     foreach (['a', 'aaaa', 'cname'] as $type) {
-        if (!dns43RrsetsGelijk((array)($owner[$type] ?? []), (array)($eOwner[$type] ?? []))) {
-            $fouten[] = "Owner {$type}-RRset wijkt af van het DNS-plan.";
-        }
+        if (!dns43RrsetsGelijk((array)($owner[$type] ?? []), (array)($eOwner[$type] ?? []))) $fouten[] = "Owner {$type}-RRset wijkt af van het DNS-plan.";
     }
     if (($plan['strategy'] ?? '') === 'cname') {
         if ($terminal === null) $fouten[] = 'Terminale CNAME-resolutie ontbreekt.';
         else {
             $eTerm = $plan['expected']['terminal'];
             foreach (['a', 'aaaa', 'cname'] as $type) {
-                if (!dns43RrsetsGelijk((array)($terminal[$type] ?? []), (array)($eTerm[$type] ?? []))) {
-                    $fouten[] = "Terminal {$type}-RRset wijkt af van het DNS-plan.";
-                }
+                if (!dns43RrsetsGelijk((array)($terminal[$type] ?? []), (array)($eTerm[$type] ?? []))) $fouten[] = "Terminal {$type}-RRset wijkt af van het DNS-plan.";
             }
         }
     }
     return ['ready' => $fouten === [], 'errors' => $fouten];
+}
+
+function dns43Utc(string $waarde): int
+{
+    if (preg_match('/^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$/D', $waarde) !== 1) throw new RuntimeException('Readiness bevat geen canonieke UTC-tijd.');
+    $dt = DateTimeImmutable::createFromFormat('!Y-m-d\\TH:i:s\\Z', $waarde, new DateTimeZone('UTC'));
+    if (!$dt || $dt->format('Y-m-d\\TH:i:s\\Z') !== $waarde) throw new RuntimeException('Readiness bevat een ongeldige UTC-tijd.');
+    return $dt->getTimestamp();
+}
+
+function dns43ReadinessLeesEnValideer(string $statusPad, ?int $nu = null): array
+{
+    $statusPad = runtime41BestaandPad($statusPad, 'dns-readiness.json');
+    $raw = @file_get_contents($statusPad);
+    if ($raw === false) throw new RuntimeException('dns-readiness.json kon niet worden gelezen.');
+    try { $status = json_decode($raw, true, 512, JSON_THROW_ON_ERROR); }
+    catch (JsonException $e) { throw new RuntimeException('dns-readiness.json bevat ongeldige JSON.'); }
+    if (!is_array($status) || (int)($status['schema'] ?? 0) !== 1 || ($status['phase'] ?? '') !== '4.3-readiness' || ($status['ready'] ?? false) !== true) {
+        throw new RuntimeException('DNS-readiness is niet geldig of niet ready.');
+    }
+    if (($status['resolver_mode'] ?? '') !== 'system') throw new RuntimeException('DNS-readiness komt niet van de live systeemresolver.');
+
+    $planCtx = dns43PlanLeesEnValideer((string)($status['source']['dns_plan_file'] ?? ''));
+    $plan = $planCtx['plan'];
+    if (!hash_equals($planCtx['sha256'], (string)($status['source']['dns_plan_sha256'] ?? ''))
+        || !hash_equals((string)$plan['source']['web_plan_sha256'], (string)($status['source']['web_plan_sha256'] ?? ''))
+        || !hash_equals((string)$plan['tenant_key'], (string)($status['tenant_key'] ?? ''))
+        || !hash_equals((string)$plan['canonical_host'], (string)($status['canonical_host'] ?? ''))
+        || !hash_equals((string)$plan['strategy'], (string)($status['strategy'] ?? ''))) {
+        throw new RuntimeException('DNS-readiness is niet meer aan de actuele tenant/DNS-bron gebonden.');
+    }
+    if (runtime41NormPad($statusPad) !== runtime41NormPad((string)$plan['bundle']['readiness_file'])) throw new RuntimeException('DNS-readiness staat niet op het gebonden tenantpad.');
+
+    $samples = (int)($status['propagation']['sample_count'] ?? 0); $interval = (int)($status['propagation']['interval_seconds'] ?? -1);
+    if (($status['propagation']['scope'] ?? '') !== 'configured-system-resolver'
+        || $samples < (int)$plan['rules']['minimum_readiness_samples']
+        || $interval < (int)$plan['rules']['minimum_sample_interval_seconds']) {
+        throw new RuntimeException('DNS-readiness bewijst onvoldoende propagation-stabiliteit.');
+    }
+    $checked = dns43Utc((string)($status['checked_at_utc'] ?? '')); $expires = dns43Utc((string)($status['expires_at_utc'] ?? ''));
+    if ($expires !== $checked + (int)$plan['rules']['readiness_max_age_seconds']) throw new RuntimeException('DNS-readiness heeft een ongeldige geldigheidsduur.');
+    $nu ??= time();
+    if ($nu < $checked - 60 || $nu > $expires) throw new RuntimeException('DNS-readiness is verlopen of heeft een onmogelijke kloktijd.');
+
+    $owner = (array)($status['observed']['owner'] ?? []); $terminal = isset($status['observed']['terminal']) && is_array($status['observed']['terminal']) ? $status['observed']['terminal'] : null;
+    if ((dns43Beoordeel($plan, $owner, $terminal)['ready'] ?? false) !== true) throw new RuntimeException('Opgeslagen DNS-observatie voldoet niet meer aan het gebonden plan.');
+    return ['status' => $status, 'plan_context' => $planCtx, 'path' => $statusPad, 'sha256' => hash('sha256', $raw)];
 }
