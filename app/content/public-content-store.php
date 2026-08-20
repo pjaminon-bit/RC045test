@@ -41,6 +41,14 @@ function publicContentBestandsnaam(string $sleutel): ?string
     return isset($definities[$sleutel]) ? $definities[$sleutel] : null;
 }
 
+function publicContentPadVoorVergelijk(string $pad): string
+{
+    $pad = str_replace('\\', '/', $pad);
+    $pad = (string) preg_replace('~/+~', '/', $pad);
+    if (DIRECTORY_SEPARATOR === '\\') $pad = strtolower($pad);
+    return rtrim($pad, '/');
+}
+
 function publicContentLegacyRoot(): string
 {
     return siteProjectRoot() . DIRECTORY_SEPARATOR . 'data';
@@ -76,6 +84,15 @@ function publicContentPad(string $sleutel): ?string
     return $root . DIRECTORY_SEPARATOR . $bestand;
 }
 
+function publicContentIsTenantPad(string $pad): bool
+{
+    $tenantRoot = publicContentTenantRoot();
+    if ($tenantRoot === null) return false;
+    $pad = publicContentPadVoorVergelijk($pad);
+    $root = publicContentPadVoorVergelijk($tenantRoot);
+    return $pad === $root || strncmp($pad, $root . '/', strlen($root) + 1) === 0;
+}
+
 /**
  * Compatibiliteitsadapter voor bestaande beheereditors die nog een absoluut
  * projectpad als /data/contact.json doorgeven. Alleen exact geregistreerde
@@ -83,17 +100,10 @@ function publicContentPad(string $sleutel): ?string
  */
 function publicContentMapLegacyPad(string $pad): string
 {
-    $vergelijk = static function (string $waarde): string {
-        $waarde = str_replace('\\', '/', $waarde);
-        $waarde = (string) preg_replace('~/+~', '/', $waarde);
-        if (DIRECTORY_SEPARATOR === '\\') $waarde = strtolower($waarde);
-        return rtrim($waarde, '/');
-    };
-
     $legacyRoot = publicContentLegacyRoot();
     foreach (publicContentDefinities() as $sleutel => $bestand) {
         $legacy = $legacyRoot . DIRECTORY_SEPARATOR . $bestand;
-        if ($vergelijk($pad) === $vergelijk($legacy)) {
+        if (publicContentPadVoorVergelijk($pad) === publicContentPadVoorVergelijk($legacy)) {
             return publicContentPad((string) $sleutel) ?? $pad;
         }
     }
