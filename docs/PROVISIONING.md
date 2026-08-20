@@ -26,6 +26,7 @@ Dit maakt aan:
     ├── auth/
     ├── audit/
     ├── security/
+    ├── sessions/
     └── backups/
         └── auth/
 ```
@@ -58,6 +59,7 @@ private/audit/log.json
 private/security/login-attempts.json
 private/security/.login-attempts.lock
 private/backups/auth/
+private/sessions/
 ```
 
 Er is voor een tenant met `private_root` **geen fallback** naar `beheer-config.php`, `beheer-users.json`, `beheer-log.json` of `beheer-login-pogingen.json` in de gedeelde applicatieroot.
@@ -71,10 +73,24 @@ $BEHEER_WACHTWOORD_HASH = '...password_hash-resultaat...';
 
 Een generiek of gedeeld standaardwachtwoord tussen verenigingen is dus niet onderdeel van provisioning.
 
+## Veilige filesystempaden
+
+`--root` wordt als securitygrens behandeld, niet alleen als tekstuele mapnaam.
+
+- Het pad moet absoluut zijn.
+- `.` en `..` als padsegment worden geweigerd; de provisioner normaliseert traversal niet stil weg.
+- Een bestaande symlink op `--root`, een ancestor, de tenantmap, een private submap of een te schrijven bestand wordt geweigerd. Ook broken symlinks vallen hieronder.
+- Voor nog niet bestaande doelen wordt de langste bestaande ancestor via `realpath()` fysiek opgelost. Pas daarna worden de gevalideerde nieuwe componenten aangehangen.
+- De fysieke tenantroot mag niet binnen de gedeelde applicatie/documentroot vallen.
+- Directory- en filewrites voeren vlak vóór gebruik opnieuw een containment- en symlinkcontrole uit. Na directorycreatie volgt opnieuw een fysieke controle.
+- `config.php`, `runtime.env` en `tenant.json` worden nooit via een symlinkdoel overschreven, ook niet met `--force`.
+
+De provisioner is een beheertool en veronderstelt dat de filesystemhiërarchie waarin `--root` ligt niet gelijktijdig door een onbetrouwbare lokale gebruiker kan worden gewijzigd. Op de VPS hoort bijvoorbeeld `/srv/verenigingen` daarom alleen schrijfbaar te zijn voor de vertrouwde provisioning-/beheeraccount. De applicatie zelf hoeft geen schrijfrecht op de bovenliggende tenantroot te hebben buiten de expliciet benodigde tenantmappen.
+
 ## Veiligheidsregels
 
-- `--root` moet absoluut zijn.
-- Tenantdata binnen de applicatie/documentroot wordt geweigerd.
+- `--root` moet absoluut en symlinkvrij zijn en mag geen `.`/`..`-segmenten bevatten.
+- Tenantdata binnen de applicatie/documentroot wordt op het fysiek gecanonicaliseerde pad geweigerd.
 - Nieuwe geprovisioneerde tenants krijgen altijd `VERENIGING_REQUIRE_TENANT_CONFIG=1` in `runtime.env`.
 - Een ontbrekende tenantconfig faalt in die modus gesloten; RC045/defaultconfig wordt niet geladen.
 - Authbestanden van externe tenants staan onder hun eigen `private_root`; gedeelde root-authdata wordt niet gebruikt als fallback.
@@ -82,7 +98,7 @@ Een generiek of gedeeld standaardwachtwoord tussen verenigingen is dus niet onde
 - Een onbekende waarde voor `VERENIGING_REQUIRE_TENANT_CONFIG` wordt als configuratiefout geweigerd in plaats van stil als aan/uit geïnterpreteerd.
 - Een bestaande afwijkende `config.php`, `runtime.env` of `tenant.json` wordt zonder `--force` niet overschreven.
 - Dezelfde opdracht nogmaals uitvoeren is idempotent: identieke bestanden blijven ongewijzigd.
-- `--dry-run` laat zien wat zou gebeuren zonder mappen of bestanden aan te maken.
+- `--dry-run` voert dezelfde padveiligheidscontroles uit, maar maakt geen mappen of bestanden aan.
 - De provisioner weigert uitvoering via HTTP en is alleen voor CLI bedoeld.
 
 ## Opties
