@@ -98,7 +98,7 @@ function provisionCanoniekDoelpad(string $pad): string
     }
 
     if (is_link($cursor)) provisionStop("Symlink in provisioningpad is niet toegestaan: {$cursor}");
-    if (!is_dir($cursor)) provisionStop("Bestaande ancestor van provisioningpad is geen map: {$cursor}");
+    if (count($staart) > 0 && !is_dir($cursor)) provisionStop("Bestaande ancestor van provisioningpad is geen map: {$cursor}");
 
     $basis = realpath($cursor);
     if ($basis === false) provisionStop("Provisioningpad kon niet fysiek worden opgelost: {$cursor}");
