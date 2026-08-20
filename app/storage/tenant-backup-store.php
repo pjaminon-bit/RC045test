@@ -129,8 +129,10 @@ function tenantBackupMaakMap(string $map): bool
 function tenantBackupMicroTijd(): string
 {
     $nu = microtime(true);
-    $micro = (int) round(($nu - floor($nu)) * 1000000);
-    return date('Y-m-d_His', (int) $nu) . '_' . sprintf('%06d', min(999999, $micro));
+    $seconde = (int) floor($nu);
+    $micro = (int) floor(($nu - $seconde) * 1000000);
+    $micro = max(0, min(999999, $micro));
+    return date('Y-m-d_His', $seconde) . '_' . sprintf('%06d', $micro);
 }
 
 function tenantBackupDataMap(string $sleutel): ?string
@@ -201,6 +203,50 @@ function tenantBackupDataLijst(string $sleutel): array
     return $files;
 }
 
+/**
+ * Een users-snapshot mag nooit een oude sessie opnieuw geldig maken.
+ * Daarom krijgt ieder hersteld account een sessie_versie die strikt hoger is
+ * dan zowel de snapshotversie als de nu actieve versie van hetzelfde account.
+ * Dit is bewust onderdeel van de restore-read: beheer/backups.php schrijft
+ * exact deze geharde data terug en bestaande sessies falen daarna gesloten.
+ */
+function tenantBackupHardenGebruikersHerstel(array $hersteld): array
+{
+    $privateRoot = tenantRuntimePrivateRoot(siteConfig());
+    if ($privateRoot === null) return $hersteld;
+
+    $usersPad = $privateRoot . DIRECTORY_SEPARATOR . 'auth' . DIRECTORY_SEPARATOR . 'users.json';
+    $huidig = [];
+    if (file_exists($usersPad) || is_link($usersPad)) {
+        if (!is_file($usersPad) || is_link($usersPad) || !tenantBackupPadVeilig($usersPad)) {
+            throw new RuntimeException('Actuele gebruikersopslag is niet veilig beschikbaar voor restore.');
+        }
+        $raw = @file_get_contents($usersPad);
+        $decoded = $raw === false ? null : json_decode($raw, true);
+        if (!is_array($decoded)) throw new RuntimeException('Actuele gebruikersopslag is beschadigd; restore afgebroken.');
+        $huidig = $decoded;
+    }
+
+    $versies = [];
+    foreach ($huidig as $account) {
+        if (!is_array($account)) continue;
+        $naam = strtolower(trim((string)($account['gebruikersnaam'] ?? '')));
+        if ($naam === '') continue;
+        $versies[$naam] = max(1, (int)($account['sessie_versie'] ?? 1));
+    }
+
+    foreach ($hersteld as $i => $account) {
+        if (!is_array($account)) continue;
+        $naam = strtolower(trim((string)($account['gebruikersnaam'] ?? '')));
+        $snapshotVersie = max(1, (int)($account['sessie_versie'] ?? 1));
+        $actueel = $naam !== '' ? max(1, (int)($versies[$naam] ?? 1)) : 1;
+        $basis = max($snapshotVersie, $actueel);
+        if ($basis >= PHP_INT_MAX) throw new RuntimeException('Gebruikersrestore bevat een ongeldige sessieversie.');
+        $hersteld[$i]['sessie_versie'] = $basis + 1;
+    }
+    return $hersteld;
+}
+
 /** Leest alleen een bestand uit exact de map van de gevraagde backup-key. */
 function tenantBackupLeesArray(string $sleutel, string $bestandsnaam, ?string &$fout = null): ?array
 {
@@ -226,7 +272,16 @@ function tenantBackupLeesArray(string $sleutel, string $bestandsnaam, ?string &$
     if (!hash_equals(tenantBackupTenantKey(), (string)($env['tenant_key'] ?? '')) || !hash_equals($sleutel, (string)($env['backup_key'] ?? ''))) {
         $fout = 'Back-up hoort niet bij deze tenant of dit onderdeel.'; return null;
     }
-    return $env['data'];
+
+    try {
+        return $sleutel === 'auth-gebruikers'
+            ? tenantBackupHardenGebruikersHerstel($env['data'])
+            : $env['data'];
+    } catch (Throwable $e) {
+        error_log('[platform] gebruikersrestore sessie-hardening mislukt: ' . $e->getMessage());
+        $fout = 'Gebruikersback-up kon niet veilig voor herstel worden voorbereid.';
+        return null;
+    }
 }
 
 function tenantBackupVerwijderMap(string $map): void
