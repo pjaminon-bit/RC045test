@@ -57,10 +57,20 @@ $ledenIndex = t25file($root . '/leden/index.php');
 t25(strpos($ledenIndex, 'leden-app.php') === false, '/leden/ is geen wrapper meer om legacy leden-app');
 t25(strpos($ledenIndex, 'Mijn ') !== false && strpos($ledenIndex, 'portaal-service.php') !== false, '/leden/ is persoonlijk portaal');
 
+// Belangrijk: deze test bevat zelf de verboden helpernaam als zoekterm. Sla
+// daarom dit testbestand over; anders matcht de scanner per definitie zichzelf.
 $it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS));
 $verkeerdeHelper = [];
-foreach($it as $file){if(!$file->isFile()||strtolower($file->getExtension())!=='php'||strpos($file->getPathname(),DIRECTORY_SEPARATOR.'.git'.DIRECTORY_SEPARATOR)!==false)continue;$txt=(string)file_get_contents($file->getPathname());if(strpos($txt,'siteVerenigingNaam(')!==false)$verkeerdeHelper[]=$file->getPathname();}
-t25(!$verkeerdeHelper, 'geen niet-bestaande siteVerenigingNaam-helper gebruikt');
+$zoekterm = 'site' . 'VerenigingNaam(';
+foreach($it as $file){
+    if(!$file->isFile()||strtolower($file->getExtension())!=='php')continue;
+    $pad=$file->getPathname();
+    if(realpath($pad)===realpath(__FILE__))continue;
+    if(strpos($pad,DIRECTORY_SEPARATOR.'.git'.DIRECTORY_SEPARATOR)!==false)continue;
+    $txt=(string)file_get_contents($pad);
+    if(strpos($txt,$zoekterm)!==false)$verkeerdeHelper[]=$pad;
+}
+t25(!$verkeerdeHelper, 'geen niet-bestaande sitenaam-helper gebruikt');
 
 $muterend = [
     'beheer/leden.php'=>'members.', 'beheer/leden-import.php'=>'members.manage',
