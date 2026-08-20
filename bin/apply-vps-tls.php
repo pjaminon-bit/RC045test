@@ -75,11 +75,11 @@ function apply44LinksPlaats(array $paren): array
     catch(Throwable $e){foreach($nieuw as $link=>$isNieuw)if($isNieuw&&is_link($link))@unlink($link);throw $e;}
     return $nieuw;
 }
-function apply44ConfigtestResult(array $plan): array
+function apply44Configtest(array $plan): array
 {
     [$c,$o,$e]=apply44Run([$plan['apache']['control_binary'],'configtest']);return[$c===0,trim($o."\n".$e)];
 }
-function apply44ReloadResult(): array
+function apply44Reload(): array
 {
     [$c,$o,$e]=apply44Run(['/usr/bin/systemctl','reload','apache2']);return[$c===0,trim($o."\n".$e)];
 }
@@ -95,10 +95,10 @@ function apply44Candidate(array $plan,string $se,array $nieuweLinks,string $fase
 {
     $volgorde=apply44CatchallFout($plan,$se);
     if($volgorde!==null){apply44HerstelLinks($nieuweLinks);throw new RuntimeException($fase.' geweigerd: '.$volgorde);}
-    [$ok,$melding]=apply44ConfigtestResult($plan);
-    if(!$ok){apply44HerstelLinks($nieuweLinks);[$herstelOk]=apply44ConfigtestResult($plan);if(!$herstelOk)throw new RuntimeException($fase.' configtest faalde én rollbackconfig is niet geldig; handmatige interventie vereist: '.$melding);throw new RuntimeException($fase.' configtest faalde; nieuw geplaatste site-links zijn teruggedraaid: '.$melding);}
-    [$reloadOk,$reloadMelding]=apply44ReloadResult();
-    if(!$reloadOk){apply44HerstelLinks($nieuweLinks);[$herstelOk]=apply44ConfigtestResult($plan);if($herstelOk)apply44ReloadResult();throw new RuntimeException($fase.' Apache reload faalde; nieuw geplaatste site-links zijn zo mogelijk teruggedraaid: '.$reloadMelding);}
+    [$ok,$melding]=apply44Configtest($plan);
+    if(!$ok){apply44HerstelLinks($nieuweLinks);[$herstelOk]=apply44Configtest($plan);if(!$herstelOk)throw new RuntimeException($fase.' configtest faalde én rollbackconfig is niet geldig; handmatige interventie vereist: '.$melding);throw new RuntimeException($fase.' configtest faalde; nieuw geplaatste site-links zijn teruggedraaid: '.$melding);}
+    [$reloadOk,$reloadMelding]=apply44Reload();
+    if(!$reloadOk){apply44HerstelLinks($nieuweLinks);[$herstelOk]=apply44Configtest($plan);if($herstelOk)apply44Reload();throw new RuntimeException($fase.' Apache reload faalde; nieuw geplaatste site-links zijn zo mogelijk teruggedraaid: '.$reloadMelding);}
 }
 function apply44DefaultCertValideer(array $plan): bool
 {
@@ -128,7 +128,7 @@ function apply44CertValideer(array $plan): void
 }
 function apply44RollbackHttp(array $plan,array $dirs,bool $tenantWas,bool $catchWas): void
 {
-    if(!$tenantWas)@unlink($dirs['se'].'/'.$plan['apache']['tenant_http_filename']);if(!$catchWas)@unlink($dirs['se'].'/'.$plan['apache']['http_catchall_filename']);[$ok]=apply44ConfigtestResult($plan);if($ok)apply44ReloadResult();
+    if(!$tenantWas)@unlink($dirs['se'].'/'.$plan['apache']['tenant_http_filename']);if(!$catchWas)@unlink($dirs['se'].'/'.$plan['apache']['http_catchall_filename']);[$ok]=apply44Configtest($plan);if($ok)apply44Reload();
 }
 
 foreach($_SERVER['argv']??[] as $arg)if(preg_match('/^--(?:password|hash|secret|dsn|db-password|token|key|certificate|private-key|email)(?:=|$)/i',(string)$arg)===1)apply44Stop('Secrets/contactdata horen niet in fase-4.4 CLI-argumenten.');
