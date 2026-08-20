@@ -59,6 +59,8 @@ jobs:
           php tests/phase33-second-tenant.php
           php tests/phase34-admin-bootstrap.php
           php tests/phase35-vps-deployment.php
+          php tests/phase351-security-reaudit.php
+          php tests/phase351-master-session-generation.php
           php tests/private-store-pdo-sqlite.php
           php tests/phase321-pdo-isolation.php
           php tests/private-store-pdo-failclosed.php
@@ -156,5 +158,6 @@ jobs:
           wacht_op_status "$basis/bin/bootstrap-tenant-admin.php" 403 nee
           wacht_op_status "$basis/bin/prepare-vps-deployment.php" 403 nee
           wacht_op_status "$basis/tests/phase35-vps-deployment.php" 403 nee
+          wacht_op_status "$basis/tests/phase351-security-reaudit.php" 403 nee
           wacht_op_status "$basis/docs/VPS-DEPLOYMENT.md" 403 nee
           wacht_op_status "$basis/dev-build.json" 403 nee

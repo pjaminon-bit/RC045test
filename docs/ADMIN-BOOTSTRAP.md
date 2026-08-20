@@ -1,6 +1,6 @@
 # Veilige eerste tenantbeheerder
 
-Vanaf fase 3.4 krijgt een nieuwe externe tenant zijn eerste beheercredential via `bin/bootstrap-tenant-admin.php`.
+Vanaf fase 3.4 krijgt een nieuwe externe tenant zijn eerste beheercredential via `bin/bootstrap-tenant-admin.php`. Fase 3.5.1 hardent de rotatie zodat een wachtwoordwissel ook alle bestaande tenant-sessies intrekt.
 
 De provisioner maakt bewust geen standaardwachtwoord aan. Daardoor bestaat er nooit een gedeeld wachtwoord dat bij iedere nieuwe vereniging geldig is.
 
@@ -53,7 +53,7 @@ De bootstrap vertrouwt niet alleen op een los pad. Voor iedere write moeten deze
 - `tenant.json` heeft dezelfde tenant-key;
 - `tenant.json` bindt exact aan dezelfde `config_file` en `private_root`;
 - `require_tenant_config` staat in het manifest op `true`;
-- `private/auth` en `private/backups/auth` zijn bestaande symlinkvrije mappen binnen dezelfde private root.
+- `private/auth`, `private/backups/auth` en `private/sessions` zijn bestaande symlinkvrije mappen binnen dezelfde private root.
 
 Een gekopieerde config of gemanipuleerd manifest kan daardoor niet worden gebruikt om de mastercredential van een andere vereniging te schrijven.
 
@@ -71,6 +71,10 @@ php bin/bootstrap-tenant-admin.php \
 
 Voor de vervanging wordt de vorige `master.php` server-side onder `private/backups/auth/` bewaard. De bootstrap bewaart maximaal 20 masterbackups en verwijdert backups ouder dan 90 dagen. Ook deze backups bevatten alleen hashes.
 
+Daarna worden **alle bestaande PHP-sessiebestanden van deze tenant verwijderd voordat de nieuwe masterhash wordt geplaatst**. Daardoor kan een browser die vóór de wachtwoordrotatie als master of gewone gebruiker was ingelogd niet met die oude sessie doorgaan. Iedereen logt na een masterrotatie opnieuw in. Een fout bij het intrekken van een sessiebestand stopt de rotatie fail-closed.
+
+Daarnaast is de tenant-sessiecookie-namespace afgeleid van de actieve `master.php`-generatie. Een nieuwe password hash verandert dus de cookienaam zelf. Dat sluit ook het race-randgeval waarin precies tijdens de rotatie een request of login loopt: een sessie uit de oude credentialgeneratie kan niet in de namespace van de nieuwe generatie doorrollen. De hash van `master.php` wordt alleen server-side gebruikt als onderdeel van een SHA-256 fingerprint; wachtwoord en password hash komen niet in de browsercookie terecht.
+
 `--rotate` op een tenant die nog geen mastercredential heeft wordt geweigerd. Zo blijven bootstrap en credentialrotatie twee expliciete handelingen.
 
 ## Write-hardening
@@ -78,7 +82,9 @@ Voor de vervanging wordt de vorige `master.php` server-side onder `private/backu
 De bootstrap:
 
 - gebruikt een exclusieve tenant-lokale `flock` om gelijktijdige credentialwrites te serialiseren;
-- weigert symlinks in config-, manifest-, private-, auth-, backup- en masterpaden;
+- weigert symlinks in config-, manifest-, private-, auth-, backup-, session- en masterpaden;
+- maakt een secondegrens-veilige backupnaam uit één microtime-meting plus random suffix;
+- valideert vóór een rotatie de volledige sessiemap en trekt daarna alle bestaande sessies in;
 - schrijft eerst naar een willekeurig tijdelijk bestand in dezelfde authmap;
 - zet server-only bestandsrechten;
 - controleert het masterdoel opnieuw vlak vóór plaatsing;

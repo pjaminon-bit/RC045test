@@ -41,6 +41,8 @@ try {
     check35($prepA===0&&$prepB===0&&is_array($jsonA)&&is_array($jsonB),'deploymentcontract wordt voor twee tenants succesvol opgebouwd');
     check35(($jsonA['schema']??0)===1&&($jsonB['schema']??0)===1,'deploymentdescriptor heeft expliciete schema-versie');
     check35(($jsonA['canonical_host']??'')==='noorderhaven.example'&&($jsonB['canonical_host']??'')==='duinrand.example','ieder deploymentcontract bindt aan eigen canonieke host');
+    check35(($jsonA['web']['http_redirect_target']??'')==='https://noorderhaven.example'&&($jsonA['web']['redirect_must_not_use_request_host']??false)===true,'HTTP redirectdoel is de vaste canonieke tenant-URL en nooit request-Host');
+    check35(($jsonA['web']['reject_unknown_hosts']??false)===true&&($jsonA['web']['default_vhost_must_reject']??false)===true,'VPS-contract vereist onbekende-hostafwijzing en catch-all default vhost');
     check35(($jsonA['shared_code']['app_root_real']??'')===realpath($root)&&($jsonB['shared_code']['app_root_real']??'')===realpath($root),'beide tenants delen exact dezelfde fysieke applicatiecode');
     check35(($jsonA['shared_code']['document_root']??'')===$root&&($jsonB['shared_code']['document_root']??'')===$root,'web documentroot wijst voor beide tenants naar gedeelde code en niet naar tenantdata');
     check35(($jsonA['tenant']['private_root']??'')!==($jsonB['tenant']['private_root']??''),'private roots blijven per tenant fysiek gescheiden');
@@ -48,7 +50,7 @@ try {
     check35(($jsonA['php_fpm']['recommended_os_user']??'')!==($jsonB['php_fpm']['recommended_os_user']??''),'aanbevolen OS-runtime identity is per tenant uniek');
     check35(($jsonA['php_fpm']['clear_env']??false)===true&&($jsonA['php_fpm']['one_pool_per_tenant']??false)===true,'PHP-FPM contract vereist clear_env en één pool per tenant');
     check35(($jsonA['runtime_env']['VERENIGING_REQUIRE_TENANT_CONFIG']??'')==='1'&&($jsonA['runtime_env']['VERENIGING_CONFIG_FILE']??'')===$cfgA,'runtimecontract injecteert fail-closed tenantconfig exact');
-    check35(($jsonA['readiness']['admin_bootstrapped']??false)===true&&($jsonA['readiness']['tenant_storage_outside_app_root']??false)===true,'readiness bewijst adminbootstrap en opslag buiten app-root');
+    check35(($jsonA['readiness']['admin_bootstrapped']??false)===true&&($jsonA['readiness']['tenant_storage_outside_app_root']??false)===true&&($jsonA['readiness']['canonical_host_contract']??false)===true,'readiness bewijst adminbootstrap, externe opslag en canonical-hostcontract');
     $rawA=(string)file_get_contents($depA);
     check35(!str_contains(strtolower($rawA),'password')&&!str_contains(strtolower($rawA),'dsn')&&!str_contains($rawA,'BEHEER_WACHTWOORD_HASH'),'deploymentdescriptor bevat geen database- of authenticatiesecrets');
     $perm=fileperms($depA); check35($perm!==false&&(($perm&0777)===0640),'deployment.json krijgt server-only bestandsrechten 0640');
@@ -118,11 +120,12 @@ try {
 
     $ht=(string)file_get_contents($root.'/.htaccess');
     check35(!str_contains($ht,'https://rc045.nl%{REQUEST_URI}')&&!str_contains($ht,'RC045_HTTPS'),'gedeelde Apache-laag bevat geen vaste RC045 HTTPS-redirect of tenantnaam meer');
-    check35(str_contains($ht,'VST_HTTPS')&&str_contains($ht,'https://%1%{REQUEST_URI}'),'Apache fallbackredirect behoudt veilige host en is tenant-neutraal');
-    check35(str_contains($ht,'app|bin|tests|docs'),'server-only ontwikkel- en beheertooling is centraal uit HTTP-surface verwijderd');
+    check35(!str_contains($ht,'%{HTTP_HOST}')&&!str_contains($ht,'https://%1%{REQUEST_URI}')&&!str_contains($ht,'VST_HTTPS'),'gedeelde Apache-laag reflecteert geen request-Host meer in HTTPS-redirects');
+    check35(str_contains($ht,'app|bin|tests|docs|\\.github|\\.git'),'server-only tooling én .git metadata zijn centraal uit HTTP-surface verwijderd');
 
     $src=(string)file_get_contents($root.'/bin/prepare-vps-deployment.php');
     check35(str_contains($src,'read_only_for_tenant_runtime')&&str_contains($src,'one_pool_per_tenant'),'deploymentcontract legt shared-code read-only en per-tenant runtime-isolatie vast');
+    check35(str_contains($src,'default_vhost_must_reject')&&str_contains($src,'redirect_must_not_use_request_host'),'deploymentcontract verankert catch-all hostafwijzing en veilige redirects');
     check35(!str_contains($src,"'password' =>")&&!str_contains($src,"'dsn' =>"),'deploymenttool serializeert bewust geen secretvelden');
 } finally {
     rrmdir35($tmp);

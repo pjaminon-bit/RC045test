@@ -1,8 +1,8 @@
 # VPS deploymentcontract
 
-Status per **20-08-2026**: fase 3.5.
+Status per **20-08-2026**: fase 3.5.1.
 
-Dit document legt de serverlayout vast waarmee meerdere verenigingen dezelfde applicatiecode veilig kunnen gebruiken. Fase 3.5 installeert nog geen DNS, TLS of webserverconfiguratie; zij levert wel het vaste, machineleesbare contract waarop die automation kan bouwen.
+Dit document legt de serverlayout vast waarmee meerdere verenigingen dezelfde applicatiecode veilig kunnen gebruiken. Fase 3.5/3.5.1 installeert nog geen DNS, TLS of webserverconfiguratie; zij levert wel het vaste, machineleesbare contract waarop die automation kan bouwen.
 
 ## Doelarchitectuur
 
@@ -87,7 +87,8 @@ Het descriptor bevat uitsluitend niet-geheime deploymentmetadata, waaronder:
 - het exacte fail-closed runtime-environment;
 - een deterministische PHP-FPM poolnaam en Unix-socket;
 - een unieke aanbevolen OS-runtimegebruiker;
-- readiness-vlaggen voor manifestbinding, runtimebinding en adminbootstrap.
+- readiness-vlaggen voor manifestbinding, runtimebinding, adminbootstrap en canonical-hostcontract;
+- webvereisten voor catch-all hostafwijzing en veilige HTTP→HTTPS-redirects.
 
 Het descriptor bevat bewust **geen**:
 
@@ -130,23 +131,59 @@ De precieze `pm.*` capaciteit wordt later op VPS-capaciteit afgestemd; dat is ge
 
 ## Webservercontract
 
-Voor Apache of Nginx gelden dezelfde regels:
+Voor Apache of Nginx gelden dezelfde harde regels:
 
 1. `server_name`/`ServerName` is exact `canonical_host` uit het descriptor;
-2. HTTP wordt naar HTTPS op **dezelfde canonieke host** gestuurd;
-3. documentroot is de gedeelde `shared_code.app_root`;
-4. PHP voor die host gaat uitsluitend naar de eigen `php_fpm.socket`;
-5. de tenantroot/private root wordt nooit rechtstreeks geserveerd;
-6. `public-content.php` en `public-asset.php` blijven de enige gateways naar tenant-publieke data/assets;
-7. server-only code en ontwikkeltooling (`app`, `bin`, `tests`, `docs`, `.github`) zijn niet via HTTP bereikbaar.
+2. de HTTP-vhost redirect naar de **vaste** `web.http_redirect_target`; een request-`Host` mag nooit in de redirect worden teruggespiegeld;
+3. er bestaat vóór alle tenantvhosts een default/catch-all vhost die onbekende hosts weigert en nooit PHP naar een tenantpool stuurt;
+4. documentroot is de gedeelde `shared_code.app_root`;
+5. PHP voor de canonieke host gaat uitsluitend naar de eigen `php_fpm.socket`;
+6. de tenantroot/private root wordt nooit rechtstreeks geserveerd;
+7. `public-content.php` en `public-asset.php` blijven de enige gateways naar tenant-publieke data/assets;
+8. server-only code en ontwikkeltooling (`app`, `bin`, `tests`, `docs`, `.github`) én VCS-metadata zoals `.git` zijn niet via HTTP bereikbaar.
 
-### Apache
+### Waarom de gedeelde `.htaccess` niet redirect
 
-De gedeelde `.htaccess` bevat de bestaande content-/assetrouting en deny-regels. Vanaf fase 3.5 bevat de HTTPS-fallback geen vaste `rc045.nl` meer. De uiteindelijke VPS-vhost hoort canonical-host en TLS desondanks op vhostniveau af te dwingen.
+Sinds fase 3.5.1 doet de gedeelde `.htaccess` bewust **geen** HTTP→HTTPS-redirect meer. De codebase kent op dat niveau niet betrouwbaar welke tenantvhost de request had moeten accepteren, terwijl `HTTP_HOST` clientinvoer is. De huidige standalone/DEV-hosting handelt HTTP→HTTPS vóór deze laag af; op de VPS doet de vhost/reverse proxy dit met een literal canonical host.
 
-### Nginx
+### Apache — vereiste vorm
 
-Nginx leest `.htaccess` niet. Een Nginx-deployment moet daarom de deny-regels en de exacte routing voor publieke content/assets expliciet overnemen. Gebruik nooit een algemene alias naar `private/`.
+De exacte syntax hangt af van de uiteindelijke VPS, maar de volgorde is essentieel. Eerst een catch-all, daarna pas tenantvhosts.
+
+```apache
+# Eerste/default HTTP-vhost: nooit naar een tenant redirecten.
+<VirtualHost *:80>
+    ServerName invalid.local
+    <Location />
+        Require all denied
+    </Location>
+</VirtualHost>
+
+# Tenant HTTP-vhost: literal redirect, geen %{HTTP_HOST}.
+<VirtualHost *:80>
+    ServerName noorderhaven.example
+    Redirect permanent / https://noorderhaven.example/
+</VirtualHost>
+
+# Tenant HTTPS-vhost.
+<VirtualHost *:443>
+    ServerName noorderhaven.example
+    DocumentRoot /srv/verenigingsplatform/current
+    # TLS-config en ProxyPassMatch/SetHandler naar exact de tenant-FPM-socket.
+</VirtualHost>
+```
+
+Voor HTTPS moet eveneens een expliciete default/catch-all configuratie bestaan die een onbekende SNI/Host niet aan de eerste tenantpool koppelt. De concrete TLS-catch-all wordt in de VPS-automation uitgewerkt, omdat certificaatstrategie en Apache/Nginx-keuze daar onderdeel van zijn.
+
+### Nginx — vereiste vorm
+
+Nginx leest `.htaccess` niet. Een Nginx-deployment moet de deny-regels en de exacte routing voor publieke content/assets expliciet overnemen. Gebruik nooit een algemene alias naar `private/`.
+
+Conceptueel begint de configuratie met een default server die onbekende hosts direct weigert, gevolgd door tenantservers met een literal HTTP→HTTPS redirect. Gebruik ook hier nooit `$host` als redirectdoel wanneer `canonical_host` al bekend is.
+
+## Release-inhoud en VCS-metadata
+
+Een live release hoort bij voorkeur uit een build/export zonder `.git` te bestaan. Defense-in-depth blokkeert de gedeelde Apache-laag `.git` daarnaast expliciet. Voor Nginx moet dezelfde deny-regel in de serverconfiguratie worden opgenomen. `deployment.json.web.vcs_metadata_must_not_be_served=true` maakt dit een deploymentvereiste.
 
 ## Filesystem ownership
 
@@ -174,7 +211,7 @@ De gedeelde code maakt later een releaseflow mogelijk zonder tenantcode te kopi�
 
 Tenantdata, uploads, auth en sessies blijven bij zo'n codewissel in `/srv/verenigingen/<key>/private` staan.
 
-## Wat fase 3.5 nog niet doet
+## Wat fase 3.5.1 nog niet doet
 
 Nog bewust buiten deze stap:
 
@@ -185,4 +222,4 @@ Nog bewust buiten deze stap:
 - PDO-database en databasecredentials provisionen;
 - monitoring, healthchecks, logaggregatie en tenant lifecycle (disable/remove/export) automatiseren.
 
-Die onderdelen kunnen nu op één stabiel `deployment.json`-contract worden gebouwd zonder de applicatiecode per vereniging te forken.
+Die onderdelen kunnen nu op één stabiel `deployment.json`-contract bouwen zonder de applicatiecode per vereniging te forken.

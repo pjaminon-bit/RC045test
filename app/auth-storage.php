@@ -5,15 +5,36 @@
 require_once __DIR__ . '/core/tenant-runtime.php';
 
 /**
+ * De actieve masterconfig is ook een sessiegeneratie. Iedere bootstrap/rotatie
+ * levert door password_hash() een andere bestandsinhoud op. Door deze hash in
+ * de tenant-sessienamespace mee te nemen wordt een tijdens rotatie lopende
+ * login nooit in dezelfde cookie-namespace als de nieuwe credential geplaatst.
+ */
+function authStorageMasterGeneratie(string $privateRoot): string
+{
+    $master = $privateRoot . '/auth/master.php';
+    if (!file_exists($master) && !is_link($master)) return 'geen-master';
+    if (!is_file($master) || is_link($master) || !is_readable($master)) {
+        tenantRuntimeConfiguratieFout('Tenant masterconfig is niet veilig leesbaar voor sessiebinding.');
+    }
+    $hash = @hash_file('sha256', $master);
+    if (!is_string($hash) || $hash === '') {
+        tenantRuntimeConfiguratieFout('Tenant masterconfig kon niet aan de sessienamespace worden gebonden.');
+    }
+    return $hash;
+}
+
+/**
  * Bepaalt de sessienamespace van een externe tenant. Zowel de cookie-naam als
- * het serverside sessiepad worden tenant-specifiek gemaakt. De hash gebruikt
- * ook de private root, zodat twee verkeerd geconfigureerde tenants met dezelfde
- * zichtbare sleutel nog steeds niet automatisch dezelfde sessienamespace delen.
+ * het serverside sessiepad worden tenant-specifiek gemaakt. De cookie-namespace
+ * bevat ook de actuele mastergeneratie: na een bootstrap/rotatie kunnen oude
+ * cookies daardoor niet doorrollen naar de nieuwe credentialgeneratie.
  */
 function authStorageSessieContext(array $siteConfig, string $privateRoot): array
 {
     $ruweSleutel = trim((string)($siteConfig['vereniging']['sleutel'] ?? ''));
-    $fingerprint = hash('sha256', $privateRoot . "\0" . $ruweSleutel);
+    $masterGeneratie = authStorageMasterGeneratie($privateRoot);
+    $fingerprint = hash('sha256', $privateRoot . "\0" . $ruweSleutel . "\0" . $masterGeneratie);
     return [
         'name' => 'VST' . substr($fingerprint, 0, 24),
         'path' => $privateRoot . '/sessions',

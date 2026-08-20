@@ -177,7 +177,7 @@ Deze punten blokkeren de template niet, maar horen bij verdere platformisering/o
 - Het standalone/legacy masterconfig ondersteunt tijdelijk nog een plaintext compatibility-variabele wanneer geen hash aanwezig is; nieuwe tenants gebruiken sinds fase 3.4 uitsluitend een password hash.
 - De tenantconfiguratie is bestand-gebaseerd. Een latere centrale control-plane kan dezelfde configuratie-API uit database/provisioning voeden zonder pagina's opnieuw te herschrijven.
 
-De eerdere technische schuld dat `.htaccess` voor HTTPS vast naar `rc045.nl` verwees is in fase 3.5 opgelost: de gedeelde fallback is tenant-neutraal en canonical-host/TLS wordt voor de VPS een deploymentverantwoordelijkheid.
+De eerdere HTTPS-schuld is in twee stappen gesloten: fase 3.5 verwijderde de vaste `rc045.nl`-redirect en fase 3.5.1 verwijdert ook het terugspiegelen van een request-`Host`. De gedeelde `.htaccess` redirect niet meer; canonical-host, TLS en onbekende-hostafwijzing zijn expliciete vhost/reverse-proxyverantwoordelijkheden.
 
 # Belangrijkste besluiten
 
@@ -207,16 +207,17 @@ Status t/m **20-08-2026**:
 - **3.3 — tweede tenantbewijs:** afgerond; twee fictieve verenigingen draaien op dezelfde code met gescheiden identiteit, modules, data en assets.
 - **3.4 — veilige eerste beheerder:** afgerond; server-only bootstrap zonder plaintext secret in Git of argv.
 - **3.5 — VPS deploymentcontract:** afgerond; gedeelde release-root, tenantgebonden runtimecontract, per-tenant PHP-FPM identiteit/socket, HTTPS/canonical-hostvoorwaarden en machineleesbaar `deployment.json`.
+- **3.5.1 — security heraudit fixes:** toegevoegd na volledige nacontrole van 3.1 t/m 3.5; masterrotatie trekt alle tenant-sessies in, gebruikersrestore kan ingetrokken sessies niet herleven, absolute-padvalidatie is OS-correct, Host-headerreflectie is verwijderd, catch-all vhostafwijzing is contractueel verplicht, `.git` is uit het HTTP-oppervlak gehaald, authbackuptijdstempels zijn secondegrens-veilig en backupbinding wordt niet langer onterecht cryptografisch genoemd.
 
-Fase 3.5 maakt bovendien de gedeelde Apache-fallback tenant-neutraal en haalt `bin`, `tests`, `docs` en `.github` uit het HTTP-oppervlak. De concrete VPS-layout staat in `docs/VPS-DEPLOYMENT.md`.
+De concrete VPS-layout en het aangescherpte host/vhostcontract staan in `docs/VPS-DEPLOYMENT.md`. De heraudit is vastgelegd in `docs/migratie-log/2026-08-20-fase-3-5-1-security-reaudit.md`.
 
-# Open na fase 3.5
+# Open na fase 3.5.1
 
 De applicatie en deploymentmetadata zijn nu voorbereid voor een echte multi-tenant VPS. Nog niet geautomatiseerd zijn de infrastructuuracties zelf:
 
 1. DNS-records;
 2. TLS-certificaten en renewal;
-3. concrete Apache/Nginx-vhostinstallatie en reload;
+3. concrete Apache/Nginx-vhostinstallatie en reload, inclusief default/catch-all;
 4. Linux users/groups en filesystem ownership per tenant;
 5. PDO/database-secret provisioning;
 6. monitoring, healthchecks en centrale logging;
