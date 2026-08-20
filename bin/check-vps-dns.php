@@ -73,15 +73,18 @@ try { $context = dns43PlanLeesEnValideer($planPad); }
 catch (Throwable $e) { check43Stop($e->getMessage()); }
 $plan = $context['plan'];
 $readyPad = (string)$plan['bundle']['readiness_file'];
+if (!isset($opt['no-write'])
+    && ($samples < (int)$plan['rules']['minimum_readiness_samples']
+        || $interval < (int)$plan['rules']['minimum_sample_interval_seconds'])) {
+    check43Stop('Een schrijfbare readiness vereist minimaal ' . $plan['rules']['minimum_readiness_samples'] . ' samples met ' . $plan['rules']['minimum_sample_interval_seconds'] . ' seconden interval.');
+}
 $laatsteOwner = null; $laatsteTerminal = null;
 
 for ($i = 1; $i <= $samples; $i++) {
     try {
         $owner = dns43Resolve((string)$plan['canonical_host']);
         $terminal = null;
-        if (($plan['strategy'] ?? '') === 'cname') {
-            $terminal = dns43Resolve((string)$plan['expected']['terminal']['name']);
-        }
+        if (($plan['strategy'] ?? '') === 'cname') $terminal = dns43Resolve((string)$plan['expected']['terminal']['name']);
         $result = dns43Beoordeel($plan, $owner, $terminal);
     } catch (Throwable $e) {
         check43ReadinessVerwijder($readyPad);
@@ -97,7 +100,6 @@ for ($i = 1; $i <= $samples; $i++) {
     if ($i < $samples && $interval > 0) sleep($interval);
 }
 
-// TOCTOU: broncontract opnieuw valideren na de live queries.
 try { $na = dns43PlanLeesEnValideer($planPad); }
 catch (Throwable $e) { check43ReadinessVerwijder($readyPad); check43Stop($e->getMessage()); }
 if (!hash_equals($context['sha256'], $na['sha256'])) {
@@ -131,10 +133,7 @@ $status = [
         'interval_seconds' => $interval,
         'scope' => 'configured-system-resolver',
     ],
-    'observed' => [
-        'owner' => $laatsteOwner,
-        'terminal' => $laatsteTerminal,
-    ],
+    'observed' => ['owner' => $laatsteOwner, 'terminal' => $laatsteTerminal],
 ];
 check43SchrijfAtomisch($readyPad, dns43Json($status));
 echo 'READY: ' . $readyPad . "\n";
