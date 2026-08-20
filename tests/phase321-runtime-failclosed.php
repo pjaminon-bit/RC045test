@@ -7,6 +7,11 @@ function run321runtime(string $envPrefix,string $runner):array{$out=[];$code=0;$
 $tmp=sys_get_temp_dir().DIRECTORY_SEPARATOR.'rc045-phase321-runtime-'.bin2hex(random_bytes(4));
 @mkdir($tmp,0750,true);
 try{
+    $runtimeBron=(string)file_get_contents($root.'/app/core/tenant-runtime.php');
+    check321runtime(strpos($runtimeBron,'http_response_code(503)')!==false,'HTTP-configuratiefout gebruikt service-unavailable status');
+    check321runtime(strpos($runtimeBron,"echo 'Deze vereniging is tijdelijk niet beschikbaar.'")!==false,'HTTP-configuratiefout toont alleen generieke melding');
+    check321runtime(strpos($runtimeBron,"error_log('[platform] tenant runtime configuratiefout: '")!==false,'interne oorzaak gaat naar serverlog');
+
     $runner=$tmp.'/runner.php';
     file_put_contents($runner,"<?php \$cfg=require ".var_export($root.'/site-config.php',true)."; echo (string)(\$cfg['vereniging']['sleutel']??'GEEN');\n");
 
@@ -18,7 +23,7 @@ try{
 
     [$codeVerplicht,$outVerplicht]=run321runtime('env -u VERENIGING_CONFIG_FILE VERENIGING_REQUIRE_TENANT_CONFIG=1',$runner);
     check321runtime($codeVerplicht!==0,'verplichte tenantmodus faalt zonder configbestand');
-    check321runtime(strpos($outVerplicht,'Tenantconfiguratie is verplicht')!==false,'fout maakt ontbrekende tenantconfig expliciet');
+    check321runtime(strpos($outVerplicht,'Tenantconfiguratie is verplicht')!==false,'CLI-fout maakt ontbrekende tenantconfig expliciet');
     check321runtime(strpos($outVerplicht,'rc045')===false,'fail-closed fout lekt geen succesvolle RC045 fallback');
 
     $tenantCfg=$tmp.'/tenant.php';
@@ -29,7 +34,7 @@ try{
 
     [$codeOngeldig,$outOngeldig]=run321runtime('env -u VERENIGING_CONFIG_FILE VERENIGING_REQUIRE_TENANT_CONFIG=misschien',$runner);
     check321runtime($codeOngeldig!==0,'ongeldige runtimevlag faalt gesloten');
-    check321runtime(strpos($outOngeldig,'ongeldige booleaanse waarde')!==false,'ongeldige vlag geeft expliciete configuratiefout');
+    check321runtime(strpos($outOngeldig,'ongeldige booleaanse waarde')!==false,'ongeldige vlag geeft expliciete CLI-configuratiefout');
 
     $ontbreekt=$tmp.'/bestaat-niet.php';
     $envOntbreekt='VERENIGING_REQUIRE_TENANT_CONFIG=1 VERENIGING_CONFIG_FILE='.escapeshellarg($ontbreekt);
