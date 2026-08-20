@@ -8,6 +8,7 @@
 // ============================================================
 
 require_once dirname(__DIR__) . '/core/site.php';
+require_once dirname(__DIR__) . '/storage/tenant-backup-store.php';
 
 function publicContentDefinities(): array
 {
@@ -97,6 +98,15 @@ function publicContentIsTenantPad(string $pad): bool
     return $pad === $root || strncmp($pad, $root . '/', strlen($root) + 1) === 0;
 }
 
+function publicContentSleutelVoorPad(string $pad): ?string
+{
+    foreach (publicContentDefinities() as $sleutel => $bestand) {
+        $doel = publicContentPad((string) $sleutel);
+        if ($doel !== null && publicContentPadVoorVergelijk($doel) === publicContentPadVoorVergelijk($pad)) return (string) $sleutel;
+    }
+    return null;
+}
+
 /**
  * Compatibiliteitsadapter voor bestaande beheereditors die nog een absoluut
  * projectpad als /data/contact.json doorgeven. Alleen exact geregistreerde
@@ -128,4 +138,43 @@ function publicContentLees(string $sleutel): ?array
         return null;
     }
     return is_array($data) ? $data : null;
+}
+
+function publicContentMaakBackupVoorPad(string $pad): ?string
+{
+    if (!publicContentIsTenantPad($pad) || !is_file($pad)) return null;
+    $sleutel = publicContentSleutelVoorPad($pad);
+    if ($sleutel === null) return null;
+    $data = publicContentLees($sleutel);
+    if ($data === null) return null;
+    return tenantBackupMaakArray('public-' . $sleutel, $data);
+}
+
+/**
+ * Centrale tenantwriter voor restore en nieuwe codepaden. De huidige versie
+ * wordt vóór overschrijven tenant-lokaal geback-upt. Standalone legacy-editors
+ * blijven hun bestaande schrijver gebruiken.
+ */
+function publicContentSchrijfTenant(string $sleutel, array $data, bool $maakBackup = true): bool
+{
+    $pad = publicContentPad($sleutel);
+    if ($pad === null || !publicContentIsTenantPad($pad) || !tenantBackupPadVeilig($pad)) return false;
+    if ($maakBackup && is_file($pad)) publicContentMaakBackupVoorPad($pad);
+
+    $map = dirname($pad);
+    if (!is_dir($map) && !@mkdir($map, 0750, true)) return false;
+    clearstatcache(true, $map);
+    if (!is_dir($map) || is_link($map) || !tenantBackupPadVeilig($map)) return false;
+    @chmod($map, 0750);
+
+    $json = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+    if ($json === false) return false;
+    try { $suffix = bin2hex(random_bytes(5)); }
+    catch (Throwable $e) { $suffix = substr(hash('sha256', (string) microtime(true)), 0, 10); }
+    $tmp = $pad . '.tmp.' . $suffix;
+    if (!tenantBackupPadVeilig($tmp) || @file_put_contents($tmp, $json, LOCK_EX) === false) return false;
+    @chmod($tmp, 0640);
+    if (!tenantBackupPadVeilig($pad) || !@rename($tmp, $pad)) { @unlink($tmp); return false; }
+    @chmod($pad, 0640);
+    return true;
 }
