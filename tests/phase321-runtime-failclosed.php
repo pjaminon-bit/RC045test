@@ -13,24 +13,24 @@ try{
     check321runtime(strpos($runtimeBron,"error_log('[platform] tenant runtime configuratiefout: '")!==false,'interne oorzaak gaat naar serverlog');
 
     $runner=$tmp.'/runner.php';
-    file_put_contents($runner,"<?php \$cfg=require ".var_export($root.'/site-config.php',true)."; echo (string)(\$cfg['vereniging']['sleutel']??'GEEN');\n");
+    file_put_contents($runner,"<?php \$cfg=require ".var_export($root.'/site-config.php',true)."; echo 'CONFIG_KEY='.(string)(\$cfg['vereniging']['sleutel']??'GEEN');\n");
 
     [$codeLegacy,$outLegacy]=run321runtime('env -u VERENIGING_CONFIG_FILE -u VERENIGING_REQUIRE_TENANT_CONFIG',$runner);
-    check321runtime($codeLegacy===0&&trim($outLegacy)==='rc045','bestaande standalone modus blijft zonder vlag compatibel');
+    check321runtime($codeLegacy===0&&trim($outLegacy)==='CONFIG_KEY=rc045','bestaande standalone modus blijft zonder vlag compatibel');
 
     [$codeUit,$outUit]=run321runtime('env -u VERENIGING_CONFIG_FILE VERENIGING_REQUIRE_TENANT_CONFIG=0',$runner);
-    check321runtime($codeUit===0&&trim($outUit)==='rc045','expliciet uitgeschakelde eis behoudt legacyconfig');
+    check321runtime($codeUit===0&&trim($outUit)==='CONFIG_KEY=rc045','expliciet uitgeschakelde eis behoudt legacyconfig');
 
     [$codeVerplicht,$outVerplicht]=run321runtime('env -u VERENIGING_CONFIG_FILE VERENIGING_REQUIRE_TENANT_CONFIG=1',$runner);
     check321runtime($codeVerplicht!==0,'verplichte tenantmodus faalt zonder configbestand');
     check321runtime(strpos($outVerplicht,'Tenantconfiguratie is verplicht')!==false,'CLI-fout maakt ontbrekende tenantconfig expliciet');
-    check321runtime(strpos($outVerplicht,'rc045')===false,'fail-closed fout lekt geen succesvolle RC045 fallback');
+    check321runtime(strpos($outVerplicht,'CONFIG_KEY=rc045')===false,'fail-closed fout voert geen succesvolle RC045 fallback uit');
 
     $tenantCfg=$tmp.'/tenant.php';
     file_put_contents($tenantCfg,"<?php return ['vereniging'=>['sleutel'=>'tenant-veilig','naam'=>'Tenant Veilig']];\n");
     $envGeldig='VERENIGING_REQUIRE_TENANT_CONFIG=1 VERENIGING_CONFIG_FILE='.escapeshellarg($tenantCfg);
     [$codeGeldig,$outGeldig]=run321runtime($envGeldig,$runner);
-    check321runtime($codeGeldig===0&&trim($outGeldig)==='tenant-veilig','verplichte modus laadt expliciete tenantconfig');
+    check321runtime($codeGeldig===0&&trim($outGeldig)==='CONFIG_KEY=tenant-veilig','verplichte modus laadt expliciete tenantconfig');
 
     [$codeOngeldig,$outOngeldig]=run321runtime('env -u VERENIGING_CONFIG_FILE VERENIGING_REQUIRE_TENANT_CONFIG=misschien',$runner);
     check321runtime($codeOngeldig!==0,'ongeldige runtimevlag faalt gesloten');
