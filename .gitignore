@@ -1,39 +1,42 @@
-# RC045 website: alles hieronder is server-only en wordt beheerd via beheer.php.
+# RC045 website: alles hieronder is server-only en wordt beheerd via beheer.
 # Nooit committen, ook niet per ongeluk: de deploy-workflow pusht de hele repo
-# op elke push naar main, dus elk bestand dat hier per ongeluk in staat
-# overschrijft bij de volgende deploy de live, via beheer.php bewerkte versie.
+# op elke push naar main, dus private tenantdata hoort nooit in GitHub.
 
-# Admin-data (JSON), geschreven door beheer.php
+# Admin-data (JSON), geschreven door beheer
 data/
 
 # Automatische back-ups van de databestanden hierboven
 data-backups/
 
-# Fotoboek-foto's en sponsorlogo's, geupload via beheer.php
+# Fotoboek-foto's en sponsorlogo's, geupload via beheer
 images/fotoboek/
 images/sponsors/
 
-# Inloggegevens en logboek van beheer.php
+# Inloggegevens en logboek
 beheer-config.php
 beheer-users.json
 beheer-log.json
 beheer-login-pogingen.json
 
 # Verenigings-/tenant-specifieke siteconfiguratie. De gedeelde defaults staan
-# in site-config.php; afwijkingen per installatie horen alleen lokaal/server-side.
+# in site-config.php; afwijkingen en databasecredentials zijn server-only.
 site-config.local.php
 
-# DeepL API-sleutel voor de automatische vertaalknopjes in beheer.php
+# DeepL API-sleutel
 vertaal-config.php
 
-# Ledenadministratie, vergaderingen (bestuur + leden/ALV) en de takenlijst:
-# server-only databestanden, staan om dezelfde reden nooit in GitHub. Werden
-# tot nu toe alleen door discipline nooit toegevoegd, nu ook expliciet hier.
+# Private verenigingsadministratie
 leden-data.php
+aanmeldingen-data.php
+contributies-data.php
 vergaderingen-data.php
 taken-data.php
 operationele-taken-data.php
 evenementen-data.php
+
+# Lokale database-/testbestanden
+*.sqlite
+*.sqlite3
 
 # macOS
 .DS_Store
