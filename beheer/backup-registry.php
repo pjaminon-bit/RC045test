@@ -26,6 +26,7 @@ return [
     // Private verenigingsadministratie.
     'leden' => ['label'=>'Ledenadministratie','pad'=>$root.'/leden-data.php','schrijffunctie'=>'phpjson'],
     'aanmeldingen_inbox' => ['label'=>'Aanmeldingen-inbox','pad'=>$root.'/aanmeldingen-data.php','schrijffunctie'=>'phpjson'],
+    'contributies' => ['label'=>'Contributie-administratie','pad'=>$root.'/contributies-data.php','schrijffunctie'=>'phpjson'],
     'vergaderingen' => ['label'=>'Vergaderingen','pad'=>$root.'/vergaderingen-data.php','schrijffunctie'=>'phpjson'],
     'taken' => ['label'=>'Taken','pad'=>$root.'/taken-data.php','schrijffunctie'=>'phpjson'],
     'operationele_taken' => ['label'=>'Operationele taken','pad'=>$root.'/operationele-taken-data.php','schrijffunctie'=>'phpjson'],
