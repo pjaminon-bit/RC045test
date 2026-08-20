@@ -23,7 +23,7 @@ function bootstrap34Help(): void
     echo "Opties:\n";
     echo "  --config=PAD       absoluut pad naar de door de provisioner gemaakte tenantconfig\n";
     echo "  --password-stdin   lees exact één wachtwoordregel van STDIN; het wachtwoord staat nooit in argv\n";
-    echo "  --rotate           vervang een bestaande masterhash gecontroleerd en maak eerst een backup\n";
+    echo "  --rotate           vervang een bestaande masterhash, maak eerst een backup en trek alle tenant-sessies in\n";
     echo "  --help             toon deze hulp\n\n";
     echo "Zonder --password-stdin wordt het wachtwoord twee keer verborgen via een interactieve TTY gevraagd.\n";
 }
@@ -188,15 +188,26 @@ function bootstrap34TenantContext(string $configInvoer): array
     $backupMap = bootstrap34BestaandVeiligPad($backupMap, 'Tenant authbackupmap', true);
     if (!bootstrap34Binnen($backupMap, $privateRoot)) bootstrap34Stop('Tenant authbackupmap valt buiten de private tenantroot.');
 
-    return compact('tenantKey', 'configPad', 'privateRoot', 'tenantRoot', 'authMap', 'backupMap');
+    $sessionMap = $privateRoot . DIRECTORY_SEPARATOR . 'sessions';
+    $sessionMap = bootstrap34BestaandVeiligPad($sessionMap, 'Tenant sessiemap', true);
+    if (!bootstrap34Binnen($sessionMap, $privateRoot)) bootstrap34Stop('Tenant sessiemap valt buiten de private tenantroot.');
+
+    return compact('tenantKey', 'configPad', 'privateRoot', 'tenantRoot', 'authMap', 'backupMap', 'sessionMap');
+}
+
+function bootstrap34MicroTijd(): string
+{
+    $nu = microtime(true);
+    $seconde = (int)floor($nu);
+    $micro = (int)floor(($nu - $seconde) * 1000000);
+    $micro = max(0, min(999999, $micro));
+    return date('Y-m-d_His', $seconde) . '_' . sprintf('%06d', $micro);
 }
 
 function bootstrap34BackupMaster(string $masterPad, string $backupMap): void
 {
     if (!is_file($masterPad)) return;
-    $micro = (int)round((microtime(true) - floor(microtime(true))) * 1000000);
-    if ($micro >= 1000000) $micro = 999999;
-    $backup = $backupMap . DIRECTORY_SEPARATOR . date('Y-m-d_His') . '_' . sprintf('%06d', $micro) . '_master.php';
+    $backup = $backupMap . DIRECTORY_SEPARATOR . bootstrap34MicroTijd() . '_' . bin2hex(random_bytes(4)) . '_master.php';
     if (bootstrap34SymlinkInPad($backup) !== null) bootstrap34Stop('Onveilige symlink in authbackup-pad.');
     if (!@copy($masterPad, $backup)) bootstrap34Stop('Bestaande masterconfig kon niet veilig worden geback-upt.');
     @chmod($backup, 0640);
@@ -214,6 +225,30 @@ function bootstrap34BackupMaster(string $masterPad, string $backupMap): void
         $oudste = array_shift($recent);
         if ($oudste !== null) @unlink($oudste);
     }
+}
+
+/**
+ * Masterrotatie is een credential-incidentgrens: geen enkele bestaande
+ * beheer- of gebruikerssessie mag na de rotatie doorlopen. Eerst wordt de
+ * volledige tenant-sessiemap op type/symlinks gevalideerd, daarna worden alle
+ * reguliere sessiebestanden verwijderd. Een onverwachte entry faalt gesloten.
+ */
+function bootstrap34TrekSessiesIn(string $sessionMap): int
+{
+    $sessionMap = bootstrap34BestaandVeiligPad($sessionMap, 'Tenant sessiemap', true);
+    $bestanden = [];
+    foreach (scandir($sessionMap) ?: [] as $item) {
+        if ($item === '.' || $item === '..') continue;
+        $pad = $sessionMap . DIRECTORY_SEPARATOR . $item;
+        if (is_link($pad)) bootstrap34Stop('Symlink aangetroffen in tenant sessiemap.');
+        if (!is_file($pad)) bootstrap34Stop('Onverwachte niet-bestandsentry in tenant sessiemap.');
+        $bestanden[] = $pad;
+    }
+
+    foreach ($bestanden as $pad) {
+        if (!@unlink($pad) && file_exists($pad)) bootstrap34Stop('Bestaande tenant-sessie kon niet worden ingetrokken.');
+    }
+    return count($bestanden);
 }
 
 function bootstrap34SchrijfAtomisch(string $masterPad, string $inhoud): void
@@ -269,12 +304,20 @@ try {
     $hash = password_hash($wachtwoord, PASSWORD_DEFAULT);
     if (!is_string($hash) || $hash === '' || !password_verify($wachtwoord, $hash)) bootstrap34Stop('Password hash kon niet veilig worden aangemaakt.');
 
-    if ($bestaat) bootstrap34BackupMaster($masterPad, $context['backupMap']);
+    $ingetrokken = 0;
+    if ($bestaat) {
+        bootstrap34BackupMaster($masterPad, $context['backupMap']);
+        // Sessies eerst weg; als de credentialwrite daarna onverhoopt faalt,
+        // blijft het oude wachtwoord geldig maar geen oude sessie actief.
+        $ingetrokken = bootstrap34TrekSessiesIn($context['sessionMap']);
+    }
+
     $inhoud = "<?php\n// Gegenereerd door bin/bootstrap-tenant-admin.php — bewaar alleen server-side.\n\$BEHEER_WACHTWOORD_HASH = " . var_export($hash, true) . ";\n";
     bootstrap34SchrijfAtomisch($masterPad, $inhoud);
 
     unset($wachtwoord, $hash, $inhoud);
     echo ($bestaat ? 'Mastercredential geroteerd' : 'Eerste tenantbeheerder geactiveerd') . ": {$context['tenantKey']}\n";
+    if ($bestaat) echo "Ingetrokken tenant-sessies: {$ingetrokken}\n";
     echo "Login: laat de gebruikersnaam leeg en gebruik het zojuist ingestelde beheerderswachtwoord.\n";
 } finally {
     flock($lock, LOCK_UN);
