@@ -23,7 +23,11 @@ Dit maakt aan:
 ├── tenant.json
 └── private/
     ├── collections/
+    ├── auth/
+    ├── audit/
+    ├── security/
     └── backups/
+        └── auth/
 ```
 
 De provisioner kopieert de applicatiecode **niet**.
@@ -43,12 +47,38 @@ VERENIGING_CONFIG_FILE=/srv/verenigingen/voorbeeldvereniging/config.php
 
 De bestaande losse RC045/DEV-installatie blijft voorlopig compatibel wanneer `VERENIGING_REQUIRE_TENANT_CONFIG` niet is gezet. Die compatibiliteitsmodus is niet bedoeld als configuratie voor nieuwe VPS-tenants.
 
+## Beheer-auth per tenant
+
+Nieuwe tenants gebruiken uitsluitend deze server-only authpaden:
+
+```text
+private/auth/master.php
+private/auth/users.json
+private/audit/log.json
+private/security/login-attempts.json
+private/security/.login-attempts.lock
+private/backups/auth/
+```
+
+Er is voor een tenant met `private_root` **geen fallback** naar `beheer-config.php`, `beheer-users.json`, `beheer-log.json` of `beheer-login-pogingen.json` in de gedeelde applicatieroot.
+
+De provisioner maakt bewust géén standaard beheerderswachtwoord aan. Een nieuwe tenant blijft voor beheer ongeconfigureerd totdat `private/auth/master.php` veilig server-side is geplaatst met minimaal een `password_hash()`:
+
+```php
+<?php
+$BEHEER_WACHTWOORD_HASH = '...password_hash-resultaat...';
+```
+
+Een generiek of gedeeld standaardwachtwoord tussen verenigingen is dus niet onderdeel van provisioning.
+
 ## Veiligheidsregels
 
 - `--root` moet absoluut zijn.
 - Tenantdata binnen de applicatie/documentroot wordt geweigerd.
 - Nieuwe geprovisioneerde tenants krijgen altijd `VERENIGING_REQUIRE_TENANT_CONFIG=1` in `runtime.env`.
 - Een ontbrekende tenantconfig faalt in die modus gesloten; RC045/defaultconfig wordt niet geladen.
+- Authbestanden van externe tenants staan onder hun eigen `private_root`; gedeelde root-authdata wordt niet gebruikt als fallback.
+- Authmappen worden met server-only directoryrechten voorbereid; geschreven authbestanden worden naar `0640` aangescherpt.
 - Een onbekende waarde voor `VERENIGING_REQUIRE_TENANT_CONFIG` wordt als configuratiefout geweigerd in plaats van stil als aan/uit geïnterpreteerd.
 - Een bestaande afwijkende `config.php`, `runtime.env` of `tenant.json` wordt zonder `--force` niet overschreven.
 - Dezelfde opdracht nogmaals uitvoeren is idempotent: identieke bestanden blijven ongewijzigd.
@@ -69,4 +99,4 @@ Bij `--driver=pdo` worden nog geen databasecredentials door de CLI gevraagd of o
 
 ## Nog handmatig in fase 3.2
 
-De provisioner maakt nog geen DNS-record, TLS-certificaat, Apache/Nginx-vhost of PHP-FPM pool aan. Hij levert wel de vaste tenantpaden en runtimeconfig waarop die automatisering in een volgende fase kan steunen.
+De provisioner maakt nog geen DNS-record, TLS-certificaat, Apache/Nginx-vhost, PHP-FPM pool of mastercredential aan. Hij levert wel de vaste tenantpaden en runtimeconfig waarop die automatisering in een volgende fase kan steunen.

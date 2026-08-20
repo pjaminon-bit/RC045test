@@ -126,7 +126,19 @@ $manifest = json_encode([
     'require_tenant_config' => true,
 ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n";
 
-$dirs = [$tenantRoot, $privateRoot, $privateRoot.'/collections', $privateRoot.'/backups'];
+// Authdata is bewust verder opgesplitst. Daardoor kunnen gebruikers, master-
+// credentials, audit en brute-force state nooit per ongeluk één gedeeld bestand
+// worden wanneer meerdere tenants dezelfde applicatiecode gebruiken.
+$dirs = [
+    $tenantRoot,
+    $privateRoot,
+    $privateRoot.'/collections',
+    $privateRoot.'/backups',
+    $privateRoot.'/backups/auth',
+    $privateRoot.'/auth',
+    $privateRoot.'/audit',
+    $privateRoot.'/security',
+];
 foreach ($dirs as $dir) {
     if ($dryRun) { echo "DIR  {$dir}\n"; continue; }
     if (!is_dir($dir) && !@mkdir($dir, 0750, true)) provisionStop("map {$dir} kon niet worden aangemaakt.");
@@ -144,3 +156,4 @@ echo "\nTenant klaar: {$key}\n";
 echo "Runtime: export VERENIGING_REQUIRE_TENANT_CONFIG=1\n";
 echo "         export VERENIGING_CONFIG_FILE=" . escapeshellarg($configPad) . "\n";
 echo "Private opslag: {$privateRoot}\n";
+echo "Auth masterconfig: {$privateRoot}/auth/master.php (nog apart instellen)\n";

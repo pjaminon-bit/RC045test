@@ -26,11 +26,8 @@
 // de pagina die dit bestand insluit, niet naar een vaste beheer.php, zodat
 // hetzelfde formulier op elke afgeschermde pagina werkt.
 //
-// Bestanden (alle drie server-only: niet in GitHub, afgeschermd in .htaccess):
-//   beheer-config.php          - hash van het beheerderswachtwoord, handmatig via FTP
-//   beheer-users.json          - gebruikers met wachtwoord-hash
-//   beheer-log.json            - activiteitenlogboek
-//   beheer-login-pogingen.json - teller voor de lockout
+// Standalone/legacy gebruikt tijdelijk de bestaande rootbestanden. Een tenant
+// met expliciete private_root gebruikt uitsluitend tenant-lokale authpaden.
 // ============================================================
 
 date_default_timezone_set('Europe/Amsterdam');
@@ -46,6 +43,19 @@ header("Content-Security-Policy: frame-ancestors 'none'");
 // De ledenadministratie bepaalt mede de rechten (zie authRechten hieronder):
 // wie daar een bestuursfunctie heeft, krijgt de bestuursonderdelen erbij.
 require_once __DIR__ . '/leden-opslag.php';
+require_once __DIR__ . '/app/auth-storage.php';
+
+// Resolveer alle authpaden uit dezelfde tenantconfig. Bij een expliciete
+// private_root bestaat bewust geen fallback naar authdata in de projectroot.
+$authSiteConfigGeladen = require __DIR__ . '/site-config.php';
+$authSiteConfig = is_array($authSiteConfigGeladen) ? $authSiteConfigGeladen : [];
+$authPaden = authStoragePaden($authSiteConfig, __DIR__);
+$configPad = $authPaden['config'];
+$usersBestand = $authPaden['users'];
+$logBestand = $authPaden['audit'];
+$loginPogingenBestand = $authPaden['login_attempts'];
+$loginPogingenSlotBestand = $authPaden['login_lock'];
+$authBackupMap = $authPaden['backups'];
 
 // ===== Sessie: een week ingelogd blijven, niet halverwege een lang formulier uitloggen =====
 $sessieduur = 60 * 60 * 24 * 7;
@@ -91,11 +101,6 @@ function authHuidigePagina() {
   return $script !== '' ? $script : 'beheer.php';
 }
 
-$configPad    = __DIR__ . '/beheer-config.php';
-$usersBestand = __DIR__ . '/beheer-users.json';
-$logBestand   = __DIR__ . '/beheer-log.json';
-$loginPogingenBestand = __DIR__ . '/beheer-login-pogingen.json';
-
 // Lockout bij te veel mislukte inlogpogingen. Er gelden twee grenzen binnen
 // hetzelfde venster: per gebruikersnaam en per bron-IP. De gebruikersnaam-
 // grens remt gericht raden op één account af; de ruimere IP-grens voorkomt
@@ -111,9 +116,9 @@ $loginLockoutIpDrempel = 20;
 // tijdgestempelde kopie naar data-backups/. Zo is een verkeerde opslag- of
 // bugactie altijd terug te draaien. Bewaartermijn gelijk aan het logboek (90
 // dagen), met een hardstop per bestand zodat de map nooit ongelimiteerd kan
-// groeien. Deze map staat buiten data/ zodat hij apart in .htaccess
-// geblokkeerd kan worden (de bestanden in data/ zelf zijn bewust wel publiek
-// opvraagbaar).
+// groeien. Deze map blijft in deze auth-fase bewust de algemene legacy map;
+// gebruikersbackups gebruiken apart $authBackupMap. De algemene backupmigratie
+// volgt als eigen auditstap.
 $dataBackupMap              = __DIR__ . '/data-backups';
 $dataBackupBewaardagen      = 90;
 $dataBackupMaxPerBestand    = 200;
@@ -125,15 +130,17 @@ function maakDataBackup($pad, $backupMap, $bewaardagen, $maxPerBestand) {
   if (!file_exists($pad)) return; // nieuw bestand, er is nog niets te bewaren
 
   if (!is_dir($backupMap)) {
-    @mkdir($backupMap, 0755, true);
+    @mkdir($backupMap, 0750, true);
   }
+  if (!is_dir($backupMap)) return;
+  @chmod($backupMap, 0750);
   $basisnaam = basename($pad);
   // Seconden alleen zijn niet uniek genoeg: twee snelle opslagacties kunnen
   // binnen dezelfde seconde vallen. De microseconden houden snapshots apart
   // terwijl het bestaande glob-patroon *_{bestandsnaam} geldig blijft.
   $micro = (int) round((microtime(true) - floor(microtime(true))) * 1000000);
   $doelpad = $backupMap . '/' . date('Y-m-d_His') . '_' . sprintf('%06d', $micro) . '_' . $basisnaam;
-  @copy($pad, $doelpad);
+  if (@copy($pad, $doelpad)) @chmod($doelpad, 0640);
 
   $bestanden = @glob($backupMap . '/*_' . $basisnaam);
   if ($bestanden === false || count($bestanden) === 0) return;
@@ -158,13 +165,16 @@ function maakDataBackup($pad, $backupMap, $bewaardagen, $maxPerBestand) {
 // ===== Gebruikers en logboek =====
 function laadGebruikers($pad) {
   if (!file_exists($pad)) return [];
-  $json = json_decode(file_get_contents($pad), true);
+  $ruw = @file_get_contents($pad);
+  if ($ruw === false) return [];
+  $json = json_decode($ruw, true);
   return is_array($json) ? $json : [];
 }
 
 function schrijfGebruikers($pad, $gebruikers) {
-  global $dataBackupMap, $dataBackupBewaardagen, $dataBackupMaxPerBestand;
-  maakDataBackup($pad, $dataBackupMap, $dataBackupBewaardagen, $dataBackupMaxPerBestand);
+  global $authBackupMap, $dataBackupBewaardagen, $dataBackupMaxPerBestand;
+  if (!authStorageMaakSchrijfmap($pad)) return false;
+  maakDataBackup($pad, $authBackupMap, $dataBackupBewaardagen, $dataBackupMaxPerBestand);
   $json = json_encode($gebruikers, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
   if ($json === false) return false;
   try {
@@ -174,10 +184,12 @@ function schrijfGebruikers($pad, $gebruikers) {
   }
   $tmp = $pad . '.tmp.' . $suffix;
   if (file_put_contents($tmp, $json, LOCK_EX) === false) return false;
+  @chmod($tmp, 0640);
   if (!@rename($tmp, $pad)) {
     @unlink($tmp);
     return false;
   }
+  @chmod($pad, 0640);
   return true;
 }
 
@@ -186,8 +198,10 @@ function schrijfGebruikers($pad, $gebruikers) {
 // versie lezen en daarna één van beide nieuwe regels verliezen. Houd daarom
 // één flock vast vanaf het lezen tot en met truncate/write/flush.
 function schrijfLog($pad, $gebruiker, $actie, $details = '') {
+  if (!authStorageMaakSchrijfmap($pad)) return false;
   $handvat = @fopen($pad, 'c+');
   if ($handvat === false) return false;
+  @chmod($pad, 0640);
   if (!flock($handvat, LOCK_EX)) {
     fclose($handvat);
     return false;
@@ -234,19 +248,27 @@ function schrijfLog($pad, $gebruiker, $actie, $details = '') {
 // LOCK_EX op alleen file_put_contents() is daarvoor niet voldoende.
 function laadLoginPogingen($pad) {
   if (!file_exists($pad)) return [];
-  $json = json_decode(file_get_contents($pad), true);
+  $ruw = @file_get_contents($pad);
+  if ($ruw === false) return [];
+  $json = json_decode($ruw, true);
   return is_array($json) ? $json : [];
 }
 
 function schrijfLoginPogingen($pad, $pogingen) {
-  return file_put_contents($pad, json_encode($pogingen, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT), LOCK_EX) !== false;
+  if (!authStorageMaakSchrijfmap($pad)) return false;
+  $json = json_encode($pogingen, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+  if ($json === false) return false;
+  $ok = file_put_contents($pad, $json, LOCK_EX) !== false;
+  if ($ok) @chmod($pad, 0640);
+  return $ok;
 }
 
 function loginPogingenSlotOpen() {
-  global $dataBackupMap;
-  if (!is_dir($dataBackupMap) && !@mkdir($dataBackupMap, 0755, true)) return false;
-  $slot = @fopen($dataBackupMap . '/.login-pogingen.lock', 'c');
+  global $loginPogingenSlotBestand;
+  if (!authStorageMaakSchrijfmap($loginPogingenSlotBestand)) return false;
+  $slot = @fopen($loginPogingenSlotBestand, 'c');
   if ($slot === false) return false;
+  @chmod($loginPogingenSlotBestand, 0640);
   if (!flock($slot, LOCK_EX)) {
     fclose($slot);
     return false;
