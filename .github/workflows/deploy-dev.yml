@@ -57,6 +57,7 @@ jobs:
           php -m | grep -qi '^pdo_sqlite$' || { echo 'pdo_sqlite ontbreekt op de runner' >&2; exit 1; }
           php tests/phase321-tenant-backups.php
           php tests/phase33-second-tenant.php
+          php tests/phase34-admin-bootstrap.php
           php tests/private-store-pdo-sqlite.php
           php tests/phase321-pdo-isolation.php
           php tests/private-store-pdo-failclosed.php
@@ -151,4 +152,5 @@ jobs:
           wacht_op_status "$basis/ledenlabels-opslag.php" 403 nee
           wacht_op_status "$basis/beheer/backup-registry.php" 403 nee
           wacht_op_status "$basis/bin/provision-tenant.php" 403 nee
+          wacht_op_status "$basis/bin/bootstrap-tenant-admin.php" 403 nee
           wacht_op_status "$basis/dev-build.json" 403 nee
