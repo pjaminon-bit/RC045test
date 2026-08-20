@@ -19,6 +19,10 @@ try{
     $cfg=require$config;
     check32(($cfg['vereniging']['sleutel']??'')==='test-club','tenant key staat in config');
     check32(($cfg['opslag']['private_root']??'')===$private,'private root staat exact in config');
+    $runtime=(string)file_get_contents($tenant.'/runtime.env');
+    check32(strpos($runtime,"VERENIGING_REQUIRE_TENANT_CONFIG=1\n")!==false,'runtime.env verplicht expliciete tenantconfig');
+    $manifest=json_decode((string)file_get_contents($tenant.'/tenant.json'),true);
+    check32(is_array($manifest)&&($manifest['require_tenant_config']??false)===true,'manifest registreert fail-closed runtime-eis');
 
     $hashVoor=hash_file('sha256',$config);sleep(1);$out2=[];exec($cmd.' 2>&1',$out2,$code2);$hashNa=hash_file('sha256',$config);
     check32($code2===0&&$hashVoor===$hashNa,'tweede identieke run is idempotent');
