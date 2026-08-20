@@ -55,6 +55,7 @@ jobs:
           php tests/phase321-public-assets-isolation.php
           php tests/phase321-public-assets-parent-symlink.php
           php -m | grep -qi '^pdo_sqlite$' || { echo 'pdo_sqlite ontbreekt op de runner' >&2; exit 1; }
+          php tests/phase321-tenant-backups.php
           php tests/private-store-pdo-sqlite.php
           php tests/phase321-pdo-isolation.php
           php tests/private-store-pdo-failclosed.php
