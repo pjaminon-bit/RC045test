@@ -15,7 +15,7 @@ function publicContentDefinities(): array
     if ($definities !== null) return $definities;
 
     // Alleen expliciet geregistreerde datasets zijn via het publieke endpoint
-    // opvraagbaar. Media/fotoboek en binaire uploads volgen bewust in optie 8.
+    // opvraagbaar. Binaire uploads worden apart door public-asset.php bediend.
     $definities = [
         'homepage' => 'homepage.json',
         'ontstaan' => 'ontstaan.json',
@@ -28,6 +28,10 @@ function publicContentDefinities(): array
         'sponsors' => 'sponsors.json',
         'contact' => 'contact.json',
         'nieuws' => 'nieuws.json',
+        'media' => 'media.json',
+        'media-pagina' => 'media-pagina.json',
+        'fotoboek' => 'fotoboek.json',
+        'fotoboek-pagina' => 'fotoboek-pagina.json',
         'rekentabel' => 'rekentabel.json',
         'lidmaatschapstypen' => 'lidmaatschapstypen.json',
         'changelog' => 'changelog.json',
