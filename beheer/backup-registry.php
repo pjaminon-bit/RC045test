@@ -1,6 +1,48 @@
 <?php
-// Centrale lijst van automatisch geback-upte beheerbestanden.
-// `json` is publieke/configdata, `phpjson` is private data met PHP-voorloop.
+// Centrale registry voor backup/restore.
+// Standalone RC045 behoudt de historische bestandsregistry. Externe tenants
+// gebruiken logische storage-items zodat JSON en PDO dezelfde restorelaag delen.
+require_once dirname(__DIR__) . '/app/core/site.php';
+require_once dirname(__DIR__) . '/app/storage/tenant-backup-store.php';
+
+if (tenantBackupActief()) {
+    require_once dirname(__DIR__) . '/app/content/public-content-store.php';
+
+    $labelsPubliek = [
+        'homepage'=>'Homepage teksten','ontstaan'=>'Ontstaan (geschiedenis)','baanreglement'=>'Baanreglement',
+        'bedankt'=>'Bedankt-pagina (betaalgegevens)','aanmelden'=>'Aanmelden (pagina)','media-pagina'=>'Media (paginatekst)',
+        'fotoboek-pagina'=>'Fotoboek (paginatekst)','actueel'=>'Openingstijden','agenda'=>'Agenda','faq'=>'Vragen (FAQ)',
+        'sponsors'=>'Sponsors','contact'=>'Contact','media'=>'Media','fotoboek'=>'Fotoboek','nieuws'=>'Nieuws',
+        'rekentabel'=>'Rekentabel contributie (legacy/compatibiliteit)','lidmaatschapstypen'=>'Lidmaatschapstypen',
+        'changelog'=>'Changelog (eigen regels)',
+    ];
+    $registry = [];
+    foreach (publicContentDefinities() as $sleutel => $bestand) {
+        $registry['public_'.$sleutel] = [
+            'label'=>$labelsPubliek[$sleutel]??('Publieke content: '.$sleutel),
+            'type'=>'public','source'=>$sleutel,'backup_key'=>'public-'.$sleutel,
+        ];
+    }
+
+    $private = [
+        'leden'=>'Ledenadministratie','aanmeldingen'=>'Aanmeldingen-inbox','contributies'=>'Contributie-administratie',
+        'groepen'=>'Commissies en werkgroepen','ledenlabels'=>'Ledenlabels en segmenten','vergaderingen'=>'Vergaderingen',
+        'taken'=>'Taken','operationele_taken'=>'Operationele taken','evenementen'=>'Evenementen',
+    ];
+    foreach ($private as $collectie=>$label) {
+        $registry['private_'.$collectie] = [
+            'label'=>$label,'type'=>'private','source'=>$collectie,
+            'backup_key'=>'private-'.tenantRuntimeCollectieSleutel($collectie),
+        ];
+    }
+
+    $registry['gebruikers'] = ['label'=>'Gebruikers','type'=>'users','source'=>'gebruikers','backup_key'=>'auth-gebruikers'];
+    $registry['assets_fotoboek'] = ['label'=>'Fotoboek bestanden','type'=>'assets','source'=>'fotoboek','backup_key'=>'assets-fotoboek'];
+    $registry['assets_sponsors'] = ['label'=>'Sponsorlogo’s','type'=>'assets','source'=>'sponsors','backup_key'=>'assets-sponsors'];
+    return $registry;
+}
+
+// Legacy/standalone: `json` is publieke/configdata, `phpjson` private data.
 $root = dirname(__DIR__);
 $data = $root . '/data';
 return [

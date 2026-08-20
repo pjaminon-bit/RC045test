@@ -2,6 +2,7 @@
 // ============================================================
 // Generieke toegang tot de verenigingsconfiguratie
 // ============================================================
+require_once __DIR__ . '/tenant-runtime.php';
 
 function siteProjectRoot(): string
 {
@@ -292,37 +293,6 @@ function siteStartTemplateOutputFilter(): void
             }
             return $html;
         }
-
-        $branding = siteHeadBrandingMarkup();
-        if ($branding !== '') {
-            $patroon = '~\s*<link\s+rel="icon"\s+type="image/x-icon"\s+href="favicon\.ico">\s*'
-                . '(?:<link\s+rel="icon"\s+type="image/png"\s+sizes="16x16"\s+href="favicon-16x16\.png">\s*)?'
-                . '(?:<link\s+rel="icon"\s+type="image/png"\s+sizes="32x32"\s+href="favicon-32x32\.png">\s*)?'
-                . '(?:<link\s+rel="icon"\s+type="image/png"\s+sizes="48x48"\s+href="favicon-48x48\.png">\s*)?'
-                . '<link\s+rel="apple-touch-icon"\s+sizes="180x180"\s+href="apple-touch-icon\.png">\s*'
-                . '<link\s+rel="manifest"\s+href="site\.webmanifest">\s*'
-                . '<meta\s+name="theme-color"\s+content="#[0-9A-Fa-f]{6}">~';
-            $html = preg_replace($patroon, "\n" . $branding . "\n", $html) ?? $html;
-        }
-
-        if (stripos($html, '</head>') !== false && strpos($html, 'id="site-theme"') === false) {
-            $html = preg_replace('~</head>~i', siteThemeMarkup() . "\n</head>", $html, 1) ?? $html;
-        }
-
-        $logo = htmlspecialchars(siteAsset('branding.logo'), ENT_QUOTES, 'UTF-8');
-        $naam = htmlspecialchars(siteNaam(), ENT_QUOTES, 'UTF-8');
-        $slogan = htmlspecialchars(siteSlogan(), ENT_QUOTES, 'UTF-8');
-        if ($logo !== '') $html = str_replace('src="rc045-logo.png"', 'src="' . $logo . '"', $html);
-        $html = str_replace('alt="RC045 logo"', 'alt="' . $naam . ' logo"', $html);
-        $html = str_replace('alt="RC045"', 'alt="' . $naam . '"', $html);
-        $html = preg_replace('~(<span\s+class="nav-logo-text">)RC045(</span>)~', '$1' . $naam . '$2', $html) ?? $html;
-        $html = preg_replace('~(<span\s+class="nav-logo-sub">)Bashers of the South(</span>)~', '$1' . $slogan . '$2', $html) ?? $html;
-        $html = str_replace('RC045 · Bashers of the South', $naam . ($slogan !== '' ? ' · ' . $slogan : ''), $html);
-
         return siteVerbergUitgeschakeldeModules($html);
     });
 }
-
-siteBewaakBeheerModulePost();
-siteBewaakPubliekeModule();
-siteStartTemplateOutputFilter();
