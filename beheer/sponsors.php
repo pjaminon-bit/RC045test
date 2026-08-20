@@ -7,6 +7,7 @@ require_once dirname(__DIR__) . '/auth.php';
 require_once dirname(__DIR__) . '/app/core/site.php';
 require_once dirname(__DIR__) . '/app/data-slot.php';
 require_once dirname(__DIR__) . '/app/content/public-content-store.php';
+require_once dirname(__DIR__) . '/app/content/public-asset-store.php';
 
 if (!$ingelogd) {
     header('Location: ../beheer.php');
@@ -27,10 +28,10 @@ if (!$isMaster && !in_array('sponsors', $rechten['toegestaneTabs'] ?? [], true))
 }
 
 $sponsorBestand = publicContentPad('sponsors');
-if ($sponsorBestand === null) throw new RuntimeException('Sponsorcontent is niet geregistreerd in de tenantcontentstore.');
-// Sponsorlogo's blijven in optie 7 bewust op hun bestaande plek. De fysieke
-// upload-/assetisolatie wordt in optie 8 als één geheel aangepakt.
-$sponsorMap = dirname(__DIR__) . '/images/sponsors';
+$sponsorMap = publicAssetMaakNamespaceMap('sponsors');
+if ($sponsorBestand === null || $sponsorMap === null) {
+    throw new RuntimeException('Sponsoropslag is niet correct geregistreerd voor deze tenant.');
+}
 
 function sponsorsEsc($waarde): string
 {
@@ -75,6 +76,7 @@ function sponsorsLogoAfmetingen(string $naam): array
     global $sponsorMap;
     if ($naam === '') return ['width' => 0, 'height' => 0];
     $pad = $sponsorMap . '/' . basename($naam);
+    if (is_link($pad)) return ['width' => 0, 'height' => 0];
     $info = @getimagesize($pad);
     return is_array($info) ? ['width' => (int) ($info[0] ?? 0), 'height' => (int) ($info[1] ?? 0)] : ['width' => 0, 'height' => 0];
 }
@@ -99,35 +101,42 @@ function sponsorsVerwerkLogo(string $veld, int $slot, string $huidig): array
     }
 
     $tmp = (string) ($bestand['tmp_name'] ?? '');
+    if ($tmp === '' || !is_uploaded_file($tmp)) return ['ok' => false, 'fout' => 'tijdelijk uploadbestand is ongeldig.'];
     $info = @getimagesize($tmp);
     if (!is_array($info)) return ['ok' => false, 'fout' => 'bestand is geen geldige afbeelding.'];
+    $breedte = (int) ($info[0] ?? 0);
+    $hoogte = (int) ($info[1] ?? 0);
+    if ($breedte < 1 || $hoogte < 1 || $breedte > 8000 || $hoogte > 8000 || ($breedte * $hoogte) > 20000000) {
+        return ['ok' => false, 'fout' => 'logo heeft onveilige afbeeldingsafmetingen.'];
+    }
 
     $mime = (string) ($info['mime'] ?? '');
     $extensies = ['image/png' => 'png', 'image/jpeg' => 'jpg', 'image/webp' => 'webp'];
     if (!isset($extensies[$mime])) return ['ok' => false, 'fout' => 'alleen PNG, JPG of WEBP is toegestaan.'];
 
-    if (!is_dir($sponsorMap) && !@mkdir($sponsorMap, 0755, true)) {
-        return ['ok' => false, 'fout' => 'map voor sponsorlogo\'s kon niet worden aangemaakt.'];
-    }
-
     $bestandsnaam = 'sponsor-' . ($slot + 1) . '.' . $extensies[$mime];
     $doel = $sponsorMap . '/' . $bestandsnaam;
+    if (is_link($doel)) return ['ok' => false, 'fout' => 'onveilig bestaand bestandsdoel geweigerd.'];
 
-    // Oude variant van hetzelfde slot met een andere extensie opruimen.
+    // Oude variant van hetzelfde slot met een andere extensie opruimen. Een
+    // symlink wordt alleen als link verwijderd en nooit gevolgd.
     foreach (['png', 'jpg', 'webp'] as $ext) {
         $oud = $sponsorMap . '/sponsor-' . ($slot + 1) . '.' . $ext;
-        if ($oud !== $doel && is_file($oud)) @unlink($oud);
+        if ($oud === $doel) continue;
+        if (is_link($oud)) { @unlink($oud); continue; }
+        if (is_file($oud)) @unlink($oud);
     }
 
     if (!@move_uploaded_file($tmp, $doel)) {
         return ['ok' => false, 'fout' => 'logo kon niet worden opgeslagen.'];
     }
+    publicAssetBeveiligBestand($doel);
 
     return [
         'ok' => true,
         'logo' => $bestandsnaam,
-        'width' => (int) ($info[0] ?? 0),
-        'height' => (int) ($info[1] ?? 0),
+        'width' => $breedte,
+        'height' => $hoogte,
     ];
 }
 
