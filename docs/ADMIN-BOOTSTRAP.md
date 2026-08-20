@@ -73,6 +73,8 @@ Voor de vervanging wordt de vorige `master.php` server-side onder `private/backu
 
 Daarna worden **alle bestaande PHP-sessiebestanden van deze tenant verwijderd voordat de nieuwe masterhash wordt geplaatst**. Daardoor kan een browser die vóór de wachtwoordrotatie als master of gewone gebruiker was ingelogd niet met die oude sessie doorgaan. Iedereen logt na een masterrotatie opnieuw in. Een fout bij het intrekken van een sessiebestand stopt de rotatie fail-closed.
 
+Daarnaast is de tenant-sessiecookie-namespace afgeleid van de actieve `master.php`-generatie. Een nieuwe password hash verandert dus de cookienaam zelf. Dat sluit ook het race-randgeval waarin precies tijdens de rotatie een request of login loopt: een sessie uit de oude credentialgeneratie kan niet in de namespace van de nieuwe generatie doorrollen. De hash van `master.php` wordt alleen server-side gebruikt als onderdeel van een SHA-256 fingerprint; wachtwoord en password hash komen niet in de browsercookie terecht.
+
 `--rotate` op een tenant die nog geen mastercredential heeft wordt geweigerd. Zo blijven bootstrap en credentialrotatie twee expliciete handelingen.
 
 ## Write-hardening
