@@ -17,6 +17,7 @@ try{
     check32(is_file($config)&&is_file($tenant.'/runtime.env')&&is_file($tenant.'/tenant.json'),'config, runtime.env en manifest bestaan');
     check32(is_dir($private.'/collections')&&is_dir($private.'/backups'),'private opslagstructuur bestaat');
     check32(is_dir($private.'/auth')&&is_dir($private.'/audit')&&is_dir($private.'/security')&&is_dir($private.'/backups/auth'),'tenant-lokale auth/audit/security/backups mappen bestaan');
+    check32(is_dir($private.'/sessions'),'tenant-lokale PHP sessiemap bestaat');
     check32(!is_file($private.'/auth/master.php'),'provisioner maakt bewust geen standaard mastercredential aan');
     $cfg=require$config;
     check32(($cfg['vereniging']['sleutel']??'')==='test-club','tenant key staat in config');
