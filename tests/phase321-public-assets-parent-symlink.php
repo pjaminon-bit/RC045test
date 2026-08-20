@@ -12,9 +12,9 @@ try{
   $launcher=$tmp.'/run.php';file_put_contents($launcher,"<?php\nputenv('VERENIGING_REQUIRE_TENANT_CONFIG=1');\nputenv(".var_export('VERENIGING_CONFIG_FILE='.$config,true).");\nputenv(".var_export('VERENIGING_PRIVATE_ROOT='.$private,true).");\n\$ROOT=".var_export($root,true).";\nrequire \$ROOT.'/app/content/public-asset-store.php';\necho json_encode(['map'=>publicAssetMaakNamespaceMap('sponsors'),'read'=>publicAssetVeiligLeesPad('sponsors','canary.jpg'),'safe'=>publicAssetTenantPadVeilig(publicAssetNamespaceRoot('sponsors'))]);\n");
   $out=[];exec(escapeshellcmd(PHP_BINARY).' '.escapeshellarg($launcher).' 2>&1',$out,$code);$d=json_decode(implode("\n",$out),true);
   check321parent($code===0,'parent-symlinkscenario draait gecontroleerd');
-  check321parent(($d['map']??'x')===null,'namespacecreatie weigert symlink op public-assets parent');
-  check321parent(($d['read']??'x')===null,'assetreader serveert geen bestand via parent-symlink');
-  check321parent(array_key_exists('safe',$d)&&$d['safe']===false,'tenantpadcontrole markeert parent-symlink onveilig');
+  check321parent(is_array($d)&&array_key_exists('map',$d)&&$d['map']===null,'namespacecreatie weigert symlink op public-assets parent');
+  check321parent(is_array($d)&&array_key_exists('read',$d)&&$d['read']===null,'assetreader serveert geen bestand via parent-symlink');
+  check321parent(is_array($d)&&array_key_exists('safe',$d)&&$d['safe']===false,'tenantpadcontrole markeert parent-symlink onveilig');
   check321parent((string)file_get_contents($outside.'/sponsors/canary.jpg')==='BUITEN-TENANT','extern symlinkdoel blijft inhoudelijk ongemoeid');
  }
 }finally{rr321parent($tmp);}
