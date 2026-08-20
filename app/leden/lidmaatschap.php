@@ -2,7 +2,14 @@
 // ============================================================
 // Lidmaatschapstypen
 // ============================================================
-function lidmaatschapBestand(): string { return dirname(__DIR__, 2) . '/data/lidmaatschapstypen.json'; }
+require_once dirname(__DIR__) . '/content/public-content-store.php';
+
+function lidmaatschapBestand(): string
+{
+    $pad = publicContentPad('lidmaatschapstypen');
+    if ($pad === null) throw new RuntimeException('Lidmaatschapstypen zijn niet geregistreerd in de tenantcontentstore.');
+    return $pad;
+}
 
 function lidmaatschapLabels($waarde, string $fallback): array
 {
@@ -74,7 +81,7 @@ function lidmaatschapSchrijf(array $types): bool
         $opschonen[]=['id'=>$id,'label'=>$labels,'actief'=>!empty($type['actief']),'leeftijd_min'=>$min,'leeftijd_max'=>$max,'jaarbedrag'=>round(max(0,(float)($type['jaarbedrag']??0)),2),'inschrijfgeld'=>round(max(0,(float)($type['inschrijfgeld']??0)),2),'pro_rata'=>!empty($type['pro_rata'])];
     }
     if(!$opschonen)return false;$data=['types'=>$opschonen,'updated'=>date('c')];$json=json_encode($data,JSON_UNESCAPED_UNICODE|JSON_PRETTY_PRINT);if($json===false)return false;$pad=lidmaatschapBestand();
-    if(function_exists('maakDataBackup')){global $dataBackupMap,$dataBackupBewaardagen,$dataBackupMaxPerBestand;maakDataBackup($pad,$dataBackupMap,$dataBackupBewaardagen,$dataBackupMaxPerBestand);}
+    if(!publicContentIsTenantPad($pad)&&function_exists('maakDataBackup')){global $dataBackupMap,$dataBackupBewaardagen,$dataBackupMaxPerBestand;maakDataBackup($pad,$dataBackupMap,$dataBackupBewaardagen,$dataBackupMaxPerBestand);}
     try{$suffix=bin2hex(random_bytes(5));}catch(Throwable $e){$suffix=str_replace('.','',(string)microtime(true));}$tmp=$pad.'.tmp.'.$suffix;
-    if(@file_put_contents($tmp,$json,LOCK_EX)===false)return false;if(!@rename($tmp,$pad)){@unlink($tmp);return false;}return true;
+    if(@file_put_contents($tmp,$json,LOCK_EX)===false)return false;if(publicContentIsTenantPad($pad))@chmod($tmp,0640);if(!@rename($tmp,$pad)){@unlink($tmp);return false;}if(publicContentIsTenantPad($pad))@chmod($pad,0640);return true;
 }

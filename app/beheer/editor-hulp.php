@@ -1,5 +1,6 @@
 <?php
 // Gedeelde, kleine hulpfuncties voor zelfstandige beheermodules.
+require_once dirname(__DIR__) . '/content/public-content-store.php';
 
 function beheerEditorEsc($waarde): string
 {
@@ -14,6 +15,7 @@ function beheerEditorKort($waarde, int $max): string
 
 function beheerEditorLeesJson(string $pad, $standaard = [])
 {
+    $pad = publicContentMapLegacyPad($pad);
     if (!is_file($pad)) return $standaard;
     $raw = @file_get_contents($pad);
     if ($raw === false) return $standaard;
@@ -25,7 +27,11 @@ function beheerEditorSchrijfJson(string $pad, array $data): bool
 {
     global $dataBackupMap, $dataBackupBewaardagen, $dataBackupMaxPerBestand;
 
-    if (function_exists('maakDataBackup')) {
+    $pad = publicContentMapLegacyPad($pad);
+    // De oude data-backupmap is nog gedeeld. Tenant-lokale publieke content
+    // wordt daar bewust niet heen gekopieerd; optie 9 maakt backup/restore zelf
+    // tenant-aware. Standalone RC045 behoudt het bestaande backupgedrag.
+    if (!publicContentIsTenantPad($pad) && function_exists('maakDataBackup')) {
         maakDataBackup($pad, $dataBackupMap, $dataBackupBewaardagen, $dataBackupMaxPerBestand);
     }
 
@@ -41,10 +47,12 @@ function beheerEditorSchrijfJson(string $pad, array $data): bool
     }
     $tmp = $pad . '.tmp.' . $suffix;
     if (@file_put_contents($tmp, $json, LOCK_EX) === false) return false;
+    if (publicContentIsTenantPad($pad)) @chmod($tmp, 0640);
     if (!@rename($tmp, $pad)) {
         @unlink($tmp);
         return false;
     }
+    if (publicContentIsTenantPad($pad)) @chmod($pad, 0640);
     return true;
 }
 

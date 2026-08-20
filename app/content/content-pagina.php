@@ -3,6 +3,8 @@
 // Generieke contentpagina-hulpfuncties
 // ============================================================
 
+require_once __DIR__ . '/public-content-store.php';
+
 function contentPaginaDefinities(): array
 {
     static $definities = null;
@@ -29,6 +31,16 @@ function contentPaginaDataPad(string $sleutel): ?string
     $def = contentPaginaDefinitie($sleutel);
     $relatief = trim((string) ($def['data_bestand'] ?? ''));
     if ($relatief === '') return null;
+
+    $tenantPad = publicContentPad($sleutel);
+    if ($tenantPad !== null) return $tenantPad;
+
+    // Een nieuwe generieke contentpagina die niet in de publieke contentstore
+    // is geregistreerd mag bij een externe tenant nooit ongemerkt naar /data
+    // terugvallen. Standalone RC045 houdt de oude compatibiliteit.
+    if (publicContentTenantRoot() !== null) {
+        tenantRuntimeConfiguratieFout('Contentdataset is niet geregistreerd voor tenantopslag: ' . $sleutel);
+    }
     return dirname(__DIR__, 2) . '/' . ltrim($relatief, '/');
 }
 

@@ -2,13 +2,15 @@
 require_once dirname(__DIR__) . '/auth.php';
 require_once dirname(__DIR__) . '/app/data-slot.php';
 require_once dirname(__DIR__) . '/app/core/site.php';
+require_once dirname(__DIR__) . '/app/content/public-content-store.php';
 
 if (!$ingelogd) { header('Location: ../beheer.php'); exit; }
 if (!siteModuleActief('aanmelden')) { http_response_code(404); echo 'De aanmeldmodule is voor deze vereniging niet ingeschakeld.'; exit; }
 $rechten = authRechten(['bedankt' => 'Bedankt-pagina'], []);
 if (!$isMaster && !in_array('bedankt', $rechten['toegestaneTabs'] ?? [], true)) { http_response_code(403); echo 'Geen toegang tot Bedankt-pagina.'; exit; }
 
-$bestand = dirname(__DIR__) . '/data/bedankt.json';
+$bestand = publicContentPad('bedankt');
+if ($bestand === null) throw new RuntimeException('Bedankt-content is niet geregistreerd in de tenantcontentstore.');
 $velden = [
     'title' => ['Titel', 200],
     'sub' => ['Introtekst', 500],
@@ -48,11 +50,14 @@ function bdMeng(array $standaard, array $data): array {
 }
 function bdSchrijf(string $pad, array $data): bool {
     global $dataBackupMap,$dataBackupBewaardagen,$dataBackupMaxPerBestand;
-    if(function_exists('maakDataBackup')) maakDataBackup($pad,$dataBackupMap,$dataBackupBewaardagen,$dataBackupMaxPerBestand);
-    $json=json_encode($data,JSON_UNESCAPED_UNICODE|JSON_PRETTY_PRINT); if($json===false)return false;
+    if(!publicContentIsTenantPad($pad)&&function_exists('maakDataBackup')) maakDataBackup($pad,$dataBackupMap,$dataBackupBewaardagen,$dataBackupMaxPerBestand);
+    $json=json_encode($data,JSON_UNESCAPED_UNICODE|JSON_PRETTY_PRINT); if($json===false||!is_dir(dirname($pad)))return false;
     $tmp=$pad.'.tmp.'.bin2hex(random_bytes(4));
     if(file_put_contents($tmp,$json,LOCK_EX)===false)return false;
-    if(!@rename($tmp,$pad)){@unlink($tmp);return false;} return true;
+    if(publicContentIsTenantPad($pad))@chmod($tmp,0640);
+    if(!@rename($tmp,$pad)){@unlink($tmp);return false;}
+    if(publicContentIsTenantPad($pad))@chmod($pad,0640);
+    return true;
 }
 
 $data=$standaard;

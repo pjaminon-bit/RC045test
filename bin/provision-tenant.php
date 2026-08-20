@@ -319,13 +319,14 @@ if (!$dryRun && !is_dir($baseRoot)) {
     @chmod($baseRoot, 0750);
 }
 
-// Authdata en PHP-sessies zijn bewust verder opgesplitst. Daardoor kunnen
-// credentials, audit, brute-force state en actieve sessies nooit per ongeluk
-// één gedeelde opslag worden wanneer tenants dezelfde applicatiecode gebruiken.
+// Authdata, publieke JSON en PHP-sessies zijn bewust verder opgesplitst.
+// Daardoor kunnen credentials, content, brute-force state en actieve sessies
+// nooit per ongeluk één gedeelde opslag worden wanneer tenants code delen.
 $dirs = [
     $tenantRoot,
     $privateRoot,
     $privateRoot.'/collections',
+    $privateRoot.'/public-content',
     $privateRoot.'/backups',
     $privateRoot.'/backups/auth',
     $privateRoot.'/auth',

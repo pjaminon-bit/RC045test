@@ -23,6 +23,7 @@ Dit maakt aan:
 ├── tenant.json
 └── private/
     ├── collections/
+    ├── public-content/
     ├── auth/
     ├── audit/
     ├── security/
@@ -99,6 +100,27 @@ $BEHEER_WACHTWOORD_HASH = '...password_hash-resultaat...';
 
 Een generiek of gedeeld standaardwachtwoord tussen verenigingen is dus niet onderdeel van provisioning.
 
+## Publieke content per tenant
+
+Dynamische openbare JSON staat voor nieuwe tenants onder:
+
+```text
+private/public-content/
+```
+
+Daaronder vallen onder meer homepage, ontstaan, baanreglement, aanmelden/bedankt, actueel, agenda, FAQ, contact, nieuws, changelog en lidmaatschapstypen. Een ontbrekend tenantbestand valt **niet** terug op het overeenkomstige RC045-bestand onder `/data`.
+
+De browser blijft voorlopig de bestaande URL-vorm `/data/<dataset>.json` gebruiken. Apache routeert uitsluitend de expliciet gewhiteliste datasets via `public-content.php`, dat het bestand voor de actieve tenant uit de private opslag leest. Het endpoint accepteert alleen GET/HEAD en kent geen vrij bestandspad. Bij Nginx moet de vhost dezelfde exacte `/data/<dataset>.json`-routing naar `public-content.php?key=<dataset>` configureren; een wildcard waarmee willekeurige private bestanden opvraagbaar worden is niet toegestaan.
+
+De bestaande standalone RC045/DEV-installatie gebruikt via dezelfde resolver voorlopig de bestaande `/data`-bestanden. Dit is alleen de compatibiliteitsmodus.
+
+Belangrijke fasegrenzen:
+
+- `media`, `fotoboek` en fysieke uploads volgen in optie 8;
+- sponsor-JSON is al tenant-lokaal, maar sponsorlogo's vallen als uploadbestand onder optie 8;
+- tenant-public-content wordt in optie 7 bewust niet naar de oude gedeelde `data-backups` gekopieerd; backup/restore wordt als geheel tenant-aware in optie 9;
+- RC045-specifieke hardcoded tekst/branding in de code wordt pas bij de neutrale platformdefaults aangepakt en is niet hetzelfde als een opslagfallback.
+
 ## Veilige filesystempaden
 
 `--root` wordt als securitygrens behandeld, niet alleen als tekstuele mapnaam.
@@ -121,7 +143,8 @@ De provisioner is een beheertool en veronderstelt dat de filesystemhiërarchie w
 - Nieuwe geprovisioneerde tenants krijgen altijd `VERENIGING_REQUIRE_TENANT_CONFIG=1` in `runtime.env`.
 - Een ontbrekende tenantconfig faalt in die modus gesloten; RC045/defaultconfig wordt niet geladen.
 - Authbestanden van externe tenants staan onder hun eigen `private_root`; gedeelde root-authdata wordt niet gebruikt als fallback.
-- Authmappen worden met server-only directoryrechten voorbereid; geschreven authbestanden worden naar `0640` aangescherpt.
+- Publieke tenant-JSON staat buiten de documentroot onder `private/public-content`; ontbrekende tenantdata valt niet terug op RC045 `/data`.
+- Auth- en contentmappen worden met server-only directoryrechten voorbereid; tenantbestanden worden naar `0640` aangescherpt waar deze laag ze schrijft.
 - Een onbekende waarde voor `VERENIGING_REQUIRE_TENANT_CONFIG` wordt als configuratiefout geweigerd in plaats van stil als aan/uit geïnterpreteerd.
 - Een bestaande afwijkende `config.php`, `runtime.env` of `tenant.json` wordt zonder `--force` niet overschreven.
 - Dezelfde opdracht nogmaals uitvoeren is idempotent: identieke bestanden blijven ongewijzigd.
