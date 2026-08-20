@@ -55,6 +55,14 @@ function prepare43SchrijfAtomisch(string $pad, string $inhoud, bool $force): str
     return 'geschreven';
 }
 
+function prepare43TrekReadinessIn(string $pad): void
+{
+    clearstatcache(true, $pad);
+    if (is_link($pad)) prepare43Stop('Bestaande DNS-readiness is onverwacht een symlink; handmatige inspectie vereist.');
+    if (is_file($pad) && !@unlink($pad)) prepare43Stop('Bestaande DNS-readiness kon na planwijziging niet worden ingetrokken.');
+    if (file_exists($pad) && !is_file($pad)) prepare43Stop('DNS-readinessdoel is geen regulier bestand.');
+}
+
 foreach ($_SERVER['argv'] ?? [] as $arg) {
     if (preg_match('/^--(?:password|hash|secret|dsn|db-password|token|key|certificate|private-key)(?:=|$)/i', (string)$arg) === 1) {
         prepare43Stop('Secrets horen niet in fase-4.3 CLI-argumenten of DNS-plannen.');
@@ -70,16 +78,12 @@ if ($strategy === '') prepare43Stop('--strategy=direct|cname is verplicht.');
 
 try {
     $context = dns43WebContext($webPlan);
-    $outputDir = isset($opt['output-dir']) && trim((string)$opt['output-dir']) !== ''
-        ? (string)$opt['output-dir']
-        : $context['tenant_root'] . '/dns';
+    $outputDir = isset($opt['output-dir']) && trim((string)$opt['output-dir']) !== '' ? (string)$opt['output-dir'] : $context['tenant_root'] . '/dns';
     $ipv4 = dns43IpLijst((string)($opt['ipv4'] ?? ''), 4);
     $ipv6 = dns43IpLijst((string)($opt['ipv6'] ?? ''), 6);
     $plan = dns43Plan($context, $outputDir, $strategy, $ipv4, $ipv6, (string)($opt['cname'] ?? ''));
     $json = dns43Json($plan);
-} catch (Throwable $e) {
-    prepare43Stop($e->getMessage());
-}
+} catch (Throwable $e) { prepare43Stop($e->getMessage()); }
 
 if (isset($opt['dry-run'])) { echo $json; exit(0); }
 
@@ -96,6 +100,7 @@ try {
 } catch (Throwable $e) { prepare43Stop($e->getMessage()); }
 
 $status = prepare43SchrijfAtomisch($plan['bundle']['plan_file'], $json, isset($opt['force']));
+if ($status === 'geschreven') prepare43TrekReadinessIn((string)$plan['bundle']['readiness_file']);
 echo strtoupper($status) . '  ' . $plan['bundle']['plan_file'] . "\n";
 echo 'DNS-plan gereed voor ' . $plan['canonical_host'] . ' (' . $plan['strategy'] . ').' . "\n";
 echo 'Voer check-vps-dns.php uit nadat de DNS-providerrecords zijn ingesteld; TLS blijft geblokkeerd zonder verse readiness.' . "\n";
