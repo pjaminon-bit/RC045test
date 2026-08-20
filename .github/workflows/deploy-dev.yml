@@ -60,6 +60,7 @@ jobs:
           php tests/phase34-admin-bootstrap.php
           php tests/phase35-vps-deployment.php
           php tests/phase351-security-reaudit.php
+          php tests/phase351-master-session-generation.php
           php tests/private-store-pdo-sqlite.php
           php tests/phase321-pdo-isolation.php
           php tests/private-store-pdo-failclosed.php
