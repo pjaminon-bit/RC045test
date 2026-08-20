@@ -126,9 +126,9 @@ $manifest = json_encode([
     'require_tenant_config' => true,
 ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n";
 
-// Authdata is bewust verder opgesplitst. Daardoor kunnen gebruikers, master-
-// credentials, audit en brute-force state nooit per ongeluk één gedeeld bestand
-// worden wanneer meerdere tenants dezelfde applicatiecode gebruiken.
+// Authdata en PHP-sessies zijn bewust verder opgesplitst. Daardoor kunnen
+// credentials, audit, brute-force state en actieve sessies nooit per ongeluk
+// één gedeelde opslag worden wanneer tenants dezelfde applicatiecode gebruiken.
 $dirs = [
     $tenantRoot,
     $privateRoot,
@@ -138,6 +138,7 @@ $dirs = [
     $privateRoot.'/auth',
     $privateRoot.'/audit',
     $privateRoot.'/security',
+    $privateRoot.'/sessions',
 ];
 foreach ($dirs as $dir) {
     if ($dryRun) { echo "DIR  {$dir}\n"; continue; }
