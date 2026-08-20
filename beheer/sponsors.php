@@ -6,6 +6,7 @@
 require_once dirname(__DIR__) . '/auth.php';
 require_once dirname(__DIR__) . '/app/core/site.php';
 require_once dirname(__DIR__) . '/app/data-slot.php';
+require_once dirname(__DIR__) . '/app/content/public-content-store.php';
 
 if (!$ingelogd) {
     header('Location: ../beheer.php');
@@ -25,7 +26,10 @@ if (!$isMaster && !in_array('sponsors', $rechten['toegestaneTabs'] ?? [], true))
     exit;
 }
 
-$sponsorBestand = dirname(__DIR__) . '/data/sponsors.json';
+$sponsorBestand = publicContentPad('sponsors');
+if ($sponsorBestand === null) throw new RuntimeException('Sponsorcontent is niet geregistreerd in de tenantcontentstore.');
+// Sponsorlogo's blijven in optie 7 bewust op hun bestaande plek. De fysieke
+// upload-/assetisolatie wordt in optie 8 als één geheel aangepakt.
 $sponsorMap = dirname(__DIR__) . '/images/sponsors';
 
 function sponsorsEsc($waarde): string
@@ -52,9 +56,18 @@ function sponsorsLees(string $pad): array
 function sponsorsSchrijf(string $pad, array $data): bool
 {
     global $dataBackupMap, $dataBackupBewaardagen, $dataBackupMaxPerBestand;
-    maakDataBackup($pad, $dataBackupMap, $dataBackupBewaardagen, $dataBackupMaxPerBestand);
+    if (!publicContentIsTenantPad($pad)) {
+        maakDataBackup($pad, $dataBackupMap, $dataBackupBewaardagen, $dataBackupMaxPerBestand);
+    }
     $json = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
-    return $json !== false && file_put_contents($pad, $json, LOCK_EX) !== false;
+    if ($json === false || !is_dir(dirname($pad))) return false;
+    try { $suffix = bin2hex(random_bytes(4)); } catch (Throwable $e) { $suffix = (string) mt_rand(100000, 999999); }
+    $tmp = $pad . '.tmp.' . $suffix;
+    if (@file_put_contents($tmp, $json, LOCK_EX) === false) return false;
+    if (publicContentIsTenantPad($pad)) @chmod($tmp, 0640);
+    if (!@rename($tmp, $pad)) { @unlink($tmp); return false; }
+    if (publicContentIsTenantPad($pad)) @chmod($pad, 0640);
+    return true;
 }
 
 function sponsorsLogoAfmetingen(string $naam): array
@@ -182,7 +195,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
                     $meldingType = 'ok';
                     schrijfLog($logBestand, $huidigeGebruiker, 'sponsors', count($items) . ' sponsor(s) opgeslagen via modulaire editor');
                 } else {
-                    $melding = 'Opslaan mislukt. Controleer de schrijfrechten van de data-map.';
+                    $melding = 'Opslaan mislukt. Controleer de schrijfrechten van de contentopslag.';
                     $meldingType = 'fout';
                 }
             }
