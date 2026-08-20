@@ -64,13 +64,23 @@ Zie `docs/VPS-WEBSERVER.md`.
 
 ### 4.3 — DNS
 
-**Status: gepland.**
+**Status: code en CI gereed; echte providerrecords/readiness volgen zodra VPS-IP's en tenantdomeinen definitief zijn.**
 
 Omvat:
 
-- tenantdomeinen naar de VPS laten wijzen;
-- gewenste A/AAAA/CNAME-strategie vastleggen;
-- DNS-readiness en propagation-controle vóór TLS/livegang.
+- tenantgebonden `dns-plan.json` uit het gevalideerde fase-4.2 web-plan;
+- expliciete `direct` A/AAAA- of één-hop `cname`-strategie;
+- exacte RRset-match: extra/stale IPv4 of IPv6 faalt gesloten;
+- geen gemengd CNAME + owner-addressprofiel;
+- CNAME-doel en terminale VPS-adressen exact vastgelegd;
+- live readiness via de systeemresolver van de VPS;
+- minimaal 3 succesvolle samples met minimaal 2 seconden interval;
+- readiness maximaal 15 minuten geldig en gebonden aan DNS-/web-planhash;
+- planwijziging of mislukte live check trekt een oude readiness in;
+- geen DNS-providercredentials of automatische providerwrite in de generieke tenantbundles;
+- fase 4.4 blijft contractueel geblokkeerd zonder verse geldige readiness.
+
+Zie `docs/VPS-DNS.md`.
 
 ### 4.4 — TLS/HTTPS
 
