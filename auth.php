@@ -72,10 +72,9 @@ session_set_cookie_params([
   // Hard op true, niet afgeleid uit $_SERVER['HTTPS']: Strato handelt de
   // beveiligde verbinding af voordat PHP aan de beurt is, waardoor die
   // variabele ook bij een https-bezoek leeg blijft en de cookie stilzwijgend
-  // zonder Secure-vlag verstuurd zou worden. HTTPS wordt in .htaccess
-  // afgedwongen, dus er is geen http-pad meer waarover deze cookie zou
-  // moeten reizen. Let op: hierdoor werkt inloggen over http niet meer, de
-  // browser stuurt de cookie dan simpelweg niet mee.
+  // zonder Secure-vlag verstuurd zou worden. HTTPS wordt door de hostinglaag
+  // of op de VPS door de vhost/reverse proxy afgedwongen; de gedeelde
+  // .htaccess reflecteert sinds fase 3.5.1 bewust geen Host-header meer.
   'secure' => true,
   'httponly' => true,
   'samesite' => 'Lax',
@@ -135,11 +134,14 @@ function maakDataBackup($pad, $backupMap, $bewaardagen, $maxPerBestand) {
   if (!is_dir($backupMap)) return;
   @chmod($backupMap, 0750);
   $basisnaam = basename($pad);
-  // Seconden alleen zijn niet uniek genoeg: twee snelle opslagacties kunnen
-  // binnen dezelfde seconde vallen. De microseconden houden snapshots apart
-  // terwijl het bestaande glob-patroon *_{bestandsnaam} geldig blijft.
-  $micro = (int) round((microtime(true) - floor(microtime(true))) * 1000000);
-  $doelpad = $backupMap . '/' . date('Y-m-d_His') . '_' . sprintf('%06d', $micro) . '_' . $basisnaam;
+  // Eén tijdmeting voedt zowel seconden als microseconden. Daardoor kan een
+  // secondewisseling tussen twee microtime()-calls nooit een negatieve of
+  // verkeerd gesorteerde microsecondecomponent opleveren.
+  $nu = microtime(true);
+  $seconde = (int) floor($nu);
+  $micro = (int) floor(($nu - $seconde) * 1000000);
+  $micro = max(0, min(999999, $micro));
+  $doelpad = $backupMap . '/' . date('Y-m-d_His', $seconde) . '_' . sprintf('%06d', $micro) . '_' . $basisnaam;
   if (@copy($pad, $doelpad)) @chmod($doelpad, 0640);
 
   $bestanden = @glob($backupMap . '/*_' . $basisnaam);
