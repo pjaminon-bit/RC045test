@@ -149,7 +149,7 @@ PHP);
 
     $auth = (string)file_get_contents($root . '/auth.php');
     check351(!str_contains($auth, 'microtime(true) - floor(microtime(true))'), 'authbackups gebruiken geen twee afzonderlijke microtime-calls meer');
-    check351(str_contains($auth, '$nu = microtime(true);') && str_contains($auth, "date('Y-m-d_His', $seconde)"), 'authbackuptijdstempel gebruikt één consistente tijdmeting');
+    check351(str_contains($auth, '$nu = microtime(true);') && str_contains($auth, "date('Y-m-d_His', \$seconde)"), 'authbackuptijdstempel gebruikt één consistente tijdmeting');
 
     $bootstrapSrc = (string)file_get_contents($bootstrap);
     check351(!str_contains($bootstrapSrc, 'microtime(true) - floor(microtime(true))') && str_contains($bootstrapSrc, 'bootstrap34MicroTijd()'), 'masterbackup gebruikt secondegrens-veilige tijdstempelhelper');
