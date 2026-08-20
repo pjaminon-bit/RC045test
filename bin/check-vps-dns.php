@@ -136,5 +136,7 @@ $status = [
     'observed' => ['owner' => $laatsteOwner, 'terminal' => $laatsteTerminal],
 ];
 check43SchrijfAtomisch($readyPad, dns43Json($status));
+try { dns43ReadinessLeesEnValideer($readyPad, $now); }
+catch (Throwable $e) { check43ReadinessVerwijder($readyPad); check43Stop('Geschreven DNS-readiness faalde eigen verificatie: ' . $e->getMessage()); }
 echo 'READY: ' . $readyPad . "\n";
 echo 'Fase 4.4 mag deze readiness alleen gebruiken zolang bronhash en vervaltijd nog geldig zijn.' . "\n";
