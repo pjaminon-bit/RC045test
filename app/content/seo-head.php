@@ -109,12 +109,13 @@ function rc045SeoHead($pagina, $indexeerbaar = true) {
   $url = htmlspecialchars(rc045Url($pagina, $taal), ENT_QUOTES, 'UTF-8');
   $socialAsset = siteAsset('branding.social_image');
   $afbeelding = $socialAsset !== '' ? htmlspecialchars(siteUrl() . '/' . $socialAsset, ENT_QUOTES, 'UTF-8') : '';
+  $titelMetaPrefix = tenantRuntimePrivateRoot(siteConfig()) === null ? 'rc045-title-' : 'site-title-';
 
   echo "  <title>$titel</title>\n";
   foreach (array_keys($RC045_TALEN) as $t) {
     if (!isset($RC045_PAGINAS[$pagina][$t])) continue;
     $liveTitel = htmlspecialchars((string)$RC045_PAGINAS[$pagina][$t]['titel'], ENT_QUOTES, 'UTF-8');
-    echo "  <meta name=\"rc045-title-$t\" content=\"$liveTitel\">\n";
+    echo "  <meta name=\"{$titelMetaPrefix}{$t}\" content=\"$liveTitel\">\n";
   }
   echo "  <meta name=\"description\" id=\"meta-description\" content=\"$omschrijving\">\n";
   echo "  <meta property=\"og:title\" content=\"$titel\">\n";
