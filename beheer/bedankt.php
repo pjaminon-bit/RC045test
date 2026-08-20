@@ -50,13 +50,15 @@ function bdMeng(array $standaard, array $data): array {
 }
 function bdSchrijf(string $pad, array $data): bool {
     global $dataBackupMap,$dataBackupBewaardagen,$dataBackupMaxPerBestand;
-    if(!publicContentIsTenantPad($pad)&&function_exists('maakDataBackup')) maakDataBackup($pad,$dataBackupMap,$dataBackupBewaardagen,$dataBackupMaxPerBestand);
+    if(publicContentIsTenantPad($pad)){
+        $sleutel=publicContentSleutelVoorPad($pad);
+        return $sleutel!==null&&publicContentSchrijfTenant($sleutel,$data,true);
+    }
+    if(function_exists('maakDataBackup')) maakDataBackup($pad,$dataBackupMap,$dataBackupBewaardagen,$dataBackupMaxPerBestand);
     $json=json_encode($data,JSON_UNESCAPED_UNICODE|JSON_PRETTY_PRINT); if($json===false||!is_dir(dirname($pad)))return false;
     $tmp=$pad.'.tmp.'.bin2hex(random_bytes(4));
     if(file_put_contents($tmp,$json,LOCK_EX)===false)return false;
-    if(publicContentIsTenantPad($pad))@chmod($tmp,0640);
     if(!@rename($tmp,$pad)){@unlink($tmp);return false;}
-    if(publicContentIsTenantPad($pad))@chmod($pad,0640);
     return true;
 }
 
