@@ -50,6 +50,7 @@ jobs:
           php tests/phase321-runtime-failclosed.php
           php tests/phase321-auth-isolation.php
           php tests/phase321-session-tenant-binding.php
+          php tests/phase321-provisioner-path-security.php
           php -m | grep -qi '^pdo_sqlite$' || { echo 'pdo_sqlite ontbreekt op de runner' >&2; exit 1; }
           php tests/private-store-pdo-sqlite.php
           php tests/phase321-pdo-isolation.php

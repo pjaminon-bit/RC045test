@@ -30,19 +30,147 @@ function provisionAbsoluut(string $pad): bool
     return tenantRuntimeIsAbsoluutPad($pad);
 }
 
+function provisionPadVoorVergelijk(string $pad): string
+{
+    $norm = str_replace('\\', '/', $pad);
+    $norm = (string)preg_replace('~/+~', '/', $norm);
+    if ($norm !== '/') $norm = rtrim($norm, '/');
+    if (DIRECTORY_SEPARATOR === '\\') $norm = strtolower($norm);
+    return $norm;
+}
+
+function provisionPadBinnen(string $pad, string $root): bool
+{
+    $pad = provisionPadVoorVergelijk($pad);
+    $root = provisionPadVoorVergelijk($root);
+    return $pad === $root || strncmp($pad, $root . '/', strlen($root) + 1) === 0;
+}
+
+function provisionHeeftRelatieveSegmenten(string $pad): bool
+{
+    foreach (explode('/', str_replace('\\', '/', $pad)) as $segment) {
+        if ($segment === '.' || $segment === '..') return true;
+    }
+    return false;
+}
+
+/**
+ * Geeft de eerste bestaande symlink in het pad of een van zijn ancestors.
+ * Ook een broken symlink telt: die mag nooit als gewone niet-bestaande map
+ * worden behandeld en later onverwacht naar een ander doel gaan wijzen.
+ */
+function provisionSymlinkInPad(string $pad): ?string
+{
+    $cursor = rtrim($pad, '/\\');
+    if ($cursor === '') $cursor = DIRECTORY_SEPARATOR;
+
+    while (true) {
+        if (is_link($cursor)) return $cursor;
+        $parent = dirname($cursor);
+        if ($parent === $cursor) break;
+        $cursor = $parent;
+    }
+    return null;
+}
+
+/**
+ * Canonicaliseert ook een nog niet bestaand doel: de langste bestaande
+ * ancestor wordt met realpath() fysiek opgelost; alleen de nog niet bestaande,
+ * reeds gevalideerde componenten worden daarna aangehangen.
+ */
+function provisionCanoniekDoelpad(string $pad): string
+{
+    $cursor = rtrim($pad, '/\\');
+    if ($cursor === '') $cursor = DIRECTORY_SEPARATOR;
+    $staart = [];
+
+    while (!file_exists($cursor) && !is_link($cursor)) {
+        $deel = basename($cursor);
+        if ($deel === '' || $deel === '.' || $deel === '..') {
+            provisionStop("Pad {$pad} kan niet veilig worden gecanonicaliseerd.");
+        }
+        array_unshift($staart, $deel);
+        $parent = dirname($cursor);
+        if ($parent === $cursor) {
+            provisionStop("Geen bestaande ancestor gevonden voor {$pad}.");
+        }
+        $cursor = $parent;
+    }
+
+    if (is_link($cursor)) provisionStop("Symlink in provisioningpad is niet toegestaan: {$cursor}");
+    if (count($staart) > 0 && !is_dir($cursor)) provisionStop("Bestaande ancestor van provisioningpad is geen map: {$cursor}");
+
+    $basis = realpath($cursor);
+    if ($basis === false) provisionStop("Provisioningpad kon niet fysiek worden opgelost: {$cursor}");
+    foreach ($staart as $deel) $basis .= DIRECTORY_SEPARATOR . $deel;
+    return rtrim($basis, '/\\');
+}
+
+function provisionProjectRoot(): string
+{
+    $project = realpath(dirname(__DIR__));
+    if ($project === false) provisionStop('Applicatieroot kon niet fysiek worden opgelost.');
+    return rtrim($project, '/\\');
+}
+
+function provisionControleerBuitenProject(string $pad): void
+{
+    $canoniek = provisionCanoniekDoelpad($pad);
+    if (provisionPadBinnen($canoniek, provisionProjectRoot())) {
+        provisionStop('Tenantroot mag niet binnen de gedeelde applicatie/documentroot liggen.');
+    }
+}
+
 function provisionNormalizeBase(string $pad): string
 {
     $pad = rtrim(trim($pad), '/\\');
     if ($pad === '' || !provisionAbsoluut($pad)) provisionStop('--root moet een absoluut pad zijn.');
-    return $pad;
+    if (str_contains($pad, "\0")) provisionStop('--root bevat een ongeldig nulkarakter.');
+    if (provisionHeeftRelatieveSegmenten($pad)) provisionStop('--root mag geen . of .. padsegmenten bevatten.');
+
+    $symlink = provisionSymlinkInPad($pad);
+    if ($symlink !== null) provisionStop("--root mag geen symlink bevatten: {$symlink}");
+
+    return provisionCanoniekDoelpad($pad);
 }
 
-function provisionOnderProjectroot(string $pad): bool
+/**
+ * Controleert een afgeleid tenantpad vlak voor gebruik opnieuw. Hiermee wordt
+ * ook een vooraf bestaande symlink in tenant/private/auth/... geweigerd en
+ * vertrouwen writes niet uitsluitend op de eerste --root-check.
+ */
+function provisionControleerTenantpad(string $pad, string $tenantRoot): void
 {
-    $project = realpath(dirname(__DIR__)) ?: dirname(__DIR__);
-    $project = rtrim(str_replace('\\', '/', $project), '/') . '/';
-    $norm = rtrim(str_replace('\\', '/', $pad), '/') . '/';
-    return strncmp($norm, $project, strlen($project)) === 0;
+    $symlink = provisionSymlinkInPad($pad);
+    if ($symlink !== null) provisionStop("Symlink in tenantpad is niet toegestaan: {$symlink}");
+
+    $canoniek = provisionCanoniekDoelpad($pad);
+    if (!provisionPadBinnen($canoniek, $tenantRoot)) {
+        provisionStop("Tenantpad valt buiten de goedgekeurde tenantroot: {$pad}");
+    }
+    if (provisionPadBinnen($canoniek, provisionProjectRoot())) {
+        provisionStop("Tenantpad valt binnen de applicatie/documentroot: {$pad}");
+    }
+}
+
+function provisionMaakMap(string $pad, string $tenantRoot, bool $dryRun): void
+{
+    provisionControleerTenantpad($pad, $tenantRoot);
+    if ($dryRun) {
+        echo "DIR  {$pad}\n";
+        return;
+    }
+
+    if (!is_dir($pad) && !@mkdir($pad, 0750, false)) {
+        provisionStop("map {$pad} kon niet worden aangemaakt.");
+    }
+    clearstatcache(true, $pad);
+    if (is_link($pad) || !is_dir($pad)) provisionStop("map {$pad} is na aanmaak geen veilige gewone map.");
+    @chmod($pad, 0750);
+
+    // Post-check: pas na realpath van de daadwerkelijk aangemaakte map mag de
+    // provisioner doorgaan naar bestanden of onderliggende directories.
+    provisionControleerTenantpad($pad, $tenantRoot);
 }
 
 function provisionPhpArray(array $config): string
@@ -50,20 +178,33 @@ function provisionPhpArray(array $config): string
     return "<?php\n// Gegenereerd door bin/provision-tenant.php\nreturn " . var_export($config, true) . ";\n";
 }
 
-function provisionSchrijf(string $pad, string $inhoud, bool $force, bool $dryRun): string
+function provisionSchrijf(string $pad, string $inhoud, bool $force, bool $dryRun, string $tenantRoot): string
 {
+    provisionControleerTenantpad($pad, $tenantRoot);
+    if (is_link($pad)) provisionStop("Bestandsdoel mag geen symlink zijn: {$pad}");
+
     if (is_file($pad)) {
         $huidig = (string) file_get_contents($pad);
         if (hash_equals(hash('sha256', $huidig), hash('sha256', $inhoud))) return 'ongewijzigd';
         if (!$force) provisionStop("{$pad} bestaat al met andere inhoud; gebruik --force na controle.");
     }
     if ($dryRun) return is_file($pad) ? 'zou vervangen' : 'zou aanmaken';
+
     $map = dirname($pad);
-    if (!is_dir($map) && !@mkdir($map, 0750, true)) provisionStop("map {$map} kon niet worden aangemaakt.");
+    provisionControleerTenantpad($map, $tenantRoot);
+    if (!is_dir($map)) provisionStop("schrijfmap {$map} bestaat niet.");
+
     $tmp = $pad . '.tmp.' . bin2hex(random_bytes(4));
+    provisionControleerTenantpad($tmp, $tenantRoot);
     if (@file_put_contents($tmp, $inhoud, LOCK_EX) === false) provisionStop("tijdelijk bestand voor {$pad} kon niet worden geschreven.");
     @chmod($tmp, 0640);
+
+    // Hercontrole vlak voor de atomische rename, zodat een tussentijds vervangen
+    // parentpad niet stil als legitiem tenantpad wordt vertrouwd.
+    provisionControleerTenantpad($pad, $tenantRoot);
+    if (is_link($pad)) { @unlink($tmp); provisionStop("Bestandsdoel werd tijdens provisioning een symlink: {$pad}"); }
     if (!@rename($tmp, $pad)) { @unlink($tmp); provisionStop("{$pad} kon niet atomisch worden geplaatst."); }
+    @chmod($pad, 0640);
     return is_file($pad) ? 'geschreven' : 'aangemaakt';
 }
 
@@ -84,8 +225,12 @@ if (!filter_var($url, FILTER_VALIDATE_URL) || !in_array((string)parse_url($url, 
 if (!in_array($timezone, timezone_identifiers_list(), true)) provisionStop('Ongeldige timezone.');
 if (!in_array($driver, ['json','pdo'], true)) provisionStop('--driver moet json of pdo zijn.');
 
-$tenantRoot = $baseRoot . DIRECTORY_SEPARATOR . $key;
-if (provisionOnderProjectroot($tenantRoot)) provisionStop('Tenantroot mag niet binnen de gedeelde applicatie/documentroot liggen.');
+$tenantRoot = rtrim($baseRoot, '/\\') . DIRECTORY_SEPARATOR . $key;
+$tenantRoot = provisionCanoniekDoelpad($tenantRoot);
+provisionControleerBuitenProject($tenantRoot);
+$symlinkTenant = provisionSymlinkInPad($tenantRoot);
+if ($symlinkTenant !== null) provisionStop("Tenantroot mag geen symlink bevatten: {$symlinkTenant}");
+
 $privateRoot = $tenantRoot . DIRECTORY_SEPARATOR . 'private';
 $configPad = $tenantRoot . DIRECTORY_SEPARATOR . 'config.php';
 $envPad = $tenantRoot . DIRECTORY_SEPARATOR . 'runtime.env';
@@ -126,6 +271,20 @@ $manifest = json_encode([
     'require_tenant_config' => true,
 ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n";
 
+if (!$dryRun && !is_dir($baseRoot)) {
+    // --root zelf mag nog niet bestaan. Alleen deze basis wordt recursief
+    // aangemaakt; tenant- en privatemappen daarna altijd één niveau per stap.
+    if (!@mkdir($baseRoot, 0750, true) && !is_dir($baseRoot)) provisionStop("basisroot {$baseRoot} kon niet worden aangemaakt.");
+    clearstatcache(true, $baseRoot);
+    $symlinkBase = provisionSymlinkInPad($baseRoot);
+    if ($symlinkBase !== null) provisionStop("basisroot bevat na aanmaak een symlink: {$symlinkBase}");
+    $baseReal = realpath($baseRoot);
+    if ($baseReal === false || provisionPadVoorVergelijk($baseReal) !== provisionPadVoorVergelijk($baseRoot)) {
+        provisionStop('Basisroot wijst na aanmaak niet naar het vooraf gecontroleerde fysieke pad.');
+    }
+    @chmod($baseRoot, 0750);
+}
+
 // Authdata en PHP-sessies zijn bewust verder opgesplitst. Daardoor kunnen
 // credentials, audit, brute-force state en actieve sessies nooit per ongeluk
 // één gedeelde opslag worden wanneer tenants dezelfde applicatiecode gebruiken.
@@ -140,16 +299,12 @@ $dirs = [
     $privateRoot.'/security',
     $privateRoot.'/sessions',
 ];
-foreach ($dirs as $dir) {
-    if ($dryRun) { echo "DIR  {$dir}\n"; continue; }
-    if (!is_dir($dir) && !@mkdir($dir, 0750, true)) provisionStop("map {$dir} kon niet worden aangemaakt.");
-    @chmod($dir, 0750);
-}
+foreach ($dirs as $dir) provisionMaakMap($dir, $tenantRoot, $dryRun);
 
 $resultaten = [
-    $configPad => provisionSchrijf($configPad, provisionPhpArray($config), $force, $dryRun),
-    $envPad => provisionSchrijf($envPad, $env, $force, $dryRun),
-    $manifestPad => provisionSchrijf($manifestPad, $manifest, $force, $dryRun),
+    $configPad => provisionSchrijf($configPad, provisionPhpArray($config), $force, $dryRun, $tenantRoot),
+    $envPad => provisionSchrijf($envPad, $env, $force, $dryRun, $tenantRoot),
+    $manifestPad => provisionSchrijf($manifestPad, $manifest, $force, $dryRun, $tenantRoot),
 ];
 
 foreach ($resultaten as $pad => $status) echo strtoupper($status) . "  {$pad}\n";
