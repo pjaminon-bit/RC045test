@@ -6,6 +6,7 @@ return [
     'features' => [
         'website' => ['label'=>'Publieke website','type'=>'kern','publieke_paginas'=>[],'publieke_links'=>[],'publieke_selectors'=>[],'beheer_tabs'=>[],'beheer_formulieren'=>[],'leden_tabs'=>[],'leden_formulieren'=>[]],
         'ledenadministratie' => ['label'=>'Ledenadministratie','type'=>'intern','publieke_paginas'=>[],'publieke_links'=>[],'publieke_selectors'=>[],'beheer_tabs'=>[],'beheer_formulieren'=>[],'leden_tabs'=>[],'leden_formulieren'=>[]],
+        'werkgroepen' => ['label'=>'Werkgroepen','type'=>'intern','publieke_paginas'=>[],'publieke_links'=>[],'publieke_selectors'=>[],'beheer_tabs'=>[],'beheer_formulieren'=>[],'leden_tabs'=>[],'leden_formulieren'=>[]],
         'vergaderingen' => ['label'=>'Vergaderingen','type'=>'intern','publieke_paginas'=>[],'publieke_links'=>[],'publieke_selectors'=>[],'beheer_tabs'=>[],'beheer_formulieren'=>[],'leden_tabs'=>[],'leden_formulieren'=>[]],
         'taken' => ['label'=>'Taken','type'=>'intern','publieke_paginas'=>[],'publieke_links'=>[],'publieke_selectors'=>[],'beheer_tabs'=>[],'beheer_formulieren'=>[],'leden_tabs'=>[],'leden_formulieren'=>[]],
         'operationele_taken' => ['label'=>'Operationele taken','type'=>'intern','publieke_paginas'=>[],'publieke_links'=>[],'publieke_selectors'=>[],'beheer_tabs'=>[],'beheer_formulieren'=>[],'leden_tabs'=>[],'leden_formulieren'=>[]],
@@ -22,7 +23,6 @@ return [
         'baanreglement'=>['label'=>'Reglement','categorie'=>'Pagina’s','route'=>'content.php?pagina=baanreglement','capability'=>'content.reglement.manage','feature'=>'website'],
         'aanmelden'=>['label'=>'Aanmelden','categorie'=>'Pagina’s','route'=>'content.php?pagina=aanmelden','capability'=>'content.aanmelden.manage','feature'=>'aanmelden'],
         'bedankt'=>['label'=>'Bedankt-pagina','categorie'=>'Pagina’s','route'=>'bedankt.php','capability'=>'content.bedankt.manage','feature'=>'aanmelden'],
-
         'actueel'=>['label'=>'Mededeling','categorie'=>'Content','route'=>'actueel.php','capability'=>'content.mededeling.manage','feature'=>'website'],
         'nieuws'=>['label'=>'Nieuws','categorie'=>'Content','route'=>'nieuws.php','capability'=>'content.nieuws.manage','feature'=>'website'],
         'agenda'=>['label'=>'Agenda','categorie'=>'Content','route'=>'agenda.php','capability'=>'events.agenda.manage','feature'=>'evenementen'],
@@ -31,19 +31,19 @@ return [
         'faq'=>['label'=>'Vragen','categorie'=>'Content','route'=>'faq.php','capability'=>'content.faq.manage','feature'=>'aanmelden'],
         'media'=>['label'=>'Media','categorie'=>'Content','route'=>'media.php','capability'=>'content.media.manage','feature'=>'media'],
         'fotoboek'=>['label'=>'Fotoboek','categorie'=>'Content','route'=>'fotoboek.php','capability'=>'content.fotoboek.manage','feature'=>'fotoboek'],
-
         'lidmaatschapstypen'=>['label'=>'Lidmaatschapstypen','categorie'=>'Contributie','route'=>'lidmaatschap.php','capability'=>'memberships.fees.manage','feature'=>'ledenadministratie'],
         'contributies'=>['label'=>'Contributie-administratie','categorie'=>'Contributie','route'=>'contributies.php','capability'=>'members.fees.manage','feature'=>'ledenadministratie'],
-
         'aanmeldingen'=>['label'=>'Aanmeldingen','categorie'=>'Vereniging','route'=>'aanmeldingen.php','capability'=>'applications.manage','feature'=>'aanmelden'],
         'leden'=>['label'=>'Leden','categorie'=>'Vereniging','route'=>'leden.php','capability'=>'members.view','feature'=>'ledenadministratie'],
         'leden_import'=>['label'=>'Leden importeren','categorie'=>'Vereniging','route'=>'leden-import.php','capability'=>'members.manage','feature'=>'ledenadministratie'],
+        'ledenlabels'=>['label'=>'Ledenlabels','categorie'=>'Vereniging','route'=>'ledenlabels.php','capability'=>'member_labels.manage','feature'=>'ledenadministratie'],
         'commissies'=>['label'=>'Commissies','categorie'=>'Vereniging','route'=>'commissies.php','capability'=>'committees.manage','feature'=>'ledenadministratie'],
+        'werkgroepen'=>['label'=>'Werkgroepen','categorie'=>'Vereniging','route'=>'werkgroepen.php','capability'=>'workgroups.manage','feature'=>'werkgroepen'],
+        'groepsrollen'=>['label'=>'Groepsrollen','categorie'=>'Vereniging','route'=>'groepsrollen.php','capability'=>'groups.roles.manage','feature'=>'ledenadministratie'],
         'vergaderingen'=>['label'=>'Vergaderingen','categorie'=>'Vereniging','route'=>'vergaderingen.php','capability'=>'meetings.manage','feature'=>'vergaderingen'],
         'taken'=>['label'=>'Taken','categorie'=>'Vereniging','route'=>'taken.php','capability'=>'tasks.manage','feature'=>'taken'],
         'operationele_taken'=>['label'=>'Operationele taken','categorie'=>'Vereniging','route'=>'operationele-taken.php','capability'=>'ops_tasks.manage','feature'=>'operationele_taken'],
         'evenementen'=>['label'=>'Evenementen','categorie'=>'Vereniging','route'=>'evenementen.php','capability'=>'events.manage','feature'=>'evenementen'],
-
         'changelog'=>['label'=>'Changelog','categorie'=>'Beheer','route'=>'changelog.php','capability'=>'system.changelog.manage','feature'=>'website'],
         'gebruikers'=>['label'=>'Gebruikers','categorie'=>'Beheer','route'=>'gebruikers.php','capability'=>'system.users.manage','gevoelig'=>true],
         'logboek'=>['label'=>'Logboek','categorie'=>'Beheer','route'=>'logboek.php','capability'=>'system.audit.read','gevoelig'=>true],
@@ -64,26 +64,24 @@ return [
         'content.faq.manage'=>['label'=>'Vragen beheren','categorie'=>'Content','legacy'=>['faq']],
         'content.media.manage'=>['label'=>'Media beheren','categorie'=>'Content','legacy'=>['media']],
         'content.fotoboek.manage'=>['label'=>'Fotoboek beheren','categorie'=>'Content','legacy'=>['fotoboek']],
-
         'memberships.fees.manage'=>['label'=>'Lidmaatschapstypen en tarieven beheren','categorie'=>'Contributie','legacy'=>['rekentabel']],
         'members.view'=>['label'=>'Leden bekijken','categorie'=>'Vereniging','legacy'=>['leden']],
         'members.manage'=>['label'=>'Leden wijzigen, importeren en archiveren','categorie'=>'Vereniging','legacy'=>['leden']],
         'members.fees.manage'=>['label'=>'Contributie per lid/jaar beheren','categorie'=>'Contributie','legacy'=>['leden']],
         'members.erase'=>['label'=>'Leden definitief wissen / privacyactie','categorie'=>'Vereniging','legacy'=>[],'gevoelig'=>true],
         'applications.manage'=>['label'=>'Aanmeldingen beoordelen','categorie'=>'Vereniging','legacy'=>[]],
+        'member_labels.manage'=>['label'=>'Ledenlabels en segmenten beheren','categorie'=>'Vereniging','legacy'=>[]],
         'committees.manage'=>['label'=>'Commissies beheren','categorie'=>'Vereniging','legacy'=>['commissies']],
+        'workgroups.manage'=>['label'=>'Werkgroepen beheren','categorie'=>'Vereniging','legacy'=>[]],
+        'groups.roles.manage'=>['label'=>'Groepsrollen beheren','categorie'=>'Vereniging','legacy'=>[]],
         'meetings.manage'=>['label'=>'Vergaderingen beheren','categorie'=>'Vereniging','legacy'=>['bestuursvergadering','ledenvergadering']],
         'tasks.manage'=>['label'=>'Taken beheren','categorie'=>'Vereniging','legacy'=>['takenlijst']],
         'ops_tasks.manage'=>['label'=>'Operationele taken beheren','categorie'=>'Vereniging','legacy'=>['operationele_taken']],
         'events.manage'=>['label'=>'Evenementen beheren','categorie'=>'Vereniging','legacy'=>['evenementen']],
-
         'system.changelog.manage'=>['label'=>'Changelog beheren','categorie'=>'Beheer','legacy'=>['changelog']],
         'system.users.manage'=>['label'=>'Gebruikers en rechten beheren','categorie'=>'Beheer','legacy'=>['gebruikers'],'gevoelig'=>true],
         'system.audit.read'=>['label'=>'Logboek lezen','categorie'=>'Beheer','legacy'=>['log'],'gevoelig'=>true],
         'system.backups.manage'=>['label'=>'Back-ups herstellen','categorie'=>'Beheer','legacy'=>['backups'],'gevoelig'=>true],
     ],
-
-    'rol_capabilities'=>[
-        'bestuur'=>['meetings.manage','tasks.manage'],
-    ],
+    'rol_capabilities'=>['bestuur'=>['meetings.manage','tasks.manage']],
 ];
