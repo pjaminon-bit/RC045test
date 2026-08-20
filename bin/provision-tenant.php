@@ -23,6 +23,8 @@ function provisionHelp(): void
     echo "Opties:\n";
     echo "  --timezone=Europe/Amsterdam\n";
     echo "  --driver=json|pdo\n";
+    echo "  --modules=website,ledenadministratie,...\n";
+    echo "                           expliciete kommagescheiden modulekeuze; zonder optie zijn alle platformmodules actief\n";
     echo "  --force                 bestaande config gecontroleerd vervangen\n";
     echo "  --dry-run               alleen tonen wat zou worden aangemaakt\n";
 }
@@ -35,8 +37,6 @@ function provisionAbsoluut(string $pad): bool
 /**
  * Een tenant-key is een permanente technische identiteit, geen gebruikerslabel.
  * Daarom wordt invoer hier nooit getrimd, lowercased of anders genormaliseerd.
- * Wat niet exact aan het contract voldoet wordt geweigerd voordat een pad,
- * configbestand of manifest wordt aangemaakt.
  */
 function provisionValideTenantKey(string $waarde): string
 {
@@ -55,13 +55,92 @@ function provisionValideTenantKey(string $waarde): string
     if ($waarde === 'default') {
         provisionStop("--key 'default' is gereserveerd en mag niet als tenantidentiteit worden gebruikt.");
     }
-
-    // Defense-in-depth: het bestaande runtime-normalisatiepad moet voor iedere
-    // nieuw geprovisioneerde key exact dezelfde waarde opleveren.
     if (!hash_equals($waarde, tenantRuntimeVeiligeSleutel($waarde))) {
         provisionStop('--key is niet canoniek voor de tenant-runtime.');
     }
     return $waarde;
+}
+
+/** De vaste platformmodulelijst is onderdeel van het provisioningcontract. */
+function provisionBeschikbareModules(): array
+{
+    return [
+        'website',
+        'ledenadministratie',
+        'werkgroepen',
+        'evenementen',
+        'vergaderingen',
+        'taken',
+        'operationele_taken',
+        'fotoboek',
+        'sponsors',
+        'media',
+        'aanmelden',
+    ];
+}
+
+/**
+ * Zonder --modules blijft het bestaande gedrag behouden: alle platformmodules
+ * zijn actief. Met --modules wordt juist iedere bekende module expliciet true
+ * of false opgeslagen, zodat een tenant nooit modulekeuzes uit RC045-defaults
+ * hoeft te erven.
+ */
+function provisionModuleKeuze(?string $waarde): array
+{
+    $beschikbaar = provisionBeschikbareModules();
+    if ($waarde === null) {
+        $actief = $beschikbaar;
+    } else {
+        $actief = [];
+        foreach (explode(',', $waarde) as $module) {
+            $module = trim($module);
+            if ($module === '') continue;
+            if (!in_array($module, $beschikbaar, true)) {
+                provisionStop("Onbekende module in --modules: {$module}.");
+            }
+            if (!in_array($module, $actief, true)) $actief[] = $module;
+        }
+        if (!in_array('website', $actief, true)) {
+            provisionStop("--modules moet de kernmodule 'website' bevatten.");
+        }
+    }
+
+    $resultaat = [];
+    foreach ($beschikbaar as $module) {
+        $resultaat[$module] = in_array($module, $actief, true);
+    }
+    return $resultaat;
+}
+
+/**
+ * Nieuwe VPS-tenants krijgen neutrale platformbranding. Lege assetpaden zijn
+ * bewust: een nieuwe vereniging mag nooit stil het RC045-logo, favicons of
+ * manifest gebruiken. Eigen branding kan daarna tenant-specifiek worden gezet.
+ */
+function provisionNeutraleBranding(): array
+{
+    return [
+        'logo' => '',
+        'social_image' => '',
+        'favicon' => '',
+        'favicon_16' => '',
+        'favicon_32' => '',
+        'favicon_48' => '',
+        'apple_touch_icon' => '',
+        'manifest' => '',
+        'theme_color' => '#0F172A',
+        'kleuren' => [
+            'primary' => '#2563EB',
+            'primary_dark' => '#1D4ED8',
+            'primary_light' => '#EFF6FF',
+            'accent' => '#D97706',
+            'accent_light' => '#FFFBEB',
+            'dark' => '#0F172A',
+            'text' => '#1E293B',
+            'muted' => '#64748B',
+            'background' => '#F8FAFC',
+        ],
+    ];
 }
 
 function provisionPadVoorVergelijk(string $pad): string
@@ -88,16 +167,11 @@ function provisionHeeftRelatieveSegmenten(string $pad): bool
     return false;
 }
 
-/**
- * Geeft de eerste bestaande symlink in het pad of een van zijn ancestors.
- * Ook een broken symlink telt: die mag nooit als gewone niet-bestaande map
- * worden behandeld en later onverwacht naar een ander doel gaan wijzen.
- */
+/** Geeft de eerste bestaande (ook broken) symlink in het pad of ancestors. */
 function provisionSymlinkInPad(string $pad): ?string
 {
     $cursor = rtrim($pad, '/\\');
     if ($cursor === '') $cursor = DIRECTORY_SEPARATOR;
-
     while (true) {
         if (is_link($cursor)) return $cursor;
         $parent = dirname($cursor);
@@ -107,11 +181,7 @@ function provisionSymlinkInPad(string $pad): ?string
     return null;
 }
 
-/**
- * Canonicaliseert ook een nog niet bestaand doel: de langste bestaande
- * ancestor wordt met realpath() fysiek opgelost; alleen de nog niet bestaande,
- * reeds gevalideerde componenten worden daarna aangehangen.
- */
+/** Canonicaliseert ook een nog niet bestaand doel via de langste ancestor. */
 function provisionCanoniekDoelpad(string $pad): string
 {
     $cursor = rtrim($pad, '/\\');
@@ -125,9 +195,7 @@ function provisionCanoniekDoelpad(string $pad): string
         }
         array_unshift($staart, $deel);
         $parent = dirname($cursor);
-        if ($parent === $cursor) {
-            provisionStop("Geen bestaande ancestor gevonden voor {$pad}.");
-        }
+        if ($parent === $cursor) provisionStop("Geen bestaande ancestor gevonden voor {$pad}.");
         $cursor = $parent;
     }
 
@@ -161,23 +229,16 @@ function provisionNormalizeBase(string $pad): string
     if ($pad === '' || !provisionAbsoluut($pad)) provisionStop('--root moet een absoluut pad zijn.');
     if (str_contains($pad, "\0")) provisionStop('--root bevat een ongeldig nulkarakter.');
     if (provisionHeeftRelatieveSegmenten($pad)) provisionStop('--root mag geen . of .. padsegmenten bevatten.');
-
     $symlink = provisionSymlinkInPad($pad);
     if ($symlink !== null) provisionStop("--root mag geen symlink bevatten: {$symlink}");
-
     return provisionCanoniekDoelpad($pad);
 }
 
-/**
- * Controleert een afgeleid tenantpad vlak voor gebruik opnieuw. Hiermee wordt
- * ook een vooraf bestaande symlink in tenant/private/auth/... geweigerd en
- * vertrouwen writes niet uitsluitend op de eerste --root-check.
- */
+/** Controleert een afgeleid tenantpad vlak voor ieder gevoelig gebruik. */
 function provisionControleerTenantpad(string $pad, string $tenantRoot): void
 {
     $symlink = provisionSymlinkInPad($pad);
     if ($symlink !== null) provisionStop("Symlink in tenantpad is niet toegestaan: {$symlink}");
-
     $canoniek = provisionCanoniekDoelpad($pad);
     if (!provisionPadBinnen($canoniek, $tenantRoot)) {
         provisionStop("Tenantpad valt buiten de goedgekeurde tenantroot: {$pad}");
@@ -194,16 +255,12 @@ function provisionMaakMap(string $pad, string $tenantRoot, bool $dryRun): void
         echo "DIR  {$pad}\n";
         return;
     }
-
     if (!is_dir($pad) && !@mkdir($pad, 0750, false)) {
         provisionStop("map {$pad} kon niet worden aangemaakt.");
     }
     clearstatcache(true, $pad);
     if (is_link($pad) || !is_dir($pad)) provisionStop("map {$pad} is na aanmaak geen veilige gewone map.");
     @chmod($pad, 0750);
-
-    // Post-check: pas na realpath van de daadwerkelijk aangemaakte map mag de
-    // provisioner doorgaan naar bestanden of onderliggende directories.
     provisionControleerTenantpad($pad, $tenantRoot);
 }
 
@@ -218,7 +275,7 @@ function provisionSchrijf(string $pad, string $inhoud, bool $force, bool $dryRun
     if (is_link($pad)) provisionStop("Bestandsdoel mag geen symlink zijn: {$pad}");
 
     if (is_file($pad)) {
-        $huidig = (string) file_get_contents($pad);
+        $huidig = (string)file_get_contents($pad);
         if (hash_equals(hash('sha256', $huidig), hash('sha256', $inhoud))) return 'ongewijzigd';
         if (!$force) provisionStop("{$pad} bestaat al met andere inhoud; gebruik --force na controle.");
     }
@@ -233,18 +290,27 @@ function provisionSchrijf(string $pad, string $inhoud, bool $force, bool $dryRun
     if (@file_put_contents($tmp, $inhoud, LOCK_EX) === false) provisionStop("tijdelijk bestand voor {$pad} kon niet worden geschreven.");
     @chmod($tmp, 0640);
 
-    // Hercontrole vlak voor de atomische rename, zodat een tussentijds vervangen
-    // parentpad niet stil als legitiem tenantpad wordt vertrouwd.
     provisionControleerTenantpad($pad, $tenantRoot);
-    if (is_link($pad)) { @unlink($tmp); provisionStop("Bestandsdoel werd tijdens provisioning een symlink: {$pad}"); }
-    if (!@rename($tmp, $pad)) { @unlink($tmp); provisionStop("{$pad} kon niet atomisch worden geplaatst."); }
+    if (is_link($pad)) {
+        @unlink($tmp);
+        provisionStop("Bestandsdoel werd tijdens provisioning een symlink: {$pad}");
+    }
+    if (!@rename($tmp, $pad)) {
+        @unlink($tmp);
+        provisionStop("{$pad} kon niet atomisch worden geplaatst.");
+    }
     @chmod($pad, 0640);
     return is_file($pad) ? 'geschreven' : 'aangemaakt';
 }
 
-$opt = getopt('', ['key:', 'name:', 'url:', 'root:', 'timezone::', 'driver::', 'force', 'dry-run', 'help']);
-if (isset($opt['help'])) { provisionHelp(); exit(0); }
-foreach (['key','name','url','root'] as $vereist) if (!isset($opt[$vereist]) || trim((string)$opt[$vereist]) === '') provisionStop("--{$vereist} is verplicht.");
+$opt = getopt('', ['key:', 'name:', 'url:', 'root:', 'timezone::', 'driver::', 'modules::', 'force', 'dry-run', 'help']);
+if (isset($opt['help'])) {
+    provisionHelp();
+    exit(0);
+}
+foreach (['key', 'name', 'url', 'root'] as $vereist) {
+    if (!isset($opt[$vereist]) || trim((string)$opt[$vereist]) === '') provisionStop("--{$vereist} is verplicht.");
+}
 
 $key = provisionValideTenantKey((string)$opt['key']);
 $naam = trim((string)$opt['name']);
@@ -252,12 +318,16 @@ $url = rtrim(trim((string)$opt['url']), '/');
 $baseRoot = provisionNormalizeBase((string)$opt['root']);
 $timezone = trim((string)($opt['timezone'] ?? 'Europe/Amsterdam')) ?: 'Europe/Amsterdam';
 $driver = strtolower(trim((string)($opt['driver'] ?? 'json')));
+$modulesOptie = array_key_exists('modules', $opt) ? (string)$opt['modules'] : null;
+$modules = provisionModuleKeuze($modulesOptie);
 $force = isset($opt['force']);
 $dryRun = isset($opt['dry-run']);
 
-if (!filter_var($url, FILTER_VALIDATE_URL) || !in_array((string)parse_url($url, PHP_URL_SCHEME), ['http','https'], true)) provisionStop('--url moet een geldige http(s)-URL zijn.');
+if (!filter_var($url, FILTER_VALIDATE_URL) || !in_array((string)parse_url($url, PHP_URL_SCHEME), ['http', 'https'], true)) {
+    provisionStop('--url moet een geldige http(s)-URL zijn.');
+}
 if (!in_array($timezone, timezone_identifiers_list(), true)) provisionStop('Ongeldige timezone.');
-if (!in_array($driver, ['json','pdo'], true)) provisionStop('--driver moet json of pdo zijn.');
+if (!in_array($driver, ['json', 'pdo'], true)) provisionStop('--driver moet json of pdo zijn.');
 
 $tenantRoot = rtrim($baseRoot, '/\\') . DIRECTORY_SEPARATOR . $key;
 $tenantRoot = provisionCanoniekDoelpad($tenantRoot);
@@ -280,19 +350,19 @@ $config = [
         'timezone' => $timezone,
         'standaard_taal' => 'nl',
     ],
+    'branding' => provisionNeutraleBranding(),
+    'modules' => $modules,
     'opslag' => [
         'private_driver' => $driver,
         'private_root' => $privateRoot,
-        'pdo' => ['dsn'=>'','user'=>'','password'=>''],
+        'pdo' => ['dsn' => '', 'user' => '', 'password' => ''],
     ],
 ];
 
-// Iedere geprovisioneerde tenant draait bewust fail-closed. Als de vhost of
-// process manager runtime.env niet correct toepast, mag de applicatie nooit
-// stil op RC045/defaultconfiguratie terugvallen.
 $env = "VERENIGING_REQUIRE_TENANT_CONFIG=1\n"
     . "VERENIGING_CONFIG_FILE={$configPad}\n"
     . "VERENIGING_PRIVATE_ROOT={$privateRoot}\n";
+$actieveModules = array_keys(array_filter($modules, static fn($actief) => $actief === true));
 $manifest = json_encode([
     'schema' => 1,
     'tenant_key' => $key,
@@ -300,14 +370,13 @@ $manifest = json_encode([
     'site_url' => $url,
     'timezone' => $timezone,
     'private_driver' => $driver,
+    'modules' => $actieveModules,
     'config_file' => $configPad,
     'private_root' => $privateRoot,
     'require_tenant_config' => true,
 ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n";
 
 if (!$dryRun && !is_dir($baseRoot)) {
-    // --root zelf mag nog niet bestaan. Alleen deze basis wordt recursief
-    // aangemaakt; tenant- en privatemappen daarna altijd één niveau per stap.
     if (!@mkdir($baseRoot, 0750, true) && !is_dir($baseRoot)) provisionStop("basisroot {$baseRoot} kon niet worden aangemaakt.");
     clearstatcache(true, $baseRoot);
     $symlinkBase = provisionSymlinkInPad($baseRoot);
@@ -319,20 +388,17 @@ if (!$dryRun && !is_dir($baseRoot)) {
     @chmod($baseRoot, 0750);
 }
 
-// Authdata, publieke JSON en PHP-sessies zijn bewust verder opgesplitst.
-// Daardoor kunnen credentials, content, brute-force state en actieve sessies
-// nooit per ongeluk één gedeelde opslag worden wanneer tenants code delen.
 $dirs = [
     $tenantRoot,
     $privateRoot,
-    $privateRoot.'/collections',
-    $privateRoot.'/public-content',
-    $privateRoot.'/backups',
-    $privateRoot.'/backups/auth',
-    $privateRoot.'/auth',
-    $privateRoot.'/audit',
-    $privateRoot.'/security',
-    $privateRoot.'/sessions',
+    $privateRoot . '/collections',
+    $privateRoot . '/public-content',
+    $privateRoot . '/backups',
+    $privateRoot . '/backups/auth',
+    $privateRoot . '/auth',
+    $privateRoot . '/audit',
+    $privateRoot . '/security',
+    $privateRoot . '/sessions',
 ];
 foreach ($dirs as $dir) provisionMaakMap($dir, $tenantRoot, $dryRun);
 
@@ -347,4 +413,5 @@ echo "\nTenant klaar: {$key}\n";
 echo "Runtime: export VERENIGING_REQUIRE_TENANT_CONFIG=1\n";
 echo "         export VERENIGING_CONFIG_FILE=" . escapeshellarg($configPad) . "\n";
 echo "Private opslag: {$privateRoot}\n";
+echo "Actieve modules: " . implode(', ', $actieveModules) . "\n";
 echo "Auth masterconfig: {$privateRoot}/auth/master.php (nog apart instellen)\n";
