@@ -1,6 +1,6 @@
 <?php
 // ============================================================
-// Ledenservice fase 2.5
+// Ledenservice fase 2.5/2.5.1
 // ============================================================
 require_once dirname(__DIR__) . '/auth-capabilities.php';
 require_once dirname(__DIR__) . '/storage/domein-repositories.php';
@@ -14,15 +14,11 @@ function ledenServiceKoppelAccount(array &$lid,string $userId,string $gebruikers
 function ledenServiceArchiveer(array &$data,string $lidId,string $door): ?array{foreach((array)($data['leden']??[]) as $i=>$lid){if(!is_array($lid)||($lid['id']??'')!==$lidId)continue;if(!empty($lid['gearchiveerd_op']))return$lid;$data['leden'][$i]['gearchiveerd_op']=date('c');$data['leden'][$i]['gearchiveerd_door']=$door;$data['leden'][$i]['status']='opgezegd';$data['leden'][$i]['user_id']='';$data['leden'][$i]['beheer_account']='';$data['leden'][$i]['gewijzigd']=date('c');return$data['leden'][$i];}return null;}
 function ledenServiceHerstelArchief(array &$data,string $lidId): ?array{foreach((array)($data['leden']??[]) as $i=>$lid){if(!is_array($lid)||($lid['id']??'')!==$lidId)continue;$data['leden'][$i]['gearchiveerd_op']='';$data['leden'][$i]['gearchiveerd_door']='';$data['leden'][$i]['user_id']='';$data['leden'][$i]['beheer_account']='';$data['leden'][$i]['gewijzigd']=date('c');return$data['leden'][$i];}return null;}
 function ledenServiceIsLijst(array $a): bool{return function_exists('array_is_list')?array_is_list($a):(count($a)===0||array_keys($a)===range(0,count($a)-1));}
-function ledenServicePurgeId(&$waarde,string $id): void
-{
-    if(!is_array($waarde))return;
-    if(ledenServiceIsLijst($waarde)){$nieuw=[];foreach($waarde as $item){if(is_string($item)&&hash_equals($item,$id))continue;if(is_array($item))ledenServicePurgeId($item,$id);$nieuw[]=$item;}$waarde=$nieuw;return;}
-    foreach(array_keys($waarde) as $sleutel){if(is_string($sleutel)&&hash_equals($sleutel,$id)){unset($waarde[$sleutel]);continue;}$item=&$waarde[$sleutel];if(is_string($item)&&hash_equals($item,$id)){$item='';unset($item);continue;}if(is_array($item))ledenServicePurgeId($item,$id);unset($item);}
-}
-function ledenServiceVerwijderRelaties(string $lidId,string $aanmeldingId=''): bool
-{
+function ledenServicePurgeId(&$waarde,string $id): void{if(!is_array($waarde))return;if(ledenServiceIsLijst($waarde)){$nieuw=[];foreach($waarde as $item){if(is_string($item)&&hash_equals($item,$id))continue;if(is_array($item))ledenServicePurgeId($item,$id);$nieuw[]=$item;}$waarde=$nieuw;return;}foreach(array_keys($waarde) as $sleutel){if(is_string($sleutel)&&hash_equals($sleutel,$id)){unset($waarde[$sleutel]);continue;}$item=&$waarde[$sleutel];if(is_string($item)&&hash_equals($item,$id)){$item='';unset($item);continue;}if(is_array($item))ledenServicePurgeId($item,$id);unset($item);}}
+function ledenServiceVerwijderRelaties(string $lidId,string $aanmeldingId=''): bool{
     $bronnen=[['repoVergaderingenLees','repoVergaderingenSchrijf'],['repoTakenLees','repoTakenSchrijf'],['repoOperationeleTakenLees','repoOperationeleTakenSchrijf'],['repoEvenementenLees','repoEvenementenSchrijf']];foreach($bronnen as [$lezer,$schrijver]){$data=$lezer();if(!is_array($data))continue;$voor=json_encode($data);ledenServicePurgeId($data,$lidId);$na=json_encode($data);if($voor!==$na&&!$schrijver($data))return false;}
+    require_once __DIR__.'/groepen.php';$groepen=groepenLeesDocument();$voor=json_encode($groepen);groepenPurgeLid($groepen,$lidId);if($voor!==json_encode($groepen)&&!groepenSchrijfDocument($groepen))return false;
+    require_once __DIR__.'/labels.php';$labels=labelsLeesDocument();$voor=json_encode($labels);labelsPurgeLid($labels,$lidId);if($voor!==json_encode($labels)&&!labelsSchrijfDocument($labels))return false;
     require_once __DIR__.'/contributies.php';$fin=contributiesLees();$voor=count((array)($fin['regels']??[]));$fin['regels']=array_values(array_filter((array)($fin['regels']??[]),static fn($r)=>!is_array($r)||($r['lid_id']??'')!==$lidId));if(count($fin['regels'])!==$voor&&!contributiesSchrijf($fin))return false;
     require_once dirname(__DIR__,2).'/aanmeldingen-opslag.php';$apps=aanmeldingenLees();$voor=count((array)($apps['aanmeldingen']??[]));$apps['aanmeldingen']=array_values(array_filter((array)($apps['aanmeldingen']??[]),static function($a)use($lidId,$aanmeldingId){if(!is_array($a))return true;if(($a['lid_id']??'')===$lidId)return false;if($aanmeldingId!==''&&($a['id']??'')===$aanmeldingId)return false;return true;}));if(count($apps['aanmeldingen'])!==$voor&&!aanmeldingenSchrijf($apps))return false;return true;
 }

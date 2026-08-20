@@ -13,6 +13,8 @@ require_once dirname(__DIR__,2) . '/vergaderingen-opslag.php';
 require_once dirname(__DIR__,2) . '/taken-opslag.php';
 require_once dirname(__DIR__,2) . '/operationele-taken-opslag.php';
 require_once dirname(__DIR__,2) . '/evenementen-opslag.php';
+require_once dirname(__DIR__,2) . '/groepen-opslag.php';
+require_once dirname(__DIR__,2) . '/ledenlabels-opslag.php';
 
 function repoPhpJsonSchrijf(string $pad, string $voorloop, array $data, ?callable $backupMaker = null, bool $backup = true): bool
 {
@@ -31,57 +33,17 @@ function repoPhpJsonSchrijf(string $pad, string $voorloop, array $data, ?callabl
     return true;
 }
 
-function repoLedenLees(): array
-{
-    return privateStoreLees('leden', 'ledenLees');
-}
-function repoLedenSchrijf(array $data, bool $backup=true): bool
-{
-    return privateStoreSchrijf('leden', $data, static fn($d) => repoPhpJsonSchrijf(
-        ledenBestandPad(), LEDEN_VOORLOOP, $d, 'ledenMaakBackup', $backup
-    ));
-}
-
-function repoVergaderingenLees(): array
-{
-    return privateStoreLees('vergaderingen', 'vergaderingenLees');
-}
-function repoVergaderingenSchrijf(array $data, bool $backup=true): bool
-{
-    return privateStoreSchrijf('vergaderingen', $data, static fn($d) => repoPhpJsonSchrijf(
-        vergaderingenBestandPad(), VERGADERINGEN_VOORLOOP, $d, 'vergaderingenMaakBackup', $backup
-    ));
-}
-
-function repoTakenLees(): array
-{
-    return privateStoreLees('taken', 'takenLees');
-}
-function repoTakenSchrijf(array $data, bool $backup=true): bool
-{
-    return privateStoreSchrijf('taken', $data, static fn($d) => repoPhpJsonSchrijf(
-        takenBestandPad(), TAKEN_VOORLOOP, $d, 'takenMaakBackup', $backup
-    ));
-}
-
-function repoOperationeleTakenLees(): array
-{
-    return privateStoreLees('operationele_taken', 'otakenLees');
-}
-function repoOperationeleTakenSchrijf(array $data, bool $backup=true): bool
-{
-    return privateStoreSchrijf('operationele_taken', $data, static fn($d) => repoPhpJsonSchrijf(
-        otaakBestandPad(), OTAKEN_VOORLOOP, $d, 'otakenMaakBackup', $backup
-    ));
-}
-
-function repoEvenementenLees(): array
-{
-    return privateStoreLees('evenementen', 'evenementenLees');
-}
-function repoEvenementenSchrijf(array $data, bool $backup=true): bool
-{
-    return privateStoreSchrijf('evenementen', $data, static fn($d) => repoPhpJsonSchrijf(
-        evenementBestandPad(), EVENEMENTEN_VOORLOOP, $d, 'evenementenMaakBackup', $backup
-    ));
-}
+function repoLedenLees(): array{return privateStoreLees('leden', 'ledenLees');}
+function repoLedenSchrijf(array $data, bool $backup=true): bool{return privateStoreSchrijf('leden', $data, static fn($d) => repoPhpJsonSchrijf(ledenBestandPad(), LEDEN_VOORLOOP, $d, 'ledenMaakBackup', $backup));}
+function repoVergaderingenLees(): array{return privateStoreLees('vergaderingen', 'vergaderingenLees');}
+function repoVergaderingenSchrijf(array $data, bool $backup=true): bool{return privateStoreSchrijf('vergaderingen', $data, static fn($d) => repoPhpJsonSchrijf(vergaderingenBestandPad(), VERGADERINGEN_VOORLOOP, $d, 'vergaderingenMaakBackup', $backup));}
+function repoTakenLees(): array{return privateStoreLees('taken', 'takenLees');}
+function repoTakenSchrijf(array $data, bool $backup=true): bool{return privateStoreSchrijf('taken', $data, static fn($d) => repoPhpJsonSchrijf(takenBestandPad(), TAKEN_VOORLOOP, $d, 'takenMaakBackup', $backup));}
+function repoOperationeleTakenLees(): array{return privateStoreLees('operationele_taken', 'otakenLees');}
+function repoOperationeleTakenSchrijf(array $data, bool $backup=true): bool{return privateStoreSchrijf('operationele_taken', $data, static fn($d) => repoPhpJsonSchrijf(otaakBestandPad(), OTAKEN_VOORLOOP, $d, 'otakenMaakBackup', $backup));}
+function repoEvenementenLees(): array{return privateStoreLees('evenementen', 'evenementenLees');}
+function repoEvenementenSchrijf(array $data, bool $backup=true): bool{return privateStoreSchrijf('evenementen', $data, static fn($d) => repoPhpJsonSchrijf(evenementBestandPad(), EVENEMENTEN_VOORLOOP, $d, 'evenementenMaakBackup', $backup));}
+function repoGroepenLees(): array{return privateStoreLees('groepen', 'groepenLees');}
+function repoGroepenSchrijf(array $data, bool $backup=true): bool{return privateStoreSchrijf('groepen', $data, static fn($d) => repoPhpJsonSchrijf(groepenBestandPad(), GROEPEN_VOORLOOP, $d, 'groepenMaakBackup', $backup));}
+function repoLedenlabelsLees(): array{return privateStoreLees('ledenlabels', 'ledenlabelsLees');}
+function repoLedenlabelsSchrijf(array $data, bool $backup=true): bool{return privateStoreSchrijf('ledenlabels', $data, static fn($d) => repoPhpJsonSchrijf(ledenlabelsBestandPad(), LEDENLABELS_VOORLOOP, $d, 'ledenlabelsMaakBackup', $backup));}
