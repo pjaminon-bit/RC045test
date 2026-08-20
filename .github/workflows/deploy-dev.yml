@@ -119,9 +119,10 @@ jobs:
           wacht_op_status "$basis/leden/" 200 ja
           wacht_op_status "$basis/aanmelden.html" 200 ja
 
-          for route in leden.php lid-groepen.php leden-import.php ledenlabels.php commissies.php werkgroepen.php groepsrollen.php vergaderingen.php taken.php operationele-taken.php evenementen.php aanmeldingen.php lidmaatschap.php contributies.php gebruikers.php logboek.php backups.php; do
+          for route in leden.php leden-import.php ledenlabels.php commissies.php werkgroepen.php groepsrollen.php vergaderingen.php taken.php operationele-taken.php evenementen.php aanmeldingen.php lidmaatschap.php contributies.php gebruikers.php logboek.php backups.php; do
             wacht_op_status "$basis/beheer/$route" 302 nee
           done
+          wacht_op_status "$basis/beheer/lid-groepen.php?id=test" 308 nee
 
           wacht_op_status "$basis/data/lidmaatschapstypen.json" 200 nee
           wacht_op_status "$basis/app/paneel-hulp.php" 403 nee
