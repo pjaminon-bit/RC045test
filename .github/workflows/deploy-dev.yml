@@ -35,13 +35,13 @@ jobs:
       - name: Basis architectuurtest
         run: php tests/phase25-architecture.php
 
-      - name: Uitgebreide fase 2.5 PR-tests
-        if: github.event_name == 'pull_request'
+      - name: Uitgebreide platformtests
         shell: bash
         run: |
           set -euo pipefail
           node --check lidmaatschap-aanmelden.js
           php tests/phase25-domain-integrity.php
+          php tests/phase251-groups.php
           php -m | grep -qi '^pdo_sqlite$' || { echo 'pdo_sqlite ontbreekt op de runner' >&2; exit 1; }
           php tests/private-store-pdo-sqlite.php
           php tests/private-store-pdo-failclosed.php
@@ -119,12 +119,14 @@ jobs:
           wacht_op_status "$basis/leden/" 200 ja
           wacht_op_status "$basis/aanmelden.html" 200 ja
 
-          for route in leden.php leden-import.php commissies.php vergaderingen.php taken.php operationele-taken.php evenementen.php aanmeldingen.php lidmaatschap.php gebruikers.php logboek.php backups.php; do
+          for route in leden.php leden-import.php ledenlabels.php commissies.php werkgroepen.php groepsrollen.php vergaderingen.php taken.php operationele-taken.php evenementen.php aanmeldingen.php lidmaatschap.php contributies.php gebruikers.php logboek.php backups.php; do
             wacht_op_status "$basis/beheer/$route" 302 nee
           done
 
           wacht_op_status "$basis/data/lidmaatschapstypen.json" 200 nee
           wacht_op_status "$basis/app/paneel-hulp.php" 403 nee
           wacht_op_status "$basis/aanmeldingen-opslag.php" 403 nee
+          wacht_op_status "$basis/groepen-opslag.php" 403 nee
+          wacht_op_status "$basis/ledenlabels-opslag.php" 403 nee
           wacht_op_status "$basis/beheer/backup-registry.php" 403 nee
           wacht_op_status "$basis/dev-build.json" 403 nee
