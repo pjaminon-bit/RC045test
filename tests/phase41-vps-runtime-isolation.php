@@ -104,11 +104,12 @@ try {
     check41($badWebCode!==0&&str_contains($badWebOut,'Linux-naam'),'webserver identity accepteert alleen veilige Linux-accountnamen');
 
     $applySrc=(string)file_get_contents($root.'/bin/apply-vps-runtime.php');
+    $contractSrc=(string)file_get_contents($root.'/app/deployment/runtime-contract.php');
     check41(str_contains($applySrc,"posix_geteuid() !== 0")&&str_contains($applySrc,"PHP_OS_FAMILY !== 'Linux'"),'root-toepassing vereist expliciet Linux EUID 0');
-    check41(str_contains($applySrc,"'groupadd', '--system'")&&str_contains($applySrc,"'useradd', '--system'")&&str_contains($applySrc,"'/usr/sbin/nologin'"),'apply-tool maakt uitsluitend system account zonder login aan');
+    check41(str_contains($applySrc,"'groupadd', '--system'")&&str_contains($applySrc,"'useradd', '--system'")&&str_contains($contractSrc,"'shell' => '/usr/sbin/nologin'")&&str_contains($contractSrc,"'home' => '/nonexistent'"),'apply-tool en contract maken uitsluitend system account zonder login/home aan');
     check41(str_contains($applySrc,'Supplementary groups')&&str_contains($applySrc,"'id', '-G'"),'apply-tool weigert onverwachte supplementary groups');
     check41(str_contains($applySrc,'apply41SymlinksVerboden')&&str_contains($applySrc,'Shared code is world-writable'),'apply-tool controleert tenantboomsymlinks en schrijfbaarheid van gedeelde code');
-    check41(!str_contains($applySrc,'systemctl')&&!str_contains($applySrc,'service '),'apply-tool reloadt PHP-FPM nooit blind automatisch');
+    check41(!str_contains($applySrc,"apply41Run(['systemctl'")&&!str_contains($applySrc,"apply41Run(['service'"),'apply-tool roept geen automatische PHP-FPM reloadcommand aan');
 } finally { rr41($tmp); }
 
 echo "Phase 4.1 VPS runtime isolation: $ok OK, $fout fout(en)\n";
