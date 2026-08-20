@@ -193,10 +193,18 @@ function web42Json(array $data): string
 
 function web42ApacheQuote(string $waarde): string
 {
-    if ($waarde === '' || str_contains($waarde, "\0") || str_contains($waarde, "\r") || str_contains($waarde, "\n")) {
+    // Apache-regexvoorbeelden gebruiken backslashes rechtstreeks in quoted
+    // arguments (zoals "\\.php$"). Verdubbel die dus niet generiek: dat zou
+    // de regexbetekenis wijzigen. Quotes/newlines zijn in onze gecontroleerde
+    // literals niet nodig en worden fail-closed geweigerd.
+    if ($waarde === ''
+        || str_contains($waarde, "\0")
+        || str_contains($waarde, "\r")
+        || str_contains($waarde, "\n")
+        || str_contains($waarde, '"')) {
         throw new RuntimeException('Ongeldige Apache-configuratiewaarde.');
     }
-    return '"' . addcslashes($waarde, "\\\"") . '"';
+    return '"' . $waarde . '"';
 }
 
 function web42CatchallConfig(array $plan): string
@@ -246,7 +254,7 @@ function web42HttpsRoutingFragment(array $plan): string
 
     return implode("\n", [
         '# Gegenereerd door fase 4.2. Include dit uitsluitend BINNEN de tenant HTTPS-vhost uit fase 4.4.',
-        '# Dit fragment bevat bewust geen TLS-key/certificaat en geen ServerAlias.',
+        '# TLS/certificaat en de exacte hostbinding worden door de fase-4.4 wrapper geleverd.',
         'UseCanonicalName On',
         'ProxyRequests Off',
         'DocumentRoot ' . web42ApacheQuote($docroot),
