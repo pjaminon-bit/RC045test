@@ -107,7 +107,13 @@ $config = [
         'pdo' => ['dsn'=>'','user'=>'','password'=>''],
     ],
 ];
-$env = "VERENIGING_CONFIG_FILE={$configPad}\nVERENIGING_PRIVATE_ROOT={$privateRoot}\n";
+
+// Iedere geprovisioneerde tenant draait bewust fail-closed. Als de vhost of
+// process manager runtime.env niet correct toepast, mag de applicatie nooit
+// stil op RC045/defaultconfiguratie terugvallen.
+$env = "VERENIGING_REQUIRE_TENANT_CONFIG=1\n"
+    . "VERENIGING_CONFIG_FILE={$configPad}\n"
+    . "VERENIGING_PRIVATE_ROOT={$privateRoot}\n";
 $manifest = json_encode([
     'schema' => 1,
     'tenant_key' => $key,
@@ -117,6 +123,7 @@ $manifest = json_encode([
     'private_driver' => $driver,
     'config_file' => $configPad,
     'private_root' => $privateRoot,
+    'require_tenant_config' => true,
 ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n";
 
 $dirs = [$tenantRoot, $privateRoot, $privateRoot.'/collections', $privateRoot.'/backups'];
@@ -134,5 +141,6 @@ $resultaten = [
 
 foreach ($resultaten as $pad => $status) echo strtoupper($status) . "  {$pad}\n";
 echo "\nTenant klaar: {$key}\n";
-echo "Runtime: export VERENIGING_CONFIG_FILE=" . escapeshellarg($configPad) . "\n";
+echo "Runtime: export VERENIGING_REQUIRE_TENANT_CONFIG=1\n";
+echo "         export VERENIGING_CONFIG_FILE=" . escapeshellarg($configPad) . "\n";
 echo "Private opslag: {$privateRoot}\n";
