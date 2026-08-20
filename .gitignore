@@ -33,6 +33,8 @@ vergaderingen-data.php
 taken-data.php
 operationele-taken-data.php
 evenementen-data.php
+groepen-data.php
+ledenlabels-data.php
 
 # Lokale database-/testbestanden
 *.sqlite
