@@ -8,6 +8,7 @@
 // ============================================================
 
 require_once dirname(__DIR__) . '/core/site.php';
+require_once dirname(__DIR__) . '/storage/tenant-backup-store.php';
 
 function publicAssetDefinities(): array
 {
@@ -223,11 +224,22 @@ function publicAssetVeiligLeesPad(string $scope, string $relatief): ?string
     return $padReal;
 }
 
+/** Eén pre-write assetsnapshot per scope per POST-request. */
+function publicAssetMaakPreWriteSnapshot(string $scope): void
+{
+    static $gedaan = [];
+    if (($gedaan[$scope] ?? false) || ($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST' || publicAssetTenantRoot() === null) return;
+    $gedaan[$scope] = true;
+    $root = publicAssetNamespaceRoot($scope);
+    if ($root !== null && is_dir($root)) tenantBackupMaakAssetSnapshot($scope);
+}
+
 function publicAssetMaakNamespaceMap(string $scope): ?string
 {
     $root = publicAssetNamespaceRoot($scope);
     if ($root === null || !publicAssetTenantPadVeilig($root)) return null;
     $tenant = publicAssetTenantRoot() !== null;
+    if ($tenant) publicAssetMaakPreWriteSnapshot($scope);
     $mode = $tenant ? 0750 : 0755;
     if (!is_dir($root) && !@mkdir($root, $mode, true)) return null;
     clearstatcache(true, $root);
