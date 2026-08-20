@@ -146,7 +146,10 @@ function tenantBackupPruneData(string $sleutel): void
     $map = tenantBackupDataMap($sleutel);
     if ($map === null || !is_dir($map) || !tenantBackupPadVeilig($map)) return;
     $files = array_values(array_filter(@glob($map . DIRECTORY_SEPARATOR . '*.json') ?: [], static fn($p) => is_file($p) && !is_link($p)));
-    usort($files, static fn($a, $b) => (@filemtime($a) ?: 0) <=> (@filemtime($b) ?: 0));
+    // Snapshotnamen beginnen met een microsecond-precisie tijdstempel en zijn
+    // daardoor betrouwbaar chronologisch te sorteren, ook wanneer filemtime
+    // voor meerdere snapshots dezelfde seconde teruggeeft.
+    usort($files, static fn($a, $b) => strcmp(basename($a), basename($b)));
     $grens = time() - tenantBackupBewaardagen() * 86400;
     $over = [];
     foreach ($files as $file) {
@@ -194,7 +197,7 @@ function tenantBackupDataLijst(string $sleutel): array
     $map = tenantBackupDataMap($sleutel);
     if ($map === null || !is_dir($map) || !tenantBackupPadVeilig($map)) return [];
     $files = array_values(array_filter(@glob($map . DIRECTORY_SEPARATOR . '*.json') ?: [], static fn($p) => is_file($p) && !is_link($p)));
-    usort($files, static fn($a, $b) => (@filemtime($b) ?: 0) <=> (@filemtime($a) ?: 0));
+    usort($files, static fn($a, $b) => strcmp(basename($b), basename($a)));
     return $files;
 }
 
@@ -293,7 +296,7 @@ function tenantBackupAssetLijst(string $scope): array
         $pad = $root . DIRECTORY_SEPARATOR . $item;
         if (is_dir($pad) && !is_link($pad) && is_file($pad . DIRECTORY_SEPARATOR . 'manifest.json')) $dirs[] = $pad;
     }
-    usort($dirs, static fn($a, $b) => (@filemtime($b . DIRECTORY_SEPARATOR . 'manifest.json') ?: 0) <=> (@filemtime($a . DIRECTORY_SEPARATOR . 'manifest.json') ?: 0));
+    usort($dirs, static fn($a, $b) => strcmp(basename($b), basename($a)));
     return $dirs;
 }
 
@@ -311,7 +314,7 @@ function tenantBackupPruneAssets(): void
         }
     }
 
-    usort($alle, static fn($a, $b) => (@filemtime($a . DIRECTORY_SEPARATOR . 'manifest.json') ?: 0) <=> (@filemtime($b . DIRECTORY_SEPARATOR . 'manifest.json') ?: 0));
+    usort($alle, static fn($a, $b) => strcmp(basename($a), basename($b)));
     $totaal = 0;
     $groottes = [];
     foreach ($alle as $map) { $g = tenantBackupMapGrootte($map); $groottes[$map] = $g; $totaal += $g; }
