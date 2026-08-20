@@ -80,7 +80,7 @@ if(($_SERVER['REQUEST_METHOD']??'')==='POST'){
                 if($idx===null){$melding='Album niet gevonden. Ververs de pagina.';$meldingType='fout';}
                 else{
                     $album=$data['albums'][$idx];$albumPad=fbMaakTenantAlbumMap($fotoRoot,$slug);
-                    if($albumPad===null){$melding='Album-map is niet veilig beschikbaar.';$meldingType='fout';continue;}
+                    if($albumPad===null){fbFlash('Album-map is niet veilig beschikbaar.','fout');fbRedirect();}
                     $titel=fbKort($_POST['titel_nl']??'',60);if($titel!=='')$album['title']['nl']=$titel;
                     $album['title']['en']=fbKort($_POST['titel_en']??'',60);$album['title']['de']=fbKort($_POST['titel_de']??'',60);
                     $album['beschrijving']=['nl'=>fbKort($_POST['beschrijving_nl']??'',600),'en'=>fbKort($_POST['beschrijving_en']??'',600),'de'=>fbKort($_POST['beschrijving_de']??'',600)];
