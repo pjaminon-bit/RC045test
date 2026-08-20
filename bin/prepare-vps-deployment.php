@@ -263,15 +263,21 @@ function deploy35Context(string $configInvoer, string $appRootInvoer): array
         'web' => [
             'https_required' => true,
             'canonical_host' => $site['host'],
+            'http_redirect_target' => $site['url'],
+            'redirect_must_not_use_request_host' => true,
+            'reject_unknown_hosts' => true,
+            'default_vhost_must_reject' => true,
             'serve_only_shared_app_root' => true,
             'private_root_must_never_be_document_root' => true,
             'tenant_runtime_selected_by_php_pool' => true,
+            'vcs_metadata_must_not_be_served' => true,
         ],
         'readiness' => [
             'manifest_bound' => true,
             'runtime_env_bound' => true,
             'admin_bootstrapped' => true,
             'tenant_storage_outside_app_root' => true,
+            'canonical_host_contract' => true,
         ],
     ];
 
