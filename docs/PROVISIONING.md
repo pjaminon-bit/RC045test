@@ -1,8 +1,8 @@
 # Tenant provisioning
 
-De applicatiecode wordt gedeeld. Iedere vereniging krijgt buiten de code/documentroot een eigen tenantmap met server-only configuratie en private opslag.
+De applicatiecode wordt gedeeld. Iedere vereniging krijgt buiten de code/documentroot een eigen tenantmap met server-only configuratie, private opslag, eigen branding/moduleprofiel en eigen beheer-authenticatie.
 
-## Nieuwe tenant aanmaken
+## 1. Nieuwe tenant aanmaken
 
 Voorbeeld:
 
@@ -11,7 +11,8 @@ php bin/provision-tenant.php \
   --key=voorbeeldvereniging \
   --name="Voorbeeldvereniging" \
   --url=https://voorbeeldvereniging.nl \
-  --root=/srv/verenigingen
+  --root=/srv/verenigingen \
+  --modules=website,ledenadministratie,aanmelden,sponsors
 ```
 
 Dit maakt aan:
@@ -32,20 +33,22 @@ Dit maakt aan:
         └── auth/
 ```
 
-De provisioner kopieert de applicatiecode **niet**. `private/public-assets/` wordt pas aangemaakt zodra een tenant de eerste publieke uploadnamespace gebruikt; de applicatie maakt die map dan zelf met tenant-lokale rechten aan. Hierdoor blijft provisioning idempotent en hoeft een tenant zonder Fotoboek of Sponsors geen ongebruikte uploadstructuur te krijgen.
+De provisioner kopieert de applicatiecode **niet**. Alle verenigingen gebruiken dezelfde gedeelde codebase.
 
-## Tenant-key is permanente technische identiteit
+`private/public-assets/` wordt pas aangemaakt zodra een tenant de eerste publieke uploadnamespace gebruikt. Een vereniging zonder Fotoboek/Sponsors krijgt dus geen ongebruikte uploadstructuur.
 
-`--key` wordt niet meer genormaliseerd of gecorrigeerd. De opgegeven waarde moet al exact canoniek zijn voordat provisioning start.
+## 2. Tenant-key
+
+`--key` is de permanente technische identiteit en wordt niet stil genormaliseerd.
 
 Contract:
 
-- 3 tot en met 63 ASCII-tekens;
-- alleen lowercase `a-z`, cijfers `0-9` en het koppelteken `-`;
-- geen koppelteken aan begin of einde;
-- geen dubbele koppeltekens (`--`);
-- geen spaties, underscores, hoofdletters, Unicode of andere speciale tekens;
-- `default` is gereserveerd en mag niet als tenant-key worden gebruikt.
+- 3 t/m 63 ASCII-tekens;
+- alleen lowercase `a-z`, cijfers `0-9` en `-`;
+- geen koppelteken aan begin/einde;
+- geen dubbele koppeltekens;
+- geen spaties, underscores, hoofdletters of Unicode;
+- `default` is gereserveerd.
 
 Voorbeelden:
 
@@ -58,26 +61,61 @@ ongeldig: test--club
 ongeldig: default
 ```
 
-Een ongeldige key wordt fail-closed geweigerd voordat tenantmappen, configuratie of manifesten worden aangemaakt. De weergavenaam van de vereniging hoort in `--name`; de technische key is niet bedoeld als vrij tekstveld.
+Ongeldige keys worden geweigerd voordat filesystemwrites plaatsvinden.
 
-## Runtime koppelen
+## 3. Moduleprofiel en branding
 
-De webserver/PHP-runtime van deze vereniging krijgt minimaal:
+Met `--modules=` wordt de actieve functionaliteit per tenant gekozen. De kernmodule `website` is verplicht. Iedere bekende module wordt in `config.php` expliciet als `true` of `false` opgeslagen, zodat een tenant geen ontbrekende modulekeuzes uit RC045/defaultconfig kan erven.
+
+Zonder `--modules` blijven voor compatibiliteit alle platformmodules actief.
+
+Nieuwe externe tenants krijgen neutrale platformbranding. Ze erven geen RC045-logo, social image, favicons of webmanifest. Eigen branding wordt later uitsluitend in de eigen server-only tenantconfig gezet.
+
+## 4. Runtime koppelen
+
+De webserver/PHP-runtime van de vereniging krijgt minimaal:
 
 ```text
 VERENIGING_REQUIRE_TENANT_CONFIG=1
 VERENIGING_CONFIG_FILE=/srv/verenigingen/voorbeeldvereniging/config.php
 ```
 
-`VERENIGING_REQUIRE_TENANT_CONFIG=1` is de securitygrens voor de gedeelde VPS. Als `VERENIGING_CONFIG_FILE` dan ontbreekt, relatief is, onleesbaar is of naar een niet-bestaand bestand wijst, stopt de applicatie met een configuratiefout. Er wordt **nooit** teruggevallen op RC045/defaultconfiguratie.
+`VERENIGING_REQUIRE_TENANT_CONFIG=1` is de harde securitygrens. Als de config ontbreekt, relatief is, onleesbaar is of niet bestaat, stopt de applicatie. Er wordt **nooit** teruggevallen op RC045/defaultconfiguratie.
 
-`config.php` bevat zelf de tenant-eigen `private_root`. `runtime.env` wordt als hulpmiddel gegenereerd en bevat de verplichte fail-closed vlag automatisch. Het bestand is niet bedoeld om via HTTP te worden aangeboden.
+`config.php` bevat de tenant-eigen `private_root`. `runtime.env` wordt als hulpmiddel gegenereerd en bevat de fail-closed runtimewaarden.
 
-De bestaande losse RC045/DEV-installatie blijft voorlopig compatibel wanneer `VERENIGING_REQUIRE_TENANT_CONFIG` niet is gezet. Die compatibiliteitsmodus is niet bedoeld als configuratie voor nieuwe VPS-tenants.
+De bestaande standalone RC045/DEV-installatie blijft compatibel zonder de verplichte tenantvlag; die modus is niet bedoeld voor nieuwe VPS-tenants.
 
-## Beheer-auth per tenant
+## 5. Eerste beheerder activeren
 
-Nieuwe tenants gebruiken uitsluitend deze server-only authpaden:
+De provisioner maakt bewust geen standaard beheerderswachtwoord. Na provisioning activeer je de eerste tenantbeheerder via:
+
+```bash
+php bin/bootstrap-tenant-admin.php \
+  --config=/srv/verenigingen/voorbeeldvereniging/config.php
+```
+
+Het wachtwoord wordt interactief twee keer verborgen gevraagd. Voor automation kan een veilige secretbron via STDIN worden gebruikt:
+
+```bash
+secret-tool ... | php bin/bootstrap-tenant-admin.php \
+  --config=/srv/verenigingen/voorbeeldvereniging/config.php \
+  --password-stdin
+```
+
+Wachtwoorden en hashes als CLI-argument worden expliciet geweigerd. Alleen een `password_hash()` wordt opgeslagen in:
+
+```text
+private/auth/master.php
+```
+
+Bestaat al een mastercredential, dan is overschrijven niet toegestaan. Een bewuste rotatie vereist `--rotate` en maakt eerst een server-only backup van de vorige hash.
+
+Volledige security- en gebruiksdetails staan in `docs/ADMIN-BOOTSTRAP.md`.
+
+## 6. Auth- en sessie-isolatie
+
+Externe tenants gebruiken uitsluitend tenant-lokale authpaden:
 
 ```text
 private/auth/master.php
@@ -89,34 +127,25 @@ private/backups/auth/
 private/sessions/
 ```
 
-Er is voor een tenant met `private_root` **geen fallback** naar `beheer-config.php`, `beheer-users.json`, `beheer-log.json` of `beheer-login-pogingen.json` in de gedeelde applicatieroot.
+Er is geen fallback naar gedeelde RC045-authdata. Ook PHP-sessionopslag en session-cookie namespace zijn tenantgebonden.
 
-De provisioner maakt bewust géén standaard beheerderswachtwoord aan. Een nieuwe tenant blijft voor beheer ongeconfigureerd totdat `private/auth/master.php` veilig server-side is geplaatst met minimaal een `password_hash()`:
+## 7. Publieke content
 
-```php
-<?php
-$BEHEER_WACHTWOORD_HASH = '...password_hash-resultaat...';
-```
-
-Een generiek of gedeeld standaardwachtwoord tussen verenigingen is dus niet onderdeel van provisioning.
-
-## Publieke content per tenant
-
-Dynamische openbare JSON staat voor nieuwe tenants onder:
+Dynamische openbare JSON staat voor externe tenants onder:
 
 ```text
 private/public-content/
 ```
 
-Daaronder vallen onder meer homepage, ontstaan, baanreglement, aanmelden/bedankt, actueel, agenda, FAQ, contact, nieuws, Media, Fotoboek, changelog en lidmaatschapstypen. Een ontbrekend tenantbestand valt **niet** terug op het overeenkomstige RC045-bestand onder `/data`.
+Onder meer homepage, ontstaan, reglement, aanmelden/bedankt, actueel, agenda, FAQ, contact, nieuws, Media, Fotoboek, changelog en lidmaatschapstypen vallen hieronder.
 
-De browser blijft voorlopig de bestaande URL-vorm `/data/<dataset>.json` gebruiken. Apache routeert uitsluitend de expliciet gewhiteliste datasets via `public-content.php`, dat het bestand voor de actieve tenant uit de private opslag leest. Het endpoint accepteert alleen GET/HEAD en kent geen vrij bestandspad. Bij Nginx moet de vhost dezelfde exacte `/data/<dataset>.json`-routing naar `public-content.php?key=<dataset>` configureren; een wildcard waarmee willekeurige private bestanden opvraagbaar worden is niet toegestaan.
+Een ontbrekend tenantbestand valt niet terug op RC045 `/data`. Legacy browser-URL's `/data/<dataset>.json` worden via de expliciete whitelist in `public-content.php` naar de actieve tenant gerouteerd.
 
-De bestaande standalone RC045/DEV-installatie gebruikt via dezelfde resolver voorlopig de bestaande `/data`-bestanden. Dit is alleen de compatibiliteitsmodus.
+Bij Nginx moet dezelfde exacte whitelist-routing worden ingericht; geef nooit vrij filesystemtoegang tot de private root.
 
-## Publieke uploads per tenant
+## 8. Publieke uploads
 
-Fotoboekbestanden en sponsorlogo's staan voor externe tenants buiten de documentroot:
+Fotoboekbestanden en sponsorlogo's staan buiten de documentroot:
 
 ```text
 private/public-assets/
@@ -129,61 +158,65 @@ private/public-assets/
     └── <bestand>
 ```
 
-De browser-URL's blijven `images/fotoboek/...` en `images/sponsors/...`. Apache routeert alleen de toegestane patronen naar `public-asset.php`. Die gateway accepteert uitsluitend GET/HEAD, gebruikt vaste MIME-whitelists, blokkeert traversal en symlink-bypasses en ondersteunt byte-ranges voor MP4-bestanden. Een ontbrekend bestand valt nooit terug op een andere tenant of de standalone RC045-map.
+De browser-URL's blijven `images/fotoboek/...` en `images/sponsors/...`. `public-asset.php` serveert alleen toegestane scopes/extensies, blokkeert traversal en symlinks en ondersteunt begrensde MP4 byte-ranges.
 
-Bij Nginx moet dezelfde scheiding expliciet worden ingericht: stuur uitsluitend de twee bekende URL-namespaces naar `public-asset.php` met de juiste `scope` en het gecontroleerde relatieve pad. Geef nooit rechtstreeks filesystemtoegang tot `private/public-assets`.
+Een ontbrekend asset valt nooit terug op een andere tenant of op RC045.
 
-Tenantassetmappen krijgen `0750`; bestanden die door de applicatie worden geschreven krijgen `0640`. De standalone RC045/DEV-installatie blijft voorlopig de bestaande `images/fotoboek/` en `images/sponsors/` gebruiken.
+## 9. Private data en PDO
 
-Belangrijke fasegrenzen:
+Private JSON-collecties staan onder:
 
-- tenant-public-content en publieke uploads worden bewust niet naar de oude gedeelde `data-backups` gekopieerd; backup/restore wordt als geheel tenant-aware in optie 9;
-- RC045-specifieke hardcoded tekst/branding in de code wordt pas bij de neutrale platformdefaults aangepakt en is niet hetzelfde als een opslagfallback;
-- een externe tenant gebruikt tot die brandingfase bewust niet het gedeelde RC045-logo als Fotoboek-watermerk.
+```text
+private/collections/
+```
 
-## Veilige filesystempaden
+Bij `--driver=pdo` gebruikt dezelfde repositorylaag tenant-key isolatie in de gedeelde PDO-store. Een externe PDO-tenant valt niet terug naar legacy JSON wanneer zijn collectie leeg is.
 
-`--root` wordt als securitygrens behandeld, niet alleen als tekstuele mapnaam.
+Databasecredentials worden niet door de provisioner gevraagd. DSN/user/password horen server-side via deployment/secrets gekoppeld te worden.
 
-- Het pad moet absoluut zijn.
-- `.` en `..` als padsegment worden geweigerd; de provisioner normaliseert traversal niet stil weg.
-- Een bestaande symlink op `--root`, een ancestor, de tenantmap, een private submap of een te schrijven bestand wordt geweigerd. Ook broken symlinks vallen hieronder.
-- Voor nog niet bestaande doelen wordt de langste bestaande ancestor via `realpath()` fysiek opgelost. Pas daarna worden de gevalideerde nieuwe componenten aangehangen.
-- De fysieke tenantroot mag niet binnen de gedeelde applicatie/documentroot vallen.
-- Directory- en filewrites voeren vlak vóór gebruik opnieuw een containment- en symlinkcontrole uit. Na directorycreatie volgt opnieuw een fysieke controle.
-- `config.php`, `runtime.env` en `tenant.json` worden nooit via een symlinkdoel overschreven, ook niet met `--force`.
+## 10. Backups en restore
 
-De provisioner is een beheertool en veronderstelt dat de filesystemhiërarchie waarin `--root` ligt niet gelijktijdig door een onbetrouwbare lokale gebruiker kan worden gewijzigd. Op de VPS hoort bijvoorbeeld `/srv/verenigingen` daarom alleen schrijfbaar te zijn voor de vertrouwde provisioning-/beheeraccount. De applicatie zelf hoeft geen schrijfrecht op de bovenliggende tenantroot te hebben buiten de expliciet benodigde tenantmappen.
+Externe tenants gebruiken tenantgebonden backups onder hun eigen `private_root/backups`.
 
-## Veiligheidsregels
+Data-envelopes en assetsnapshots zijn aan tenant en scope/component gebonden. Een fysiek naar een andere tenant gekopieerde snapshot wordt bij restore geweigerd. Assetrestore gebruikt staging en atomische rename.
 
-- `--key` moet exact aan het vaste tenant-key-contract voldoen; de provisioner normaliseert keys niet.
-- `--root` moet absoluut en symlinkvrij zijn en mag geen `.`/`..`-segmenten bevatten.
-- Tenantdata binnen de applicatie/documentroot wordt op het fysiek gecanonicaliseerde pad geweigerd.
-- Nieuwe geprovisioneerde tenants krijgen altijd `VERENIGING_REQUIRE_TENANT_CONFIG=1` in `runtime.env`.
-- Een ontbrekende tenantconfig faalt in die modus gesloten; RC045/defaultconfig wordt niet geladen.
-- Authbestanden van externe tenants staan onder hun eigen `private_root`; gedeelde root-authdata wordt niet gebruikt als fallback.
-- Publieke tenant-JSON staat buiten de documentroot onder `private/public-content`; ontbrekende tenantdata valt niet terug op RC045 `/data`.
-- Publieke tenantuploads staan buiten de documentroot onder `private/public-assets`; ze worden alleen via de whitelisted gateway geserveerd.
-- Auth-, content- en assetmappen gebruiken server-only directoryrechten; tenantbestanden worden naar `0640` aangescherpt waar deze laag ze schrijft.
-- Een onbekende waarde voor `VERENIGING_REQUIRE_TENANT_CONFIG` wordt als configuratiefout geweigerd in plaats van stil als aan/uit geïnterpreteerd.
-- Een bestaande afwijkende `config.php`, `runtime.env` of `tenant.json` wordt zonder `--force` niet overschreven.
-- Dezelfde opdracht nogmaals uitvoeren is idempotent: identieke bestanden blijven ongewijzigd.
-- `--dry-run` voert dezelfde key- en padveiligheidscontroles uit, maar maakt geen mappen of bestanden aan.
-- De provisioner weigert uitvoering via HTTP en is alleen voor CLI bedoeld.
+Retentie kan via `opslag.backups` worden ingesteld en begrenst leeftijd, aantallen en totale assetbytes.
 
-## Opties
+## 11. Filesystemveiligheid
+
+De tenantroot is een securitygrens:
+
+- `--root` moet absoluut zijn;
+- `.` en `..` segmenten worden geweigerd;
+- symlinks op roots, ancestors, tenantmappen, private submappen en schrijfdoelen worden geweigerd;
+- nog niet bestaande doelen worden via de langste bestaande ancestor fysiek gecanonicaliseerd;
+- tenantdata binnen de gedeelde applicatie/documentroot wordt geweigerd;
+- gevoelige writes controleren containment en symlinks opnieuw vlak vóór gebruik;
+- `config.php`, `runtime.env` en `tenant.json` worden atomisch geschreven en niet via symlinks overschreven;
+- de admin-bootstrap bindt config, manifest en private root opnieuw voordat `master.php` wordt geschreven.
+
+Op de VPS hoort `/srv/verenigingen` alleen schrijfbaar te zijn voor de vertrouwde provisioning-/beheeraccount.
+
+## Provisioneropties
 
 ```text
 --timezone=Europe/Amsterdam
 --driver=json
 --driver=pdo
+--modules=website,ledenadministratie,...
 --force
 --dry-run
 ```
 
-Bij `--driver=pdo` worden nog geen databasecredentials door de CLI gevraagd of opgeslagen. Die worden in een latere deployment/provisioningfase via secrets/environment gekoppeld.
+`--force` geldt voor gecontroleerde vervanging van provisioningconfiguratie en **niet** voor de mastercredential. Credentialrotatie gebruikt apart `bootstrap-tenant-admin.php --rotate`.
 
-## Nog handmatig in fase 3.2
+## Nog te automatiseren voor de VPS-fase
 
-De provisioner maakt nog geen DNS-record, TLS-certificaat, Apache/Nginx-vhost, PHP-FPM pool of mastercredential aan. Hij levert wel de vaste tenantpaden en runtimeconfig waarop die automatisering in een volgende fase kan steunen.
+De tenantapplicatielaag kan nu veilig worden geprovisioneerd en van een eerste beheerder worden voorzien. In de deployment/VPS-fase blijven onder meer over:
+
+- DNS-records;
+- TLS-certificaten;
+- Apache/Nginx-vhost per domein;
+- PHP-FPM/runtime-isolatie en environmentinjectie;
+- PDO/database-secret provisioning wanneer PDO wordt gebruikt;
+- operationele monitoring, logging en lifecycle-automation voor tenants.
