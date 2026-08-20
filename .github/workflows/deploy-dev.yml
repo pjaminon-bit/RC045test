@@ -43,6 +43,7 @@ jobs:
           php tests/phase25-domain-integrity.php
           php tests/phase251-groups.php
           php tests/phase252-ux.php
+          php tests/phase26-ui.php
           php -m | grep -qi '^pdo_sqlite$' || { echo 'pdo_sqlite ontbreekt op de runner' >&2; exit 1; }
           php tests/private-store-pdo-sqlite.php
           php tests/private-store-pdo-failclosed.php
@@ -117,6 +118,7 @@ jobs:
 
           wacht_op_status "$basis/" 200 ja
           wacht_op_status "$basis/beheer/" 200 ja
+          wacht_op_status "$basis/beheer/ui-2026.css" 200 nee
           wacht_op_status "$basis/leden/" 200 ja
           wacht_op_status "$basis/aanmelden.html" 200 ja
 
