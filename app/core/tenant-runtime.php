@@ -28,19 +28,68 @@ function tenantRuntimeIsAbsoluutPad(string $pad): bool
 }
 
 /**
+ * Faalt runtimeconfiguratie veilig af. Via HTTP worden interne details en
+ * serverpaden nooit teruggegeven; die gaan alleen naar de serverlog. CLI houdt
+ * de concrete fout voor provisioner/tests/beheerdiagnose.
+ */
+function tenantRuntimeConfiguratieFout(string $intern): void
+{
+    error_log('[platform] tenant runtime configuratiefout: ' . $intern);
+
+    if (PHP_SAPI !== 'cli') {
+        if (!headers_sent()) {
+            http_response_code(503);
+            header('Content-Type: text/plain; charset=UTF-8');
+            header('Cache-Control: no-store');
+            header('Retry-After: 60');
+            header('X-Robots-Tag: noindex, nofollow');
+        }
+        echo 'Deze vereniging is tijdelijk niet beschikbaar.';
+        exit;
+    }
+
+    throw new RuntimeException($intern);
+}
+
+/**
+ * Productie-/multi-tenantmodus: wanneer deze vlag aan staat MOET iedere
+ * request een expliciet extern tenantconfigbestand hebben. Een onbekende of
+ * verkeerd gespelde vlag faalt eveneens hard; een configuratiefout mag nooit
+ * stil leiden tot de RC045/defaultconfiguratie.
+ */
+function tenantRuntimeConfigVerplicht(): bool
+{
+    $ruw = getenv('VERENIGING_REQUIRE_TENANT_CONFIG');
+    if ($ruw === false) return false;
+
+    $waarde = strtolower(trim((string) $ruw));
+    if ($waarde === '' || in_array($waarde, ['0', 'false', 'no', 'off'], true)) return false;
+    if (in_array($waarde, ['1', 'true', 'yes', 'on'], true)) return true;
+
+    tenantRuntimeConfiguratieFout('VERENIGING_REQUIRE_TENANT_CONFIG bevat een ongeldige booleaanse waarde.');
+    return false;
+}
+
+/**
  * Geeft het externe configbestand terug wanneer VERENIGING_CONFIG_FILE is
  * gezet. Een expliciet maar ongeldig pad faalt bewust hard: terugvallen op een
  * andere vereniging/configuratie zou in een multi-tenant omgeving onveilig zijn.
+ * In verplichte tenantmodus faalt ook een ontbrekende variabele direct hard.
  */
 function tenantRuntimeExternConfigPad(): ?string
 {
     $pad = trim((string) (getenv('VERENIGING_CONFIG_FILE') ?: ''));
-    if ($pad === '') return null;
+    if ($pad === '') {
+        if (tenantRuntimeConfigVerplicht()) {
+            tenantRuntimeConfiguratieFout('Tenantconfiguratie is verplicht maar VERENIGING_CONFIG_FILE ontbreekt.');
+        }
+        return null;
+    }
     if (!tenantRuntimeIsAbsoluutPad($pad)) {
-        throw new RuntimeException('VERENIGING_CONFIG_FILE moet een absoluut pad zijn.');
+        tenantRuntimeConfiguratieFout('VERENIGING_CONFIG_FILE moet een absoluut pad zijn.');
     }
     if (!is_file($pad) || !is_readable($pad)) {
-        throw new RuntimeException('Extern verenigingsconfigbestand is niet leesbaar.');
+        tenantRuntimeConfiguratieFout('Extern verenigingsconfigbestand is niet leesbaar.');
     }
     return $pad;
 }
@@ -56,7 +105,7 @@ function tenantRuntimePrivateRoot(array $config): ?string
     $pad = $configPad !== '' ? $configPad : $envPad;
     if ($pad === '') return null;
     if (!tenantRuntimeIsAbsoluutPad($pad)) {
-        throw new RuntimeException('Private tenantopslag moet een absoluut pad gebruiken.');
+        tenantRuntimeConfiguratieFout('Private tenantopslag moet een absoluut pad gebruiken.');
     }
     return rtrim($pad, '/\\');
 }

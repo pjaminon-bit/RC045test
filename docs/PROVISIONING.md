@@ -33,15 +33,23 @@ De provisioner kopieert de applicatiecode **niet**.
 De webserver/PHP-runtime van deze vereniging krijgt minimaal:
 
 ```text
+VERENIGING_REQUIRE_TENANT_CONFIG=1
 VERENIGING_CONFIG_FILE=/srv/verenigingen/voorbeeldvereniging/config.php
 ```
 
-`config.php` bevat zelf de tenant-eigen `private_root`. `runtime.env` wordt als hulpmiddel gegenereerd en is niet bedoeld om via HTTP te worden aangeboden.
+`VERENIGING_REQUIRE_TENANT_CONFIG=1` is de securitygrens voor de gedeelde VPS. Als `VERENIGING_CONFIG_FILE` dan ontbreekt, relatief is, onleesbaar is of naar een niet-bestaand bestand wijst, stopt de applicatie met een configuratiefout. Er wordt **nooit** teruggevallen op RC045/defaultconfiguratie.
+
+`config.php` bevat zelf de tenant-eigen `private_root`. `runtime.env` wordt als hulpmiddel gegenereerd en bevat de verplichte fail-closed vlag automatisch. Het bestand is niet bedoeld om via HTTP te worden aangeboden.
+
+De bestaande losse RC045/DEV-installatie blijft voorlopig compatibel wanneer `VERENIGING_REQUIRE_TENANT_CONFIG` niet is gezet. Die compatibiliteitsmodus is niet bedoeld als configuratie voor nieuwe VPS-tenants.
 
 ## Veiligheidsregels
 
 - `--root` moet absoluut zijn.
 - Tenantdata binnen de applicatie/documentroot wordt geweigerd.
+- Nieuwe geprovisioneerde tenants krijgen altijd `VERENIGING_REQUIRE_TENANT_CONFIG=1` in `runtime.env`.
+- Een ontbrekende tenantconfig faalt in die modus gesloten; RC045/defaultconfig wordt niet geladen.
+- Een onbekende waarde voor `VERENIGING_REQUIRE_TENANT_CONFIG` wordt als configuratiefout geweigerd in plaats van stil als aan/uit geïnterpreteerd.
 - Een bestaande afwijkende `config.php`, `runtime.env` of `tenant.json` wordt zonder `--force` niet overschreven.
 - Dezelfde opdracht nogmaals uitvoeren is idempotent: identieke bestanden blijven ongewijzigd.
 - `--dry-run` laat zien wat zou gebeuren zonder mappen of bestanden aan te maken.
