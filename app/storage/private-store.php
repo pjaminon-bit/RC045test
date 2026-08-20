@@ -3,11 +3,13 @@
 // Tenant-aware private storage abstraction
 // ============================================================
 require_once dirname(__DIR__) . '/core/tenant-runtime.php';
+require_once __DIR__ . '/tenant-backup-store.php';
 
 function privateStoreConfig(): array{static$config=null;if($config===null){$geladen=require dirname(__DIR__,2).'/site-config.php';$config=is_array($geladen)?$geladen:[];}return$config;}
 function privateStoreTenant(): string{$config=privateStoreConfig();return tenantRuntimeVeiligeSleutel((string)($config['vereniging']['sleutel']??'default'));}
 function privateStoreDriver(): string{$config=privateStoreConfig();$driver=strtolower(trim((string)($config['opslag']['private_driver']??'json')));return$driver==='pdo'?'pdo':'json';}
 function privateStoreJsonRoot(): ?string{return tenantRuntimePrivateRoot(privateStoreConfig());}
+function privateStoreBackupSleutel(string $collectie): string{return'private-'.tenantRuntimeCollectieSleutel($collectie);}
 
 /**
  * Legacy JSON/PHP fallback is uitsluitend bedoeld voor de bestaande losse
@@ -42,20 +44,12 @@ function privateStoreJsonSchrijf(string $collectie,array $data): bool
     $root=privateStoreJsonRoot();if($root===null)return false;$pad=tenantRuntimeCollectiePad($root,$collectie);$map=dirname($pad);
     if(!is_dir($map)&&!@mkdir($map,0750,true))throw new RuntimeException('Private tenantopslag kon niet worden aangemaakt.');
     $json=json_encode($data,JSON_UNESCAPED_UNICODE|JSON_PRETTY_PRINT);if($json===false)return false;
-    // Bewaar de vorige versie tenant-lokaal. Het centrale backupbeheer wordt
-    // in een volgende provisioningfase op deze map aangesloten.
-    if(is_file($pad)){
-        $backupMap=$root.DIRECTORY_SEPARATOR.'backups'.DIRECTORY_SEPARATOR.tenantRuntimeCollectieSleutel($collectie);
-        if((is_dir($backupMap)||@mkdir($backupMap,0750,true))&&is_readable($pad)){
-            $backup=$backupMap.DIRECTORY_SEPARATOR.date('Ymd-His').'-'.substr(hash('sha256',(string)microtime(true).$pad),0,8).'.json';
-            @copy($pad,$backup);
-        }
-    }
     try{$suffix=bin2hex(random_bytes(5));}catch(Throwable $e){$suffix=str_replace('.','',(string)microtime(true));}
     $tmp=$pad.'.tmp.'.$suffix;
     if(@file_put_contents($tmp,$json,LOCK_EX)===false)return false;
     @chmod($tmp,0640);
     if(!@rename($tmp,$pad)){@unlink($tmp);return false;}
+    @chmod($pad,0640);
     return true;
 }
 
@@ -94,10 +88,22 @@ function privateStoreSchrijf(string $collectie,array $data,callable $jsonSchrijv
 {
     $collectie=trim($collectie);if($collectie==='')return false;
     if(privateStoreDriver()!=='pdo'){
-        if(privateStoreJsonRoot()!==null)return privateStoreJsonSchrijf($collectie,$data);
+        if(privateStoreJsonRoot()!==null){
+            $root=privateStoreJsonRoot();$pad=$root===null?null:tenantRuntimeCollectiePad($root,$collectie);
+            if($pad!==null&&is_file($pad)){
+                $oud=privateStoreJsonLees($collectie);
+                tenantBackupMaakArray(privateStoreBackupSleutel($collectie),$oud);
+            }
+            return privateStoreJsonSchrijf($collectie,$data);
+        }
         return(bool)$jsonSchrijver($data);
     }
     $pdo=privateStorePdo();$json=json_encode($data,JSON_UNESCAPED_UNICODE|JSON_PRETTY_PRINT);if($json===false)return false;$tenant=privateStoreTenant();$nu=date('c');$driver=strtolower((string)$pdo->getAttribute(PDO::ATTR_DRIVER_NAME));
+    try{
+        $oudStmt=$pdo->prepare('SELECT payload FROM vereniging_private_store WHERE tenant_key = :tenant AND collection_key = :collection');
+        $oudStmt->execute(['tenant'=>$tenant,'collection'=>$collectie]);$oudRij=$oudStmt->fetch();
+        if($oudRij){$oudPayload=(string)($oudRij['payload']??'');$oudData=json_decode($oudPayload,true);if(json_last_error()===JSON_ERROR_NONE&&is_array($oudData))tenantBackupMaakArray(privateStoreBackupSleutel($collectie),$oudData);}
+    }catch(Throwable $e){error_log('[platform] private store pre-backup read mislukt voor '.$collectie.': '.$e->getMessage());throw new RuntimeException('Private verenigingsopslag kon niet veilig worden geback-upt.',0,$e);}
     if($driver==='pgsql')$sql='INSERT INTO vereniging_private_store (tenant_key, collection_key, payload, updated_at) VALUES (:tenant,:collection,:payload,:updated) ON CONFLICT (tenant_key, collection_key) DO UPDATE SET payload = EXCLUDED.payload, updated_at = EXCLUDED.updated_at';
     elseif($driver==='sqlite')$sql='INSERT INTO vereniging_private_store (tenant_key, collection_key, payload, updated_at) VALUES (:tenant,:collection,:payload,:updated) ON CONFLICT(tenant_key, collection_key) DO UPDATE SET payload = excluded.payload, updated_at = excluded.updated_at';
     else$sql='INSERT INTO vereniging_private_store (tenant_key, collection_key, payload, updated_at) VALUES (:tenant,:collection,:payload,:updated) ON DUPLICATE KEY UPDATE payload=VALUES(payload), updated_at=VALUES(updated_at)';
