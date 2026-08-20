@@ -32,7 +32,7 @@ Dit maakt aan:
         └── auth/
 ```
 
-De provisioner kopieert de applicatiecode **niet**.
+De provisioner kopieert de applicatiecode **niet**. `private/public-assets/` wordt pas aangemaakt zodra een tenant de eerste publieke uploadnamespace gebruikt; de applicatie maakt die map dan zelf met tenant-lokale rechten aan. Hierdoor blijft provisioning idempotent en hoeft een tenant zonder Fotoboek of Sponsors geen ongebruikte uploadstructuur te krijgen.
 
 ## Tenant-key is permanente technische identiteit
 
@@ -108,18 +108,38 @@ Dynamische openbare JSON staat voor nieuwe tenants onder:
 private/public-content/
 ```
 
-Daaronder vallen onder meer homepage, ontstaan, baanreglement, aanmelden/bedankt, actueel, agenda, FAQ, contact, nieuws, changelog en lidmaatschapstypen. Een ontbrekend tenantbestand valt **niet** terug op het overeenkomstige RC045-bestand onder `/data`.
+Daaronder vallen onder meer homepage, ontstaan, baanreglement, aanmelden/bedankt, actueel, agenda, FAQ, contact, nieuws, Media, Fotoboek, changelog en lidmaatschapstypen. Een ontbrekend tenantbestand valt **niet** terug op het overeenkomstige RC045-bestand onder `/data`.
 
 De browser blijft voorlopig de bestaande URL-vorm `/data/<dataset>.json` gebruiken. Apache routeert uitsluitend de expliciet gewhiteliste datasets via `public-content.php`, dat het bestand voor de actieve tenant uit de private opslag leest. Het endpoint accepteert alleen GET/HEAD en kent geen vrij bestandspad. Bij Nginx moet de vhost dezelfde exacte `/data/<dataset>.json`-routing naar `public-content.php?key=<dataset>` configureren; een wildcard waarmee willekeurige private bestanden opvraagbaar worden is niet toegestaan.
 
 De bestaande standalone RC045/DEV-installatie gebruikt via dezelfde resolver voorlopig de bestaande `/data`-bestanden. Dit is alleen de compatibiliteitsmodus.
 
+## Publieke uploads per tenant
+
+Fotoboekbestanden en sponsorlogo's staan voor externe tenants buiten de documentroot:
+
+```text
+private/public-assets/
+├── fotoboek/
+│   └── <album>/
+│       ├── <bestand>
+│       └── thumbs/
+│           └── <bestand>
+└── sponsors/
+    └── <bestand>
+```
+
+De browser-URL's blijven `images/fotoboek/...` en `images/sponsors/...`. Apache routeert alleen de toegestane patronen naar `public-asset.php`. Die gateway accepteert uitsluitend GET/HEAD, gebruikt vaste MIME-whitelists, blokkeert traversal en symlink-bypasses en ondersteunt byte-ranges voor MP4-bestanden. Een ontbrekend bestand valt nooit terug op een andere tenant of de standalone RC045-map.
+
+Bij Nginx moet dezelfde scheiding expliciet worden ingericht: stuur uitsluitend de twee bekende URL-namespaces naar `public-asset.php` met de juiste `scope` en het gecontroleerde relatieve pad. Geef nooit rechtstreeks filesystemtoegang tot `private/public-assets`.
+
+Tenantassetmappen krijgen `0750`; bestanden die door de applicatie worden geschreven krijgen `0640`. De standalone RC045/DEV-installatie blijft voorlopig de bestaande `images/fotoboek/` en `images/sponsors/` gebruiken.
+
 Belangrijke fasegrenzen:
 
-- `media`, `fotoboek` en fysieke uploads volgen in optie 8;
-- sponsor-JSON is al tenant-lokaal, maar sponsorlogo's vallen als uploadbestand onder optie 8;
-- tenant-public-content wordt in optie 7 bewust niet naar de oude gedeelde `data-backups` gekopieerd; backup/restore wordt als geheel tenant-aware in optie 9;
-- RC045-specifieke hardcoded tekst/branding in de code wordt pas bij de neutrale platformdefaults aangepakt en is niet hetzelfde als een opslagfallback.
+- tenant-public-content en publieke uploads worden bewust niet naar de oude gedeelde `data-backups` gekopieerd; backup/restore wordt als geheel tenant-aware in optie 9;
+- RC045-specifieke hardcoded tekst/branding in de code wordt pas bij de neutrale platformdefaults aangepakt en is niet hetzelfde als een opslagfallback;
+- een externe tenant gebruikt tot die brandingfase bewust niet het gedeelde RC045-logo als Fotoboek-watermerk.
 
 ## Veilige filesystempaden
 
@@ -144,7 +164,8 @@ De provisioner is een beheertool en veronderstelt dat de filesystemhiërarchie w
 - Een ontbrekende tenantconfig faalt in die modus gesloten; RC045/defaultconfig wordt niet geladen.
 - Authbestanden van externe tenants staan onder hun eigen `private_root`; gedeelde root-authdata wordt niet gebruikt als fallback.
 - Publieke tenant-JSON staat buiten de documentroot onder `private/public-content`; ontbrekende tenantdata valt niet terug op RC045 `/data`.
-- Auth- en contentmappen worden met server-only directoryrechten voorbereid; tenantbestanden worden naar `0640` aangescherpt waar deze laag ze schrijft.
+- Publieke tenantuploads staan buiten de documentroot onder `private/public-assets`; ze worden alleen via de whitelisted gateway geserveerd.
+- Auth-, content- en assetmappen gebruiken server-only directoryrechten; tenantbestanden worden naar `0640` aangescherpt waar deze laag ze schrijft.
 - Een onbekende waarde voor `VERENIGING_REQUIRE_TENANT_CONFIG` wordt als configuratiefout geweigerd in plaats van stil als aan/uit geïnterpreteerd.
 - Een bestaande afwijkende `config.php`, `runtime.env` of `tenant.json` wordt zonder `--force` niet overschreven.
 - Dezelfde opdracht nogmaals uitvoeren is idempotent: identieke bestanden blijven ongewijzigd.

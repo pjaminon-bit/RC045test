@@ -2,6 +2,8 @@
 // ============================================================
 // Modulaire Fotoboek-hulpfuncties
 // ============================================================
+require_once dirname(__DIR__) . '/app/content/public-content-store.php';
+require_once dirname(__DIR__) . '/app/content/public-asset-store.php';
 
 function fbEsc($v): string { return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
 function fbKort($v,int $max): string { $t=trim(is_scalar($v)?(string)$v:''); return function_exists('mb_substr')?mb_substr($t,0,$max,'UTF-8'):substr($t,0,$max); }
@@ -68,14 +70,17 @@ function fbLees(string $pad): array {
 }
 function fbSchrijf(string $pad,array $data): bool {
     global $dataBackupMap,$dataBackupBewaardagen,$dataBackupMaxPerBestand;
-    if(function_exists('maakDataBackup'))maakDataBackup($pad,$dataBackupMap,$dataBackupBewaardagen,$dataBackupMaxPerBestand);
-    if(!is_dir(dirname($pad))&&!@mkdir(dirname($pad),0755,true))return false;
+    if(function_exists('maakDataBackup')&&!publicContentIsTenantPad($pad))maakDataBackup($pad,$dataBackupMap,$dataBackupBewaardagen,$dataBackupMaxPerBestand);
+    $mode=publicContentIsTenantPad($pad)?0750:0755;
+    if(!is_dir(dirname($pad))&&!@mkdir(dirname($pad),$mode,true))return false;
     $j=json_encode($data,JSON_UNESCAPED_UNICODE|JSON_PRETTY_PRINT);
     if($j===false)return false;
     try{$suffix=bin2hex(random_bytes(4));}catch(Throwable $e){$suffix=str_replace('.','',(string)microtime(true));}
     $tmp=$pad.'.tmp.'.$suffix;
     if(file_put_contents($tmp,$j,LOCK_EX)===false)return false;
+    if(publicContentIsTenantPad($pad))@chmod($tmp,0640);
     if(!@rename($tmp,$pad)){@unlink($tmp);return false;}
+    if(publicContentIsTenantPad($pad))@chmod($pad,0640);
     return true;
 }
 function fbSchaalAf($bron,int $b,int $h,int $max){
@@ -90,12 +95,13 @@ function fbSchaalAf($bron,int $b,int $h,int $max){
 function fbWatermerk($img,string $logoPad,string $tekst='rc045.nl'): void {
     $b=imagesx($img);$h=imagesy($img);$lh=(int)max(18,min(36,round($h*.035)));$pad=(int)max(7,round($lh*.45));
     $logo=null;
-    if(is_file($logoPad)&&($lb=@imagecreatefrompng($logoPad))){$ow=imagesx($lb);$oh=imagesy($lb);if($oh>0){$lw=(int)round($lh*($ow/$oh));$logo=imagecreatetruecolor($lw,$lh);imagealphablending($logo,false);imagesavealpha($logo,true);$tr=imagecolorallocatealpha($logo,0,0,0,127);imagefill($logo,0,0,$tr);imagealphablending($logo,true);imagecopyresampled($logo,$lb,0,0,0,0,$lw,$lh,$ow,$oh);}imagedestroy($lb);}
+    if(is_file($logoPad)&&!is_link($logoPad)&&($lb=@imagecreatefrompng($logoPad))){$ow=imagesx($lb);$oh=imagesy($lb);if($oh>0){$lw=(int)round($lh*($ow/$oh));$logo=imagecreatetruecolor($lw,$lh);imagealphablending($logo,false);imagesavealpha($logo,true);$tr=imagecolorallocatealpha($logo,0,0,0,127);imagefill($logo,0,0,$tr);imagealphablending($logo,true);imagecopyresampled($logo,$lb,0,0,0,0,$lw,$lh,$ow,$oh);}imagedestroy($lb);}
+    $tekst=trim($tekst)!==''?$tekst:'vereniging';
     $font=3;$tw=imagefontwidth($font)*strlen($tekst);$th=imagefontheight($font);$lw=$logo?imagesx($logo):0;$gap=$logo?(int)round($pad*.6):0;$vw=$lw+$gap+$tw+$pad*2;$vh=max($lh,$th)+$pad;
     $x2=$b-$pad;$y2=$h-$pad;$x1=(int)round($x2-$vw);$y1=(int)round($y2-$vh);imagealphablending($img,true);$vlak=imagecolorallocatealpha($img,20,24,15,55);imagefilledrectangle($img,$x1,$y1,$x2,$y2,$vlak);$my=(int)round(($y1+$y2)/2);$x=$x1+$pad;
     if($logo){imagecopy($img,$logo,$x,$my-(int)round(imagesy($logo)/2),0,0,imagesx($logo),imagesy($logo));$x+=imagesx($logo)+$gap;imagedestroy($logo);} $wit=imagecolorallocate($img,255,255,255);imagestring($img,$font,$x,$my-(int)round($th/2),$tekst,$wit);
 }
-function fbVerwerkFoto(string $tmp,string $vol,string $thumb,bool $watermerk,string $logo,int $maxVol,int $maxThumb): array {
+function fbVerwerkFoto(string $tmp,string $vol,string $thumb,bool $watermerk,string $logo,int $maxVol,int $maxThumb,string $watermerkTekst='rc045.nl'): array {
     $info=@getimagesize($tmp); if($info===false)return ['ok'=>false,'fout'=>'bestand is geen geldige afbeelding.'];
     $pixelBreedte=(int)($info[0]??0);$pixelHoogte=(int)($info[1]??0);
     if($pixelBreedte<1||$pixelHoogte<1||$pixelBreedte>16000||$pixelHoogte>16000||($pixelBreedte*$pixelHoogte)>60000000){
@@ -108,15 +114,26 @@ function fbVerwerkFoto(string $tmp,string $vol,string $thumb,bool $watermerk,str
     if(!$bron)return ['ok'=>false,'fout'=>'alleen JPG, PNG of WEBP toegestaan, of bestand kon niet worden geopend.'];
     if($info[2]===IMAGETYPE_JPEG&&function_exists('exif_read_data')){ $ex=@exif_read_data($tmp);$o=(int)($ex['Orientation']??0);$hoek=$o===3?180:($o===6?-90:($o===8?90:0));if($hoek){$r=imagerotate($bron,$hoek,0);if($r){imagedestroy($bron);$bron=$r;}} }
     $b=imagesx($bron);$h=imagesy($bron);$full=fbSchaalAf($bron,$b,$h,$maxVol);if(!$full){imagedestroy($bron);return ['ok'=>false,'fout'=>'afbeelding kon niet worden verkleind.'];}
-    if($watermerk)fbWatermerk($full,$logo);
+    if($watermerk)fbWatermerk($full,$logo,$watermerkTekst);
     $okFull=@imagejpeg($full,$vol,82);$ow=imagesx($full);$oh=imagesy($full);imagedestroy($full);
     $th=fbSchaalAf($bron,$b,$h,$maxThumb);$okThumb=$th?@imagejpeg($th,$thumb,78):false;if($th)imagedestroy($th);imagedestroy($bron);
     if(!$okFull||!$okThumb){@unlink($vol);@unlink($thumb);return ['ok'=>false,'fout'=>'afbeelding kon niet op de server worden opgeslagen.'];}
+    publicAssetBeveiligBestand($vol);publicAssetBeveiligBestand($thumb);
     return ['ok'=>true,'width'=>$ow,'height'=>$oh];
 }
-function fbWatermerkBestaand(string $pad,string $logo): bool { $info=@getimagesize($pad);if($info===false||$info[2]!==IMAGETYPE_JPEG)return false;$img=@imagecreatefromjpeg($pad);if(!$img)return false;fbWatermerk($img,$logo);$ok=@imagejpeg($img,$pad,82);imagedestroy($img);return (bool)$ok; }
+function fbWatermerkBestaand(string $pad,string $logo,string $watermerkTekst='rc045.nl'): bool { $info=@getimagesize($pad);if($info===false||$info[2]!==IMAGETYPE_JPEG)return false;$img=@imagecreatefromjpeg($pad);if(!$img)return false;fbWatermerk($img,$logo,$watermerkTekst);$ok=@imagejpeg($img,$pad,82);imagedestroy($img);if($ok)publicAssetBeveiligBestand($pad);return (bool)$ok; }
 function fbVerwijderBestanden(string $albumPad,array $foto): void {
     $file=basename((string)($foto['file']??''));if($file!==''){@unlink($albumPad.'/'.$file);@unlink($albumPad.'/thumbs/'.$file);}
     $poster=basename((string)($foto['poster']??''));if($poster!==''){@unlink($albumPad.'/'.$poster);@unlink($albumPad.'/thumbs/'.$poster);}
 }
-function fbVerwijderMap(string $pad): void { if(!is_dir($pad))return;foreach((array)@scandir($pad) as $i){if($i==='.'||$i==='..')continue;$p=$pad.'/'.$i;if(is_dir($p))fbVerwijderMap($p);else @unlink($p);}@rmdir($pad); }
+function fbVerwijderMap(string $pad): void {
+    if(is_link($pad)){@unlink($pad);return;}
+    if(!is_dir($pad))return;
+    foreach((array)@scandir($pad) as $i){
+        if($i==='.'||$i==='..')continue;
+        $p=$pad.'/'.$i;
+        if(is_link($p)){@unlink($p);continue;}
+        if(is_dir($p))fbVerwijderMap($p);else @unlink($p);
+    }
+    @rmdir($pad);
+}

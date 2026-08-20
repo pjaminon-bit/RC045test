@@ -30,8 +30,15 @@ DirectoryIndex index.php index.html
 # Dynamische openbare content staat voor externe tenants buiten de documentroot.
 # Ook legacy /data/*.json-verzoeken lopen daarom via één whitelisted PHP-endpoint.
 # De bestaande standalone RC045-installatie blijft via datzelfde endpoint de
-# bestanden uit /data lezen. Media/fotoboek volgen apart in optie 8.
-RewriteRule ^data/(homepage|ontstaan|baanreglement|aanmelden|bedankt|actueel|agenda|faq|sponsors|contact|nieuws|rekentabel|lidmaatschapstypen|changelog)\.json$ public-content.php?key=$1 [L,QSA]
+# bestanden uit /data lezen.
+RewriteRule ^data/(homepage|ontstaan|baanreglement|aanmelden|bedankt|actueel|agenda|faq|sponsors|contact|nieuws|media|media-pagina|fotoboek|fotoboek-pagina|rekentabel|lidmaatschapstypen|changelog)\.json$ public-content.php?key=$1 [L,QSA]
+
+# ===== Tenant-aware publieke uploads =====
+# Externe tenants bewaren uploads buiten de documentroot. De bestaande URL's
+# blijven gelijk, maar alleen strikt gevalideerde fotoboekbestanden en
+# sponsorlogo's kunnen via de read-only assetgateway worden gelezen.
+RewriteRule ^images/sponsors/([A-Za-z0-9][A-Za-z0-9._-]{0,180})$ public-asset.php?scope=sponsors&path=$1 [L,QSA,NE]
+RewriteRule ^images/fotoboek/([a-z0-9][a-z0-9-]*)/(thumbs/)?([A-Za-z0-9][A-Za-z0-9._-]{0,180})$ public-asset.php?scope=fotoboek&path=$1/$2$3 [L,QSA,NE]
 
 # ===== Fotoboek: nette album-URL's =====
 RewriteRule ^fotoboek/?$ fotoboek.php [L,QSA]

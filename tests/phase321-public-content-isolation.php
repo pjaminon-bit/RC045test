@@ -50,7 +50,7 @@ require_once $root . '/app/content/public-content-store.php';
 
 $definities = publicContentDefinities();
 check321content(isset($definities['homepage'],$definities['contact'],$definities['lidmaatschapstypen']), 'publieke contentstore registreert kern-datasets expliciet');
-check321content(!isset($definities['media']) && !isset($definities['fotoboek']), 'media en fotoboek blijven bewust buiten optie 7');
+check321content(isset($definities['media'],$definities['media-pagina'],$definities['fotoboek'],$definities['fotoboek-pagina']), 'media en fotoboekmetadata vallen vanaf optie 8 onder dezelfde tenantcontentgrens');
 check321content(publicContentBestandsnaam('../auth/users') === null, 'willekeurige/traversal datasetkey is niet toegestaan');
 check321content(publicContentPad('lidmaatschapstypen') === $root . '/data/lidmaatschapstypen.json', 'standalone RC045 behoudt legacy datapad');
 $legacyMembership = @file_get_contents($root . '/data/lidmaatschapstypen.json');

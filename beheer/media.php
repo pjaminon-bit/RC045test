@@ -2,16 +2,20 @@
 require_once dirname(__DIR__) . '/auth.php';
 require_once dirname(__DIR__) . '/app/core/site.php';
 require_once dirname(__DIR__) . '/app/data-slot.php';
+require_once dirname(__DIR__) . '/app/content/public-content-store.php';
 
 if (!$ingelogd) { header('Location: ../beheer.php'); exit; }
 if (!siteModuleActief('media')) { http_response_code(404); echo 'De mediamodule is voor deze vereniging niet ingeschakeld.'; exit; }
 $rechten = authRechten(['media' => 'Media'], []);
 if (!$isMaster && !in_array('media', $rechten['toegestaneTabs'] ?? [], true)) { http_response_code(403); echo 'Geen toegang tot Media.'; exit; }
 
-$mediaBestand = dirname(__DIR__) . '/data/media.json';
-$mediaTekstBestand = dirname(__DIR__) . '/data/media-pagina.json';
+$mediaBestand = publicContentPad('media');
+$mediaTekstBestand = publicContentPad('media-pagina');
+if ($mediaBestand === null || $mediaTekstBestand === null) throw new RuntimeException('Mediacontent is niet geregistreerd in de tenantcontentstore.');
 
-$mediaStandaard = [
+// De historische RC045-media-items zijn alleen een standalone compatibility-
+// fallback. Een lege externe tenant mag nooit RC045-persinhoud erven.
+$mediaStandaard = publicContentTenantRoot() === null ? [
  ['date'=>'2020-11-08','bron'=>'Omroep Landgraaf','icoon'=>'📺','title'=>['nl'=>'Interview Omroep Landgraaf','en'=>'Interview Omroep Landgraaf','de'=>'Interview Omroep Landgraaf'],'desc'=>['nl'=>'Omroep Landgraaf bracht een interview over onze RC-autoclub, nog voordat we een eigen baan hadden.','en'=>'Omroep Landgraaf aired an interview about our RC car club, before we had our own track.','de'=>'Omroep Landgraaf brachte ein Interview über unseren RC-Auto-Verein, noch bevor wir eine eigene Strecke hatten.'],'link'=>'https://www.facebook.com/OmroepLandgraaf/videos/3636393673049251/','linktekst'=>['nl'=>'Bekijk op Facebook →','en'=>'Watch on Facebook →','de'=>'Auf Facebook ansehen →']],
  ['date'=>'2020-12-06','bron'=>'Omroep Landgraaf','icoon'=>'📺','title'=>['nl'=>'Interview Omroep Landgraaf: Caravanrace','en'=>'Interview Omroep Landgraaf: Caravanrace','de'=>'Interview Omroep Landgraaf: Caravanrace'],'desc'=>['nl'=>'Een tweede interview met Omroep Landgraaf, ditmaal over de Caravanrace die onze leden organiseerden.','en'=>'A second interview with Omroep Landgraaf, this time about the Caravanrace organised by our members.','de'=>'Ein zweites Interview mit Omroep Landgraaf, diesmal über das Caravanrennen, das unsere Mitglieder organisierten.'],'link'=>'https://www.facebook.com/OmroepLandgraaf/videos/739268850304412/','linktekst'=>['nl'=>'Bekijk op Facebook →','en'=>'Watch on Facebook →','de'=>'Auf Facebook ansehen →']],
  ['date'=>'2021-04-25','bron'=>'Omroep Landgraaf','icoon'=>'📰','title'=>['nl'=>'Artikel Omroep Landgraaf','en'=>'Article Omroep Landgraaf','de'=>'Artikel Omroep Landgraaf'],'desc'=>['nl'=>'Omroep Landgraaf schreef een artikel over RC045 en de groeiende populariteit van onze hobby in de regio.','en'=>'Omroep Landgraaf wrote an article about RC045 and the growing popularity of our hobby in the region.','de'=>'Omroep Landgraaf schrieb einen Artikel über RC045 und die wachsende Beliebtheit unseres Hobbys in der Region.'],'link'=>'https://www.facebook.com/OmroepLandgraaf/posts/4235498243148100','linktekst'=>['nl'=>'Lees het artikel →','en'=>'Read the article →','de'=>'Artikel lesen →']],
@@ -19,7 +23,7 @@ $mediaStandaard = [
  ['date'=>'2021-05-04','bron'=>'L1mburg','icoon'=>'📺','title'=>['nl'=>'Route Regio: op zoek naar een nieuwe locatie','en'=>'Route Regio: looking for a new location','de'=>'Route Regio: auf der Suche nach einem neuen Gelände'],'desc'=>['nl'=>'L1 volgde RC045 in de zoektocht naar een nieuwe locatie voor de club.','en'=>"L1 followed RC045's search for a new location for the club.",'de'=>'L1 begleitete RC045 bei der Suche nach einem neuen Gelände für den Verein.'],'link'=>'https://www.l1.nl/nieuws/2535856/route-regio-rc-045-is-op-zoek-naar-een-nieuwe-locatie','linktekst'=>['nl'=>'Bekijk de reportage →','en'=>'Watch the report →','de'=>'Reportage ansehen →']],
  ['date'=>'2022-11-20','bron'=>'Omroep Landgraaf','icoon'=>'📺','title'=>['nl'=>'Interview Omroep Landgraaf: opening nieuwe locatie','en'=>'Omroep Landgraaf interview: new location opening','de'=>'Interview Omroep Landgraaf: Eröffnung des neuen Geländes'],'desc'=>['nl'=>'Omroep Landgraaf was aanwezig bij de opening van onze nieuwe baan aan de Wijngaardsberg in Kerkrade, nadat we waren verhuisd vanaf het veldje bij sporthal Strijthagen.','en'=>'Omroep Landgraaf attended the opening of our new track at the Wijngaardsberg in Kerkrade, after our move from the field near sports hall Strijthagen.','de'=>'Omroep Landgraaf war bei der Eröffnung unserer neuen Bahn am Wijngaardsberg in Kerkrade dabei, nachdem wir vom Feld bei der Sporthalle Strijthagen umgezogen waren.'],'link'=>'https://www.facebook.com/watch/?v=828115825105155','linktekst'=>['nl'=>'Bekijk op Facebook →','en'=>'Watch on Facebook →','de'=>'Auf Facebook ansehen →']],
  ['date'=>'2024-02-13','bron'=>'L1mburg','icoon'=>'📺','title'=>['nl'=>'Route Regio: eindelijk een eigen terrein','en'=>'Route Regio: finally our own site','de'=>'Route Regio: endlich ein eigenes Gelände'],'desc'=>['nl'=>'Ruim twee jaar later keerde L1 terug: RC045 had eindelijk een eigen terrein gevonden.','en'=>'Over two years later, L1 returned: RC045 had finally found its own site.','de'=>'Über zwei Jahre später kehrte L1 zurück: RC045 hatte endlich ein eigenes Gelände gefunden.'],'link'=>'https://www.l1.nl/nieuws/2542087/route-regio-rc045-heeft-eindelijk-een-eigen-terrein','linktekst'=>['nl'=>'Bekijk de reportage →','en'=>'Watch the report →','de'=>'Reportage ansehen →']],
-];
+] : [];
 $mediaTekstStandaard=['hero_sub'=>['nl'=>'Voordat wij een eigen baan hadden, gaf de media ons veelvuldig aandacht. Hier vind je een overzicht van die berichtgevingen.','en'=>'Before we had our own track, the media paid us frequent attention. Here you will find an overview of those features.','de'=>'Bevor wir eine eigene Strecke hatten, schenkten uns die Medien häufig Aufmerksamkeit. Hier findest du eine Übersicht dieser Berichterstattungen.']];
 
 function mediaEsc($v): string { return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
@@ -27,7 +31,16 @@ function mediaKort($v,int $max): string { $t=trim(is_scalar($v)?(string)$v:''); 
 function mediaDatumIso($v): string { $v=trim((string)$v); if(preg_match('/^\d{4}-\d{2}-\d{2}$/',$v)) return $v; if(preg_match('/^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{4})$/',$v,$m)&&checkdate((int)$m[2],(int)$m[1],(int)$m[3])) return sprintf('%04d-%02d-%02d',(int)$m[3],(int)$m[2],(int)$m[1]); return ''; }
 function mediaLees(string $pad,array $standaard): array { if(!is_file($pad)) return $standaard; $d=json_decode((string)@file_get_contents($pad),true); return is_array($d)?$d:$standaard; }
 function mediaVulStandaard(array $standaard,array $opgeslagen): array { $r=$standaard; foreach($standaard as $k=>$v){ if(!isset($opgeslagen[$k])||!is_array($opgeslagen[$k])) continue; foreach($v as $taal=>$tekst){ if(isset($opgeslagen[$k][$taal])&&trim((string)$opgeslagen[$k][$taal])!=='') $r[$k][$taal]=(string)$opgeslagen[$k][$taal]; }} return $r; }
-function mediaSchrijf(string $pad,array $data): bool { global $dataBackupMap,$dataBackupBewaardagen,$dataBackupMaxPerBestand; maakDataBackup($pad,$dataBackupMap,$dataBackupBewaardagen,$dataBackupMaxPerBestand); if(!is_dir(dirname($pad))) @mkdir(dirname($pad),0755,true); $j=json_encode($data,JSON_UNESCAPED_UNICODE|JSON_PRETTY_PRINT); return $j!==false&&file_put_contents($pad,$j,LOCK_EX)!==false; }
+function mediaSchrijf(string $pad,array $data): bool {
+ global $dataBackupMap,$dataBackupBewaardagen,$dataBackupMaxPerBestand;
+ $tenant=publicContentIsTenantPad($pad);
+ if(!$tenant&&function_exists('maakDataBackup'))maakDataBackup($pad,$dataBackupMap,$dataBackupBewaardagen,$dataBackupMaxPerBestand);
+ $map=dirname($pad);$mode=$tenant?0750:0755;if(!is_dir($map)&&!@mkdir($map,$mode,true))return false;
+ $j=json_encode($data,JSON_UNESCAPED_UNICODE|JSON_PRETTY_PRINT);if($j===false)return false;
+ try{$suffix=bin2hex(random_bytes(4));}catch(Throwable $e){$suffix=(string)mt_rand(100000,999999);}$tmp=$pad.'.tmp.'.$suffix;
+ if(@file_put_contents($tmp,$j,LOCK_EX)===false)return false;if($tenant)@chmod($tmp,0640);
+ if(!@rename($tmp,$pad)){@unlink($tmp);return false;}if($tenant)@chmod($pad,0640);return true;
+}
 
 $items=mediaLees($mediaBestand,$mediaStandaard);
 $tekst=mediaVulStandaard($mediaTekstStandaard,mediaLees($mediaTekstBestand,[]));
@@ -40,7 +53,7 @@ if(($_SERVER['REQUEST_METHOD']??'')==='POST'){
    $nieuwTekst=['hero_sub'=>['nl'=>mediaKort($_POST['hero_sub']['nl']??'',400),'en'=>mediaKort($_POST['hero_sub']['en']??'',400),'de'=>mediaKort($_POST['hero_sub']['de']??'',400)]];
    if($fout!==''){ $melding=$fout;$type='fout'; }
    elseif(mediaSchrijf($mediaBestand,$nieuw)&&mediaSchrijf($mediaTekstBestand,$nieuwTekst)){ $items=$nieuw;$tekst=mediaVulStandaard($mediaTekstStandaard,$nieuwTekst);$melding='Opgeslagen. De media-pagina is bijgewerkt.';$type='ok';schrijfLog($logBestand,$huidigeGebruiker,'media',count($items).' item(s) en paginatekst opgeslagen via modulaire editor'); }
-   else { $melding='Opslaan mislukt. Controleer de schrijfrechten van de data-map.';$type='fout'; }
+   else { $melding='Opslaan mislukt. Controleer de schrijfrechten van de contentopslag.';$type='fout'; }
  } finally { dataSlotDicht($slot); }}
 }
 if(!$items) $items=[];

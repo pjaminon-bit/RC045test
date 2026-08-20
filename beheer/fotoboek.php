@@ -13,10 +13,15 @@ $rechten=authRechten(['fotoboek'=>'Fotoboek'],[]);
 if(!$isMaster&&!in_array('fotoboek',$rechten['toegestaneTabs']??[],true)){http_response_code(403);echo'Geen toegang tot Fotoboek.';exit;}
 
 $root=dirname(__DIR__);
-$dataPad=$root.'/data/fotoboek.json';
-$tekstPad=$root.'/data/fotoboek-pagina.json';
-$fotoRoot=$root.'/images/fotoboek';
-$logoPad=$root.'/rc045-logo.png';
+$dataPad=publicContentPad('fotoboek');
+$tekstPad=publicContentPad('fotoboek-pagina');
+$fotoRoot=publicAssetMaakNamespaceMap('fotoboek');
+if($dataPad===null||$tekstPad===null||$fotoRoot===null)throw new RuntimeException('Fotoboekopslag is niet correct geregistreerd voor deze tenant.');
+// Een externe tenant gebruikt nooit het gedeelde RC045-logo als watermerk.
+// Tot tenant-branding zelf als asset wordt beheerd blijft daar alleen de eigen
+// sitehost als tekstwatermerk over. Standalone RC045 behoudt het huidige logo.
+$logoPad=publicAssetTenantRoot()===null?($root.'/'.siteAsset('branding.logo')):'';
+$watermerkTekst=(string)(parse_url(siteUrl(),PHP_URL_HOST)?:siteNaam());
 $maxVol=1600;$maxThumb=400;$maxFoto=25*1024*1024;
 $tekstStandaard=['hero_sub'=>['nl'=>"Foto's van onze evenementen en banen, gerangschikt per album. Klik op een album om de foto's te bekijken.",'en'=>'Photos from our events and tracks, sorted by album. Click an album to view the photos.','de'=>'Fotos von unseren Veranstaltungen und Strecken, sortiert nach Album. Klicke auf ein Album, um die Fotos anzusehen.']];
 
@@ -24,6 +29,13 @@ function fbTekstLees(string $pad,array $std): array { if(!is_file($pad))return $
 function fbAlbumIndex(array $data,string $slug): ?int { foreach($data['albums']??[] as $i=>$a)if((string)($a['slug']??'')===$slug)return (int)$i;return null; }
 function fbFlash(string $tekst,string $type='ok'): void { $_SESSION['flash']['fotoboek']=['tekst'=>$tekst,'type'=>$type]; }
 function fbRedirect(): void { header('Location: fotoboek.php');exit; }
+function fbMaakTenantAlbumMap(string $fotoRoot,string $slug): ?string {
+    $map=$fotoRoot.'/'.$slug;$thumbs=$map.'/thumbs';$tenant=publicAssetIsTenantPad($map);$mode=$tenant?0750:0755;
+    if(!is_dir($thumbs)&&!@mkdir($thumbs,$mode,true))return null;
+    if(is_link($map)||is_link($thumbs)||!is_dir($map)||!is_dir($thumbs))return null;
+    if($tenant){@chmod($map,0750);@chmod($thumbs,0750);}
+    return $map;
+}
 
 $melding='';$meldingType='';
 if(isset($_SESSION['flash']['fotoboek'])&&is_array($_SESSION['flash']['fotoboek'])){$melding=(string)($_SESSION['flash']['fotoboek']['tekst']??'');$meldingType=(string)($_SESSION['flash']['fotoboek']['type']??'ok');unset($_SESSION['flash']['fotoboek']);}
@@ -37,14 +49,14 @@ if(($_SERVER['REQUEST_METHOD']??'')==='POST'){
             if($actie==='tekst_opslaan'){
                 $nieuw=['hero_sub'=>[]];foreach(['nl','en','de'] as $t)$nieuw['hero_sub'][$t]=fbKort($_POST['hero_sub'][$t]??'',400);
                 if(fbSchrijf($tekstPad,$nieuw)){schrijfLog($logBestand,$huidigeGebruiker,'fotoboek_tekst','ondertitel bijgewerkt via modulaire editor');fbFlash('Opgeslagen. De fotoboekpagina gebruikt meteen deze tekst.');fbRedirect();}
-                $melding='Opslaan mislukt. Controleer de schrijfrechten van de data-map.';$meldingType='fout';
+                $melding='Opslaan mislukt. Controleer de schrijfrechten van de contentopslag.';$meldingType='fout';
             }
             elseif($actie==='album_aanmaken'){
                 $titel=fbKort($_POST['titel_nl']??'',60);
                 if($titel===''){$melding='Vul een Nederlandse titel in.';$meldingType='fout';}
                 else{
-                    $data=fbLees($dataPad);$slugs=array_map(static fn($a)=>(string)($a['slug']??''),$data['albums']);$slug=fbUniekeSlug(fbMaakSlug($titel),$slugs);$map=$fotoRoot.'/'.$slug;
-                    if(!is_dir($map.'/thumbs')&&!@mkdir($map.'/thumbs',0755,true)){$melding='Album-map kon niet worden aangemaakt.';$meldingType='fout';}
+                    $data=fbLees($dataPad);$slugs=array_map(static fn($a)=>(string)($a['slug']??''),$data['albums']);$slug=fbUniekeSlug(fbMaakSlug($titel),$slugs);$map=fbMaakTenantAlbumMap($fotoRoot,$slug);
+                    if($map===null){$melding='Album-map kon niet veilig worden aangemaakt.';$meldingType='fout';}
                     else{
                         $data['albums'][]=['slug'=>$slug,'title'=>['nl'=>$titel,'en'=>fbKort($_POST['titel_en']??'',60),'de'=>fbKort($_POST['titel_de']??'',60)],'date'=>date('Y-m-d'),'volgorde'=>count($data['albums']),'cover'=>'','verborgen'=>false,'beschrijving'=>['nl'=>'','en'=>'','de'=>''],'photos'=>[]];
                         if(fbSchrijf($dataPad,$data)){schrijfLog($logBestand,$huidigeGebruiker,'fotoboek_album_aangemaakt',$titel);fbFlash('Album “'.$titel.'” is aangemaakt.');fbRedirect();}
@@ -67,7 +79,8 @@ if(($_SERVER['REQUEST_METHOD']??'')==='POST'){
                 $slug=fbMaakSlug($_POST['slug']??'');$data=fbLees($dataPad);$idx=fbAlbumIndex($data,$slug);
                 if($idx===null){$melding='Album niet gevonden. Ververs de pagina.';$meldingType='fout';}
                 else{
-                    $album=$data['albums'][$idx];$albumPad=$fotoRoot.'/'.$slug;if(!is_dir($albumPad.'/thumbs'))@mkdir($albumPad.'/thumbs',0755,true);
+                    $album=$data['albums'][$idx];$albumPad=fbMaakTenantAlbumMap($fotoRoot,$slug);
+                    if($albumPad===null){fbFlash('Album-map is niet veilig beschikbaar.','fout');fbRedirect();}
                     $titel=fbKort($_POST['titel_nl']??'',60);if($titel!=='')$album['title']['nl']=$titel;
                     $album['title']['en']=fbKort($_POST['titel_en']??'',60);$album['title']['de']=fbKort($_POST['titel_de']??'',60);
                     $album['beschrijving']=['nl'=>fbKort($_POST['beschrijving_nl']??'',600),'en'=>fbKort($_POST['beschrijving_en']??'',600),'de'=>fbKort($_POST['beschrijving_de']??'',600)];
@@ -79,7 +92,7 @@ if(($_SERVER['REQUEST_METHOD']??'')==='POST'){
                         $pi=null;foreach($album['photos'] as $i=>$p)if((string)($p['file']??'')===$bestand){$pi=$i;break;}if($pi===null)continue;
                         if(!empty($rij['verwijderen'])){$teVerwijderen[]=$album['photos'][$pi];continue;}
                         $album['photos'][$pi]['caption']=['nl'=>fbKort($rij['caption_nl']??'',150),'en'=>fbKort($rij['caption_en']??'',150),'de'=>fbKort($rij['caption_de']??'',150)];
-                        if(($album['photos'][$pi]['type']??'photo')!=='video'&&!empty($rij['watermerk_toevoegen'])&&fbWatermerkBestaand($albumPad.'/'.$bestand,$logoPad)){$album['photos'][$pi]['watermerk']=true;$watermerkTeller++;}
+                        if(($album['photos'][$pi]['type']??'photo')!=='video'&&!empty($rij['watermerk_toevoegen'])&&fbWatermerkBestaand($albumPad.'/'.$bestand,$logoPad,$watermerkTekst)){$album['photos'][$pi]['watermerk']=true;$watermerkTeller++;}
                     }
                     if($teVerwijderen){$namen=array_map(static fn($p)=>(string)($p['file']??''),$teVerwijderen);$album['photos']=array_values(array_filter($album['photos'],static fn($p)=>!in_array((string)($p['file']??''),$namen,true)));}
 
@@ -88,16 +101,16 @@ if(($_SERVER['REQUEST_METHOD']??'')==='POST'){
                     if(isset($_FILES['nieuwe_fotos'])&&is_array($_FILES['nieuwe_fotos']['tmp_name']??null)){
                         foreach($_FILES['nieuwe_fotos']['tmp_name'] as $i=>$tmp){$err=(int)($_FILES['nieuwe_fotos']['error'][$i]??UPLOAD_ERR_NO_FILE);if($err===UPLOAD_ERR_NO_FILE)continue;$orig=(string)($_FILES['nieuwe_fotos']['name'][$i]??'foto');
                             if($err!==UPLOAD_ERR_OK){$uploadFouten[]=$orig.': uploaden mislukt.';continue;}
+                            if(!is_string($tmp)||!is_uploaded_file($tmp)){$uploadFouten[]=$orig.': tijdelijk uploadbestand is ongeldig.';continue;}
                             if((int)($_FILES['nieuwe_fotos']['size'][$i]??0)>$maxFoto){$uploadFouten[]=$orig.': groter dan 25 MB.';continue;}
                             $hash=@sha1_file($tmp);if($hash&&isset($hashes[$hash])){$uploadFouten[]=$orig.': staat al in dit album, overgeslagen.';continue;}
-                            $basis=preg_replace('/[^a-z0-9]+/','-',strtolower(pathinfo($orig,PATHINFO_FILENAME)));$basis=trim((string)$basis,'-');if($basis==='')$basis='foto';$naam=$basis.'.jpg';$n=2;while(file_exists($albumPad.'/'.$naam))$naam=$basis.'-'.$n++.'.jpg';
-                            $res=fbVerwerkFoto($tmp,$albumPad.'/'.$naam,$albumPad.'/thumbs/'.$naam,$watermerkAan,$logoPad,$maxVol,$maxThumb);
+                            $basis=preg_replace('/[^a-z0-9]+/','-',strtolower(pathinfo($orig,PATHINFO_FILENAME)));$basis=trim((string)$basis,'-');if($basis==='')$basis='foto';$basis=substr($basis,0,120);$naam=$basis.'.jpg';$n=2;while(file_exists($albumPad.'/'.$naam))$naam=$basis.'-'.$n++.'.jpg';
+                            $res=fbVerwerkFoto($tmp,$albumPad.'/'.$naam,$albumPad.'/thumbs/'.$naam,$watermerkAan,$logoPad,$maxVol,$maxThumb,$watermerkTekst);
                             if(empty($res['ok'])){$uploadFouten[]=$orig.': '.($res['fout']??'verwerking mislukt.');continue;}
                             $album['photos'][]=['type'=>'photo','file'=>$naam,'width'=>(int)$res['width'],'height'=>(int)$res['height'],'caption'=>['nl'=>'','en'=>'','de'=>''],'watermerk'=>$watermerkAan,'hash'=>$hash?:null];$nieuweBestanden[]=$naam;if($hash)$hashes[$hash]=true;$aantal++;
                         }
                     }
-                    if(!empty($_POST['album_watermerk_alle']))foreach($album['photos'] as &$p){if(($p['type']??'photo')==='video')continue;if(fbWatermerkBestaand($albumPad.'/'.basename((string)$p['file']),$logoPad)){$p['watermerk']=true;$watermerkTeller++;}}unset($p);
-
+                    if(!empty($_POST['album_watermerk_alle']))foreach($album['photos'] as &$p){if(($p['type']??'photo')==='video')continue;if(fbWatermerkBestaand($albumPad.'/'.basename((string)$p['file']),$logoPad,$watermerkTekst)){$p['watermerk']=true;$watermerkTeller++;}}unset($p);
                     $fotoNamen=[];foreach($album['photos'] as $p)if(($p['type']??'photo')!=='video')$fotoNamen[]=(string)$p['file'];
                     if($gekozenCover!==''&&in_array($gekozenCover,$fotoNamen,true))$album['cover']=$gekozenCover;
                     elseif(empty($album['cover'])||!in_array((string)$album['cover'],$fotoNamen,true))$album['cover']=$fotoNamen[0]??'';
