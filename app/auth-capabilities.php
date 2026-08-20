@@ -16,21 +16,8 @@ function authGebruikerMigreerRecord(array $r): array{if(trim((string)($r['id']??
 function authGebruikerRecordOpNaam(string $naam): ?array{$naam=trim($naam);if($naam==='')return null;if(function_exists('authGebruikerRecord')&&isset($GLOBALS['huidigeGebruiker'])&&strcasecmp($naam,(string)$GLOBALS['huidigeGebruiker'])===0){$r=authGebruikerRecord();if(is_array($r))return$r;}if(!isset($GLOBALS['usersBestand'])||!function_exists('laadGebruikers'))return null;foreach(laadGebruikers($GLOBALS['usersBestand']) as $r)if(is_array($r)&&isset($r['gebruikersnaam'])&&strcasecmp((string)$r['gebruikersnaam'],$naam)===0)return$r;return null;}
 function authHuidigeGebruikerId(): string{if(empty($GLOBALS['ingelogd'])||!empty($GLOBALS['isMaster']))return'';$r=authGebruikerRecordOpNaam((string)($GLOBALS['huidigeGebruiker']??''));return is_array($r)?authGebruikerId($r):'';}
 function authRolCapabilities(): array{if(empty($GLOBALS['ingelogd'])||!empty($GLOBALS['isMaster']))return[];require_once __DIR__.'/storage/domein-repositories.php';$uid=authHuidigeGebruikerId();$naam=(string)($GLOBALS['huidigeGebruiker']??'');$bestuur=false;foreach((array)(repoLedenLees()['leden']??[]) as $l){if(!is_array($l)||!empty($l['gearchiveerd_op']))continue;$idMatch=$uid!==''&&trim((string)($l['user_id']??''))===$uid;$legacy=!$idMatch&&$naam!==''&&strcasecmp(trim((string)($l['beheer_account']??'')),$naam)===0;if(($idMatch||$legacy)&&function_exists('ledenIsBestuurslid')&&ledenIsBestuurslid($l)){$bestuur=true;break;}}if(!$bestuur)return[];$p=authPlatformDefinities();return authCapabilitiesNormaliseer((array)($p['rol_capabilities']['bestuur']??[]));}
-function authCapabilityImplicaties(string $c): array{$m=['members.manage'=>['members.view'],'members.fees.manage'=>['members.view'],'members.erase'=>['members.view']];return(array)($m[$c]??[]);}
-function authCapabilityFeatureActief(string $capability): bool
-{
-    $p=authPlatformDefinities();$gevonden=false;$actief=false;$config=require dirname(__DIR__).'/site-config.php';
-    foreach((array)($p['beheer']??[]) as $d){if(!is_array($d)||($d['capability']??'')!==$capability)continue;$f=trim((string)($d['feature']??''));if($f==='')continue;$gevonden=true;if(($config['modules'][$f]??false)===true)$actief=true;}
-    return !$gevonden||$actief;
-}
-function authHeeftCapability(string $capability,bool $expliciet=false): bool
-{
-    // Feature flags staan boven autorisatie, ook voor masteraccounts.
-    if(!authCapabilityFeatureActief($capability))return false;
-    if(empty($GLOBALS['ingelogd']))return false;if(!empty($GLOBALS['isMaster']))return true;
-    $r=authGebruikerRecordOpNaam((string)($GLOBALS['huidigeGebruiker']??''));if(!is_array($r))return false;$caps=authGebruikerCapabilities($r);
-    if(in_array($capability,$caps,true))return true;foreach($caps as $g)if(in_array($capability,authCapabilityImplicaties($g),true))return true;if($expliciet)return false;
-    $rol=authRolCapabilities();if(in_array($capability,$rol,true))return true;foreach($rol as $g)if(in_array($capability,authCapabilityImplicaties($g),true))return true;return false;
-}
+function authCapabilityImplicaties(string $c): array{$m=['members.manage'=>['members.view','member_labels.manage'],'members.fees.manage'=>['members.view'],'members.erase'=>['members.view'],'committees.manage'=>['groups.roles.manage'],'workgroups.manage'=>['groups.roles.manage']];return(array)($m[$c]??[]);}
+function authCapabilityFeatureActief(string $capability): bool{$p=authPlatformDefinities();$gevonden=false;$actief=false;$config=require dirname(__DIR__).'/site-config.php';foreach((array)($p['beheer']??[]) as $d){if(!is_array($d)||($d['capability']??'')!==$capability)continue;$f=trim((string)($d['feature']??''));if($f==='')continue;$gevonden=true;if(($config['modules'][$f]??false)===true)$actief=true;}return !$gevonden||$actief;}
+function authHeeftCapability(string $capability,bool $expliciet=false): bool{if(!authCapabilityFeatureActief($capability))return false;if(empty($GLOBALS['ingelogd']))return false;if(!empty($GLOBALS['isMaster']))return true;$r=authGebruikerRecordOpNaam((string)($GLOBALS['huidigeGebruiker']??''));if(!is_array($r))return false;$caps=authGebruikerCapabilities($r);if(in_array($capability,$caps,true))return true;foreach($caps as $g)if(in_array($capability,authCapabilityImplicaties($g),true))return true;if($expliciet)return false;$rol=authRolCapabilities();if(in_array($capability,$rol,true))return true;foreach($rol as $g)if(in_array($capability,authCapabilityImplicaties($g),true))return true;return false;}
 function authCapabilityGevoelig(string $c): bool{$d=authCapabilityDefinities();return!empty($d[$c]['gevoelig']);}
 function authCapabilityGroepen(): array{$g=[];foreach(authCapabilityDefinities() as $c=>$d){$cat=(string)($d['categorie']??'Overig');if(!isset($g[$cat]))$g[$cat]=[];$g[$cat][$c]=(string)($d['label']??$c);}return$g;}
