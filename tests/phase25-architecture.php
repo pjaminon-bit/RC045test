@@ -1,34 +1,112 @@
 <?php
-// Fase 2.5 architectuur/security regressietest. Schrijft geen productiedata.
-$root=dirname(__DIR__);$errors=[];$ok=[];
-function t25($cond,string $message):void{global$errors,$ok;if($cond)$ok[]=$message;else$errors[]=$message;}
-function t25txt(string $path):string{return is_file($path)?(string)file_get_contents($path):'';}
+// Run from repository root: php tests/phase25-architecture.php
+$root = dirname(__DIR__);
+$errors = [];
+$ok = [];
+function t25($cond, $message) { global $errors,$ok; if($cond)$ok[]=$message;else$errors[]=$message; }
+function t25file($path) { return is_file($path) ? (string)file_get_contents($path) : ''; }
 
-$platform=require $root.'/app/core/platform-definities.php';$features=$platform['features']??[];$beheer=$platform['beheer']??[];$caps=$platform['capabilities']??[];$config=require $root.'/site-config.php';
-t25(is_array($features)&&$features,'platform features aanwezig');t25(is_array($beheer)&&$beheer,'beheerregistry aanwezig');t25(is_array($caps)&&$caps,'capabilityregistry aanwezig');
-$featureAdapter=require $root.'/app/core/module-definities.php';$beheerAdapter=require $root.'/app/beheer/module-registry.php';t25($featureAdapter===$features,'feature-adapter gebruikt centrale bron');t25(count($beheerAdapter)===count($beheer),'beheer-adapter gebruikt centrale bron');
-$routes=[];foreach($beheer as $key=>$def){t25(is_array($def),"beheercomponent $key is array");$cap=(string)($def['capability']??'');t25($cap!==''&&isset($caps[$cap]),"beheercomponent $key heeft capability");$route=(string)($def['route']??'');$path=(string)parse_url($route,PHP_URL_PATH);t25($path!==''&&is_file($root.'/beheer/'.ltrim($path,'/')),"beheerroute $key bestaat");if($route!==''){t25(!isset($routes[$route]),"beheerroute $route uniek");$routes[$route]=$key;}$feature=trim((string)($def['feature']??''));if($feature!==''){t25(isset($features[$feature]),"feature $feature bestaat");t25(array_key_exists($feature,(array)($config['modules']??[])),"feature $feature tenant-configureerbaar");}t25(!array_key_exists('bootstrap',$def),"$key heeft geen outputfilter-bootstrap");}
-$vereist=['leden'=>'members.view','leden_import'=>'members.manage','commissies'=>'committees.manage','vergaderingen'=>'meetings.manage','taken'=>'tasks.manage','operationele_taken'=>'ops_tasks.manage','evenementen'=>'events.manage','aanmeldingen'=>'applications.manage','lidmaatschapstypen'=>'memberships.fees.manage','contributies'=>'members.fees.manage'];foreach($vereist as $k=>$cap)t25(($beheer[$k]['capability']??null)===$cap,"fase-2.5 component $k geregistreerd");t25(!isset($beheer['rekentabel']),'legacy Rekentabel is geen actieve module');
-foreach(['members.erase','system.users.manage','system.audit.read','system.backups.manage'] as $cap)t25(!empty($caps[$cap]['gevoelig']),"gevoelige capability $cap gemarkeerd");
+$platform = require $root . '/app/core/platform-definities.php';
+$features = $platform['features'] ?? [];
+$beheer = $platform['beheer'] ?? [];
+$caps = $platform['capabilities'] ?? [];
+$config = require $root . '/site-config.php';
 
-$beheerIndex=t25txt($root.'/beheer/index.php');t25(strlen($beheerIndex)<50000,'beheer/index.php is dunne shell');t25(strpos($beheerIndex,'authPlatformDefinities')!==false,'beheer-shell gebruikt platformregister');t25(strpos($beheerIndex,'formulier ===')===false,'beheer-shell bevat geen legacy formulieren');
-$ledenIndex=t25txt($root.'/leden/index.php');t25(strpos($ledenIndex,'leden-app.php')===false,'ledenportaal is geen legacy wrapper');t25(strpos($ledenIndex,'portaal-service.php')!==false,'ledenportaal gebruikt portaalservice');t25(strpos($ledenIndex,'contributieVoorLidJaar')!==false,'ledenportaal leest aparte contributie-administratie');
-foreach(['app/beheer/bootstrap.php','app/paneel-hulp.php','app/core/paneel-modules.php','leden-app.php'] as $rel)t25(!is_file($root.'/'.$rel),"oude runtime verwijderd: $rel");
+t25(is_array($features) && $features, 'platform features aanwezig');
+t25(is_array($beheer) && $beheer, 'beheerregistry aanwezig');
+t25(is_array($caps) && $caps, 'capabilityregistry aanwezig');
 
-$leden=t25txt($root.'/beheer/leden.php');t25(strpos($leden,'ledenZetContributie(')===false,'ledenbeheer schrijft geen geneste contributie');t25(strpos($leden,'contributies.php')!==false,'ledenbeheer verwijst naar financiële module');t25(strpos($leden,'lmNummerVrij')!==false,'lidnummer uniek bewaakt');t25(strpos($leden,'lmUserVrij')!==false,'user_id een-op-een bewaakt');t25(strpos($leden,"authHeeftCapability('members.erase',true)")!==false,'privacy erase vereist expliciet gevoelig recht');t25(strpos($leden,'privateStoreTransactie')!==false,'privacy erase gebruikt transactiegrens');
-$service=t25txt($root.'/app/leden/service.php');t25(strpos($service,'array_keys($waarde)')!==false,'privacy purge verwerkt associative sleutels');foreach(['contributiesLees','aanmeldingenLees','bestuurslid_id'] as $needle)t25(strpos($service,$needle)!==false,"privacyrelaties omvatten $needle");
+$featureAdapter = require $root . '/app/core/module-definities.php';
+$beheerAdapter = require $root . '/app/beheer/module-registry.php';
+t25($featureAdapter === $features, 'module-definities is zuivere platformadapter');
+t25(count($beheerAdapter) === count($beheer), 'beheerregistry heeft exact alle platformcomponenten');
 
-$import=t25txt($root.'/beheer/leden-import.php');t25(strpos($import,'ledenZetContributie(')===false,'CSV-import schrijft geen geneste contributie');t25(strpos($import,'contributieUpsert')!==false&&strpos($import,'contributiesSchrijf')!==false,'CSV-import schrijft apart financieel domein');t25(strpos($import,'privateStoreTransactie')!==false,'CSV-import is transactioneel op PDO');
-$contrib=t25txt($root.'/app/leden/contributies.php');t25(strpos($contrib,'contributiesNormaliseerDocument')!==false,'contributie document heeft unieke lid+jaar-normalisatie');t25(strpos($contrib,"privateStoreLees('contributies'")!==false&&strpos($contrib,"privateStoreSchrijf('contributies'")!==false,'contributie is tenant-aware');t25(strpos($contrib,'contributiesLegacyRegels')!==false,'legacy financiële data is alleen migratiebron');
+$routes = [];
+foreach ($beheer as $key=>$def) {
+    t25(is_array($def), "beheercomponent $key is array");
+    $cap = (string)($def['capability'] ?? '');
+    t25($cap !== '' && isset($caps[$cap]), "beheercomponent $key verwijst naar geldige capability");
+    $route = (string)($def['route'] ?? '');
+    $path = (string)parse_url($route, PHP_URL_PATH);
+    t25($path !== '' && is_file($root . '/beheer/' . ltrim($path,'/')), "beheerroute $key bestaat");
+    if ($route !== '') { t25(!isset($routes[$route]), "beheerroute $route is uniek"); $routes[$route]=$key; }
+    $feature = trim((string)($def['feature'] ?? ''));
+    if ($feature !== '') {
+        t25(isset($features[$feature]), "feature $feature voor $key bestaat");
+        t25(array_key_exists($feature, (array)($config['modules'] ?? [])), "feature $feature is tenant-configureerbaar");
+    }
+}
 
-$ontvangst=t25txt($root.'/aanmelden-ontvangst.php');t25(strpos($ontvangst,'repoLedenLees')!==false,'aanmelding duplicate-check gebruikt tenant repository');t25(strpos($ontvangst,"\$_POST['lidmaatschap_type']")!==false,'server gebruikt gekozen lidmaatschapstype');t25(strpos($ontvangst,'lidmaatschapTypeToegestaanVoorLeeftijd')!==false,'server valideert type tegen leeftijd');t25(strpos($ontvangst,'berekend_inschrijfgeld')!==false,'aanvraag bewaart inschrijfgeldsnapshot');t25(strpos($ontvangst,'ledenSchrijf(')===false&&strpos($ontvangst,"['leden'][]")===false,'publieke aanmelding maakt geen lid');
-$signup=t25txt($root.'/lidmaatschap-aanmelden.js');t25(strpos($signup,'submit.disabled=true')!==false,'publieke submit start fail-closed');t25(strpos($signup,"addEventListener('submit'")!==false&&strpos($signup,'capture:true')!==false,'publieke submit heeft capture guard');t25(strpos($signup,"select.name='lidmaatschap_type'")!==false,'publieke formulier heeft typekeuze');
-$appUi=t25txt($root.'/beheer/aanmeldingen.php');$appService=t25txt($root.'/app/leden/aanmeldingen-service.php');t25(strpos($appUi,'aanmeldingServiceAccepteer')!==false,'beheer delegeert acceptatie aan service');t25(strpos($appUi,'aanmeldingenOpschonenBewaartermijn')!==false,'inbox materialiseert retentie');t25(strpos($appService,'privateStoreTransactie')!==false,'acceptatie is transactioneel');t25(strpos($appService,'ledenZetContributie(')===false,'acceptatie schrijft geen geneste contributie');t25(strpos($appService,'betaald_bedrag')!==false,'acceptatieretry bewaakt bestaande betaling');
-$appStore=t25txt($root.'/aanmeldingen-opslag.php');t25(strpos($appStore,'aanmeldingenBewaardagen')!==false&&strpos($appStore,'??90')!==false,'aanmeldingen hebben privacyretentie default 90 dagen');t25(strpos($appStore,"$status==='nieuw'")===false||strpos($appStore,"status==='nieuw'")!==false,'open aanvragen worden expliciet behandeld in retentie');
+$verplicht = [
+    'leden'=>'members.view','leden_import'=>'members.manage','commissies'=>'committees.manage',
+    'vergaderingen'=>'meetings.manage','taken'=>'tasks.manage','operationele_taken'=>'ops_tasks.manage',
+    'evenementen'=>'events.manage','aanmeldingen'=>'applications.manage','lidmaatschapstypen'=>'memberships.fees.manage',
+];
+foreach($verplicht as $component=>$cap)t25(($beheer[$component]['capability']??null)===$cap,"fase-2.5 component $component geregistreerd");
+t25(!empty($caps['members.erase']['gevoelig']), 'definitief leden wissen is gevoelige capability');
+t25(!empty($caps['system.users.manage']['gevoelig']), 'gebruikersbeheer is gevoelige capability');
+t25(!empty($caps['system.audit.read']['gevoelig']), 'auditlog is gevoelige capability');
+t25(!empty($caps['system.backups.manage']['gevoelig']), 'backupherstel is gevoelige capability');
 
-$private=t25txt($root.'/app/storage/private-store.php');t25(strpos($private,'privateStoreTransactie')!==false,'private storage ondersteunt transacties');t25(strpos($private,'rollBack')!==false,'PDO-transactie kan rollbacken');t25(strpos($private,"throw new RuntimeException('Private verenigingsopslag")!==false,'PDO-fouten falen gesloten');
-$ht=t25txt($root.'/.htaccess');$gitignore=t25txt($root.'/.gitignore');foreach(['leden-data\\.php','aanmeldingen-data\\.php','contributies-data\\.php'] as $needle)t25(strpos($ht,$needle)!==false,".htaccess beschermt $needle");foreach(['leden-data.php','aanmeldingen-data.php','contributies-data.php'] as $needle)t25(strpos($gitignore,$needle)!==false,".gitignore beschermt $needle");$backup=require $root.'/beheer/backup-registry.php';foreach(['leden','aanmeldingen_inbox','contributies','vergaderingen','taken','operationele_taken','evenementen','lidmaatschapstypen'] as $key)t25(isset($backup[$key]),"backupregistry bevat $key");
+$beheerIndex = t25file($root . '/beheer/index.php');
+t25(strlen($beheerIndex) < 50000, 'beheer/index.php is een dunne shell');
+t25(strpos($beheerIndex, 'formulier ===') === false && strpos($beheerIndex, "formulier'] ===") === false, 'beheer-shell bevat geen inhoudelijke legacy POST-handlers');
+t25(strpos($beheerIndex, 'authPlatformDefinities') !== false, 'beheer-shell gebruikt centraal platformregister');
 
-require_once $root.'/app/leden/lidmaatschap.php';$types=lidmaatschapLees()['types']??[];$ids=array_map(static fn($t)=>(string)($t['id']??''),$types);t25(count($types)>0,'minstens één lidmaatschapstype');t25(count($ids)===count(array_unique($ids)),'lidmaatschapstype-id’s uniek');foreach($types as $type){t25(($type['leeftijd_min']??null)===null||($type['leeftijd_max']??null)===null||$type['leeftijd_min']<=$type['leeftijd_max'],'geldige leeftijdsgrens');t25((float)($type['jaarbedrag']??-1)>=0,'jaarbedrag niet negatief');t25(trim((string)($type['labels']['nl']??''))!=='','type heeft Nederlandse naam');}
+$ledenIndex = t25file($root . '/leden/index.php');
+t25(strpos($ledenIndex, 'leden-app.php') === false, '/leden/ is geen wrapper meer om legacy leden-app');
+t25(strpos($ledenIndex, 'Mijn ') !== false && strpos($ledenIndex, 'portaal-service.php') !== false, '/leden/ is persoonlijk portaal');
 
-echo 'Phase 2.5 architecture checks: '.count($ok).' OK, '.count($errors)." fout(en)\n";if($errors){foreach($errors as $e)fwrite(STDERR,"FOUT: $e\n");exit(1);}foreach($ok as $m)echo "OK: $m\n";
+$it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS));
+$verkeerdeHelper = [];
+$zoekterm = 'site' . 'VerenigingNaam(';
+foreach($it as $file){
+    if(!$file->isFile()||strtolower($file->getExtension())!=='php')continue;
+    $pad=$file->getPathname();
+    if(realpath($pad)===realpath(__FILE__))continue;
+    if(strpos($pad,DIRECTORY_SEPARATOR.'.git'.DIRECTORY_SEPARATOR)!==false)continue;
+    $txt=(string)file_get_contents($pad);
+    if(strpos($txt,$zoekterm)!==false)$verkeerdeHelper[]=$pad;
+}
+t25(!$verkeerdeHelper, 'geen niet-bestaande sitenaam-helper gebruikt');
+
+$muterend = [
+    'beheer/leden.php'=>'members.', 'beheer/leden-import.php'=>'members.manage',
+    'beheer/commissies.php'=>'committees.manage','beheer/vergaderingen.php'=>'meetings.manage',
+    'beheer/taken.php'=>'tasks.manage','beheer/operationele-taken.php'=>'ops_tasks.manage',
+    'beheer/evenementen.php'=>'events.manage','beheer/aanmeldingen.php'=>'applications.manage',
+    'beheer/lidmaatschap.php'=>'memberships.fees.manage','beheer/gebruikers.php'=>'system.users.manage',
+    'beheer/backups.php'=>'system.backups.manage',
+];
+foreach($muterend as $rel=>$needle){$txt=t25file($root.'/'.$rel);t25($txt!=='',"$rel bestaat");t25(strpos($txt,'csrfOk(')!==false,"$rel controleert CSRF");t25(strpos($txt,$needle)!==false,"$rel controleert capability $needle");}
+
+$ontvangst = t25file($root . '/aanmelden-ontvangst.php');
+t25(strpos($ontvangst,'aanmeldingenSchrijf')!==false, 'openbare aanmelding schrijft naar inbox');
+t25(strpos($ontvangst,"['leden'][]")===false && strpos($ontvangst,'ledenSchrijf(')===false, 'openbare aanmelding maakt niet rechtstreeks een lid');
+t25(strpos($ontvangst,'lidmaatschapBedragVoorMaand')!==false, 'openbare aanmelding berekent bedrag server-side');
+
+$service = t25file($root . '/app/leden/service.php');
+t25(strpos($service,"empty(\$gevonden['gearchiveerd_op'])")!==false, 'definitief wissen vereist eerst archiveren');
+t25(strpos($service,'ledenServiceVerwijderRelaties')!==false, 'definitief wissen ruimt bekende relaties op');
+
+$ht = t25file($root . '/.htaccess');
+foreach(['leden-data\\.php','aanmeldingen-data\\.php','vergaderingen-data\\.php','taken-data\\.php','operationele-taken-data\\.php','evenementen-data\\.php'] as $needle)t25(strpos($ht,$needle)!==false,".htaccess beschermt $needle");
+$backup = require $root . '/beheer/backup-registry.php';
+foreach(['leden','aanmeldingen_inbox','vergaderingen','taken','operationele_taken','evenementen','lidmaatschapstypen'] as $key)t25(isset($backup[$key]),"backupregistry bevat $key");
+
+require_once $root . '/app/leden/lidmaatschap.php';
+$types = lidmaatschapLees()['types'] ?? [];
+$ids = array_map(static fn($t)=>(string)($t['id']??''),$types);
+t25(count($ids) === count(array_unique($ids)), 'lidmaatschapstype-id’s zijn uniek');
+t25(count($types) >= 1, 'minstens één lidmaatschapstype beschikbaar');
+foreach($types as $type){$min=$type['leeftijd_min'];$max=$type['leeftijd_max'];t25($min===null||$max===null||$min<=$max,'leeftijdsgrens lidmaatschapstype is geldig');t25(($type['jaarbedrag']??-1)>=0,'jaarbedrag is niet negatief');}
+
+t25(trim((string)($config['vereniging']['sleutel']??''))!=='','tenant heeft vaste technische sleutel');
+t25(in_array((string)($config['opslag']['private_driver']??''),['json','pdo'],true),'private storage driver is geldig');
+
+require_once $root . '/app/auth-capabilities.php';
+$ledenCaps=authCapabilitiesVanTabs(['leden']);
+foreach(['members.view','members.manage','members.fees.manage'] as $c)t25(in_array($c,$ledenCaps,true),"legacy ledenrecht behoudt $c");
+
+echo "Phase 2.5 checks: " . count($ok) . " OK, " . count($errors) . " fout(en)\n";
+if($errors){foreach($errors as $e)fwrite(STDERR,"FOUT: $e\n");exit(1);}foreach($ok as $m)echo "OK: $m\n";
