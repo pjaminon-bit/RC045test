@@ -84,16 +84,27 @@ Zie `docs/VPS-DNS.md`.
 
 ### 4.4 — TLS/HTTPS
 
-**Status: gepland.**
+**Status: code en CI gereed; daadwerkelijke certificaatuitgifte en HTTPS-activatie volgen op de echte VPS na 4.1/4.2 root-toepassing en verse 4.3 DNS-readiness.**
 
 Omvat:
 
-- certificaatuitgifte;
-- veilige renewal;
-- HTTPS/canonical-host enforcement;
-- TLS default/catch-all gedrag voor onbekende SNI/hosts;
-- complete Apache HTTPS-wrapper rond het in 4.2 gegenereerde tenant-routingfragment;
-- volledige `apache2ctl configtest` vóór enable/reload.
+- tenantgebonden `tls-plan.json` uit verse fase-4.3 readiness;
+- Certbot `certonly --webroot` met vooraf geregistreerd operator-ACME-account;
+- aparte per-tenant ACME webroot; Certbot mag Apache-config niet autonoom herschrijven;
+- HTTP-vhost serveert uitsluitend `/.well-known/acme-challenge/` en redirect overige requests naar de vaste canonical HTTPS-host;
+- aparte eerste/default HTTP- en HTTPS-catch-all vóór tenantvhosts;
+- neutraal lokaal reject-certificaat voor onbekende HTTPS/SNI in plaats van een tenantcertificaat;
+- TLS 1.0/1.1 en TLS-compressie uit; HSTS één jaar zonder `includeSubDomains`;
+- iedere tenant-HTTPS-vhost controleert zowel `SSL_TLS_SNI` als `Host`;
+- certificaatvalidatie op exacte SAN, geldigheid, private-key match, lineage-containment en keyrechten;
+- actieve fase-4.1 FPM-socket en exact geïnstalleerd 4.2 routingfragment verplicht vóór HTTPS;
+- live DNS-hercontrole direct vóór ACME-uitgifte;
+- volledige Apache `configtest` vóór elke reload en vóór definitieve HTTPS-activatie;
+- Certbot renewal deploy-hook: eerst `apache2ctl configtest`, alleen daarna `systemctl reload apache2`;
+- mislukte eerste ACME-uitgifte rolt nieuw geactiveerde tenant-HTTP-route zo mogelijk terug;
+- geen ACME-accountmail, certificaatprivate key of andere secrets in tenantbundles/Git.
+
+Zie `docs/VPS-TLS.md`.
 
 ### 4.5 — Database provisioning
 

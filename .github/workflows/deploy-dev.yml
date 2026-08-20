@@ -65,6 +65,7 @@ jobs:
           php tests/phase411-runtime-reaudit.php
           php tests/phase42-apache-vhosts.php
           php tests/phase43-dns-readiness.php
+          php tests/phase44-tls-https.php
           php tests/private-store-pdo-sqlite.php
           php tests/phase321-pdo-isolation.php
           php tests/private-store-pdo-failclosed.php
@@ -167,13 +168,17 @@ jobs:
           wacht_op_status "$basis/bin/apply-vps-webserver.php" 403 nee
           wacht_op_status "$basis/bin/prepare-vps-dns.php" 403 nee
           wacht_op_status "$basis/bin/check-vps-dns.php" 403 nee
+          wacht_op_status "$basis/bin/prepare-vps-tls.php" 403 nee
+          wacht_op_status "$basis/bin/apply-vps-tls.php" 403 nee
           wacht_op_status "$basis/tests/phase35-vps-deployment.php" 403 nee
           wacht_op_status "$basis/tests/phase351-security-reaudit.php" 403 nee
           wacht_op_status "$basis/tests/phase41-vps-runtime-isolation.php" 403 nee
           wacht_op_status "$basis/tests/phase411-runtime-reaudit.php" 403 nee
           wacht_op_status "$basis/tests/phase42-apache-vhosts.php" 403 nee
           wacht_op_status "$basis/tests/phase43-dns-readiness.php" 403 nee
+          wacht_op_status "$basis/tests/phase44-tls-https.php" 403 nee
           wacht_op_status "$basis/docs/VPS-DEPLOYMENT.md" 403 nee
           wacht_op_status "$basis/docs/VPS-WEBSERVER.md" 403 nee
           wacht_op_status "$basis/docs/VPS-DNS.md" 403 nee
+          wacht_op_status "$basis/docs/VPS-TLS.md" 403 nee
           wacht_op_status "$basis/dev-build.json" 403 nee
