@@ -41,17 +41,26 @@ Zie `docs/VPS-RUNTIME-ISOLATION.md`.
 
 ### 4.2 — Webserver & vhosts
 
-**Status: gepland.**
+**Status: code en CI gereed; artifacts blijven inactief tot DNS/TLS in 4.3/4.4.**
+
+Canonieke productie-stack: **Apache HTTP Server 2.4 op Ubuntu/Debian**, minimaal 2.4.49.
 
 Omvat:
 
-- Apache/Nginx tenant-vhosts;
-- literal canonical HTTP→HTTPS redirect;
-- default/catch-all voor onbekende hosts;
-- iedere host uitsluitend naar zijn eigen PHP-FPM socket;
-- documentroot uitsluitend de gedeelde release;
-- server-side denyregels voor private/tooling/VCS-paden;
-- configtest vóór reload.
+- deterministische Apache tenant-vhosts uit het fase-4.1 runtimeplan;
+- eerste/default `000-` HTTP catch-all met `StrictHostCheck On` en `Require all denied`;
+- literal canonical HTTP→HTTPS redirect zonder request-Hostreflectie;
+- exacte `ServerName` zonder `ServerAlias`;
+- iedere host uitsluitend naar eigen PHP-FPM Unix socket én unieke FastCGI backendidentity;
+- DocumentRoot uitsluitend de gedeelde release;
+- server-side denyregels voor private/tooling/VCS-paden naast de vertrouwde gedeelde `.htaccess`;
+- root-vrije bundlecheck;
+- root-only installatie naar `sites-available` + dedicated fragmentmap;
+- Apache-versie/module/syntaxpreflight;
+- geen `a2ensite`, geen `sites-enabled` write en geen reload/restart in fase 4.2;
+- volledige TLS-vhost/configtest/activatie volgt pas in 4.4.
+
+Zie `docs/VPS-WEBSERVER.md`.
 
 ### 4.3 — DNS
 
@@ -72,7 +81,9 @@ Omvat:
 - certificaatuitgifte;
 - veilige renewal;
 - HTTPS/canonical-host enforcement;
-- TLS default/catch-all gedrag voor onbekende SNI/hosts.
+- TLS default/catch-all gedrag voor onbekende SNI/hosts;
+- complete Apache HTTPS-wrapper rond het in 4.2 gegenereerde tenant-routingfragment;
+- volledige `apache2ctl configtest` vóór enable/reload.
 
 ### 4.5 — Database provisioning
 
