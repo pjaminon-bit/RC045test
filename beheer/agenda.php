@@ -6,6 +6,7 @@
 require_once dirname(__DIR__) . '/auth.php';
 require_once dirname(__DIR__) . '/app/core/site.php';
 require_once dirname(__DIR__) . '/app/data-slot.php';
+require_once dirname(__DIR__) . '/app/content/public-content-store.php';
 
 if (!$ingelogd) { header('Location: ../beheer.php'); exit; }
 // De Agenda-beheertab hoort in module-definities bij de feature
@@ -16,7 +17,8 @@ if (!siteModuleActief('evenementen')) { http_response_code(404); echo 'De evenem
 $rechten = authRechten(['agenda' => 'Agenda'], []);
 if (!$isMaster && !in_array('agenda', $rechten['toegestaneTabs'] ?? [], true)) { http_response_code(403); echo 'Geen toegang tot Agenda.'; exit; }
 
-$agendaBestand = dirname(__DIR__) . '/data/agenda.json';
+$agendaBestand = publicContentPad('agenda');
+if ($agendaBestand === null) throw new RuntimeException('Agenda is niet geregistreerd in de tenantcontentstore.');
 $agendaTags = ['leden' => 'Ledenevenement', 'opendag' => 'Open dag', 'wedstrijd' => 'Wedstrijd'];
 
 function agendaEsc($v): string { return htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8'); }
@@ -41,9 +43,18 @@ function agendaLees(string $pad): array {
 }
 function agendaSchrijf(string $pad, array $data): bool {
     global $dataBackupMap, $dataBackupBewaardagen, $dataBackupMaxPerBestand;
-    maakDataBackup($pad, $dataBackupMap, $dataBackupBewaardagen, $dataBackupMaxPerBestand);
+    if (!publicContentIsTenantPad($pad)) {
+        maakDataBackup($pad, $dataBackupMap, $dataBackupBewaardagen, $dataBackupMaxPerBestand);
+    }
     $json = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
-    return $json !== false && file_put_contents($pad, $json, LOCK_EX) !== false;
+    if ($json === false || !is_dir(dirname($pad))) return false;
+    try { $suffix = bin2hex(random_bytes(4)); } catch (Throwable $e) { $suffix = (string) mt_rand(100000, 999999); }
+    $tmp = $pad . '.tmp.' . $suffix;
+    if (@file_put_contents($tmp, $json, LOCK_EX) === false) return false;
+    if (publicContentIsTenantPad($pad)) @chmod($tmp, 0640);
+    if (!@rename($tmp, $pad)) { @unlink($tmp); return false; }
+    if (publicContentIsTenantPad($pad)) @chmod($pad, 0640);
+    return true;
 }
 
 $events = agendaLees($agendaBestand);
@@ -80,7 +91,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             if (agendaSchrijf($agendaBestand,$nieuw)) {
                 $events=$nieuw; $melding='Opgeslagen. De agenda op de website is bijgewerkt.'; $meldingType='ok';
                 schrijfLog($logBestand,$huidigeGebruiker,'agenda',count($events).' kaart(en) opgeslagen via modulaire editor');
-            } else { $melding='Opslaan mislukt. Controleer de schrijfrechten van de data-map.'; $meldingType='fout'; }
+            } else { $melding='Opslaan mislukt. Controleer de schrijfrechten van de contentopslag.'; $meldingType='fout'; }
         } finally { dataSlotDicht($slot); }
     }
 }
