@@ -1,5 +1,0 @@
-<?php
-function beheerContactMagOpenen(): bool { if (empty($GLOBALS['ingelogd'])) return false; if (!empty($GLOBALS['isMaster'])) return true; return in_array('contact', (array)($GLOBALS['toegestaneTabs'] ?? []), true); }
-function beheerContactBewaakLegacyPost(): void { if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST' || (string)($_POST['formulier'] ?? '') !== 'contact') return; $_POST['formulier']=''; if(function_exists('schrijfLog')) schrijfLog($GLOBALS['logBestand'],$GLOBALS['huidigeGebruiker'],'legacy_contact_geblokkeerd','contact'); }
-function beheerContactStartOutputFilter(): void { ob_start(function($html){ if(!is_string($html))return $html; if(beheerContactMagOpenen())$html=preg_replace('~<button\s+type="button"\s+class="menu-item"\s+data-tab="contact">.*?</button>~is','<a class="menu-item menu-item-link" style="display:block;text-decoration:none" href="contact.php">* Contact</a>',$html,1)??$html; if(stripos($html,'</head>')!==false)$html=preg_replace('~</head>~i','<style>#tab-contact{display:none!important}</style></head>',$html,1)??$html; return $html;}); }
-beheerContactBewaakLegacyPost(); beheerContactStartOutputFilter();
