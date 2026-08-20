@@ -1,8 +1,10 @@
 # VPS deploymentcontract
 
-Status per **20-08-2026**: fase 3.5.1.
+Status per **20-08-2026**: fase 3.5.1 + fase 4.1 runtimevoorbereiding.
 
-Dit document legt de serverlayout vast waarmee meerdere verenigingen dezelfde applicatiecode veilig kunnen gebruiken. Fase 3.5/3.5.1 installeert nog geen DNS, TLS of webserverconfiguratie; zij levert wel het vaste, machineleesbare contract waarop die automation kan bouwen.
+Dit document legt de serverlayout vast waarmee meerdere verenigingen dezelfde applicatiecode veilig kunnen gebruiken. Fase 3.5/3.5.1 levert het vaste, machineleesbare tenant- en hostcontract. Fase 4.1 bouwt daarop de Linux/PHP-FPM runtimebundle en root-applyprocedure. DNS, TLS en concrete webserver-vhosts volgen in fase 4.2–4.4.
+
+De officiële vervolgnummers staan in `docs/ROADMAP.md`. De concrete 4.1 runtimeprocedure staat in `docs/VPS-RUNTIME-ISOLATION.md`.
 
 ## Doelarchitectuur
 
@@ -19,6 +21,9 @@ Dit document legt de serverlayout vast waarmee meerdere verenigingen dezelfde ap
 │   ├── runtime.env
 │   ├── tenant.json
 │   ├── deployment.json
+│   ├── runtime/
+│   │   ├── runtime-plan.json
+│   │   └── vst-noorderhaven-<hash>.conf
 │   └── private/
 │       ├── auth/
 │       ├── audit/
@@ -26,12 +31,13 @@ Dit document legt de serverlayout vast waarmee meerdere verenigingen dezelfde ap
 │       ├── collections/
 │       ├── public-content/
 │       ├── security/
-│       └── sessions/
+│       ├── sessions/
+│       └── tmp/
 └── duinrand/
     └── ... dezelfde tenantstructuur, eigen data ...
 ```
 
-De webserver gebruikt dus voor iedere vereniging dezelfde logische documentroot, bijvoorbeeld `/srv/verenigingsplatform/current`. De tenantroot onder `/srv/verenigingen/<key>` is **nooit** een documentroot, alias of statische webmap.
+De webserver gebruikt voor iedere vereniging dezelfde logische documentroot, bijvoorbeeld `/srv/verenigingsplatform/current`. De tenantroot onder `/srv/verenigingen/<key>` is **nooit** een documentroot, alias of statische webmap.
 
 ## Deploymentdescriptor maken
 
@@ -98,40 +104,83 @@ Het descriptor bevat bewust **geen**:
 - TLS private keys;
 - API-tokens of andere secrets.
 
+## Fase 4.1: Linux/PHP-FPM runtimebundle
+
+Op basis van `deployment.json` wordt nu een tweede deterministisch contract gemaakt:
+
+```bash
+php bin/prepare-vps-runtime.php \
+  --deployment=/srv/verenigingen/noorderhaven/deployment.json \
+  --php-version=8.3 \
+  --web-user=www-data \
+  --web-group=www-data
+```
+
+Dit schrijft onder de tenantroot:
+
+```text
+runtime/runtime-plan.json
+runtime/<tenant-pool>.conf
+```
+
+De generator voert geen root-acties uit. Voor roottoepassing wordt de bundle eerst opnieuw gecontroleerd:
+
+```bash
+php bin/apply-vps-runtime.php \
+  --plan=/srv/verenigingen/noorderhaven/runtime/runtime-plan.json \
+  --check
+```
+
+Op de echte Linux-VPS kan daarna bewust worden toegepast:
+
+```bash
+sudo php bin/apply-vps-runtime.php \
+  --plan=/srv/verenigingen/noorderhaven/runtime/runtime-plan.json \
+  --apply \
+  --fpm-pool-dir=/etc/php/8.3/fpm/pool.d
+```
+
+De apply-tool reloadt PHP-FPM niet automatisch. Eerst moet de volledige serverconfiguratie met de distro-/versiespecifieke testopdracht worden gevalideerd; pas daarna volgt een expliciete reload.
+
 ## PHP-FPM: één pool per tenant
 
-De securitygrens op de VPS is niet alleen de applicatiecode. Iedere tenant hoort een eigen PHP-FPM pool te krijgen met de waarden uit `deployment.json`.
+De securitygrens op de VPS is niet alleen de applicatiecode. Iedere tenant krijgt een eigen PHP-FPM pool met de waarden uit het gevalideerde runtimeplan.
 
 Conceptueel:
 
 ```ini
 [<deployment.php_fpm.pool>]
-user = <deployment.php_fpm.recommended_os_user>
-group = <tenant-eigen groep>
+user = <unieke tenant-system-user>
+group = <unieke tenant-primary-group>
 listen = <deployment.php_fpm.socket>
 listen.owner = www-data
 listen.group = www-data
 listen.mode = 0660
 
 clear_env = yes
-env[VERENIGING_REQUIRE_TENANT_CONFIG] = 1
-env[VERENIGING_CONFIG_FILE] = <deployment.runtime_env.VERENIGING_CONFIG_FILE>
-env[VERENIGING_PRIVATE_ROOT] = <deployment.runtime_env.VERENIGING_PRIVATE_ROOT>
+php_admin_value[session.save_path] = "/srv/verenigingen/<tenant>/private/sessions"
+php_admin_value[upload_tmp_dir] = "/srv/verenigingen/<tenant>/private/tmp"
+
+env[VERENIGING_REQUIRE_TENANT_CONFIG] = "1"
+env[VERENIGING_CONFIG_FILE] = "<tenant>/config.php"
+env[VERENIGING_PRIVATE_ROOT] = "<tenant>/private"
 ```
 
 Belangrijk:
 
-- de tenant-runtimegebruiker krijgt schrijfrecht op uitsluitend zijn eigen private root;
+- de tenant-runtimegebruiker is een system account zonder login, home of supplementary groups;
+- de tenant-runtimegebruiker krijgt schrijfrecht uitsluitend op zijn eigen private root;
 - andere tenant-runtimegebruikers krijgen daar geen toegang toe;
-- de gedeelde applicatierelease is voor tenant-runtimes read-only;
+- sessies en tijdelijke uploads staan in de eigen private root;
+- de gedeelde applicatierelease blijft centraal beheerd en is nooit tenant-owned;
 - `clear_env=yes` voorkomt dat een pool toevallig environment van een andere deployment erft;
-- databasecredentials worden apart via server-side secrets gekoppeld en komen niet in `deployment.json`.
+- databasecredentials volgen apart in fase 4.5 en komen niet in `deployment.json` of de 4.1 runtimebundle.
 
-De precieze `pm.*` capaciteit wordt later op VPS-capaciteit afgestemd; dat is geen tenantidentiteitsgrens.
+De precieze `pm.*` capaciteit is geen tenantidentiteitsgrens en kan later op VPS-capaciteit worden afgestemd.
 
-## Webservercontract
+## Webservercontract — fase 4.2
 
-Voor Apache of Nginx gelden dezelfde harde regels:
+Voor Apache of Nginx gelden dezelfde harde regels die in fase 3.5.1 al in het deploymentcontract zijn vastgelegd en in fase 4.2 daadwerkelijk worden geautomatiseerd:
 
 1. `server_name`/`ServerName` is exact `canonical_host` uit het descriptor;
 2. de HTTP-vhost redirect naar de **vaste** `web.http_redirect_target`; een request-`Host` mag nooit in de redirect worden teruggespiegeld;
@@ -169,11 +218,11 @@ De exacte syntax hangt af van de uiteindelijke VPS, maar de volgorde is essentie
 <VirtualHost *:443>
     ServerName noorderhaven.example
     DocumentRoot /srv/verenigingsplatform/current
-    # TLS-config en ProxyPassMatch/SetHandler naar exact de tenant-FPM-socket.
+    # TLS-config en SetHandler/ProxyPassMatch naar exact de tenant-FPM-socket.
 </VirtualHost>
 ```
 
-Voor HTTPS moet eveneens een expliciete default/catch-all configuratie bestaan die een onbekende SNI/Host niet aan de eerste tenantpool koppelt. De concrete TLS-catch-all wordt in de VPS-automation uitgewerkt, omdat certificaatstrategie en Apache/Nginx-keuze daar onderdeel van zijn.
+Voor HTTPS moet eveneens een expliciete default/catch-all configuratie bestaan die een onbekende SNI/Host niet aan de eerste tenantpool koppelt. De concrete TLS-catch-all wordt in fase 4.2/4.4 uitgewerkt.
 
 ### Nginx — vereiste vorm
 
@@ -185,41 +234,46 @@ Conceptueel begint de configuratie met een default server die onbekende hosts di
 
 Een live release hoort bij voorkeur uit een build/export zonder `.git` te bestaan. Defense-in-depth blokkeert de gedeelde Apache-laag `.git` daarnaast expliciet. Voor Nginx moet dezelfde deny-regel in de serverconfiguratie worden opgenomen. `deployment.json.web.vcs_metadata_must_not_be_served=true` maakt dit een deploymentvereiste.
 
-## Filesystem ownership
+## Filesystem ownership — fase 4.1
 
-Gewenste richting:
+Het 4.1-contract maakt de bedoelde scheiding concreet:
 
 ```text
-shared release             root/platform beheer   read-only voor tenant-runtimes
-tenant config/manifest     tenant runtime/admin   0640
-tenant private directories tenant runtime          0750
-tenant private files       tenant runtime          0640
+shared release             centraal platformbeheer   nooit tenant-owned/writable
+tenantroot                  root:<tenantgroup>        0750
+config/runtime metadata    root:<tenantgroup>        0640
+runtime bundle             root:<tenantgroup>        0750/0640
+tenant private directories <tenantuser>:<group>      0750
+tenant private files       <tenantuser>:<group>      0640
+sessions + tmp dirs        <tenantuser>:<group>      0700
+sessions + tmp files       <tenantuser>:<group>      0600
 ```
 
-De provisioningaccount mag de tenantstructuur aanmaken. Voor livegang moet ownership vervolgens aan de bedoelde tenant-runtimeidentity worden gekoppeld. Automatische `chown` is bewust nog niet in de applicatie-CLI ingebouwd: OS-accountbeheer hoort bij de VPS/deploymentlaag en vereist rootrechten.
+De root-applytool weigert symlinks in de tenantboom vóór recursieve ownershipwijzigingen en controleert dat de fysieke shared release niet world-writable of via de tenantidentity schrijfbaar is. Hij wijzigt shared-code ownership/modes nooit.
 
-## Veilige releasewissel
+## Veilige releasewissel — fase 4.7
 
 De gedeelde code maakt later een releaseflow mogelijk zonder tenantcode te kopiëren:
 
 1. nieuwe commit naar een nieuwe immutable map onder `releases/` plaatsen;
 2. centrale tests uitvoeren;
-3. `prepare-vps-deployment.php --dry-run` voor tenants uitvoeren tegen de nieuwe release;
+3. tenant-deployment/runtime preflight uitvoeren tegen de nieuwe release;
 4. pas na succesvolle checks `current` atomisch naar de nieuwe release laten wijzen;
 5. smoke tests per tenant uitvoeren;
 6. oude release tijdelijk beschikbaar houden voor snelle rollback.
 
 Tenantdata, uploads, auth en sessies blijven bij zo'n codewissel in `/srv/verenigingen/<key>/private` staan.
 
-## Wat fase 3.5.1 nog niet doet
+## Resterende fase 4-stappen
 
-Nog bewust buiten deze stap:
+Na de code/CI-voorbereiding van fase 4.1 volgen volgens `docs/ROADMAP.md`:
 
-- DNS-records aanmaken/wijzigen;
-- Let's Encrypt/andere TLS-certificaten uitgeven en vernieuwen;
-- Apache/Nginx-vhosts daadwerkelijk installeren/reloaden;
-- Linux users/groups automatisch aanmaken en ownership toepassen;
-- PDO-database en databasecredentials provisionen;
-- monitoring, healthchecks, logaggregatie en tenant lifecycle (disable/remove/export) automatiseren.
+- **4.2:** concrete Apache/Nginx-vhosts en veilige reloadprocedure;
+- **4.3:** DNS;
+- **4.4:** TLS/certificaten en renewal;
+- **4.5:** PDO/database-secret provisioning;
+- **4.6:** monitoring, healthchecks en centrale logging;
+- **4.7:** release- en rollbackautomation;
+- **4.8:** tenant lifecycle (disable/export/remove).
 
-Die onderdelen kunnen nu op één stabiel `deployment.json`-contract bouwen zonder de applicatiecode per vereniging te forken.
+De daadwerkelijke 4.1 `--apply`-handeling wordt pas op de toekomstige VPS uitgevoerd. Code/CI-gereed betekent dus nadrukkelijk niet dat er al Linux-accounts of PHP-FPM pools op een productie-VPS zijn aangemaakt.
