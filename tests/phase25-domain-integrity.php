@@ -1,4 +1,5 @@
 <?php
+require __DIR__.'/phase25-platform-full.php';
 $root=dirname(__DIR__);$errors=[];$ok=[];
 function d25($cond,string $message):void{global$errors,$ok;if($cond)$ok[]=$message;else$errors[]=$message;}
 require_once $root.'/app/leden/contributies.php';
@@ -19,6 +20,6 @@ $rel=['aanwezigheid'=>['lid_test'=>'aanwezig','ander'=>'afwezig'],'deelnemers'=>
 
 $type=['id'=>'test','actief'=>true,'leeftijd_min'=>16,'leeftijd_max'=>65,'jaarbedrag'=>120,'inschrijfgeld'=>10,'pro_rata'=>true,'labels'=>['nl'=>'Testlid','en'=>'Test member']];d25(lidmaatschapTypeToegestaanVoorLeeftijd($type,16),'ondergrens lidmaatschapstype toegestaan');d25(lidmaatschapTypeToegestaanVoorLeeftijd($type,65),'bovengrens lidmaatschapstype toegestaan');d25(!lidmaatschapTypeToegestaanVoorLeeftijd($type,15),'onder leeftijd geweigerd');d25(lidmaatschapLabel($type,'en')==='Test member','meertalige label werkt');d25(abs(lidmaatschapBedragVoorMaand($type,7)-50.0)<0.001,'pro-rata bedrag correct');
 
-$serviceTekst=(string)file_get_contents($root.'/app/leden/aanmeldingen-service.php');d25(strpos($serviceTekst,'betaald>0')!==false||strpos($serviceTekst,'$betaald>0')!==false,'acceptatieretry controleert reeds betaald bedrag');d25(strpos($serviceTekst,"status!=='open'")!==false,'acceptatieretry controleert financieel gewijzigde status');d25(strpos($serviceTekst,'privateStoreTransactie')!==false,'acceptatie gebruikt transactie');
+$serviceTekst=(string)file_get_contents($root.'/app/leden/aanmeldingen-service.php');d25(strpos($serviceTekst,'$betaald>0')!==false,'acceptatieretry controleert reeds betaald bedrag');d25(strpos($serviceTekst,"status!=='open'")!==false,'acceptatieretry controleert financieel gewijzigde status');d25(strpos($serviceTekst,'privateStoreTransactie')!==false,'acceptatie gebruikt transactie');
 
 echo 'Phase 2.5 domain checks: '.count($ok).' OK, '.count($errors)." fout(en)\n";if($errors){foreach($errors as $e)fwrite(STDERR,"FOUT: $e\n");exit(1);}foreach($ok as $m)echo "OK: $m\n";
