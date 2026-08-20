@@ -6,22 +6,13 @@ RewriteEngine On
 
 Options -Indexes
 
-# ===== HTTPS afdwingen =====
-# Op de VPS hoort TLS/canonical-host primair in de vhost of reverse proxy.
-# Deze fallback blijft nodig voor de huidige standalone/DEV-hosting, maar mag
-# nooit meer naar één vaste vereniging verwijzen. Alleen een syntactisch veilige
-# Host-header wordt in de redirect teruggebruikt; een ongeldige Host faalt 400.
-RewriteCond %{HTTPS} =on [OR]
-RewriteCond %{HTTP:X-Forwarded-Proto} =https [OR]
-RewriteCond %{HTTP:X-Forwarded-SSL} =on
-RewriteRule ^ - [E=VST_HTTPS:1]
-RewriteCond %{ENV:VST_HTTPS} !=1
-RewriteCond %{SERVER_PORT} !=443
-RewriteCond %{HTTP_HOST} ^([A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*)(?::[0-9]{1,5})?$ [NC]
-RewriteRule ^ https://%1%{REQUEST_URI} [R=301,L,NE]
-RewriteCond %{ENV:VST_HTTPS} !=1
-RewriteCond %{SERVER_PORT} !=443
-RewriteRule ^ - [R=400,L]
+# ===== HTTPS / canonical host =====
+# De gedeelde applicatielaag redirect bewust NIET op basis van HTTP_HOST.
+# Een Host-header is clientinvoer en mag nooit als redirectdoel worden
+# teruggespiegeld. Huidige standalone/DEV-hosting handelt HTTP -> HTTPS vóór
+# deze applicatielaag af. Op de multi-tenant VPS zijn TLS, canonical-host en
+# onbekende-hostafwijzing een harde vhost/reverse-proxyverantwoordelijkheid.
+# Zie docs/VPS-DEPLOYMENT.md en deployment.json.web.
 
 # ===== Algemene security headers =====
 <IfModule mod_headers.c>
@@ -60,7 +51,7 @@ RewriteRule ^(.+)\.html$ $1.php [L]
 # SERVER-ONLY BESTANDEN EN ONTWIKKELTOOLING
 # ============================================================
 RewriteRule ^beheer-(config\.php|users\.json|log\.json|login-pogingen\.json)$ - [F,L]
-RewriteRule ^(?:app|bin|tests|docs|\.github)(?:/|$) - [F,L,NC]
+RewriteRule ^(?:app|bin|tests|docs|\.github|\.git)(?:/|$) - [F,L,NC]
 RewriteRule ^leden-app\.php$ - [F,L,NC]
 RewriteRule ^data-backups(?:/|$) - [F,L,NC]
 RewriteRule ^beheer/(?:backup-registry\.php|gebruikers-rechten\.php|fotoboek-lib\.php)$ - [F,L,NC]
