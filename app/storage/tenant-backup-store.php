@@ -382,7 +382,12 @@ function tenantBackupLeesAssetSnapshot(string $scope, string $naam, ?string &$fo
     return $payload;
 }
 
-/** Herstelt één volledige assetnamespace via staging + rename en maakt eerst een nieuwe snapshot. */
+/**
+ * Herstelt één volledige assetnamespace via staging + rename. De gekozen
+ * snapshot wordt eerst volledig naar staging gekopieerd. Pas daarna wordt de
+ * huidige toestand als nieuwe snapshot vastgelegd. Zo kan retentie de gekozen
+ * oude snapshot niet meer onder de voeten van een lopende restore verwijderen.
+ */
 function tenantBackupHerstelAssetSnapshot(string $scope, string $naam, ?string &$fout = null): bool
 {
     $payload = tenantBackupLeesAssetSnapshot($scope, $naam, $fout);
@@ -392,18 +397,19 @@ function tenantBackupHerstelAssetSnapshot(string $scope, string $naam, ?string &
     $tenantRoot = publicAssetTenantRoot();
     if ($doel === null || $tenantRoot === null || !publicAssetTenantPadVeilig($doel)) { $fout='Assetdoel is niet veilig beschikbaar.'; return false; }
 
-    // Huidige toestand eerst best-effort veiligstellen.
-    if (is_dir($doel)) tenantBackupMaakAssetSnapshot($scope);
-
     $parent = dirname($doel);
     if (!is_dir($parent) && !@mkdir($parent, 0750, true)) { $fout='Assetroot kon niet worden voorbereid.'; return false; }
     try { $rand = bin2hex(random_bytes(4)); }
     catch (Throwable $e) { $rand = substr(hash('sha256', (string) microtime(true)), 0, 8); }
     $stage = $parent . DIRECTORY_SEPARATOR . basename($doel) . '.restore.' . $rand;
     $oud = $parent . DIRECTORY_SEPARATOR . basename($doel) . '.before-restore.' . $rand;
+
+    // Eerst de gekozen restorebron veiligstellen; daarna mag pruning optreden.
     if (!tenantBackupKopieerMap($payload, $stage)) { tenantBackupVerwijderMap($stage); $fout='Assetsnapshot kon niet naar staging worden gekopieerd.'; return false; }
 
     $hadDoel = is_dir($doel);
+    if ($hadDoel) tenantBackupMaakAssetSnapshot($scope); // best-effort pre-restore snapshot
+
     if ($hadDoel && !@rename($doel, $oud)) { tenantBackupVerwijderMap($stage); $fout='Huidige assetmap kon niet veilig worden geparkeerd.'; return false; }
     if (!@rename($stage, $doel)) {
         if ($hadDoel) @rename($oud, $doel);
