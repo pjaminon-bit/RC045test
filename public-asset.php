@@ -3,7 +3,7 @@
 // documentroot; alleen expliciet toegestane namespaces/paden worden geserveerd.
 require_once __DIR__ . '/app/content/public-asset-store.php';
 
-function publicAssetHttpFout(int $status): never
+function publicAssetHttpFout(int $status): void
 {
     http_response_code($status);
     header('Content-Type: text/plain; charset=UTF-8');
@@ -103,6 +103,6 @@ while ($resterend > 0 && !feof($handle)) {
     if ($blok === false || $blok === '') break;
     echo $blok;
     $resterend -= strlen($blok);
-    if (function_exists('fastcgi_finish_request') && connection_aborted()) break;
+    if (connection_aborted()) break;
 }
 fclose($handle);
