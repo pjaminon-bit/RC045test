@@ -41,6 +41,10 @@ function apply47MarkerEntry(string $pad, string $releases): array
     $ctx=release47MarkerLees($pad,true); if(!hash_equals(runtime41NormPad(dirname($ctx['path'])),runtime41NormPad($releases)))apply47Stop('Release ligt niet direct onder releases/.');
     return release47StateEntry($ctx);
 }
+function apply47EntryGelijk(array $a, array $b): bool
+{
+    foreach(['commit','path','manifest_sha256']as$k){if(!isset($a[$k],$b[$k])||!hash_equals((string)$a[$k],(string)$b[$k]))return false;}return true;
+}
 function apply47StateLees(array $plan, bool $magOntbreken=false): ?array
 {
     $pad=(string)$plan['paths']['state']; if(!file_exists($pad)){if($magOntbreken)return null;apply47Stop('release-state.json ontbreekt.');}
@@ -48,13 +52,22 @@ function apply47StateLees(array $plan, bool $magOntbreken=false): ?array
     $raw=@file_get_contents($pad);$s=is_string($raw)?json_decode($raw,true):null;
     if(!is_array($s)||(int)($s['schema']??0)!==1||($s['phase']??'')!=='4.7-state'||!is_array($s['active']??null))apply47Stop('release-state.json is ongeldig.');
     $active=apply47MarkerEntry((string)($s['active']['path']??''),(string)$plan['paths']['releases_root']);
-    foreach(['commit','path','manifest_sha256']as$k){if(!hash_equals((string)$active[$k],(string)($s['active'][$k]??'')))apply47Stop('Actieve release-state wijkt af van marker.');}
-    if(isset($s['previous'])&&$s['previous']!==null){if(!is_array($s['previous']))apply47Stop('Previous release-state is ongeldig.');$p=apply47MarkerEntry((string)($s['previous']['path']??''),(string)$plan['paths']['releases_root']);foreach(['commit','path','manifest_sha256']as$k){if(!hash_equals((string)$p[$k],(string)($s['previous'][$k]??'')))apply47Stop('Previous release-state wijkt af van marker.');}}
+    if(!apply47EntryGelijk($active,$s['active']))apply47Stop('Actieve release-state wijkt af van marker.');
+    if(isset($s['previous'])&&$s['previous']!==null){if(!is_array($s['previous']))apply47Stop('Previous release-state is ongeldig.');$p=apply47MarkerEntry((string)($s['previous']['path']??''),(string)$plan['paths']['releases_root']);if(!apply47EntryGelijk($p,$s['previous']))apply47Stop('Previous release-state wijkt af van marker.');}
+    if(isset($s['transition'])&&$s['transition']!==null){$tr=$s['transition'];if(!is_array($tr)||!in_array((string)($tr['mode']??''),['deploy','rollback'],true)||!is_array($tr['from']??null)||!is_array($tr['to']??null))apply47Stop('Release transition-state is ongeldig.');$from=apply47MarkerEntry((string)($tr['from']['path']??''),(string)$plan['paths']['releases_root']);$to=apply47MarkerEntry((string)($tr['to']['path']??''),(string)$plan['paths']['releases_root']);if(!apply47EntryGelijk($from,$tr['from'])||!apply47EntryGelijk($to,$tr['to'])||!apply47EntryGelijk($from,$active)||hash_equals((string)$from['commit'],(string)$to['commit']))apply47Stop('Release transition is niet exact aan active/from/to gebonden.');}
     return $s;
+}
+function apply47GeenTransition(array $state): void
+{
+    if(isset($state['transition'])&&$state['transition']!==null)apply47Stop('Er staat een onafgeronde release-transition. Voer eerst --recover uit.');
+}
+function apply47CurrentReal(array $plan): string
+{
+    $current=(string)$plan['paths']['current'];if(!is_link($current))apply47Stop('current moet een symlink zijn.');$real=realpath($current);if($real===false)apply47Stop('current kan niet fysiek worden opgelost.');return runtime41NormPad($real);
 }
 function apply47CurrentMoet(array $plan, array $entry): void
 {
-    $current=(string)$plan['paths']['current']; if(!is_link($current))apply47Stop('current moet een symlink zijn.');$real=realpath($current);if($real===false||!hash_equals(runtime41NormPad($real),runtime41NormPad((string)$entry['path'])))apply47Stop('current wijst niet naar de actieve release-state.');
+    if(!hash_equals(apply47CurrentReal($plan),runtime41NormPad((string)$entry['path'])))apply47Stop('current wijst niet naar de actieve release-state.');
 }
 function apply47Switch(array $plan, array $entry): void
 {
@@ -125,26 +138,39 @@ function apply47Herstel(array $plan, array $origineel, array $tenants, string $m
     apply47Event($plan,'deploy_failed_rolled_back',['mode'=>'deploy','from_commit'=>$old['commit'],'to_commit'=>$mislukteCommit,'result'=>$health?'rollback-ok':'rollback-health-failed','tenant_count'=>count($tenants)]);
     if(!$health)apply47Stop('Nieuwe release faalde en rollback kon niet als gezond worden bewezen.',3);apply47Stop('Nieuwe release faalde; current is succesvol teruggezet naar vorige gezonde release.',2);
 }
+function apply47Recover(array $plan): void
+{
+    $state=apply47StateLees($plan);$tr=$state['transition']??null;if(!is_array($tr))apply47Stop('Er is geen onafgeronde release-transition om te herstellen.');$tenants=apply47TenantLijst($plan);$from=$tr['from'];$to=$tr['to'];$current=apply47CurrentReal($plan);$result='';
+    if(hash_equals($current,runtime41NormPad((string)$to['path']))){apply47Switch($plan,$from);$result='candidate-reverted';}
+    elseif(hash_equals($current,runtime41NormPad((string)$from['path']))){$result='transition-cleared-before-switch';}
+    else apply47Stop('current wijst bij recovery naar noch transition-from noch transition-to; handmatige inspectie vereist.');
+    $healthy=apply47FpmReload($tenants)&&apply47Health((string)$from['path'],$tenants,false);
+    if(!$healthy)apply47Stop('Recovery heeft current naar de oorspronkelijke release gebracht, maar die kon niet als gezond worden bewezen.',4);
+    apply47AtomicJson((string)$plan['paths']['state'],apply47State($from,$state['previous']??null,null,count($tenants),(bool)($state['bootstrap']??false)));
+    apply47Event($plan,'transition_recovered',['mode'=>(string)$tr['mode'],'from_commit'=>$from['commit'],'to_commit'=>$to['commit'],'result'=>$result,'tenant_count'=>count($tenants)]);
+    echo'RECOVER OK  commit='.$from['commit'].' tenants='.count($tenants)."\n";
+}
 
 foreach($_SERVER['argv']??[]as$a){if(preg_match('/^--(?:password|secret|token|key|dsn|webhook)(?:=|$)/i',(string)$a)===1)apply47Stop('Secrets horen niet in fase-4.7 CLI-argumenten.');}
-$opt=getopt('',['plan:','platform-root::','tenant-base::','check','bootstrap','deploy','rollback','help']);if(isset($opt['help'])){echo"Gebruik:\n  php bin/apply-vps-release.php --plan=... --check\n  sudo php bin/apply-vps-release.php --plan=... --bootstrap|--deploy\n  sudo php bin/apply-vps-release.php --rollback [--platform-root=/srv/verenigingsplatform --tenant-base=/srv/verenigingen]\n";exit(0);} 
-$modes=array_filter(['check'=>isset($opt['check']),'bootstrap'=>isset($opt['bootstrap']),'deploy'=>isset($opt['deploy']),'rollback'=>isset($opt['rollback'])]);if(count($modes)!==1)apply47Stop('Kies exact één van --check, --bootstrap, --deploy of --rollback.');$mode=array_key_first($modes);
-if($mode!=='rollback'){$planPad=trim((string)($opt['plan']??''));if($planPad==='')apply47Stop('--plan is verplicht.');try{$ctx=release47PlanLeesEnValideer($planPad);$plan=$ctx['plan'];$manifest=$ctx['manifest'];}catch(Throwable$e){apply47Stop($e->getMessage());}if($mode==='check'){echo'CHECK OK  commit='.$plan['commit'].' files='.$plan['source']['file_count']."\n";exit(0);}}
+$opt=getopt('',['plan:','platform-root::','tenant-base::','check','bootstrap','deploy','rollback','recover','help']);if(isset($opt['help'])){echo"Gebruik:\n  php bin/apply-vps-release.php --plan=... --check\n  sudo php bin/apply-vps-release.php --plan=... --bootstrap|--deploy\n  sudo php bin/apply-vps-release.php --rollback|--recover [--platform-root=/srv/verenigingsplatform --tenant-base=/srv/verenigingen]\n";exit(0);} 
+$modes=array_filter(['check'=>isset($opt['check']),'bootstrap'=>isset($opt['bootstrap']),'deploy'=>isset($opt['deploy']),'rollback'=>isset($opt['rollback']),'recover'=>isset($opt['recover'])]);if(count($modes)!==1)apply47Stop('Kies exact één van --check, --bootstrap, --deploy, --rollback of --recover.');$mode=array_key_first($modes);
+if(!in_array($mode,['rollback','recover'],true)){$planPad=trim((string)($opt['plan']??''));if($planPad==='')apply47Stop('--plan is verplicht.');try{$ctx=release47PlanLeesEnValideer($planPad);$plan=$ctx['plan'];$manifest=$ctx['manifest'];}catch(Throwable$e){apply47Stop($e->getMessage());}if($mode==='check'){echo'CHECK OK  commit='.$plan['commit'].' files='.$plan['source']['file_count']."\n";exit(0);}}
 else{$platform=release47VeiligAbsoluut(trim((string)($opt['platform-root']??'/srv/verenigingsplatform')),'Platformroot');$tenBase=release47VeiligAbsoluut(trim((string)($opt['tenant-base']??'/srv/verenigingen')),'Tenantbasis');$plan=['paths'=>['platform_root'=>$platform,'releases_root'=>$platform.'/releases','current'=>$platform.'/current','state'=>$platform.'/release-state.json','events'=>$platform.'/release-events.jsonl','lock'=>'/var/lock/verenigingsplatform-release.lock','tenant_base'=>$tenBase]];}
 if(PHP_OS_FAMILY!=='Linux'||!function_exists('posix_geteuid')||posix_geteuid()!==0)apply47Stop('Release-activatie vereist Linux root.');
 $lock=@fopen((string)$plan['paths']['lock'],'c+');if(!is_resource($lock)||!flock($lock,LOCK_EX|LOCK_NB))apply47Stop('Een andere releasehandeling is al actief.');@chown((string)$plan['paths']['lock'],'root');@chgrp((string)$plan['paths']['lock'],'root');@chmod((string)$plan['paths']['lock'],0600);
 apply47SafeDir((string)$plan['paths']['platform_root']);apply47SafeDir((string)$plan['paths']['releases_root']);
+if($mode==='recover'){apply47Recover($plan);exit(0);}
 if($mode==='bootstrap'){
     if(file_exists((string)$plan['paths']['current'])||is_link((string)$plan['paths']['current'])||file_exists((string)$plan['paths']['state']))apply47Stop('Bootstrap mag alleen zonder bestaande current/release-state.');
     if(is_dir((string)$plan['paths']['tenant_base'])){foreach(scandir((string)$plan['paths']['tenant_base'])?:[]as$n){if($n!=='.'&&$n!=='..')apply47Stop('Bootstrap is alleen bedoeld vóór tenant-activatie; tenantbasis is niet leeg.');}}
     $entry=apply47Stage($plan,$manifest);apply47PhpSyntax((string)$entry['path'],$manifest);apply47Switch($plan,$entry);apply47AtomicJson((string)$plan['paths']['state'],apply47State($entry,null,null,0,true));apply47Event($plan,'bootstrap',['mode'=>'bootstrap','to_commit'=>$entry['commit'],'result'=>'ok','tenant_count'=>0]);echo'BOOTSTRAP OK  commit='.$entry['commit']."\n";exit(0);
 }
 if($mode==='deploy'){
-    $state=apply47StateLees($plan);apply47CurrentMoet($plan,$state['active']);$tenants=apply47TenantLijst($plan);apply47Health((string)$state['active']['path'],$tenants,true);$candidate=apply47Stage($plan,$manifest);if(hash_equals((string)$candidate['commit'],(string)$state['active']['commit']))apply47Stop('Kandidaatrelease is al actief.');apply47PhpSyntax((string)$candidate['path'],$manifest,$tenants);apply47CandidateProbe((string)$candidate['path'],$tenants);apply47ApacheTest();
+    $state=apply47StateLees($plan);apply47GeenTransition($state);apply47CurrentMoet($plan,$state['active']);$tenants=apply47TenantLijst($plan);apply47Health((string)$state['active']['path'],$tenants,true);$candidate=apply47Stage($plan,$manifest);if(hash_equals((string)$candidate['commit'],(string)$state['active']['commit']))apply47Stop('Kandidaatrelease is al actief.');apply47PhpSyntax((string)$candidate['path'],$manifest,$tenants);apply47CandidateProbe((string)$candidate['path'],$tenants);apply47ApacheTest();
     $transition=['mode'=>'deploy','from'=>$state['active'],'to'=>$candidate,'started_at_utc'=>gmdate('Y-m-d\TH:i:s\Z')];apply47AtomicJson((string)$plan['paths']['state'],apply47State($state['active'],$state['previous']??null,$transition,count($tenants),(bool)($state['bootstrap']??false)));apply47Switch($plan,$candidate);if(!apply47FpmReload($tenants)||!apply47Health((string)$candidate['path'],$tenants,false))apply47Herstel($plan,$state,$tenants,(string)$candidate['commit']);
     $nieuw=apply47State($candidate,$state['active'],null,count($tenants),false);apply47AtomicJson((string)$plan['paths']['state'],$nieuw);apply47Event($plan,'deploy_succeeded',['mode'=>'deploy','from_commit'=>$state['active']['commit'],'to_commit'=>$candidate['commit'],'result'=>'ok','tenant_count'=>count($tenants)]);echo'DEPLOY OK  commit='.$candidate['commit'].' tenants='.count($tenants)."\n";exit(0);
 }
-$state=apply47StateLees($plan);apply47CurrentMoet($plan,$state['active']);if(!is_array($state['previous']??null))apply47Stop('Geen vorige gevalideerde release beschikbaar voor rollback.');$tenants=apply47TenantLijst($plan);$target=apply47MarkerEntry((string)$state['previous']['path'],(string)$plan['paths']['releases_root']);apply47CandidateProbe((string)$target['path'],$tenants);apply47ApacheTest();$transition=['mode'=>'rollback','from'=>$state['active'],'to'=>$target,'started_at_utc'=>gmdate('Y-m-d\TH:i:s\Z')];apply47AtomicJson((string)$plan['paths']['state'],apply47State($state['active'],$state['previous'],$transition,count($tenants),false));apply47Switch($plan,$target);
+$state=apply47StateLees($plan);apply47GeenTransition($state);apply47CurrentMoet($plan,$state['active']);if(!is_array($state['previous']??null))apply47Stop('Geen vorige gevalideerde release beschikbaar voor rollback.');$tenants=apply47TenantLijst($plan);$target=apply47MarkerEntry((string)$state['previous']['path'],(string)$plan['paths']['releases_root']);apply47CandidateProbe((string)$target['path'],$tenants);apply47ApacheTest();$transition=['mode'=>'rollback','from'=>$state['active'],'to'=>$target,'started_at_utc'=>gmdate('Y-m-d\TH:i:s\Z')];apply47AtomicJson((string)$plan['paths']['state'],apply47State($state['active'],$state['previous'],$transition,count($tenants),false));apply47Switch($plan,$target);
 if(!apply47FpmReload($tenants)||!apply47Health((string)$target['path'],$tenants,false)){
     apply47Switch($plan,$state['active']);$restored=apply47FpmReload($tenants)&&apply47Health((string)$state['active']['path'],$tenants,false);apply47AtomicJson((string)$plan['paths']['state'],apply47State($state['active'],$state['previous'],null,count($tenants),false));apply47Event($plan,'rollback_failed',['mode'=>'rollback','from_commit'=>$state['active']['commit'],'to_commit'=>$target['commit'],'result'=>$restored?'current-restored-healthy':'restore-health-failed','tenant_count'=>count($tenants)]);if(!$restored)apply47Stop('Rollbackdoel faalde; oorspronkelijke current is teruggezet maar kon niet als gezond worden bewezen.',4);apply47Stop('Rollbackdoel werd niet gezond; oorspronkelijke gezonde release is hersteld.',3);
 }
