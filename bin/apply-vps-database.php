@@ -8,6 +8,7 @@ if (PHP_SAPI !== 'cli') {
 }
 
 require_once dirname(__DIR__) . '/app/deployment/database-contract.php';
+require_once dirname(__DIR__) . '/app/deployment/process-runner.php';
 
 function apply45Stop(string $melding, int $code = 1): never
 {
@@ -26,16 +27,37 @@ function apply45Help(): void
     echo "Er wordt bewust geen databasewachtwoord aangemaakt: lokale Unix-socket peer-auth bindt DB-login aan de kernel OS-user.\n";
 }
 
+function apply45Binary(string $name): string
+{
+    static $cache = [];
+    if (isset($cache[$name])) return $cache[$name];
+    $known = [
+        'pgrep' => ['/usr/bin/pgrep'],
+        'runuser' => ['/usr/sbin/runuser','/usr/bin/runuser'],
+        'psql' => ['/usr/bin/psql'],
+    ];
+    if (!isset($known[$name])) throw new RuntimeException('Niet-toegestane database PATH-binary: ' . $name);
+    foreach ($known[$name] as $candidate) {
+        if (is_file($candidate) && is_executable($candidate)) return $cache[$name] = $candidate;
+    }
+    throw new RuntimeException('Vereiste database-executable ontbreekt: ' . $name);
+}
+
 function apply45Exec(array $command, ?string $stdin = null): array
 {
-    $descriptors = [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']];
-    $proc = @proc_open($command, $descriptors, $pipes, null, null, ['bypass_shell' => true]);
-    if (!is_resource($proc)) throw new RuntimeException('Proces kon niet worden gestart: ' . (string)($command[0] ?? '?'));
-    if ($stdin !== null) fwrite($pipes[0], $stdin);
-    fclose($pipes[0]);
-    $stdout = stream_get_contents($pipes[1]); $stderr = stream_get_contents($pipes[2]);
-    fclose($pipes[1]); fclose($pipes[2]);
-    return [proc_close($proc), is_string($stdout) ? trim($stdout) : '', is_string($stderr) ? trim($stderr) : ''];
+    if ($command === [] || !isset($command[0])) throw new RuntimeException('Database subprocesscommando ontbreekt.');
+    $command[0] = apply45Binary((string)$command[0]);
+    if (basename((string)$command[0]) === 'runuser') {
+        $sep = array_search('--', $command, true);
+        if ($sep === false || !isset($command[$sep + 1])) throw new RuntimeException('runuser databasecommando mist exact child-executable.');
+        $command[$sep + 1] = apply45Binary((string)$command[$sep + 1]);
+    }
+    return process521Run($command, $stdin, null, null, 900);
+}
+
+function apply45Deps(): void
+{
+    foreach (['pgrep','runuser','psql'] as $name) apply45Binary($name);
 }
 
 function apply45RuntimeMoetInactiefZijn(string $tenantUser): void
@@ -173,13 +195,13 @@ $plan = $context['plan'];
 if (isset($opt['check'])) { echo 'OK: fase-4.5 databasebundle valide voor tenant ' . $plan['tenant_key'] . ".\n"; echo 'PostgreSQL database=' . $plan['isolation']['database'] . ', app-role=' . $plan['isolation']['app_role'] . ', auth=peer.' . "\n"; exit(0); }
 if (PHP_OS_FAMILY !== 'Linux' || !function_exists('posix_geteuid') || posix_geteuid() !== 0) apply45Stop('Database --apply vereist Linux root (EUID 0).');
 if (!function_exists('posix_getpwnam') || !function_exists('posix_getgrnam')) apply45Stop('POSIX accountfuncties ontbreken.');
+apply45Deps();
 $appUser = (string)$plan['isolation']['app_role']; $pw = @posix_getpwnam($appUser); $gr = @posix_getgrnam($appUser);
 if (!is_array($pw) || !is_array($gr) || (int)($pw['gid'] ?? -1) !== (int)($gr['gid'] ?? -2)) apply45Stop('Fase-4.1 tenant Linux-user/group bestaat niet exact; pas 4.1 eerst op de VPS toe.');
 
 $appRoleTenantGebonden = false; $hbaBeschermingActief = false;
 try {
     apply45RuntimeMoetInactiefZijn($appUser);
-    foreach ([['which', 'psql'], ['which', 'runuser'], ['which', 'pgrep']] as $cmd) { [$code] = apply45Exec($cmd); if ($code !== 0) throw new RuntimeException($cmd[1] . ' ontbreekt op de VPS.'); }
     $versie = (int)apply45PgQuery('SHOW server_version_num');
     if ($versie < 160000) throw new RuntimeException('Fase 4.5 vereist PostgreSQL 16 of nieuwer voor gecontroleerde HBA includes/rule_number-validatie.');
     if (($plan['postgresql']['socket_only_required'] ?? false) !== true || (string)($plan['postgresql']['listen_addresses_required'] ?? 'onverwacht') !== '') throw new RuntimeException('Databaseplan mist het verplichte socket-only PostgreSQL-contract.');
