@@ -7,6 +7,7 @@
 // - aparte NOLOGIN ownerrol;
 // - app-loginrol is exact de Linux/PHP-FPM user uit fase 4.1;
 // - uitsluitend Unix-socket peer authentication, dus geen DB-wachtwoord;
+// - PostgreSQL is socket-only: geen TCP-listener;
 // - schema/DDL blijft buiten de webrequest-runtime.
 // ============================================================
 
@@ -178,6 +179,8 @@ function database45Plan(array $context): array
         ],
         'postgresql' => [
             'minimum_major_version' => 16,
+            'socket_only_required' => true,
+            'listen_addresses_required' => '',
             'admin_os_user' => 'postgres',
             'admin_database' => 'postgres',
             'psql_binary' => 'psql',
@@ -207,8 +210,10 @@ function database45Plan(array $context): array
             'no_database_secret_in_tenant_config' => true,
             'no_database_secret_in_runtime_bundle' => true,
             'peer_binds_database_login_to_kernel_os_identity' => true,
+            'socket_only_database_server_required' => true,
             'public_database_privileges_revoked' => true,
             'public_schema_privileges_revoked' => true,
+            'app_privilege_drift_normalized' => true,
             'cross_database_hba_reject_required' => true,
             'database_tenant_marker_required' => true,
             'connectivity_check_as_tenant_os_user_required' => true,
@@ -279,7 +284,9 @@ function database45MigrationSql(array $plan): string
         'CREATE SCHEMA IF NOT EXISTS vst AUTHORIZATION ' . $owner . ';',
         'ALTER SCHEMA vst OWNER TO ' . $owner . ';',
         'REVOKE ALL ON SCHEMA public FROM PUBLIC;',
+        'REVOKE ALL ON SCHEMA public FROM ' . $app . ';',
         'REVOKE ALL ON SCHEMA vst FROM PUBLIC;',
+        'REVOKE ALL ON SCHEMA vst FROM ' . $app . ';',
         'CREATE TABLE IF NOT EXISTS vst.vereniging_schema_meta (',
         '    component VARCHAR(80) PRIMARY KEY,',
         '    schema_version INTEGER NOT NULL,',
@@ -296,10 +303,12 @@ function database45MigrationSql(array $plan): string
         ');',
         'ALTER TABLE vst.vereniging_private_store OWNER TO ' . $owner . ';',
         'REVOKE ALL ON TABLE vst.vereniging_schema_meta FROM PUBLIC;',
+        'REVOKE ALL ON TABLE vst.vereniging_schema_meta FROM ' . $app . ';',
         'REVOKE ALL ON TABLE vst.vereniging_private_store FROM PUBLIC;',
+        'REVOKE ALL ON TABLE vst.vereniging_private_store FROM ' . $app . ';',
         'INSERT INTO vst.vereniging_schema_meta (component, schema_version, tenant_key)',
         "VALUES ('private_store', 1, {$tenant})",
-        'ON CONFLICT (component) DO NOTHING;',
+        'ON CONFLICT (component) DO UPDATE SET schema_version = EXCLUDED.schema_version, tenant_key = EXCLUDED.tenant_key, applied_at = CURRENT_TIMESTAMP;',
         'GRANT USAGE ON SCHEMA vst TO ' . $app . ';',
         'GRANT SELECT ON TABLE vst.vereniging_schema_meta TO ' . $app . ';',
         'GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE vst.vereniging_private_store TO ' . $app . ';',
