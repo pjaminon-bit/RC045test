@@ -40,7 +40,7 @@ try{
  c52((bootstrap52DnsBeoordeel($cnameProf,'beheer2.platform.example',$owner,$terminal)['ready']??false)===true,'platform-DNS ondersteunt exact één CNAME-hop naar verwachte adressen');
 
  $apply=(string)file_get_contents($root.'/bin/apply-first-vps-bootstrap.php');
- c52(str_contains($apply,'plan_sha256')&&str_contains($apply,"'first-vps-state.json'")&&str_contains($apply,'verenigingsplatform-first-bootstrap.lock'),'resume-state is plan-gebonden en globaal gelockt');
+ c52(str_contains($apply,'plan_sha256')&&str_contains($apply,"\$p['paths']['state_file']")&&str_contains($apply,"\$p['paths']['lock_file']")&&str_contains($apply,'flock($lh,LOCK_EX|LOCK_NB)'),'resume-state is plan-gebonden en globaal gelockt');
  c52(str_contains($apply,"'--bootstrap'")&&str_contains($apply,'apply-vps-release.php'),'first-VPS flow hergebruikt expliciet fase-4.7 release-bootstrap');
  c52(strpos($apply,'apply-vps-release.php')<strpos($apply,"'provision-tenant.php'"),'immutable release-bootstrap staat in bron vóór tenantprovisioning');
  c52(str_contains($apply,"'--register-unsafely-without-email'")&&!str_contains($apply,'--email='),'eerste ACME-account serializeert geen e-mailadres');
@@ -48,6 +48,7 @@ try{
  c52(str_contains($apply,'b52LiveDns')&&str_contains($apply,"b52Cert(\$p,\$bins['certbot'])"),'platform-DNS wordt vóór certificaatuitgifte live bewezen');
  c52(str_contains($apply,'bootstrap-control-plane-operator.php')&&str_contains($apply,"'--password-stdin'"),'platformoperator loopt via bestaande bcrypt STDIN-bootstrap');
  c52(str_contains($apply,'bootstrap-tenant-admin.php')&&str_contains($apply,"'--password-stdin'"),'eerste tenantbeheerder loopt via bestaande STDIN-bootstrap');
+ c52(str_contains($apply,"if(!isset(\$o['secrets-stdin']))")&&strpos($apply,"if(!isset(\$o['secrets-stdin']))")<strpos($apply,'stream_get_contents(STDIN)'),'secrets-stdin vlag wordt gecontroleerd vóór enige STDIN-read');
  c52(!str_contains($apply,'shell_exec(')&&!str_contains($apply,'`')&&!str_contains($apply,'rm -rf'),'5.2 gebruikt geen shell escape of rm-rf');
  c52(str_contains($apply,"['bypass_shell'=>true]")&&str_contains($apply,'proc_open('),'childprocessen gebruiken vaste argv zonder shell');
  c52(str_contains($apply,'packages_are_not_auto_installed')===false&&!str_contains($apply,"'apt'")&&!str_contains($apply,'apt-get'),'root-flow installeert bewust geen packages');
@@ -59,7 +60,7 @@ try{
  c52(str_contains($apply,"'operator_password'")&&str_contains($apply,"'tenant_admin_password'")&&!str_contains($apply,'VERENIGING_PASSWORD'),'secrets hebben alleen de twee bootstrapdoelen en gaan niet via environment');
 
  $cp=(string)file_get_contents($root.'/app/deployment/control-plane-contract.php');c52(str_contains($cp,"'acme_webroot'")&&str_contains($cp,'/.well-known/acme-challenge'),'definitieve 5.1 control-plane blijft ACME-renewal ondersteunen');
- c52(str_contains($cp,'RewriteCond %{REQUEST_URI} !^/\\.well-known/acme-challenge/')&&str_contains($cp,'[R=308,L,NE]'),'definitieve HTTP-vhost serveert alleen challenge en redirect overige paden vast naar HTTPS');
- $docs=(string)file_get_contents($root.'/docs/VPS-FIRST-BOOTSTRAP.md');c52(str_contains($docs,'schrijft geen DNS-records')&&str_contains($docs,'installeert geen packages'),'operatorgrenzen staan expliciet in VPS-bootstrapdocumentatie');
+ c52(str_contains($cp,'RewriteCond %{REQUEST_URI}')&&str_contains($cp,'acme-challenge')&&str_contains($cp,'[R=308,L,NE]')&&str_contains($cp,"'    RewriteRule ^ https://' . \$host"),'definitieve HTTP-vhost serveert alleen challenge en redirect overige paden vast naar HTTPS');
+ $docs=(string)file_get_contents($root.'/docs/VPS-FIRST-BOOTSTRAP.md');c52(str_contains($docs,'schrijft geen DNS-records')&&str_contains($docs,'Packages worden niet automatisch'),'operatorgrenzen staan expliciet in VPS-bootstrapdocumentatie');
  $workflow=(string)file_get_contents($root.'/.github/workflows/deploy-dev.yml');c52(str_contains($workflow,'phase52-first-vps-bootstrap.php'),'fase-5.2 test draait in CI');
 }finally{rm52($tmp);}echo"Phase 5.2 first VPS bootstrap: {$ok} OK, {$fout} fout(en)\n";exit($fout===0?0:1);
