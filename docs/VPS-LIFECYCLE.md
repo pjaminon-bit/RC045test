@@ -7,6 +7,7 @@ Fase 4.8 beheert de levenscyclus van een reeds geprovisioneerde productie-tenant
 - lifecyclemutaties zijn uitsluitend Linux-root/operatoracties;
 - gewone verenigingsbeheerders krijgen nooit directe root-, Apache-, FPM-, PostgreSQL- of Certbotrechten;
 - een bestaande VPS-installatie wordt éénmalig met `--adopt-active` onder lifecyclebeheer gebracht;
+- per tenant kan maximaal één lifecycleactie tegelijk draaien via een exclusieve root-lock;
 - lifecycle-state staat root-owned onder `/var/lib/verenigingsplatform/lifecycle`;
 - lifecycle-audit staat server-side in `/var/log/verenigingsplatform/lifecycle.jsonl`;
 - exports staan root-only buiten tenantroot onder `/var/backups/verenigingsplatform/tenants/<tenant>`;
@@ -55,12 +56,13 @@ sudo php bin/apply-vps-lifecycle.php --plan=... --suspend
 
 De veilige volgorde is:
 
-1. tenant HTTP/HTTPS uit Apache `sites-enabled` halen en Apache configtest/reload;
-2. PostgreSQL app-role `NOLOGIN` zetten en bestaande tenantsessies beëindigen;
-3. monitoringtimer stoppen;
-4. exacte tenant FPM-poolconfig verwijderen, FPM-config testen en FPM reloaden;
-5. bewijzen dat tenant socket en tenantprocessen verdwenen zijn;
-6. lifecycle-state naar `suspended` brengen.
+1. de tenant HTTPS-appvhost uit Apache `sites-enabled` halen en Apache configtest/reload uitvoeren;
+2. de minimale HTTP-vhost uitsluitend voor `/.well-known/acme-challenge/` actief laten, zodat Certbot ook bij langdurige suspend kan blijven vernieuwen; overige HTTP-verzoeken blijven naar de niet-actieve tenant-HTTPS-route wijzen en bereiken de applicatie niet;
+3. PostgreSQL app-role `NOLOGIN` zetten en bestaande tenantsessies beëindigen;
+4. monitoringtimer stoppen;
+5. exacte tenant FPM-poolconfig verwijderen, FPM-config testen en FPM reloaden;
+6. bewijzen dat tenant socket en tenantprocessen verdwenen zijn;
+7. lifecycle-state naar `suspended` brengen.
 
 Een fout midden in deze overgang laat een transition-state achter. `--recover` rijdt de tenant vervolgens altijd fail-closed naar `suspended`; recovery probeert nooit een half geactiveerde toestand te raden.
 
@@ -70,11 +72,11 @@ Een fout midden in deze overgang laat een transition-state achter. `--recover` r
 sudo php bin/apply-vps-lifecycle.php --plan=... --activate
 ```
 
-Activatie mag uitsluitend vanuit `suspended` en gebruikt de omgekeerde gecontroleerde volgorde:
+Activatie mag uitsluitend vanuit `suspended` en gebruikt de gecontroleerde volgorde:
 
 1. exacte FPM-pool uit de gevalideerde 4.1-bundle installeren, configtest en reload;
 2. PostgreSQL app-role exact volgens het bestaande least-privilege/no-password contract naar `LOGIN` brengen en de 4.5 runtimecheck uitvoeren;
-3. exacte tenant Apache-vhosts activeren en Apache configtest/reload;
+3. exacte tenant HTTP/HTTPS-vhosts activeren en Apache configtest/reload;
 4. volledige 4.6 healthcheck uitvoeren;
 5. pas daarna monitoring opnieuw activeren en lifecycle-state `active` schrijven.
 
@@ -147,13 +149,13 @@ De purge ruimt tenantgebonden serverresources op, waaronder:
 
 Het geverifieerde exportpakket blijft behouden. Ook blijft een root-owned tombstone achter, zodat dezelfde tenant-key niet stil als een nieuwe vereniging kan worden geadopteerd. DNS-records bij de provider blijven bewust ongemoeid.
 
-Vlak vóór de laatste dataverwijdering wordt de tombstone op `data_delete` gezet. Mocht precies tijdens die laatste stap een proces- of stroomuitval optreden, dan kan de root-owned plansnapshot worden gebruikt voor:
+Voor de destructieve stappen wordt een root-owned plansnapshot vastgelegd en de tombstone geeft aan of de purge bezig is met `purging_infrastructure` of `data_delete`. Een proceskill of stroomuitval in een van beide fasen kan daardoor uitsluitend vanaf die exact gebonden snapshot worden hervat:
 
 ```bash
 sudo php bin/apply-vps-lifecycle.php --recover-purge --tenant=club
 ```
 
-Dit recovery-pad mag uitsluitend een reeds voorbereide `data_delete` afronden; het kan geen nieuwe purge starten.
+`--recover-purge` kan geen nieuwe verwijdering starten. Het accepteert alleen een reeds door een geldige purge geschreven `purging_infrastructure`- of `data_delete`-tombstone waarvan de plansnapshotchecksum nog exact klopt.
 
 ## Platform-/superbeheer-GUI
 
