@@ -58,6 +58,16 @@ try{
  c52(str_contains($apply,"'--adopt-active'")&&str_contains($apply,"'--refresh-only'"),'gezonde tenant wordt geadopteerd en control-plane snapshot daarna ververst');
  c52(str_contains($apply,"trim(\$o)!=='401'")&&str_contains($apply,"'--probe','--write-status'"),'eindcontrole bewijst Basic Auth 401 en tenant healthprobe');
  c52(str_contains($apply,"'operator_password'")&&str_contains($apply,"'tenant_admin_password'")&&!str_contains($apply,'VERENIGING_PASSWORD'),'secrets hebben alleen de twee bootstrapdoelen en gaan niet via environment');
+ c52(str_contains($apply,'b52TrustedReleasePlan')&&str_contains($apply,'b52SourceTrust')&&str_contains($apply,"b52PlatformHttp(\$p,\$ctx['artifacts'])"),'root-apply gebruikt root-owned releaseplan en in-memory gevalideerde bootstrapartifacts');
+ c52(str_contains($apply,"(int)\$s['uid']!==0")&&str_contains($apply,"((int)\$s['mode']&0022)!==0"),'first-VPS root-apply weigert niet-root-owned of group/world-writable releasebron');
+ c52(str_contains($apply,'b52ExactBytes')&&!str_contains($apply,'function b52ExactInstall'),'serverartifacts worden uit gevalideerde bytes geplaatst en niet opnieuw uit mutable bundle gelezen');
+
+ $cpApply=(string)file_get_contents($root.'/bin/apply-vps-control-plane.php');
+ c52(str_contains($cpApply,"\$art=\$ctx['artifacts']")&&str_contains($cpApply,'cpaExactBytes')&&!str_contains($cpApply,'function cpaExact(string$src'),'control-plane root-apply installeert uitsluitend in-memory gevalideerde artifactbytes');
+ c52(str_contains($cpApply,'cpaVerifyMeta')&&str_contains($cpApply,'chown($dst,0)')&&str_contains($cpApply,"['mode']&0777"),'control-plane normaliseert en verifieert owner/group/mode van bestaande artifacts');
+ $releaseApply=(string)file_get_contents($root.'/bin/apply-vps-release.php');
+ c52(str_contains($releaseApply,'apply47ImmutableRechten')&&str_contains($releaseApply,'0555')&&str_contains($releaseApply,'0444')&&str_contains($releaseApply,"['uid']!==0")&&str_contains($releaseApply,"['gid']!==0"),'4.7 bewijst root:root en exact read-only metadata voor iedere immutable release');
+ c52(str_contains($releaseApply,"'/usr/sbin/runuser'")&&str_contains($releaseApply,"'/usr/bin/systemctl'"),'kritieke 4.7 childprocessen gebruiken absolute systeembinaries');
 
  $cp=(string)file_get_contents($root.'/app/deployment/control-plane-contract.php');c52(str_contains($cp,"'acme_webroot'")&&str_contains($cp,'/.well-known/acme-challenge'),'definitieve 5.1 control-plane blijft ACME-renewal ondersteunen');
  c52(str_contains($cp,'RewriteCond %{REQUEST_URI}')&&str_contains($cp,'acme-challenge')&&str_contains($cp,'[R=308,L,NE]')&&str_contains($cp,"'    RewriteRule ^ https://' . \$host"),'definitieve HTTP-vhost serveert alleen challenge en redirect overige paden vast naar HTTPS');
