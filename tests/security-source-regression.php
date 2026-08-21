@@ -54,7 +54,6 @@ foreach ($productionPhp as $rel => $raw) {
     if (stripos($raw, 'proc_open(') !== false && !in_array($rel, $allowedProcOpen, true)) {
         $danger[] = "{$rel}:proc_open buiten centrale runner";
     }
-    // Directe shell-uitvoering via backticks hoort nergens in productie-PHP.
     $tokens = token_get_all($raw);
     foreach ($tokens as $token) {
         if (is_string($token) && $token === '`') { $danger[] = "{$rel}:backtick shell"; break; }
@@ -85,12 +84,39 @@ $auth = $productionPhp['auth.php'] ?? '';
 secOk(str_contains($auth, 'hash_equals') && str_contains($auth, 'password_verify'), 'authenticatie gebruikt constant-time vergelijking en password_verify');
 secOk(str_contains($auth, 'session_regenerate_id'), 'authenticatie roteert sessie-id');
 
-$uploadFiles = ['beheer/sponsors.php','beheer/fotoboek.php'];
-foreach ($uploadFiles as $file) {
-    if (!isset($productionPhp[$file])) continue;
-    $raw = $productionPhp[$file];
-    secOk(str_contains($raw, 'move_uploaded_file') || str_contains($raw, 'imagecreatefrom'), "{$file} bevat expliciete server-side uploadverwerking");
-}
+$sponsors = $productionPhp['beheer/sponsors.php'] ?? '';
+secOk(
+    str_contains($sponsors, 'is_uploaded_file')
+    && (str_contains($sponsors, 'getimagesize') || str_contains($sponsors, 'finfo')),
+    'sponsorupload valideert echt HTTP-uploadbestand en server-side afbeeldingstype'
+);
+
+$fotoboek = $productionPhp['beheer/fotoboek.php'] ?? '';
+$fotoboekLib = $productionPhp['beheer/fotoboek-lib.php'] ?? '';
+secOk(
+    str_contains($fotoboek, "require_once __DIR__ . '/fotoboek-lib.php'")
+    && str_contains($fotoboek, 'UPLOAD_ERR_OK')
+    && str_contains($fotoboek, 'is_uploaded_file($tmp)')
+    && str_contains($fotoboek, '$maxFoto=25*1024*1024'),
+    'Fotoboek entrypoint vereist geldige HTTP-upload en begrenst bestandsgrootte vóór beeldverwerking'
+);
+secOk(
+    str_contains($fotoboekLib, 'getimagesize($tmp)')
+    && str_contains($fotoboekLib, '>16000')
+    && str_contains($fotoboekLib, '>60000000')
+    && str_contains($fotoboekLib, 'IMAGETYPE_JPEG')
+    && str_contains($fotoboekLib, 'IMAGETYPE_PNG')
+    && str_contains($fotoboekLib, 'IMAGETYPE_WEBP'),
+    'Fotoboek library valideert type, dimensies en image-bombgrenzen vóór decode'
+);
+secOk(
+    str_contains($fotoboekLib, 'imagecreatefromjpeg($tmp)')
+    && str_contains($fotoboekLib, 'imagecreatefrompng($tmp)')
+    && str_contains($fotoboekLib, 'imagecreatefromwebp($tmp)')
+    && str_contains($fotoboekLib, 'imagejpeg($full,$vol,82)')
+    && str_contains($fotoboekLib, 'imagejpeg($th,$thumb,78)'),
+    'Fotoboek decodeert alleen toegestane formaten en herbouwt fullsize en thumbnail als server-JPEG'
+);
 
 echo "Security source regression: {$ok} OK, {$fout} fout(en)\n";
 exit($fout === 0 ? 0 : 1);
