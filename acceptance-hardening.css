@@ -1,0 +1,82 @@
+/* Eindacceptatie-hardening: alleen generieke browser-/responsive garanties. */
+
+/* Grid/flex-kinderen mogen op smalle viewports nooit hun min-contentbreedte
+   aan het document opleggen. */
+.container,
+.about-grid,
+.about-grid > *,
+.about-images,
+.track-layout,
+.track-layout > *,
+.location-grid,
+.location-grid > *,
+.contact-grid,
+.contact-grid > *,
+.form-grid,
+.form-grid > * {
+  min-width: 0 !important;
+  max-width: 100% !important;
+}
+
+.about-img-main,
+.track-photo,
+.carousel-img {
+  max-width: 100% !important;
+}
+
+/* De volledige desktopnavigatie past met taal- en themakiezer niet betrouwbaar
+   onder 900px. Schakel daarom op tablet al over naar het hamburgerpatroon. */
+@media (max-width: 900px) {
+  .nav-inner { min-width: 0 !important; padding-left: 16px !important; padding-right: 16px !important; }
+  .nav-logo { min-width: 0 !important; }
+  .nav-links { display: none !important; }
+  .nav-links.open {
+    display: flex !important;
+    flex-direction: column !important;
+    position: absolute !important;
+    top: 72px !important;
+    left: 0 !important;
+    right: 0 !important;
+    background: var(--nav-bg-open) !important;
+    border-bottom: 1px solid var(--border) !important;
+    padding: 12px 24px 20px !important;
+    gap: 4px !important;
+    z-index: 99 !important;
+  }
+  .nav-hamburger { display: flex !important; }
+  .nav-tools { margin-left: auto !important; min-width: 0 !important; }
+}
+
+@media (max-width: 700px) {
+  .about-grid { gap: 32px !important; }
+  .about-images { width: 100% !important; overflow: hidden !important; }
+  .about-img-main { width: 100% !important; height: auto !important; min-height: 220px; object-fit: cover; }
+  .section-title, .section-sub, .feature-card, .about-story-link { max-width: 100% !important; overflow-wrap: anywhere; }
+}
+
+/* Carousel-dots blijven visueel compact, maar krijgen een betrouwbare
+   aanraak-/klikzone. */
+.carousel-dots { gap: 2px !important; }
+.carousel-dot {
+  width: 28px !important;
+  height: 28px !important;
+  min-width: 28px !important;
+  min-height: 28px !important;
+  border-radius: 50% !important;
+  background: transparent !important;
+  position: relative !important;
+}
+.carousel-dot::after {
+  content: '';
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: rgba(255,255,255,.55);
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%,-50%);
+}
+.carousel-dot.active::after { background: #fff; transform: translate(-50%,-50%) scale(1.2); }
+
+.iban-copy-btn { min-height: 32px !important; }
