@@ -157,16 +157,26 @@ Zie `docs/VPS-MONITORING.md`.
 
 ### 4.7 — Release & rollback automation
 
-**Status: gepland.**
+**Status: code en CI gereed; echte releasewissels volgen op de productie-VPS.**
 
 Omvat:
 
-- immutable `releases/<commit>`;
-- atomische `current`-wissel;
-- preflight voor tenants;
-- config/runtime/vhost checks;
-- smoke tests na release;
-- snelle rollback naar vorige gevalideerde release.
+- immutable `releases/<40-hex-commit>` met root-owned `0555/0444` filesystemrechten;
+- deterministisch SHA-256 inhoudsmanifest; commit-ID is identificatie en de inhoudshash is de werkelijke integriteitsbinding;
+- mutable/private tenantdata, lokale secrets, `.git`, `.github` en DEV-buildmetadata worden niet in een productie-release opgenomen;
+- bestaande release directories worden nooit overschreven en niet automatisch verwijderd;
+- expliciete eerste `--bootstrap` vóór tenantactivatie;
+- normale deploy vereist gezonde huidige tenants, PHP-syntax, read-only kandidaattenantprobes en Apache configtest vóór de wissel;
+- atomische `current`-wissel via tijdelijke symlink + filesystem-rename;
+- transition-state voorkomt dat de bestaande 4.1–4.6 planbinding tijdens de korte wissel onterecht open of willekeurig wordt;
+- PHP-FPM reload na de codewissel;
+- volledige 4.6 tenant-health na de switch;
+- mislukte post-switch deploy zet `current` automatisch terug en bewijst de oude health opnieuw;
+- handmatige rollback gebruikt uitsluitend de vorige gevalideerde release uit root-owned state en mag juist plaatsvinden wanneer de huidige release ongezond is;
+- release-events worden server-side geaudit zonder secrets;
+- gewone verenigingsbeheerders krijgen geen directe release/rootbevoegdheid.
+
+Zie `docs/VPS-RELEASES.md`.
 
 ### 4.8 — Tenant lifecycle
 
