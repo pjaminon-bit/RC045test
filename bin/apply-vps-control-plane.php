@@ -3,8 +3,9 @@ if(PHP_SAPI!=='cli'){http_response_code(403);exit('Alleen via CLI beschikbaar.')
 require_once dirname(__DIR__).'/app/deployment/control-plane-contract.php';
 require_once dirname(__DIR__).'/app/deployment/control-plane-identity.php';
 require_once dirname(__DIR__).'/app/deployment/control-plane-auth-hardening.php';
+require_once dirname(__DIR__).'/app/deployment/process-runner.php';
 function cpaStop(string$m,int$c=1):never{fwrite(STDERR,"FOUT: {$m}\n");exit($c);}
-function cpaRun(array$cmd):array{$d=[0=>['pipe','r'],1=>['pipe','w'],2=>['pipe','w']];$p=@proc_open($cmd,$d,$x,null,null,['bypass_shell'=>true]);if(!is_resource($p))return[255,'','proces kon niet starten'];fclose($x[0]);$o=stream_get_contents($x[1]);fclose($x[1]);$e=stream_get_contents($x[2]);fclose($x[2]);return[proc_close($p),trim((string)$o),trim((string)$e)];}
+function cpaRun(array$cmd):array{return process521Run($cmd,null,null,null,900);}
 function cpaRoot():void{if(PHP_OS_FAMILY!=='Linux'||!function_exists('posix_geteuid')||posix_geteuid()!==0)throw new RuntimeException('Control-plane installatie vereist Linux root.');}
 function cpaPhp(array$p):string{$b='/usr/bin/php'.(string)$p['php_fpm']['version'];if(!preg_match('#^/usr/bin/php[0-9]{1,2}\.[0-9]{1,2}$#D',$b))throw new RuntimeException('Ongeldige exacte control-plane PHP-binary.');return$b;}
 function cpaDeps(array$p):void{foreach([cpaPhp($p),'/usr/bin/systemctl','/usr/bin/systemd-analyze','/usr/bin/openssl','/usr/bin/id','/usr/bin/getent','/usr/sbin/groupadd','/usr/sbin/useradd',(string)$p['apache']['control_binary'],(string)$p['php_fpm']['test_binary'],(string)$p['rate_limit']['client_binary']]as$b)if(!is_file($b)||!is_executable($b))throw new RuntimeException('Vereiste executable ontbreekt: '.$b);cpaRateLimitPreflight($p);}
