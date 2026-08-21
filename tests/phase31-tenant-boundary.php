@@ -14,7 +14,7 @@ try{
     check31(strpos($runtime,'VERENIGING_PRIVATE_ROOT')!==false,'runtime ondersteunt externe private root');
     check31(strpos($siteConfig,'tenantRuntimeExternConfigPad()')!==false,'site-config gebruikt tenant runtime');
     check31(strpos($store,'privateStoreJsonRoot')!==false,'private store kent tenant-lokale JSON-root');
-    check31(strpos($store,'nooit terugvallen op legacy projectdata')!==false,'tenant JSON lekt niet terug naar legacy fallback');
+    check31(strpos($store,'privateStoreLegacyFallbackToegestaan')!==false,'tenantopslag heeft expliciete centrale legacy-fallbackguard');
     check31(strpos($slot,'tenantRuntimePrivateRoot')!==false,'dataslot volgt tenant private root');
 
     $aRoot=$tmp.'/tenant-a';$bRoot=$tmp.'/tenant-b';

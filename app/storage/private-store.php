@@ -4,6 +4,7 @@
 // ============================================================
 require_once dirname(__DIR__) . '/core/tenant-runtime.php';
 require_once __DIR__ . '/tenant-backup-store.php';
+require_once __DIR__ . '/pdo-runtime.php';
 
 function privateStoreConfig(): array{static$config=null;if($config===null){$geladen=require dirname(__DIR__,2).'/site-config.php';$config=is_array($geladen)?$geladen:[];}return$config;}
 function privateStoreTenant(): string{$config=privateStoreConfig();return tenantRuntimeVeiligeSleutel((string)($config['vereniging']['sleutel']??'default'));}
@@ -27,9 +28,6 @@ function privateStoreLegacyFallbackToegestaan(): bool
 function privateStoreJsonLees(string $collectie): array
 {
     $root=privateStoreJsonRoot();if($root===null)return[];$pad=tenantRuntimeCollectiePad($root,$collectie);
-    // Bij expliciete tenantopslag nooit terugvallen op legacy projectdata:
-    // een nieuwe tenant mag onder geen beding gegevens van een andere tenant
-    // zien wanneer zijn eigen collectie nog niet bestaat.
     if(!is_file($pad))return[];
     $ruw=@file_get_contents($pad);if($ruw===false)throw new RuntimeException('Private tenantopslag kon niet worden gelezen.');
     $data=json_decode($ruw,true);if(json_last_error()!==JSON_ERROR_NONE||!is_array($data)){
@@ -53,16 +51,66 @@ function privateStoreJsonSchrijf(string $collectie,array $data): bool
     return true;
 }
 
+/**
+ * Resolutievolgorde voor PDO:
+ * 1. bestaande expliciete DSN in serverconfig (legacy/standalone compatibiliteit);
+ * 2. bestaande VERENIGING_DB_* environment (legacy compatibiliteit);
+ * 3. fase 4.5 serverruntime: vast database-runtime.json + lokale peer-auth,
+ *    uitsluitend voor een externe tenant met lege DSN/user/password.
+ */
+function privateStorePdoVerbindingsdata(): array
+{
+    $config=privateStoreConfig();
+    $pdoConfig=$config['opslag']['pdo']??[];if(!is_array($pdoConfig))$pdoConfig=[];
+    $dsnConfig=trim((string)($pdoConfig['dsn']??''));
+    $dsnEnv=trim((string)(getenv('VERENIGING_DB_DSN')?:''));
+    $userConfig=(string)($pdoConfig['user']??'');
+    $passConfig=(string)($pdoConfig['password']??'');
+    $userEnv=(string)(getenv('VERENIGING_DB_USER')?:'');
+    $passEnv=(string)(getenv('VERENIGING_DB_PASSWORD')?:'');
+
+    if($dsnConfig!=='')return['dsn'=>$dsnConfig,'user'=>$userConfig!==''?$userConfig:$userEnv,'password'=>$passConfig!==''?$passConfig:$passEnv,'source'=>'config','runtime'=>null];
+    if($dsnEnv!=='')return['dsn'=>$dsnEnv,'user'=>$userConfig!==''?$userConfig:$userEnv,'password'=>$passConfig!==''?$passConfig:$passEnv,'source'=>'env','runtime'=>null];
+
+    $extern=trim((string)(getenv('VERENIGING_CONFIG_FILE')?:''));
+    if($extern!==''){
+        if($userConfig!==''||$passConfig!==''||$userEnv!==''||$passEnv!==''){
+            throw new RuntimeException('Fase-4.5 PDO-tenant mag geen losse databaseuser/password naast peer-runtime bevatten.');
+        }
+        $runtime=pdoRuntime45ServerConfig(privateStoreTenant());
+        if(is_array($runtime))return['dsn'=>(string)$runtime['dsn'],'user'=>(string)$runtime['user'],'password'=>'','source'=>'phase45-peer','runtime'=>$runtime];
+    }
+
+    throw new RuntimeException('PDO-driver geselecteerd zonder DSN of fase-4.5 database-runtime.');
+}
+
 function privateStorePdo(): PDO
 {
     static$pdo=null;static$fout=null;if($pdo instanceof PDO)return$pdo;if($fout instanceof Throwable)throw new RuntimeException('Private verenigingsopslag is tijdelijk niet beschikbaar.',0,$fout);
-    $config=privateStoreConfig();$dsnConfig=trim((string)($config['opslag']['pdo']['dsn']??''));$dsnEnv=trim((string)(getenv('VERENIGING_DB_DSN')?:''));$dsn=$dsnConfig!==''?$dsnConfig:$dsnEnv;
-    if($dsn===''){$fout=new RuntimeException('PDO-driver geselecteerd zonder DSN.');error_log('[platform] private PDO: driver=pdo maar geen DSN geconfigureerd');throw new RuntimeException('Private verenigingsopslag is niet geconfigureerd.',0,$fout);}
-    $userConfig=(string)($config['opslag']['pdo']['user']??'');$passConfig=(string)($config['opslag']['pdo']['password']??'');$user=$userConfig!==''?$userConfig:(string)(getenv('VERENIGING_DB_USER')?:'');$pass=$passConfig!==''?$passConfig:(string)(getenv('VERENIGING_DB_PASSWORD')?:'');
-    try{$pdo=new PDO($dsn,$user,$pass,[PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION,PDO::ATTR_DEFAULT_FETCH_MODE=>PDO::FETCH_ASSOC]);try{$pdo->setAttribute(PDO::ATTR_EMULATE_PREPARES,false);}catch(Throwable $ignored){}privateStoreEnsureSchema($pdo);return$pdo;}
-    catch(Throwable $e){error_log('[platform] private PDO niet beschikbaar: '.get_class($e).' · '.$e->getMessage());$fout=$e;throw new RuntimeException('Private verenigingsopslag is tijdelijk niet beschikbaar.',0,$e);}
+    try{
+        $verbinding=privateStorePdoVerbindingsdata();
+        $pdo=new PDO((string)$verbinding['dsn'],(string)$verbinding['user'],(string)$verbinding['password'],[PDO::ATTR_ERRMODE=>PDO::ERRMODE_EXCEPTION,PDO::ATTR_DEFAULT_FETCH_MODE=>PDO::FETCH_ASSOC]);
+        try{$pdo->setAttribute(PDO::ATTR_EMULATE_PREPARES,false);}catch(Throwable $ignored){}
+        if(($verbinding['source']??'')==='phase45-peer'){
+            pdoRuntime45ValideerSchema($pdo,(array)$verbinding['runtime'],privateStoreTenant());
+        }else{
+            privateStoreEnsureSchema($pdo);
+        }
+        return$pdo;
+    }
+    catch(Throwable $e){
+        if(str_contains($e->getMessage(),'zonder DSN of fase-4.5'))error_log('[platform] private PDO: driver=pdo maar geen veilige verbinding geconfigureerd');
+        else error_log('[platform] private PDO niet beschikbaar: '.get_class($e).' · '.$e->getMessage());
+        $fout=$e;throw new RuntimeException('Private verenigingsopslag is tijdelijk niet beschikbaar.',0,$e);
+    }
 }
-function privateStoreEnsureSchema(PDO $pdo): void{$pdo->exec('CREATE TABLE IF NOT EXISTS vereniging_private_store (tenant_key VARCHAR(80) NOT NULL, collection_key VARCHAR(120) NOT NULL, payload TEXT NOT NULL, updated_at VARCHAR(40) NOT NULL, PRIMARY KEY (tenant_key, collection_key))');}
+
+/** Alleen legacy/direct PDO mag nog een minimaal schema lazy aanmaken. Fase 4.5 PostgreSQL doet nooit DDL vanuit een webrequest. */
+function privateStoreEnsureSchema(PDO $pdo): void
+{
+    $pdo->exec('CREATE TABLE IF NOT EXISTS vereniging_private_store (tenant_key VARCHAR(80) NOT NULL, collection_key VARCHAR(120) NOT NULL, payload TEXT NOT NULL, updated_at VARCHAR(40) NOT NULL, PRIMARY KEY (tenant_key, collection_key))');
+}
+
 function privateStoreTransactie(callable $callback)
 {
     if(privateStoreDriver()!=='pdo')return$callback();$pdo=privateStorePdo();$eigen=!$pdo->inTransaction();if($eigen)$pdo->beginTransaction();

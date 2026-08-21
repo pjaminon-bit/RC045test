@@ -1,6 +1,6 @@
 # Roadmap verenigingsplatform
 
-Status per **20-08-2026**.
+Status per **21-08-2026**.
 
 Dit document is vanaf fase 4 de centrale nummering voor de resterende platform- en VPS-stappen. Historische migratiedocumenten blijven hun toenmalige stand beschrijven.
 
@@ -108,15 +108,29 @@ Zie `docs/VPS-TLS.md`.
 
 ### 4.5 — Database provisioning
 
-**Status: gepland.**
+**Status: code en CI gereed; daadwerkelijke PostgreSQL provisioning volgt op de echte VPS.**
+
+Canoniek productiemodel: **lokale PostgreSQL 16+ met één database per tenant en Unix-socket peer authentication.**
 
 Omvat:
 
-- PDO-database/databaseuser per gekozen isolatiemodel;
-- server-only databasecredentials;
-- schema/migraties;
-- geen secrets in Git, deployment.json of runtimebundles;
-- tenantbinding en fail-closed connectivity checks.
+- tenantgebonden `database-plan.json` uit het gevalideerde fase-4.1 runtimeplan;
+- iedere PDO-tenant moet vooraf expliciet met `--driver=pdo` zijn geprovisioneerd; JSON-tenants worden nooit stil omgeschakeld;
+- één unieke database per tenant;
+- aparte NOLOGIN owner-role; de app-role is exact de unieke Linux/PHP-FPM user uit fase 4.1;
+- geen databasepassword: kernel peer identity via `/var/run/postgresql` is de enige app-authenticatie;
+- exacte HBA-allow voor eigen database gevolgd door reject voor iedere andere database voor dezelfde tenantuser;
+- platform-HBA include staat vóór generieke bestaande regels en wordt via `pg_hba_file_rules` gevalideerd vóór reload;
+- `PUBLIC` krijgt geen database- of schemarechten;
+- app-role krijgt alleen CONNECT, schema-USAGE, SELECT op schema-meta en SELECT/INSERT/UPDATE/DELETE op private-store;
+- schema `vst` versie 1 met tenantmarker als defense-in-depth;
+- DDL/schema-migratie uitsluitend via provisioning, nooit automatisch vanuit een HTTP-request;
+- vaste secretvrije `database-runtime.json` buiten de documentroot;
+- root-vrije bundlecheck en aparte Linux-root `--apply`;
+- post-apply runtimecheck draait als de echte tenant Linux-user, test DML rollback-safe en eist DDL-weigering;
+- geen DB-secrets in Git, `config.php`, `deployment.json`, environment of runtimebundles.
+
+Zie `docs/VPS-DATABASE.md`.
 
 ### 4.6 — Monitoring & logging
 
