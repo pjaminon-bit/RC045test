@@ -34,6 +34,22 @@ DirectoryIndex index.php index.html
 # bestanden uit /data lezen.
 RewriteRule ^data/(homepage|ontstaan|baanreglement|aanmelden|bedankt|actueel|agenda|faq|sponsors|contact|nieuws|media|media-pagina|fotoboek|fotoboek-pagina|rekentabel|lidmaatschapstypen|changelog)\.json$ public-content.php?key=$1 [L,QSA]
 
+# ===== Publieke beeldassets =====
+# De DEV-map op rc045.nl is een stagingweergave van RC045. Alleen daar mogen
+# ontbrekende beeldbestanden tijdelijk naar de bestaande productieasset onder
+# /images/... verwijzen. De voorwaarde op REQUEST_URI voorkomt dat een nieuwe
+# tenant ooit onbedoeld RC045-branding/foto's erft.
+RewriteCond %{REQUEST_URI} ^/dev/images/ [NC]
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteRule ^images/((?:[A-Za-z0-9_-]+/)*[A-Za-z0-9][A-Za-z0-9._-]{0,180}\.(?:jpe?g|png|webp|gif|svg))$ /images/$1 [R=302,L,NE,NC]
+
+# Buiten DEV krijgt een nog niet ingestelde algemene templatefoto een lokale,
+# neutrale placeholder. Sponsor- en fotoboekpaden zijn tenantuploads en vallen
+# bewust NIET onder deze fallback: hun metadata en bestand moeten bij elkaar
+# horen en fouten daarin moeten zichtbaar blijven.
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteRule ^images/(?!sponsors/|fotoboek/)(?:[A-Za-z0-9_-]+/)*[A-Za-z0-9][A-Za-z0-9._-]{0,180}\.(?:jpe?g|png|webp|gif|svg)$ images/template-placeholder.svg [L,NC]
+
 # ===== Tenant-aware publieke uploads =====
 # Externe tenants bewaren uploads buiten de documentroot. De bestaande URL's
 # blijven gelijk, maar alleen strikt gevalideerde fotoboekbestanden en
