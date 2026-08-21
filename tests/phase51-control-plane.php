@@ -44,6 +44,7 @@ try{
  c51(str_contains($exec,'while(true)')&&str_contains($exec,'sort($files,SORT_STRING)')&&str_contains($exec,'if($verwerkt===0)break'),'executor draint queue deterministisch zonder vast te lopen op niet-overneembare items');
  c51(str_contains($exec,"\$lockDir=dirname(\$c['executor_lock'])")&&!str_contains($exec,"cpeDir(dirname(\$c['executor_lock'])"),'executor wijzigt globale /run/lock map niet');
  c51(!str_contains($exec,'shell_exec(')&&!str_contains($exec,'`')&&!str_contains($exec,'rm -rf'),'executor bevat geen shell escape of rm-rf');
+ c51(str_contains($exec,'Lifecycleplan bevat geen beschikbare exacte tenant-PHP-binary')&&str_contains($exec,'$cmd=[$php')&&!str_contains($exec,"\$cmd=['/usr/bin/php'"),'executor voert lifecycle exact uit met PHP-binary uit hervalideerd tenantplan');
  c51(str_contains($boot,"'/usr/bin/htpasswd'")&&str_contains($boot,"'-B'")&&str_contains($boot,"'-i'")&&!str_contains($boot,"'-b'"),'operatorbootstrap gebruikt bcrypt en wachtwoord via STDIN, nooit CLI');
  c51(str_contains($boot,'strlen($pw)<14'),'operatorwachtwoord heeft minimaal 14 tekens');
  c51(str_contains($apply,'Operatorbestand ontbreekt')&&str_contains($apply,'Platformbeheer-certificaatbestand ontbreekt'),'root-apply vereist operator en TLS-certificaat vóór activatie');
@@ -51,5 +52,6 @@ try{
  c51(str_contains($apply,"'/usr/sbin/groupadd','--system'")&&str_contains($apply,"'/usr/sbin/useradd','--system'")&&str_contains($apply,"'/usr/sbin/nologin'"),'root-apply maakt aparte system identity zonder login');
  c51(str_contains($apply,"'/usr/bin/systemd-analyze','verify'")&&str_contains($apply,"'configtest'")&&str_contains($apply,"'enable','--now'"),'root-apply valideert FPM/Apache/systemd vóór queue-activatie');
  c51(str_contains($apply,'function cpaDeps')&&str_contains($apply,"'/usr/bin/systemctl'")&&str_contains($apply,"'/usr/bin/id'"),'root-apply valideert vaste systeemdependencies vóór mutaties');
+ c51(str_contains($apply,'function cpaPhp')&&str_contains($apply,'function cpaServiceBytes')&&str_contains($apply,"str_replace('ExecStart=/usr/bin/php '")&&str_contains($apply,'cpaRun([cpaPhp($p)'),'root-apply pint systemd executor en eerste snapshot aan exact geplande PHP-versie');
  $workflow=(string)file_get_contents($root.'/.github/workflows/deploy-dev.yml');c51(str_contains($workflow,'phase51-control-plane.php'),'fase 5.1 test draait in CI');
 }finally{rm51($tmp);}echo"Phase 5.1 control-plane: {$ok} OK, {$fout} fout(en)\n";exit($fout===0?0:1);
