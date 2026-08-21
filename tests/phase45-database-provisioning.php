@@ -74,9 +74,11 @@ try{
  c45(str_contains($pdoRuntime,'SET search_path TO vst, pg_catalog')&&str_contains($pdoRuntime,'vereniging_schema_meta')&&str_contains($pdoRuntime,'schema_version'),'serverruntime valideert expliciet DB-identiteit, tenantmarker en schema');
  c45(!str_contains($pdoRuntime,'CREATE TABLE')&&!str_contains($pdoRuntime,'CREATE SCHEMA'),'fase-4.5 webrequest-runtime voert geen DDL uit');
  c45(str_contains($apply,'server_version_num')&&str_contains($apply,'160000')&&str_contains($apply,'pg_hba_file_rules'),'root-apply vereist PostgreSQL 16+ en preflight HBA-parserregels');
- c45(str_contains($apply,"'runuser', '-u', 'postgres'")&&str_contains($apply,"'runuser', '-u', $user")===false,'PostgreSQL adminacties lopen uitsluitend via lokale postgres OS-user');
+ c45(str_contains($apply,"SHOW listen_addresses")&&str_contains($apply,"listen_addresses=''"),'root-apply vereist socket-only PostgreSQL zonder TCP-listener');
+ c45(str_contains($apply,"'runuser', '-u', 'postgres'")&&str_contains($apply,'function apply45PeerCheck'),'adminacties lopen via postgres OS-user en tenant-login heeft een aparte peercheck');
  c45(str_contains($apply,'PASSWORD NULL')&&!str_contains($apply,'PGPASSWORD'),'app-role heeft expliciet geen PostgreSQL password en tool gebruikt geen PGPASSWORD');
  c45(str_contains($apply,"local all")===false&&str_contains($apply,'database45HbaConfig'),'HBA-inhoud komt uitsluitend uit het gevalideerde pure contract');
+ c45(str_contains($apply,'strpos(file_name')&&str_contains($apply,'eersteBuitenPlatform'),'HBA ordering vergelijkt tenantregels met eerste niet-platformregel en ondersteunt meerdere tenant-HBA-bestanden');
  c45(str_contains($apply,"'-d', 'postgres'")&&str_contains($apply,'Cross-database HBA-reject'),'apply-tool bewijst dat tenant OS-user niet naar postgres/andere database kan uitwijken');
  c45(str_contains($apply,'REVOKE ALL ON DATABASE')&&str_contains($apply,'has_schema_privilege')&&str_contains($apply,"'CREATE')::text"),'root-apply controleert least-privilege database- en schemarechten');
  c45(str_contains($check,'posix_geteuid()')&&str_contains($check,"extension_loaded('pdo_pgsql')"),'runtimecheck moet als exact tenant Linux-user met pdo_pgsql draaien');
