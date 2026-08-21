@@ -146,14 +146,14 @@ function apply45HbaInstalleer(array $plan): array
         $deny = apply45PgQuery("SELECT count(*) FROM pg_hba_file_rules WHERE file_name={$tenantLiteral} AND type='local' AND database=ARRAY['all']::text[] AND user_name=ARRAY[{$userLiteral}]::text[] AND auth_method='reject'");
         if ($allow !== '1' || $deny !== '1') throw new RuntimeException('Exacte tenant peer-allow + cross-database reject zijn niet zichtbaar in pg_hba_file_rules.');
 
-        // Meerdere tenantbestanden delen dezelfde include_dir. Een tenant mag dus
-        // na een eerder tenantbestand komen; alle platformregels samen moeten
-        // vóór iedere regel buiten de gecontroleerde platform-include staan.
-        $eersteTenant = apply45PgQuery("SELECT min(rule_number) FROM pg_hba_file_rules WHERE file_name={$tenantLiteral}");
+        // Alle echte authregels uit de gecontroleerde platform-include moeten
+        // vóór iedere echte authregel buiten die include staan. Zo blijft dit
+        // correct wanneer meerdere tenant-HBA-bestanden naast elkaar bestaan.
         $platformPrefix = database45SqlLiteral(rtrim($includeDir, '/') . '/');
-        $eersteBuitenPlatform = apply45PgQuery("SELECT min(rule_number) FROM pg_hba_file_rules WHERE strpos(file_name, {$platformPrefix}) <> 1");
-        if ($eersteTenant === '' || ($eersteBuitenPlatform !== '' && (int)$eersteTenant > (int)$eersteBuitenPlatform)) {
-            throw new RuntimeException('Platform-HBA include staat niet vóór de bestaande niet-platform HBA-regels.');
+        $laatstePlatform = apply45PgQuery("SELECT max(rule_number) FROM pg_hba_file_rules WHERE type IS NOT NULL AND strpos(file_name, {$platformPrefix}) = 1");
+        $eersteBuitenPlatform = apply45PgQuery("SELECT min(rule_number) FROM pg_hba_file_rules WHERE type IS NOT NULL AND strpos(file_name, {$platformPrefix}) <> 1");
+        if ($laatstePlatform === '' || ($eersteBuitenPlatform !== '' && (int)$laatstePlatform > (int)$eersteBuitenPlatform)) {
+            throw new RuntimeException('Niet alle platform-HBA authregels staan vóór de bestaande niet-platform HBA-regels.');
         }
         if (apply45PgQuery('SELECT pg_reload_conf()') !== 't') throw new RuntimeException('PostgreSQL HBA reload kon niet worden aangevraagd.');
     } catch (Throwable $e) {
@@ -243,9 +243,10 @@ try {
     $versie = (int)apply45PgQuery('SHOW server_version_num');
     if ($versie < 160000) throw new RuntimeException('Fase 4.5 vereist PostgreSQL 16 of nieuwer voor gecontroleerde HBA includes/rule_number-validatie.');
 
-    // De productie-DB hoort uitsluitend lokaal via Unix sockets bereikbaar te
-    // zijn. Daarmee kan een brede TCP/host HBA-regel nooit een tweede loginpad
-    // naar de passwordloze tenantrollen openen.
+    if (($plan['postgresql']['socket_only_required'] ?? false) !== true
+        || (string)($plan['postgresql']['listen_addresses_required'] ?? 'onverwacht') !== '') {
+        throw new RuntimeException('Databaseplan mist het verplichte socket-only PostgreSQL-contract.');
+    }
     if (trim(apply45PgQuery('SHOW listen_addresses')) !== '') {
         throw new RuntimeException("Fase 4.5 vereist socket-only PostgreSQL: zet listen_addresses='' en herstart PostgreSQL gecontroleerd vóór --apply.");
     }
@@ -281,15 +282,42 @@ try {
     $dbOwner = apply45PgQuery("SELECT r.rolname FROM pg_database d JOIN pg_roles r ON r.oid=d.datdba WHERE d.datname=" . database45SqlLiteral($database));
     if (!hash_equals($owner, $dbOwner)) throw new RuntimeException('Tenantdatabase is niet eigendom van de NOLOGIN owner-role.');
 
-    apply45PgQuery('REVOKE ALL ON DATABASE ' . $database . ' FROM PUBLIC; GRANT CONNECT ON DATABASE ' . $database . ' TO ' . $owner . '; GRANT CONNECT ON DATABASE ' . $database . ' TO ' . $appUser . '; ALTER ROLE ' . $appUser . ' IN DATABASE ' . $database . ' SET search_path TO vst, pg_catalog;');
+    // Re-apply normaliseert privilege drift: eerst alle directe app/database-
+    // rechten intrekken en daarna uitsluitend CONNECT teruggeven. Schema/table
+    // grants worden op dezelfde manier in de migratie genormaliseerd.
+    apply45PgQuery('REVOKE ALL ON DATABASE ' . $database . ' FROM PUBLIC; REVOKE ALL ON DATABASE ' . $database . ' FROM ' . $appUser . '; GRANT CONNECT ON DATABASE ' . $database . ' TO ' . $owner . '; GRANT CONNECT ON DATABASE ' . $database . ' TO ' . $appUser . '; ALTER ROLE ' . $appUser . ' IN DATABASE ' . $database . ' SET search_path TO vst, pg_catalog;');
     $migration = @file_get_contents((string)$plan['bundle']['migration_file']);
     if (!is_string($migration)) throw new RuntimeException('Migratieartifact kon niet worden gelezen.');
     apply45PgScript($migration, $database);
 
     $meta = apply45PgQuery("SELECT tenant_key || '|' || schema_version::text FROM vst.vereniging_schema_meta WHERE component='private_store'", $database);
     if (!hash_equals($plan['tenant_key'] . '|1', $meta)) throw new RuntimeException('Schema tenantmarker/version wijkt af na migratie.');
-    $priv = apply45PgQuery("SELECT has_schema_privilege(" . database45SqlLiteral($appUser) . ",'vst','USAGE')::text || '|' || has_schema_privilege(" . database45SqlLiteral($appUser) . ",'vst','CREATE')::text || '|' || has_table_privilege(" . database45SqlLiteral($appUser) . ",'vst.vereniging_schema_meta','SELECT')::text || '|' || has_table_privilege(" . database45SqlLiteral($appUser) . ",'vst.vereniging_schema_meta','INSERT')::text || '|' || has_table_privilege(" . database45SqlLiteral($appUser) . ",'vst.vereniging_private_store','SELECT,INSERT,UPDATE,DELETE')::text", $database);
-    if (!hash_equals('true|false|true|false|true', $priv)) throw new RuntimeException('App-role databaseprivileges wijken af van het least-privilege contract.');
+    $appLit = database45SqlLiteral($appUser);
+    $dbLit = database45SqlLiteral($database);
+    $priv = apply45PgQuery(
+        "SELECT "
+        . "has_database_privilege({$appLit},{$dbLit},'CONNECT')::text || '|' || "
+        . "has_database_privilege({$appLit},{$dbLit},'CREATE')::text || '|' || "
+        . "has_database_privilege({$appLit},{$dbLit},'TEMPORARY')::text || '|' || "
+        . "has_schema_privilege({$appLit},'public','USAGE')::text || '|' || "
+        . "has_schema_privilege({$appLit},'public','CREATE')::text || '|' || "
+        . "has_schema_privilege({$appLit},'vst','USAGE')::text || '|' || "
+        . "has_schema_privilege({$appLit},'vst','CREATE')::text || '|' || "
+        . "has_table_privilege({$appLit},'vst.vereniging_schema_meta','SELECT')::text || '|' || "
+        . "has_table_privilege({$appLit},'vst.vereniging_schema_meta','INSERT')::text || '|' || "
+        . "has_table_privilege({$appLit},'vst.vereniging_schema_meta','UPDATE')::text || '|' || "
+        . "has_table_privilege({$appLit},'vst.vereniging_schema_meta','DELETE')::text || '|' || "
+        . "has_table_privilege({$appLit},'vst.vereniging_private_store','SELECT')::text || '|' || "
+        . "has_table_privilege({$appLit},'vst.vereniging_private_store','INSERT')::text || '|' || "
+        . "has_table_privilege({$appLit},'vst.vereniging_private_store','UPDATE')::text || '|' || "
+        . "has_table_privilege({$appLit},'vst.vereniging_private_store','DELETE')::text || '|' || "
+        . "has_table_privilege({$appLit},'vst.vereniging_private_store','TRUNCATE')::text || '|' || "
+        . "has_table_privilege({$appLit},'vst.vereniging_private_store','REFERENCES')::text || '|' || "
+        . "has_table_privilege({$appLit},'vst.vereniging_private_store','TRIGGER')::text",
+        $database
+    );
+    $verwachtePriv = 'true|false|false|false|false|true|false|true|false|false|false|true|true|true|true|false|false|false';
+    if (!hash_equals($verwachtePriv, $priv)) throw new RuntimeException('App-role database/schema/table privileges wijken af van het exact least-privilege contract.');
 
     $hbaState = apply45HbaInstalleer($plan);
     try { apply45PeerCheck($plan); }
