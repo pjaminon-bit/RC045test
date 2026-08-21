@@ -44,6 +44,9 @@ try{
  try{security521ReleaseBinding($rc,$rp,$rm,'/srv/verenigingsplatform/releases/'.str_repeat('e',40),$marker,$state);c52(false,'onverwachte current-wissel wordt fail-closed geweigerd');}catch(Throwable$e){c52(str_contains($e->getMessage(),'current'),'onverwachte current-wissel wordt fail-closed geweigerd');}
  $stateAndere=$state;$stateAndere['active']['commit']=str_repeat('e',40);try{security521ReleaseBinding($rc,$rp,$rm,$rp,$marker,$stateAndere);c52(false,'andere actieve releasecommit in state wordt geweigerd');}catch(Throwable$e){c52(str_contains($e->getMessage(),'Actieve'),'andere actieve releasecommit in state wordt geweigerd');}
  $stateTransition=$state;$stateTransition['transition']=['mode'=>'deploy','from'=>$state['active'],'to'=>$state['active']];try{security521ReleaseBinding($rc,$rp,$rm,$rp,$marker,$stateTransition);c52(false,'lopende 4.7 transition blokkeert first-VPS vervolg');}catch(Throwable$e){c52(str_contains($e->getMessage(),'stabiel'),'lopende 4.7 transition blokkeert first-VPS vervolg');}
+ try{security521GitSourceBinding($rc,$root,$root,$rc,'');c52(true,'Git source-binding accepteert exact root, HEAD en schone working tree');}catch(Throwable$e){c52(false,'Git source-binding accepteert exact root, HEAD en schone working tree');}
+ try{security521GitSourceBinding($rc,$root,$root,str_repeat('e',40),'');c52(false,'Git source-binding weigert een andere HEAD dan het plan');}catch(Throwable$e){c52(str_contains($e->getMessage(),'HEAD'),'Git source-binding weigert een andere HEAD dan het plan');}
+ try{security521GitSourceBinding($rc,$root,$root,$rc,' M auth.php');c52(false,'Git source-binding weigert een dirty working tree');}catch(Throwable$e){c52(str_contains($e->getMessage(),'wijzigingen'),'Git source-binding weigert een dirty working tree');}
 
  $apply=(string)file_get_contents($root.'/bin/apply-first-vps-bootstrap.php');
  c52(str_contains($apply,'plan_sha256')&&str_contains($apply,"\$p['paths']['state_file']")&&str_contains($apply,"\$p['paths']['lock_file']")&&str_contains($apply,'flock($lh,LOCK_EX|LOCK_NB)'),'resume-state is plan-gebonden en globaal gelockt');
@@ -60,7 +63,7 @@ try{
  c52(substr_count($apply,'finally{b52SecretWis(')===2&&str_contains($apply,'$raw=str_repeat("\\0",strlen($raw))'),'beide stagecredentials en hun ruwe JSON-regel worden ook bij fouten direct gewist');
  c52(!str_contains($apply,'$needSecrets')&&!str_contains($apply,'$secrets=b52Secrets'),'bootstrap houdt geen vroeg ingelezen secrets-array meer vast');
  c52(!str_contains($apply,'shell_exec(')&&!str_contains($apply,'`')&&!str_contains($apply,'rm -rf'),'5.2 gebruikt geen shell escape of rm-rf');
- c52(str_contains($apply,"['bypass_shell'=>true]")&&str_contains($apply,'proc_open('),'childprocessen gebruiken vaste argv zonder shell');
+ c52(str_contains($apply,"require_once dirname(__DIR__).'/app/deployment/process-runner.php'")&&str_contains($apply,'process521Run($cmd,$stdin,null,null,3600)')&&!str_contains($apply,'proc_open('),'childprocessen gebruiken gedeelde deadlock-veilige argv-runner zonder shell');
  c52(str_contains($apply,'packages_are_not_auto_installed')===false&&!str_contains($apply,"'apt'")&&!str_contains($apply,'apt-get'),'root-flow installeert bewust geen packages');
  c52(strpos($apply,'b52TenantDb($p,$current)')<strpos($apply,'b52TenantFpm($p)'),'database apply gebeurt vóór tenant-FPM reload');
  c52(strpos($apply,'b52TenantTls($p,$current)')<strpos($apply,'b52TenantMonitoring($p,$current)'),'tenant-TLS staat vóór monitoring');
@@ -74,6 +77,10 @@ try{
  c52(str_contains($apply,'b52ReleaseEnsure')&&str_contains($apply,'b52ReleaseLock')&&substr_count($apply,'b52ReleaseExact($p)')>=10,'first-VPS reconcileert bestaande release, houdt 4.7 lock vast en herbewijst releasebinding rond mutaties');
  c52(str_contains($apply,"if(\$c||\$s){if(!\$c||!\$s)")&&str_contains($apply,'b52ReleaseExact($p);return;'),'crash na geslaagde release-bootstrap wordt gereconcileerd in plaats van opnieuw gebootstrapt');
  c52(str_contains($apply,"if(\$status==='unmanaged')")&&str_contains($apply,"if(\$status==='active')")&&str_contains($apply,"'--activate'"),'lifecycle-resume adopteert alleen unmanaged en valideert reeds active idempotent');
+ c52(str_contains($apply,"'/usr/bin/git'")&&str_contains($apply,"'rev-parse','--verify','HEAD^{commit}'")&&str_contains($apply,"'status','--porcelain=v1','--untracked-files=all'")&&str_contains($apply,'security521GitSourceBinding'),'production bootstrap bindt bron expliciet aan Git top-level, HEAD en schone working tree');
+ $preflightPos=strpos($apply,"if(\$mode!=='status')b52ProductionPreflight(\$p,\$bins)");$lockPos=strpos($apply,"\$lh=@fopen(\$p['paths']['lock_file'],'c')");c52($preflightPos!==false&&$lockPos!==false&&$preflightPos<$lockPos,'volledige production preflight gebeurt vóór het eerste bootstrap-lockbestand');
+ c52(str_contains($apply,"'/usr/sbin/apache2ctl','configtest'")&&str_contains($apply,"\$bins['fpm'],'-t'")&&str_contains($apply,"\$bins['fail2ban'],'-t'")&&str_contains($apply,"'SELECT 1;'"),'production preflight bewijst Apache, PHP-FPM, Fail2ban en PostgreSQL vóór mutaties');
+ c52(str_contains($apply,"'apache2','php'.\$v.'-fpm.service','postgresql'")&&str_contains($apply,"'is-active','--quiet'"),'kritieke productieservices moeten al actief zijn vóór first-VPS mutaties');
 
  $cpApply=(string)file_get_contents($root.'/bin/apply-vps-control-plane.php');
  c52(str_contains($cpApply,"\$art=\$ctx['artifacts']")&&str_contains($cpApply,'cpaExactBytes')&&!str_contains($cpApply,'function cpaExact(string$src'),'control-plane root-apply installeert uitsluitend in-memory gevalideerde artifactbytes');
