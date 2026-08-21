@@ -180,16 +180,24 @@ Zie `docs/VPS-RELEASES.md`.
 
 ### 4.8 — Tenant lifecycle
 
-**Status: gepland.**
+**Status: code en CI gereed; daadwerkelijke lifecyclemutaties volgen op de echte productie-VPS.**
 
 Omvat:
 
-- tenant activeren;
-- gecontroleerd uitschakelen;
-- exporteren;
-- verwijderen met expliciete veiligheidsstappen;
-- lifecycle-acties tenantgebonden auditen;
-- uiteindelijk een aparte platform-/superbeheer-GUI voor deze operatoracties; niet in het gewone verenigingsbeheer.
+- een bestaande actieve tenant wordt alleen na volledige runtime/database/Apache/monitoring-health expliciet met `--adopt-active` onder lifecyclebeheer gebracht;
+- per tenant kan maximaal één lifecycleactie tegelijk lopen via een root-owned lock;
+- gecontroleerd uitschakelen blokkeert app-HTTPS, PostgreSQL-login/sessies, monitoring en PHP-FPM; alleen de minimale HTTP-01 route blijft bereikbaar voor certificaatvernieuwing;
+- heractiveren bouwt fail-closed op via FPM → database → Apache/HTTPS → volledige healthcheck → monitoring;
+- export is alleen vanuit stabiel `suspended` toegestaan en bevat PostgreSQL-dump, volledige tenantboom en SHA-256 manifest/checksum in root-only opslag;
+- verwijderen is tweestaps: eerst `pending_delete` na geverifieerde export, daarna minimaal 24 uur wachttijd en een tweede expliciete purgebevestiging;
+- een pending delete kan binnen de wachttijd worden ingetrokken;
+- definitieve purge ruimt tenantgebonden Apache/FPM/PostgreSQL/HBA/Certbot/systemd/Linux-resources en tenantdata op, maar bewaart export en tombstone;
+- onderbroken infrastructuur- of datapurges hebben een expliciet recoverypad dat uitsluitend de reeds gestarte purge mag hervatten;
+- lifecycle-state en audit zijn tenantgebonden en root-owned buiten documentroot;
+- DNS-providerrecords worden nooit automatisch verwijderd;
+- een latere platform-/superbeheer-GUI komt als aparte control-plane boven deze operator-engine en krijgt geen directe rootuitvoering vanuit het gewone verenigingsbeheer.
+
+Zie `docs/VPS-LIFECYCLE.md`.
 
 ## Volgorde
 
