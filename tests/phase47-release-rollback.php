@@ -37,7 +37,7 @@ try{
 
  $apply=(string)file_get_contents($root.'/bin/apply-vps-release.php');
  c47(str_contains($apply,'flock($lock,LOCK_EX|LOCK_NB)'),'releasehandelingen worden globaal geserialiseerd');
- c47(str_contains($apply,"'.current.tmp.'")&&str_contains($apply,'rename($tmp,$current)'),'current-wissel gebruikt tijdelijke symlink plus atomische rename');
+ c47(str_contains($apply,"'/.current.tmp.'")&&str_contains($apply,'rename($tmp,$current)')&&str_contains($apply,'symlink($rel,$tmp)'),'current-wissel gebruikt tijdelijke symlink plus atomische rename');
  c47(str_contains($apply,'apply47Health((string)$state[\'active\'][\'path\']')&&str_contains($apply,'apply47CandidateProbe'),'deploy vereist gezonde huidige release en read-only kandidaatprobe');
  c47(strpos($apply,'apply47CandidateProbe')<strpos($apply,'apply47ApacheTest')&&strpos($apply,'apply47ApacheTest')<strrpos($apply,'apply47Switch($plan,$candidate)'),'tenantprobe en Apache configtest gebeuren vóór kandidaatswitch');
  c47(str_contains($apply,"['systemctl','reload'"),'PHP-FPM wordt na codewissel gecontroleerd herladen');
