@@ -4,6 +4,12 @@
 $recent = [
   [
     'datum' => '2026-08-21',
+    'cat' => 'verbetering',
+    'titel' => 'Veilige releases en automatische rollback voorbereid',
+    'tekst' => 'Fase 4.7 voegt immutable releases per commit toe met een inhoudsmanifest, een atomische current-wissel, tenantpreflight en volledige healthchecks na activatie. Als een nieuwe release na de wissel faalt wordt automatisch naar de vorige gezonde release teruggeschakeld. Handmatige rollback gebruikt alleen de eerder gevalideerde previous-release uit server-state.',
+  ],
+  [
+    'datum' => '2026-08-21',
     'cat' => 'beveiliging',
     'titel' => 'Database-isolatie opnieuw aangescherpt na heraudit',
     'tekst' => 'De PostgreSQL tenantrole blijft voortaan NOLOGIN totdat de tenant-HBA-regels en exact least-privilege aantoonbaar actief zijn. Bij fouten valt de role weer terug naar NOLOGIN, beschermende rejectregels blijven staan en onveilige symlinks in PostgreSQL-configpaden worden geweigerd.',
