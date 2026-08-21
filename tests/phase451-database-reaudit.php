@@ -9,8 +9,7 @@ function c451(bool $conditie, string $label): void
     else { $fout++; fwrite(STDERR, "FOUT: {$label}\n"); }
 }
 
-$applyPad = $root . '/bin/apply-vps-database.php';
-$apply = (string)file_get_contents($applyPad);
+$apply = (string)file_get_contents($root . '/bin/apply-vps-database.php');
 
 c451(str_contains($apply, 'function apply45RuntimeMoetInactiefZijn'), 'database-apply heeft expliciete tenant-runtime stilstandguard');
 c451(str_contains($apply, "['pgrep', '-u', \$tenantUser]") && str_contains($apply, 'if ($code === 1) return;'), 'procesguard accepteert alleen aantoonbaar geen tenantprocessen');
@@ -29,14 +28,22 @@ c451($posNoLogin !== false && $posHba !== false && $posNoLogin < $posHba, 'app-r
 c451($posHba !== false && $posDatabase !== false && $posHba < $posDatabase, 'tenant-HBA allow/reject wordt geladen vóór databasecreatie');
 c451($posDatabase !== false && $posPriv !== false && $posDatabase < $posPriv, 'database bestaat vóór privilege-normalisatie');
 c451($posPriv !== false && $posLogin !== false && $posPriv < $posLogin, 'least privilege is bewezen vóór LOGIN wordt toegestaan');
-c451($posLogin !== false && $posPeer !== false && $posLogin < $posPeer, 'peer/cross-database proef volgt direct op uiteindelijke LOGIN');
+c451($posLogin !== false && $posPeer !== false && $posLogin < $posPeer, 'peer/cross-database proef volgt op uiteindelijke LOGIN');
 
 c451(str_contains($apply, "CREATE ROLE ' . \$appUser . ' NOLOGIN INHERIT"), 'nieuwe app-role wordt initieel als NOLOGIN aangemaakt');
 c451(str_contains($apply, "'false|true', \$noLoginProps"), 'NOLOGIN/no-password toestand wordt vóór HBA aantoonbaar gevalideerd');
+$posGebonden = strpos($apply, '$appRoleTenantGebonden = true;', strpos($apply, 'if ($appBestond)'));
+$posPreProps = strpos($apply, '$preProps =', strpos($apply, 'if ($appBestond)'));
+c451($posGebonden !== false && $posPreProps !== false && $posGebonden < $posPreProps, 'reeds gemarkeerde tenantrole wordt vóór driftcheck als fail-closed sluitbaar gemarkeerd');
+c451(str_contains($apply, 'gevaarlijke privilege/password-drift; role wordt fail-closed gesloten'), 'gevaarlijke drift op bestaande tenantrole leidt tot expliciete sluiting');
 c451(str_contains($apply, 'appRoleTenantGebonden') && str_contains($apply, "ALTER ROLE ' . \$appUser . ' NOLOGIN PASSWORD NULL"), 'foutpad sluit tenantgebonden app-role opnieuw fail-closed');
 c451(str_contains($apply, 'Beschermende tenant-HBA blijft actief'), 'foutpad documenteert dat geladen HBA-reject niet wordt teruggedraaid');
 c451(!str_contains($apply, 'apply45HbaRollback('), 'na rolecreatie bestaat geen rollbackpad dat tenant-HBA weer kan verwijderen');
 c451(str_contains($apply, "['which', 'pgrep']"), 'root-apply behandelt pgrep als verplichte beveiligingsdependency');
+
+c451(str_contains($apply, "foreach (['/etc/verenigingsplatform', '/etc/verenigingsplatform/postgresql', \$includeDir] as \$veiligPad)"), 'HBA-installatie controleert ook bovenliggende platformconfigpaden');
+c451(substr_count($apply, 'runtime41SymlinkInPad(') >= 5, 'root-HBA writes en bundle ownership gebruiken ancestor-symlinkcontrole');
+c451(str_contains($apply, "runtime41BestaandPad(apply45PgQuery('SHOW hba_file')"), 'actief pg_hba.conf-pad wordt volledig symlink-vrij opgelost');
 
 $workflow = (string)file_get_contents($root . '/.github/workflows/deploy-dev.yml');
 c451(str_contains($workflow, 'php tests/phase451-database-reaudit.php'), 'fase 4.5.1 heraudit draait in CI');
