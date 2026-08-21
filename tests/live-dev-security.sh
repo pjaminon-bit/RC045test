@@ -13,7 +13,6 @@ status() { curl --silent --show-error --output /dev/null --write-out '%{http_cod
 # Baseline headers op de publieke entrypoint.
 curl --silent --show-error --dump-header "$TMP/headers" --output "$TMP/home" --connect-timeout 10 --max-time 30 "$BASE/"
 tr -d '\r' < "$TMP/headers" > "$TMP/headers.clean"
-headers="$(cat "$TMP/headers.clean")"
 
 if grep -Eqi '^strict-transport-security:[[:space:]]*.+max-age=' "$TMP/headers.clean"; then ok 'HSTS actief'; else bad 'HSTS ontbreekt'; fi
 if grep -Eqi '^x-content-type-options:[[:space:]]*nosniff' "$TMP/headers.clean"; then ok 'X-Content-Type-Options nosniff actief'; else bad 'X-Content-Type-Options nosniff ontbreekt'; fi
@@ -53,8 +52,10 @@ if ! tr -d '\r' < "$TMP/crlf" | grep -Eqi '^X-RC045-Injected:[[:space:]]*yes'; t
 
 # Cookies die op login-entrypoints worden gezet moeten hardened zijn.
 for route in beheer/ leden/; do
-  curl --silent --show-error --dump-header "$TMP/cookie-$route" --output /dev/null --connect-timeout 10 --max-time 30 "$BASE/$route"
-  mapfile -t cookies < <(tr -d '\r' < "$TMP/cookie-$route" | grep -i '^set-cookie:' || true)
+  label="${route%/}"
+  header_file="$TMP/cookie-$label"
+  curl --silent --show-error --dump-header "$header_file" --output /dev/null --connect-timeout 10 --max-time 30 "$BASE/$route"
+  mapfile -t cookies < <(tr -d '\r' < "$header_file" | grep -i '^set-cookie:' || true)
   if (( ${#cookies[@]} == 0 )); then
     ok "$route zet vóór login geen cookie"
     continue
