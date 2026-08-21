@@ -68,6 +68,7 @@ jobs:
           php tests/phase44-tls-https.php
           php tests/phase45-database-provisioning.php
           php tests/phase451-database-reaudit.php
+          php tests/phase46-monitoring-logging.php
           php tests/private-store-pdo-sqlite.php
           php tests/phase321-pdo-isolation.php
           php tests/private-store-pdo-failclosed.php
@@ -145,6 +146,7 @@ jobs:
           wacht_op_status "$basis/beheer/ui-2026.css" 200 nee
           wacht_op_status "$basis/leden/" 200 ja
           wacht_op_status "$basis/aanmelden.html" 200 ja
+          wacht_op_status "$basis/healthz.php" 404 nee
 
           for route in leden.php leden-import.php ledenlabels.php commissies.php werkgroepen.php groepsrollen.php groep-relaties.php vergaderingen.php taken.php operationele-taken.php evenementen.php aanmeldingen.php lidmaatschap.php contributies.php gebruikers.php logboek.php backups.php; do
             wacht_op_status "$basis/beheer/$route" 302 nee
@@ -157,6 +159,8 @@ jobs:
           wacht_op_status "$basis/public-asset.php?scope=sponsors&path=missing.jpg" 404 nee
           wacht_op_status "$basis/public-asset.php?scope=sponsors&path=shell.php" 404 nee
           wacht_op_status "$basis/app/paneel-hulp.php" 403 nee
+          wacht_op_status "$basis/app/operational-log.php" 403 nee
+          wacht_op_status "$basis/app/deployment/monitoring-contract.php" 403 nee
           wacht_op_status "$basis/aanmeldingen-opslag.php" 403 nee
           wacht_op_status "$basis/groepen-opslag.php" 403 nee
           wacht_op_status "$basis/ledenlabels-opslag.php" 403 nee
@@ -175,6 +179,9 @@ jobs:
           wacht_op_status "$basis/bin/prepare-vps-database.php" 403 nee
           wacht_op_status "$basis/bin/apply-vps-database.php" 403 nee
           wacht_op_status "$basis/bin/check-vps-database.php" 403 nee
+          wacht_op_status "$basis/bin/prepare-vps-monitoring.php" 403 nee
+          wacht_op_status "$basis/bin/apply-vps-monitoring.php" 403 nee
+          wacht_op_status "$basis/bin/check-vps-health.php" 403 nee
           wacht_op_status "$basis/tests/phase35-vps-deployment.php" 403 nee
           wacht_op_status "$basis/tests/phase351-security-reaudit.php" 403 nee
           wacht_op_status "$basis/tests/phase41-vps-runtime-isolation.php" 403 nee
@@ -184,9 +191,11 @@ jobs:
           wacht_op_status "$basis/tests/phase44-tls-https.php" 403 nee
           wacht_op_status "$basis/tests/phase45-database-provisioning.php" 403 nee
           wacht_op_status "$basis/tests/phase451-database-reaudit.php" 403 nee
+          wacht_op_status "$basis/tests/phase46-monitoring-logging.php" 403 nee
           wacht_op_status "$basis/docs/VPS-DEPLOYMENT.md" 403 nee
           wacht_op_status "$basis/docs/VPS-WEBSERVER.md" 403 nee
           wacht_op_status "$basis/docs/VPS-DNS.md" 403 nee
           wacht_op_status "$basis/docs/VPS-TLS.md" 403 nee
           wacht_op_status "$basis/docs/VPS-DATABASE.md" 403 nee
+          wacht_op_status "$basis/docs/VPS-MONITORING.md" 403 nee
           wacht_op_status "$basis/dev-build.json" 403 nee
