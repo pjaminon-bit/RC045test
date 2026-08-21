@@ -5,6 +5,7 @@ Status: **code/automation en CI-contract gereed; daadwerkelijke PostgreSQL provi
 Fase 4.5 kiest één canoniek productiemodel voor private PDO-opslag:
 
 - PostgreSQL **16 of nieuwer** op dezelfde Linux VPS;
+- PostgreSQL draait **socket-only** met `listen_addresses=''`: geen TCP-listener voor tenantdatabases;
 - **één database per tenant**;
 - één aparte **NOLOGIN owner-role** per tenant;
 - de applicatie-loginrole is exact dezelfde unieke Linux-user als de PHP-FPM pool uit fase 4.1;
@@ -14,14 +15,15 @@ Fase 4.5 kiest één canoniek productiemodel voor private PDO-opslag:
 
 ## Waarom peer authentication
 
-Alle tenant-PHP-processen draaien sinds fase 4.1 onder een unieke system user. PostgreSQL peer authentication kan bij een lokale Unix-socket die kernel-identiteit rechtstreeks controleren. De PostgreSQL app-role gebruikt daarom exact dezelfde naam als de Linux/FPM-user.
+Alle tenant-PHP-processen draaien sinds fase 4.1 onder een unieke system user. PostgreSQL peer authentication kan bij een lokale Unix-socket die kernelidentiteit rechtstreeks controleren. De PostgreSQL app-role gebruikt daarom exact dezelfde naam als de Linux/FPM-user.
 
 Dat levert een sterkere lokale grens op dan gedeelde wachtwoorden:
 
 1. geen reusable databasepassword op disk;
 2. geen password in process environment of PHP-FPM config;
 3. een proces van tenant A kan zich niet als databaseuser van tenant B voordoen;
-4. de HBA-regels staan de eigen database eerst toe en weigeren dezelfde tenantuser daarna expliciet voor alle andere databases.
+4. de HBA-regels staan de eigen database eerst toe en weigeren dezelfde tenantuser daarna expliciet voor alle andere databases;
+5. doordat PostgreSQL geen TCP-listener heeft, kan een brede toekomstige `host ... trust`-regel geen tweede netwerkpad naar de passwordloze tenantrollen openen.
 
 ## Voorwaarden
 
@@ -31,7 +33,8 @@ Voor een tenant moeten vooraf aanwezig zijn:
 2. fase 3.4 admin bootstrap;
 3. `deployment.json` uit fase 3.5;
 4. fase-4.1 runtimebundle;
-5. de fase-4.1 Linux-user/group moet daadwerkelijk op de VPS zijn toegepast voordat `--apply` wordt gebruikt.
+5. de fase-4.1 Linux-user/group moet daadwerkelijk op de VPS zijn toegepast voordat `--apply` wordt gebruikt;
+6. PostgreSQL moet gecontroleerd met `listen_addresses=''` zijn gestart en `/var/run/postgresql` als Unix-socket aanbieden.
 
 Fase 4.5 schakelt een bestaande JSON-tenant **niet automatisch** om. Een datamigratie is een afzonderlijke, expliciete operatie en mag niet verstopt zitten in infrastructuurprovisioning.
 
@@ -84,7 +87,7 @@ De apply-tool:
 
 1. vereist Linux root;
 2. controleert dat de fase-4.1 tenantuser/group werkelijk bestaat;
-3. vereist PostgreSQL >=16 en socket `/var/run/postgresql`;
+3. vereist PostgreSQL >=16, `listen_addresses=''` en socket `/var/run/postgresql`;
 4. controleert vóór mutaties of deterministische role-/databasenamen niet door een ander object zijn bezet;
 5. markeert platformobjecten expliciet met de tenant-key;
 6. maakt een NOLOGIN owner-role;
@@ -94,11 +97,12 @@ De apply-tool:
 10. past schema/migratie v1 toe als PostgreSQL-admin;
 11. geeft de app-role alleen CONNECT, schema-USAGE, SELECT op de schemamarker en SELECT/INSERT/UPDATE/DELETE op de private-store tabel;
 12. installeert de tenant-HBA-regels in `/etc/verenigingsplatform/postgresql/pg_hba.d`;
-13. zet de platform `include_dir` vóór de generieke regels in de actieve `pg_hba.conf`;
+13. zet de platform `include_dir` vóór de niet-platformregels in de actieve `pg_hba.conf`;
 14. valideert de actuele HBA-bestanden via `pg_hba_file_rules` vóór reload;
-15. reloadt PostgreSQL alleen na geldige HBA-config;
-16. test een echte peer-login als de tenant Linux-user;
-17. bewijst dat dezelfde tenantuser niet naar de `postgres` database kan uitwijken.
+15. ondersteunt meerdere tenant-HBA-bestanden in dezelfde gecontroleerde include-dir zonder ze als generieke regels te behandelen;
+16. reloadt PostgreSQL alleen na geldige HBA-config;
+17. test een echte peer-login als de tenant Linux-user;
+18. bewijst dat dezelfde tenantuser niet naar de `postgres` database kan uitwijken.
 
 Afwijkende bestaande PostgreSQL-objecten worden niet met `--force` overgenomen. Een collision zonder correcte tenantmarker vereist handmatige inspectie.
 
@@ -111,7 +115,7 @@ local <eigen-database> <eigen-linux-db-user> peer
 local all              <eigen-linux-db-user> reject
 ```
 
-De platform-include staat vóór generieke bestaande HBA-regels. Daardoor kan een latere brede `local all all ...` regel de tenantgrens niet omzeilen.
+Alle bestanden in de gecontroleerde platform-include staan vóór bestaande niet-platform HBA-regels. Daardoor kan een latere brede `local all all ...` regel de tenantgrens niet omzeilen. De socket-only serverinstelling voorkomt daarnaast dat TCP/`host`-regels als alternatief authenticatiepad dienen.
 
 ## Schema v1
 
