@@ -42,6 +42,16 @@ function release47GenegeerdPad(string $rel): bool
     return preg_match('/\.sqlite3?$/Di', $rel) === 1;
 }
 
+function release47VerbodenGeheimPad(string $rel): bool
+{
+    $rel = ltrim(str_replace('\\', '/', $rel), '/');
+    $basis = strtolower(basename($rel));
+    if (in_array($basis, ['.env.example', '.env.sample', '.env.template'], true)) return false;
+    if ($basis === '.env' || str_starts_with($basis, '.env.')) return true;
+    if (in_array($basis, ['id_rsa', 'id_ed25519', 'credentials.json', 'secrets.json'], true)) return true;
+    return preg_match('/\.(?:pem|key|p12|pfx)$/Di', $basis) === 1;
+}
+
 function release47Manifest(string $root): array
 {
     $root = runtime41BestaandPad($root, 'Releasebron', true);
@@ -54,6 +64,7 @@ function release47Manifest(string $root): array
         $pad = $info->getPathname();
         $rel = ltrim(substr(str_replace('\\', '/', $pad), strlen(str_replace('\\', '/', $root))), '/');
         if ($rel === '' || release47GenegeerdPad($rel)) continue;
+        if (release47VerbodenGeheimPad($rel)) throw new RuntimeException("Releasebron bevat een verboden secretachtig bestand: {$rel}");
         if (is_link($pad)) throw new RuntimeException("Releasebron bevat symlink: {$rel}");
         if ($info->isDir()) continue;
         if (!$info->isFile()) throw new RuntimeException("Releasebron bevat onverwacht object: {$rel}");
@@ -136,6 +147,7 @@ function release47Plan(string $sourceRoot, string $commit, string $platformRoot,
             'no_secrets_in_plan' => true,
             'source_symlinks_forbidden' => true,
             'mutable_tenant_data_excluded' => true,
+            'unexpected_secretlike_files_rejected' => true,
             'release_content_hash_required' => true,
             'root_apply_only' => true,
         ],
