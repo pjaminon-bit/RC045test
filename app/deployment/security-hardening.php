@@ -39,3 +39,30 @@ function security521ReleaseBinding(
         throw new RuntimeException('Actieve release-state wijkt af van het fase-5.2 plan.');
     }
 }
+
+function security521GitSourceBinding(
+    string $expectedCommit,
+    string $expectedRoot,
+    string $gitTopLevel,
+    string $gitHead,
+    string $gitStatus
+): void {
+    $expectedCommit = strtolower(trim($expectedCommit));
+    $gitHead = strtolower(trim($gitHead));
+    if (preg_match('/^[0-9a-f]{40}$/D', $expectedCommit) !== 1
+        || preg_match('/^[0-9a-f]{40}$/D', $gitHead) !== 1) {
+        throw new RuntimeException('Git source-binding bevat geen exacte 40-teken commit.');
+    }
+    $expectedRoot = runtime41NormPad($expectedRoot);
+    $gitTopLevel = runtime41NormPad(trim($gitTopLevel));
+    if (!runtime41IsAbsoluutPad($expectedRoot) || !runtime41IsAbsoluutPad($gitTopLevel)
+        || !hash_equals($expectedRoot, $gitTopLevel)) {
+        throw new RuntimeException('Git top-level wijkt af van de geplande releasebron.');
+    }
+    if (!hash_equals($expectedCommit, $gitHead)) {
+        throw new RuntimeException('Git HEAD wijkt af van de geplande releasecommit.');
+    }
+    if (trim($gitStatus) !== '') {
+        throw new RuntimeException('Git releasebron bevat tracked of untracked wijzigingen.');
+    }
+}
