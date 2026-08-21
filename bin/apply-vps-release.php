@@ -95,13 +95,16 @@ function apply47TenantLijst(array $plan): array
     }
     if($uit===[])apply47Stop('Geen provisioned tenants gevonden voor releasepreflight.');usort($uit,static fn($a,$b)=>strcmp($a['tenant'],$b['tenant']));return $uit;
 }
-function apply47PhpSyntax(string $release, array $manifest): void
+function apply47PhpSyntax(string $release, array $manifest, array $tenants=[]): void
 {
-    foreach(array_keys($manifest['files'])as$rel){if(!str_ends_with(strtolower($rel),'.php'))continue;[$c,,$e]=apply47Run([PHP_BINARY,'-l',$release.'/'.$rel]);if($c!==0)apply47Stop("PHP syntax faalt in kandidaat {$rel}: {$e}");}
+    $binaries=[];
+    if($tenants===[])$binaries[PHP_BINARY]=true;
+    else foreach($tenants as$t){$bin='/usr/bin/php'.(string)$t['php_version'];if(!is_file($bin)||!is_executable($bin))apply47Stop('PHP CLI voor tenantversie ontbreekt of is niet executable: '.$bin);$binaries[$bin]=true;}
+    foreach(array_keys($binaries)as$bin){foreach(array_keys($manifest['files'])as$rel){if(!str_ends_with(strtolower($rel),'.php'))continue;[$c,,$e]=apply47Run([$bin,'-l',$release.'/'.$rel]);if($c!==0)apply47Stop("PHP syntax faalt onder {$bin} in kandidaat {$rel}: {$e}");}}
 }
 function apply47CandidateProbe(string $release, array $tenants): void
 {
-    $checker=$release.'/bin/check-release-tenant.php';foreach($tenants as$t){$env=['VERENIGING_REQUIRE_TENANT_CONFIG'=>'1','VERENIGING_CONFIG_FILE'=>$t['config'],'VERENIGING_PRIVATE_ROOT'=>$t['private'],'PATH'=>'/usr/sbin:/usr/bin:/sbin:/bin'];[$c,,$e]=apply47Run(['runuser','-u',$t['user'],'--','/usr/bin/env','VERENIGING_REQUIRE_TENANT_CONFIG=1','VERENIGING_CONFIG_FILE='.$t['config'],'VERENIGING_PRIVATE_ROOT='.$t['private'],'/usr/bin/php',$checker,'--expected-tenant='.$t['tenant']],$env);if($c!==0)apply47Stop('Kandidaatrelease faalt tenantprobe voor '.$t['tenant'].($e!==''?': '.$e:''));}
+    $checker=$release.'/bin/check-release-tenant.php';foreach($tenants as$t){$php='/usr/bin/php'.(string)$t['php_version'];if(!is_file($php)||!is_executable($php))apply47Stop('PHP CLI voor tenantprobe ontbreekt of is niet executable: '.$php);$env=['VERENIGING_REQUIRE_TENANT_CONFIG'=>'1','VERENIGING_CONFIG_FILE'=>$t['config'],'VERENIGING_PRIVATE_ROOT'=>$t['private'],'PATH'=>'/usr/sbin:/usr/bin:/sbin:/bin'];[$c,,$e]=apply47Run(['runuser','-u',$t['user'],'--','/usr/bin/env','VERENIGING_REQUIRE_TENANT_CONFIG=1','VERENIGING_CONFIG_FILE='.$t['config'],'VERENIGING_PRIVATE_ROOT='.$t['private'],$php,$checker,'--expected-tenant='.$t['tenant']],$env);if($c!==0)apply47Stop('Kandidaatrelease faalt tenantprobe voor '.$t['tenant'].($e!==''?': '.$e:''));}
 }
 function apply47Health(string $release, array $tenants, bool $stop=true): bool
 {
@@ -137,7 +140,7 @@ if($mode==='bootstrap'){
     $entry=apply47Stage($plan,$manifest);apply47PhpSyntax((string)$entry['path'],$manifest);apply47Switch($plan,$entry);apply47AtomicJson((string)$plan['paths']['state'],apply47State($entry,null,null,0,true));apply47Event($plan,'bootstrap',['mode'=>'bootstrap','to_commit'=>$entry['commit'],'result'=>'ok','tenant_count'=>0]);echo'BOOTSTRAP OK  commit='.$entry['commit']."\n";exit(0);
 }
 if($mode==='deploy'){
-    $state=apply47StateLees($plan);apply47CurrentMoet($plan,$state['active']);$tenants=apply47TenantLijst($plan);apply47Health((string)$state['active']['path'],$tenants,true);$candidate=apply47Stage($plan,$manifest);if(hash_equals((string)$candidate['commit'],(string)$state['active']['commit']))apply47Stop('Kandidaatrelease is al actief.');apply47PhpSyntax((string)$candidate['path'],$manifest);apply47CandidateProbe((string)$candidate['path'],$tenants);apply47ApacheTest();
+    $state=apply47StateLees($plan);apply47CurrentMoet($plan,$state['active']);$tenants=apply47TenantLijst($plan);apply47Health((string)$state['active']['path'],$tenants,true);$candidate=apply47Stage($plan,$manifest);if(hash_equals((string)$candidate['commit'],(string)$state['active']['commit']))apply47Stop('Kandidaatrelease is al actief.');apply47PhpSyntax((string)$candidate['path'],$manifest,$tenants);apply47CandidateProbe((string)$candidate['path'],$tenants);apply47ApacheTest();
     $transition=['mode'=>'deploy','from'=>$state['active'],'to'=>$candidate,'started_at_utc'=>gmdate('Y-m-d\TH:i:s\Z')];apply47AtomicJson((string)$plan['paths']['state'],apply47State($state['active'],$state['previous']??null,$transition,count($tenants),(bool)($state['bootstrap']??false)));apply47Switch($plan,$candidate);if(!apply47FpmReload($tenants)||!apply47Health((string)$candidate['path'],$tenants,false))apply47Herstel($plan,$state,$tenants,(string)$candidate['commit']);
     $nieuw=apply47State($candidate,$state['active'],null,count($tenants),false);apply47AtomicJson((string)$plan['paths']['state'],$nieuw);apply47Event($plan,'deploy_succeeded',['mode'=>'deploy','from_commit'=>$state['active']['commit'],'to_commit'=>$candidate['commit'],'result'=>'ok','tenant_count'=>count($tenants)]);echo'DEPLOY OK  commit='.$candidate['commit'].' tenants='.count($tenants)."\n";exit(0);
 }
