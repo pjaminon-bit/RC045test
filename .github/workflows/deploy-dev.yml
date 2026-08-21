@@ -69,6 +69,7 @@ jobs:
           php tests/phase45-database-provisioning.php
           php tests/phase451-database-reaudit.php
           php tests/phase46-monitoring-logging.php
+          php tests/phase47-release-rollback.php
           php tests/private-store-pdo-sqlite.php
           php tests/phase321-pdo-isolation.php
           php tests/private-store-pdo-failclosed.php
@@ -161,6 +162,7 @@ jobs:
           wacht_op_status "$basis/app/paneel-hulp.php" 403 nee
           wacht_op_status "$basis/app/operational-log.php" 403 nee
           wacht_op_status "$basis/app/deployment/monitoring-contract.php" 403 nee
+          wacht_op_status "$basis/app/deployment/release-contract.php" 403 nee
           wacht_op_status "$basis/aanmeldingen-opslag.php" 403 nee
           wacht_op_status "$basis/groepen-opslag.php" 403 nee
           wacht_op_status "$basis/ledenlabels-opslag.php" 403 nee
@@ -182,6 +184,9 @@ jobs:
           wacht_op_status "$basis/bin/prepare-vps-monitoring.php" 403 nee
           wacht_op_status "$basis/bin/apply-vps-monitoring.php" 403 nee
           wacht_op_status "$basis/bin/check-vps-health.php" 403 nee
+          wacht_op_status "$basis/bin/prepare-vps-release.php" 403 nee
+          wacht_op_status "$basis/bin/apply-vps-release.php" 403 nee
+          wacht_op_status "$basis/bin/check-release-tenant.php" 403 nee
           wacht_op_status "$basis/tests/phase35-vps-deployment.php" 403 nee
           wacht_op_status "$basis/tests/phase351-security-reaudit.php" 403 nee
           wacht_op_status "$basis/tests/phase41-vps-runtime-isolation.php" 403 nee
@@ -192,10 +197,12 @@ jobs:
           wacht_op_status "$basis/tests/phase45-database-provisioning.php" 403 nee
           wacht_op_status "$basis/tests/phase451-database-reaudit.php" 403 nee
           wacht_op_status "$basis/tests/phase46-monitoring-logging.php" 403 nee
+          wacht_op_status "$basis/tests/phase47-release-rollback.php" 403 nee
           wacht_op_status "$basis/docs/VPS-DEPLOYMENT.md" 403 nee
           wacht_op_status "$basis/docs/VPS-WEBSERVER.md" 403 nee
           wacht_op_status "$basis/docs/VPS-DNS.md" 403 nee
           wacht_op_status "$basis/docs/VPS-TLS.md" 403 nee
           wacht_op_status "$basis/docs/VPS-DATABASE.md" 403 nee
           wacht_op_status "$basis/docs/VPS-MONITORING.md" 403 nee
+          wacht_op_status "$basis/docs/VPS-RELEASES.md" 403 nee
           wacht_op_status "$basis/dev-build.json" 403 nee
