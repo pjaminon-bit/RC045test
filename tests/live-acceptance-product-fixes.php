@@ -6,7 +6,7 @@ $ht=(string)file_get_contents($root.'/.htaccess');
 liveFixCheck(str_contains($ht,'Header always unset X-Powered-By')&&str_contains($ht,'Header unset X-Powered-By'),'Apache verwijdert X-Powered-By in normale en always-headertabel');
 
 $endpoint=(string)file_get_contents($root.'/public-content.php');
-liveFixCheck(str_contains($endpoint,'publicContentTenantRoot() === null')&&str_contains($endpoint,'http_response_code(204)'),'ontbrekende standalone override geeft 204 in plaats van browser-404');
+liveFixCheck(str_contains($endpoint,'tenantRuntimeExternConfigPad()')&&str_contains($endpoint,'tenantRuntimeConfigVerplicht()')&&str_contains($endpoint,'publicContentLegacyRoot() . DIRECTORY_SEPARATOR . $bestand')&&str_contains($endpoint,'http_response_code(204)'),'ontbrekende standalone override wordt vóór tenant-store resolutie als 204 behandeld');
 liveFixCheck(str_contains($endpoint,'http_response_code(404)'),'tenant/ongeldige content blijft fail-closed met 404');
 
 $seo=(string)file_get_contents($root.'/app/content/seo-head.php');

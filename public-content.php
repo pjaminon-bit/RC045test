@@ -11,24 +11,48 @@ if (!in_array($methode, ['GET', 'HEAD'], true)) {
 }
 
 $sleutel = isset($_GET['key']) && is_string($_GET['key']) ? $_GET['key'] : '';
-if ($sleutel === '' || publicContentBestandsnaam($sleutel) === null) {
+$bestand = publicContentBestandsnaam($sleutel);
+if ($sleutel === '' || $bestand === null) {
     http_response_code(404);
     header('Cache-Control: no-store');
     exit;
 }
 
-$data = publicContentLees($sleutel);
-if ($data === null) {
-    // Standalone/DEV draait met ingebouwde template-defaults als een optionele
-    // beheeroverride nog niet bestaat. Voor dat compatibiliteitsscenario is
-    // "geen override" geen fout: 204 voorkomt onnodige browser-404's terwijl
-    // de pagina zijn bestaande defaults behoudt. Externe tenants mogen juist
-    // nooit op gedeelde/legacy data terugvallen en blijven daarom fail-closed
-    // met 404 wanneer hun eigen tenantdataset ontbreekt.
-    if (publicContentTenantRoot() === null) {
+// Standalone/DEV gebruikt ingebouwde template-defaults wanneer een optionele
+// beheer-override nog niet als JSON-bestand bestaat. Detecteer dat vóór de
+// tenant-store wordt geresolved: zo is een ontbrekend legacybestand geen
+// configuratiefout en veroorzaakt de browser geen 404/500. Zodra een externe
+// tenantconfiguratie actief/verplicht is, geldt deze compatibiliteitsroute
+// nadrukkelijk niet en blijft de tenant-store fail-closed.
+$externPad = tenantRuntimeExternConfigPad();
+$configVerplicht = tenantRuntimeConfigVerplicht();
+if ($externPad === null && !$configVerplicht) {
+    $legacyPad = publicContentLegacyRoot() . DIRECTORY_SEPARATOR . $bestand;
+    if (!is_file($legacyPad)) {
         http_response_code(204);
         header('Cache-Control: no-store');
         header('X-Content-Type-Options: nosniff');
+        exit;
+    }
+}
+
+try {
+    $data = publicContentLees($sleutel);
+} catch (Throwable $e) {
+    error_log('[platform] publieke content-store faalde voor dataset ' . $sleutel . ': ' . $e->getMessage());
+    http_response_code(500);
+    header('Cache-Control: no-store');
+    exit;
+}
+
+if ($data === null) {
+    // Een bestaand maar onleesbaar/ongeldig standalone bestand is géén
+    // ontbrekende override en mag dus niet stil als 204 worden gemaskeerd.
+    // Voor externe tenants betekent null eveneens dat de eigen dataset niet
+    // beschikbaar is; daar blijft 404 de veilige uitkomst.
+    if ($externPad === null && !$configVerplicht) {
+        http_response_code(500);
+        header('Cache-Control: no-store');
         exit;
     }
     http_response_code(404);
