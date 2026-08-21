@@ -22,7 +22,9 @@ try{
  c45(($dry['isolation']['owner_role_login']??true)===false&&($dry['isolation']['app_role_owns_database']??true)===false&&($dry['isolation']['app_role_ddl_forbidden']??false)===true,'aparte NOLOGIN owner houdt DDL buiten de app-role');
  c45(($dry['connection']['auth_method']??'')==='peer'&&($dry['connection']['password_required']??true)===false&&($dry['connection']['unix_socket_dir']??'')==='/var/run/postgresql','productieverbinding gebruikt uitsluitend lokale Unix-socket peer-auth zonder password');
  c45(($dry['postgresql']['minimum_major_version']??0)===16&&($dry['postgresql']['hba_allow_own_database_only']??false)===true&&($dry['postgresql']['hba_reject_other_databases_for_tenant_user']??false)===true,'PostgreSQL 16+ en expliciete allow-own/reject-other HBA zijn contractueel verplicht');
- c45(($dry['security']['no_database_secret_in_git']??false)===true&&($dry['security']['no_database_secret_in_runtime_bundle']??false)===true&&($dry['filesystem']['database_secrets_file']??'x')===null,'databasecontract serializeert bewust geen secretbestand of wachtwoord');
+ c45(($dry['postgresql']['socket_only_required']??false)===true&&array_key_exists('listen_addresses_required',$dry['postgresql']??[])&&$dry['postgresql']['listen_addresses_required']==='','databaseplan verankert socket-only PostgreSQL met lege listen_addresses');
+ c45(($dry['security']['no_database_secret_in_git']??false)===true&&($dry['security']['no_database_secret_in_runtime_bundle']??false)===true&&array_key_exists('database_secrets_file',$dry['filesystem']??[])&&$dry['filesystem']['database_secrets_file']===null,'databasecontract serializeert bewust geen secretbestand of wachtwoord');
+ c45(($dry['security']['app_privilege_drift_normalized']??false)===true,'databasecontract vereist normalisatie van oude extra app-rechten');
  c45(($dry['schema_contract']['schema_name']??'')==='vst'&&($dry['schema_contract']['schema_version']??0)===1&&($dry['schema_contract']['runtime_ddl_forbidden']??false)===true,'schema v1 wordt via provisioning beheerd en runtime-DDL is verboden');
 
  [$prepA,$outA]=run45([PHP_BINARY,$root.'/bin/prepare-vps-database.php','--runtime-plan='.$rA]);[$prepB,$outB]=run45([PHP_BINARY,$root.'/bin/prepare-vps-database.php','--runtime-plan='.$rB]);
@@ -43,9 +45,10 @@ try{
  $sql=(string)file_get_contents($a.'/database/001-private-store.sql');
  c45(str_contains($sql,'CREATE SCHEMA IF NOT EXISTS vst AUTHORIZATION '.($jA['isolation']['owner_role']??''))&&str_contains($sql,'ALTER TABLE vst.vereniging_private_store OWNER TO '.($jA['isolation']['owner_role']??'')),'schema en tabel blijven eigendom van NOLOGIN owner');
  c45(str_contains($sql,'REVOKE ALL ON SCHEMA public FROM PUBLIC')&&str_contains($sql,'REVOKE ALL ON SCHEMA vst FROM PUBLIC'),'PUBLIC krijgt geen public- of tenant-schemarechten');
- c45(str_contains($sql,'GRANT USAGE ON SCHEMA vst TO '.($jA['isolation']['app_role']??''))&&str_contains($sql,'GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE vst.vereniging_private_store TO '.($jA['isolation']['app_role']??'')),'app-role krijgt alleen benodigde schema-USAGE en DML');
+ c45(str_contains($sql,'REVOKE ALL ON SCHEMA public FROM '.($jA['isolation']['app_role']??''))&&str_contains($sql,'REVOKE ALL ON TABLE vst.vereniging_private_store FROM '.($jA['isolation']['app_role']??'')),'migratie trekt oude directe app-schema/table grants eerst in');
+ c45(str_contains($sql,'GRANT USAGE ON SCHEMA vst TO '.($jA['isolation']['app_role']??''))&&str_contains($sql,'GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE vst.vereniging_private_store TO '.($jA['isolation']['app_role']??'')),'app-role krijgt daarna alleen benodigde schema-USAGE en DML');
  c45(!str_contains($sql,'GRANT CREATE')&&!str_contains($sql,'GRANT ALL'),'migratie verleent geen CREATE/ALL aan app-role');
- c45(str_contains($sql,"VALUES ('private_store', 1, 'noorderhaven')"),'database bevat vaste tenantmarker + schemaversie');
+ c45(str_contains($sql,"VALUES ('private_store', 1, 'noorderhaven')")&&str_contains($sql,'ON CONFLICT (component) DO NOTHING'),'database bevat vaste tenantmarker + schemaversie die bij conflict niet stil wordt herschreven');
 
  $perm=fileperms($pA);c45($perm!==false&&(($perm&0777)===0640),'database-plan.json krijgt server-only 0640');
  [$checkCode,$checkOut]=run45([PHP_BINARY,$root.'/bin/apply-vps-database.php','--database-plan='.$pA,'--check']);c45($checkCode===0&&str_contains($checkOut,'bundle valide'),'root-vrije database --check valideert plan en artifacts');
@@ -78,9 +81,9 @@ try{
  c45(str_contains($apply,"'runuser', '-u', 'postgres'")&&str_contains($apply,'function apply45PeerCheck'),'adminacties lopen via postgres OS-user en tenant-login heeft een aparte peercheck');
  c45(str_contains($apply,'PASSWORD NULL')&&!str_contains($apply,'PGPASSWORD'),'app-role heeft expliciet geen PostgreSQL password en tool gebruikt geen PGPASSWORD');
  c45(str_contains($apply,"local all")===false&&str_contains($apply,'database45HbaConfig'),'HBA-inhoud komt uitsluitend uit het gevalideerde pure contract');
- c45(str_contains($apply,'strpos(file_name')&&str_contains($apply,'eersteBuitenPlatform'),'HBA ordering vergelijkt tenantregels met eerste niet-platformregel en ondersteunt meerdere tenant-HBA-bestanden');
+ c45(str_contains($apply,'laatstePlatform')&&str_contains($apply,'eersteBuitenPlatform')&&str_contains($apply,'type IS NOT NULL'),'HBA ordering bewijst dat alle platform-authregels vóór niet-platformregels staan');
  c45(str_contains($apply,"'-d', 'postgres'")&&str_contains($apply,'Cross-database HBA-reject'),'apply-tool bewijst dat tenant OS-user niet naar postgres/andere database kan uitwijken');
- c45(str_contains($apply,'REVOKE ALL ON DATABASE')&&str_contains($apply,'has_schema_privilege')&&str_contains($apply,"'CREATE')::text"),'root-apply controleert least-privilege database- en schemarechten');
+ c45(str_contains($apply,'REVOKE ALL ON DATABASE')&&str_contains($apply,'FROM ' . '$appUser')&&str_contains($apply,'has_database_privilege')&&str_contains($apply,"'TEMPORARY'")&&str_contains($apply,"'TRIGGER'"),'root-apply normaliseert en controleert database/schema/table least privilege exact');
  c45(str_contains($check,'posix_geteuid()')&&str_contains($check,"extension_loaded('pdo_pgsql')"),'runtimecheck moet als exact tenant Linux-user met pdo_pgsql draaien');
  c45(str_contains($check,'beginTransaction()')&&str_contains($check,'rollBack()')&&str_contains($check,'CREATE TABLE vst.__phase45_ddl_probe'),'runtimecheck test DML rollback-safe en verwacht DDL-weigering');
 }finally{putenv('VERENIGING_CONFIG_FILE');rr45($tmp);}
