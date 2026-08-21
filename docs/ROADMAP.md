@@ -22,45 +22,45 @@ De gedeelde applicatie kan daarmee meerdere verenigingen vanuit dezelfde codebas
 
 ## Fase 4 — VPS & productie-infrastructuur
 
-**Ontwikkelstatus: 4.1 t/m 4.8 code/CI/merge/DEV afgerond.** De daadwerkelijke root-toepassing en live DNS/TLS/databasehandelingen volgen pas op de echte productie-VPS.
+**Ontwikkelstatus: 4.1 t/m 4.8 code/CI/merge afgerond.** De daadwerkelijke root-toepassing en live DNS/TLS/databasehandelingen zijn nog niet als echte productie-VPS-acceptatie uitgevoerd.
 
 ### 4.1 — VPS runtime & Linux-isolatie
-**Status: code en CI gereed; root-toepassing volgt op productie.**
+**Status: code en CI gereed; echte VPS-validatie volgt in fase 5.3.**
 Per tenant een unieke no-login Linux-user/group, eigen PHP-FPM pool/socket en private session/tmp-opslag. Gedeelde code blijft centraal read-only. 4.1.1 heraudit controleert UID/GID-collisions en actieve processen fail-closed.
 Zie `docs/VPS-RUNTIME-ISOLATION.md`.
 
 ### 4.2 — Apache webserver & vhosts
-**Status: code en CI gereed; productie-activatie volgt op productie.**
+**Status: code en CI gereed; echte VPS-validatie volgt in fase 5.3.**
 Exacte ServerName, neutrale default-vhost, vaste redirects zonder Host-reflectie, per-tenant FPM-routing en server-side blokkade van private/tooling/VCS-paden.
 Zie `docs/VPS-WEBSERVER.md`.
 
 ### 4.3 — DNS readiness
-**Status: code en CI gereed; echte providerrecords/readiness volgen op productie.**
+**Status: code en CI gereed; live DNS-readiness volgt in fase 5.3.**
 Direct A/AAAA of één CNAME-hop, exacte RRset-match en minimaal drie consistente live resolvermetingen. Geen DNS-providercredentials of automatische providerwrites in tenantbundles.
 Zie `docs/VPS-DNS.md`.
 
 ### 4.4 — TLS/HTTPS
-**Status: code en CI gereed; certificaatuitgifte volgt op productie.**
+**Status: code en CI gereed; echte certificaatuitgifte volgt in fase 5.3.**
 Certbot webroot HTTP-01, neutrale HTTPS-catchall, exacte Host+SNI-binding, certificaat/key-validatie, HSTS en Apache configtest vóór reload/activatie.
 Zie `docs/VPS-TLS.md`.
 
 ### 4.5 — PostgreSQL provisioning
-**Status: code en CI gereed; echte databases volgen op productie.**
+**Status: code en CI gereed; echte databaseprovisioning volgt in fase 5.3.**
 PostgreSQL 16+, één database per tenant, aparte NOLOGIN-owner, app-role gelijk aan de Linux/FPM-user en Unix-socket peer authentication zonder databasewachtwoord. 4.5.1 houdt de app-role NOLOGIN totdat HBA en least privilege aantoonbaar veilig zijn.
 Zie `docs/VPS-DATABASE.md`.
 
 ### 4.6 — Monitoring & logging
-**Status: code en CI gereed; installatie volgt op productie.**
+**Status: code en CI gereed; echte service/timer/log-validatie volgt in fase 5.3.**
 Informatie-arme healthcheck, lokale Apache/FPM/PostgreSQL/TLS/app/disk-probes, privacyarme operationele logging, 14 dagen retentie en gededupliceerde alerts.
 Zie `docs/VPS-MONITORING.md`.
 
 ### 4.7 — Release & rollback automation
-**Status: code en CI gereed; echte releasewissels volgen op productie.**
+**Status: code en CI gereed; echte releasewissel/rollback volgt in fase 5.3.**
 Immutable releases per commit, inhoudsmanifest, atomische `current`-wissel, kandidaattenantpreflight, volledige health na activatie en automatische/handmatige rollback naar uitsluitend de vorige gevalideerde release.
 Zie `docs/VPS-RELEASES.md`.
 
 ### 4.8 — Tenant lifecycle
-**Status: code en CI gereed; lifecyclemutaties volgen op productie.**
+**Status: code en CI gereed; echte lifecyclevalidatie volgt in fase 5.3.**
 Adopteren, uitschakelen, heractiveren, volledige export, `pending_delete`, 24 uur wachttijd, definitieve purge en crash-recovery. Lifecycle-state/audit zijn root-owned en tenantgebonden. DNS-providerrecords worden nooit automatisch verwijderd.
 Zie `docs/VPS-LIFECYCLE.md`.
 
@@ -68,7 +68,7 @@ Zie `docs/VPS-LIFECYCLE.md`.
 
 ### 5.1 — Platformbeheer / superbeheer GUI
 
-**Status: code, CI en merge gereed; productie-installatie volgt via fase 5.2.**
+**Status: code, CI en merge gereed; echte installatie/acceptatie volgt via fase 5.3.**
 
 Omvat:
 
@@ -91,7 +91,7 @@ Zie `docs/VPS-CONTROL-PLANE.md`.
 
 ### 5.2 — First-VPS productiebootstrap
 
-**Status: code gereed en volledig gehard in 5.2.1; CI op de kandidaat-PR is groen. Productietoepassing blijft uitgesteld tot de echte VPS.**
+**Status: code, CI en merge gereed; volledig gehard in 5.2.1. Productietoepassing is nog niet uitgevoerd.**
 
 Doel: de handmatige productievoorbereiding reduceren tot één gecontroleerde, hervatbare operatorflow. De implementatie omvat:
 
@@ -119,14 +119,50 @@ Zie `docs/VPS-FIRST-BOOTSTRAP.md`.
 
 ### 5.2.1 — Production security hardening
 
-**Status: kandidaatimplementatie afgerond; volledige regressiematrix groen.**
+**Status: afgerond en gemerged naar `main` via PR #37; definitieve PR-validatie was groen.**
 
-Deze heraudit sluit de resterende productiegrenzen rond 4.7 t/m 5.2: immutable release-metadata, purge/recovery-binding, control-plane identity/auth/rate limiting, executor-resultaatintegriteit, subprocess-deadlocks, absolute PATH-binding, production preflight en Git source/commit-binding. De volgende stap is de kandidaat-PR afronden en mergen; daarna volgt pas de echte VPS-validatie.
+Deze heraudit sloot de resterende productiegrenzen rond 4.1 t/m 5.2: immutable release-metadata, purge/recovery-binding, control-plane identity/auth/rate limiting, executor-resultaatintegriteit, subprocess-deadlocks, absolute binary-binding, production preflight en Git source/commit-binding.
+
+### 5.3 — Eerste echte VPS-validatie
+
+**Status: volgende fase; nog niet uitgevoerd.**
+
+Doel: alle reeds gebouwde productiecontracten aantoonbaar op één schone Debian/Ubuntu-VPS uitvoeren en accepteren voordat reguliere verenigingen worden onboard.
+
+Volgorde:
+
+1. VPS-readiness volgens `docs/VPS-READINESS.md`;
+2. vereiste packages/modules/services vooraf installeren en configureren;
+3. platformbeheerhost en eerste testtenanthost kiezen;
+4. DNS-records handmatig bij de provider zetten;
+5. exacte schone Git-checkout van de gekozen releasecommit op de VPS plaatsen;
+6. fase-5.2 bundle genereren en root-vrij `--check` uitvoeren;
+7. first-VPS bootstrap uitvoeren;
+8. platformbeheer en eerste testtenant functioneel controleren;
+9. monitoring/timers/logrotate over echte runtime controleren;
+10. suspend → activate en volledige export op de testtenant beproeven;
+11. releasewissel + rollback op de productieachtige VPS beproeven;
+12. resultaten vastleggen en fase 4.1 t/m 5.2 pas daarna als **op echte VPS gevalideerd** markeren.
+
+Een destructieve purge wordt alleen op een expliciete wegwerp-testtenant getest.
+
+Zie `docs/VPS-READINESS.md` en `docs/VPS-FIRST-BOOTSTRAP.md`.
+
+## Niet-blokkerende technische schuld
+
+Na fase 2 zijn nog enkele compatibiliteits-/opruimpunten bekend. Deze blokkeren fase 5.3 niet:
+
+- fysiek runtime-dode legacyformuliercode in `beheer/index.php`;
+- enkele oudere JSON-writers die nog niet op één gedeelde atomische writer zijn gestandaardiseerd;
+- publieke legacy-markup die runtime door de templatefilter wordt gecorrigeerd;
+- historische `rc045*` functienamen/variabelen/comments;
+- RC045-stijlwaarden als standalone fallback-defaults;
+- legacy standalone masterconfigcompatibiliteit buiten nieuwe VPS-tenants.
+
+Deze punten horen bij een latere mechanische opschoningsfase en mogen niet ongemerkt onderdeel worden van de eerste productiebootstrap.
 
 ## Volgorde vanaf nu
 
-De ontwikkelvolgorde is:
+**Statusdocumentatie afronden → post-merge `main`/DEV opnieuw bewijzen → fase 5.3 VPS-readiness → echte first-VPS bootstrap → acceptatie van control-plane/tenant/monitoring/lifecycle/release-rollback → verdere platformfuncties.**
 
-**5.2.1 PR afronden/merge → echte VPS-validatie met een eerste tenant → verdere platformfuncties.**
-
-Een fase kan code/automation al gereed hebben voordat de daadwerkelijke productiehandeling op de VPS is uitgevoerd. Dat verschil blijft per fase expliciet vermeld; **“code gereed” is nooit hetzelfde als “op productie toegepast”.**
+Een fase kan code/automation al gereed hebben voordat de daadwerkelijke productiehandeling op de VPS is uitgevoerd. Dat verschil blijft per fase expliciet vermeld; **“code gereed” is nooit hetzelfde als “op productie toegepast/gevalideerd”.**
