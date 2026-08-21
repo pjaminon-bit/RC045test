@@ -308,7 +308,7 @@ function database45MigrationSql(array $plan): string
         'REVOKE ALL ON TABLE vst.vereniging_private_store FROM ' . $app . ';',
         'INSERT INTO vst.vereniging_schema_meta (component, schema_version, tenant_key)',
         "VALUES ('private_store', 1, {$tenant})",
-        'ON CONFLICT (component) DO UPDATE SET schema_version = EXCLUDED.schema_version, tenant_key = EXCLUDED.tenant_key, applied_at = CURRENT_TIMESTAMP;',
+        'ON CONFLICT (component) DO NOTHING;',
         'GRANT USAGE ON SCHEMA vst TO ' . $app . ';',
         'GRANT SELECT ON TABLE vst.vereniging_schema_meta TO ' . $app . ';',
         'GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE vst.vereniging_private_store TO ' . $app . ';',
