@@ -1,0 +1,116 @@
+name: Full regression acceptance
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+  workflow_run:
+    workflows:
+      - Validate and deploy RC045test
+    types:
+      - completed
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rc045test-full-regression-${{ github.event.pull_request.number || github.event.workflow_run.id || github.run_id }}
+  cancel-in-progress: true
+
+env:
+  LIVE_DEV_BASE_URL: https://rc045.nl/dev
+  PLAYWRIGHT_TEST_BASE_URL: https://rc045.nl/dev
+
+jobs:
+  source-regression:
+    if: >-
+      github.event_name == 'pull_request' ||
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_branch == 'main' &&
+       github.event.workflow_run.conclusion == 'success')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact te testen bron
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Runtimeversies
+        shell: bash
+        run: |
+          set -euo pipefail
+          php -v
+          node --version
+          npm --version
+
+      - name: PHP syntax van volledige repository
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r -d '' bestand; do
+            php -l "$bestand"
+          done < <(find . -type f -name '*.php' -not -path './node_modules/*' -print0)
+
+      - name: Alle functionele technische en securityregressies
+        shell: bash
+        run: bash tests/run-all.sh
+
+  live-security:
+    needs: source-regression
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_branch == 'main' &&
+       github.event.workflow_run.conclusion == 'success')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact gedeployde bron
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Actieve DEV securityregressie
+        shell: bash
+        run: bash tests/live-dev-security.sh
+
+  live-browser:
+    needs: source-regression
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_branch == 'main' &&
+       github.event.workflow_run.conclusion == 'success')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout exact gedeployde bron
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Installeer exact Playwright 1.62.1
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --no-save --no-package-lock @playwright/test@1.62.1
+          npx playwright install --with-deps chromium
+
+      - name: Functionele en optische browseracceptatie
+        shell: bash
+        run: npx playwright test tests/live-dev-browser.spec.js --workers=1 --reporter=line,html
+
+      - name: Bewaar screenshots en browserrapport
+        if: ${{ always() }}
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: browser-acceptance-${{ github.run_id }}
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: warn
+          retention-days: 30
