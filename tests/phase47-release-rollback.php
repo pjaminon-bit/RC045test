@@ -27,7 +27,6 @@ try{
  [$sec,$seco]=r47([PHP_BINARY,$root.'/bin/prepare-vps-release.php','--source='.$src,'--commit='.$commit,'--output='.$plans.'/x.json','--secret=nee']);c47($sec!==0&&str_contains($seco,'Secrets'),'release CLI weigert secretachtige argumenten');
  if(function_exists('symlink')){$outside=$tmp.'/outside';file_put_contents($outside,'x');@symlink($outside,$src.'/evil-link');try{release47Manifest($src);c47(false,'symlink in releasebron wordt geweigerd');}catch(Throwable$e){c47(str_contains($e->getMessage(),'symlink'),'symlink in releasebron wordt geweigerd');}@unlink($src.'/evil-link');}else c47(true,'symlinktest overgeslagen');
 
- // Pure 4.7 current/state bridge: bestaande infrahashes blijven geldig alleen bij expliciete managed state.
  $relRoot=$tmp.'/bridge/releases';@mkdir($relRoot,0755,true);$a=str_repeat('1',40);$b=str_repeat('2',40);foreach([$a,$b]as$c){$d=$relRoot.'/'.$c;@mkdir($d,0755,true);file_put_contents($d.'/.verenigingsplatform-release.json',json_encode(['schema'=>1,'phase'=>'4.7-release','commit'=>$c,'manifest_sha256'=>str_repeat($c[0],64),'immutable'=>true]));}
  $current=$tmp.'/bridge/current';@symlink('releases/'.$b,$current);$entryB=['commit'=>$b,'path'=>$relRoot.'/'.$b,'manifest_sha256'=>str_repeat('2',64)];$entryA=['commit'=>$a,'path'=>$relRoot.'/'.$a,'manifest_sha256'=>str_repeat('1',64)];file_put_contents($tmp.'/bridge/release-state.json',json_encode(['schema'=>1,'phase'=>'4.7-state','active'=>$entryB,'previous'=>$entryA,'transition'=>null]));
  c47(runtime41BeheerdeReleaseCurrent($current,(string)realpath($current)),'runtime accepteert current-wissel met exact gebonden actieve release-state');
@@ -39,11 +38,11 @@ try{
  c47(str_contains($apply,"'.current.tmp.'")&&str_contains($apply,'rename($tmp,$current)'),'current-wissel gebruikt tijdelijke symlink plus atomische rename');
  c47(str_contains($apply,'apply47Health((string)$state[\'active\'][\'path\']')&&str_contains($apply,'apply47CandidateProbe'),'deploy vereist gezonde huidige release en read-only kandidaatprobe');
  c47(strpos($apply,'apply47CandidateProbe')<strpos($apply,'apply47ApacheTest')&&strpos($apply,'apply47ApacheTest')<strrpos($apply,'apply47Switch($plan,$candidate)'),'tenantprobe en Apache configtest gebeuren vóór kandidaatswitch');
- c47(str_contains($apply,'systemctl\',\'reload')||str_contains($apply,"['systemctl','reload'"),'PHP-FPM wordt na codewissel gecontroleerd herladen');
+ c47(str_contains($apply,"['systemctl','reload'"),'PHP-FPM wordt na codewissel gecontroleerd herladen');
  c47(str_contains($apply,'apply47Herstel')&&str_contains($apply,'deploy_failed_rolled_back'),'mislukte post-switch deploy heeft expliciet rollbackpad');
- c47(str_contains($apply,"$state['previous']")&&str_contains($apply,'Geen vorige gevalideerde release beschikbaar'),'handmatige rollback gebruikt alleen previous uit state');
+ c47(str_contains($apply,"\$state['previous']")&&str_contains($apply,'Geen vorige gevalideerde release beschikbaar'),'handmatige rollback gebruikt alleen previous uit state');
  c47(!str_contains($apply,'rm -rf')&&!str_contains($apply,'unlink($final)'),'bestaande immutable releases worden nooit automatisch verwijderd');
- c47(str_contains($apply,"$mode==='bootstrap'")&&str_contains($apply,'tenantbasis is niet leeg'),'bootstrap is expliciet en alleen vóór tenantactivatie');
+ c47(str_contains($apply,"\$mode==='bootstrap'")&&str_contains($apply,'tenantbasis is niet leeg'),'bootstrap is expliciet en alleen vóór tenantactivatie');
  $cand=(string)file_get_contents($root.'/bin/check-release-tenant.php');c47(str_contains($cand,"SELECT 1")&&!str_contains($cand,'INSERT ')&&!str_contains($cand,'UPDATE ')&&!str_contains($cand,'DELETE '),'kandidaattenantprobe is database read-only');
  $workflow=(string)file_get_contents($root.'/.github/workflows/deploy-dev.yml');c47(str_contains($workflow,'phase47-release-rollback.php'),'fase 4.7 test draait in CI');c47(str_contains($workflow,'/bin/apply-vps-release.php')&&str_contains($workflow,'/tests/phase47-release-rollback.php'),'4.7 tooling en test blijven via DEV HTTP-smoke afgeschermd');
 }finally{rm47($tmp);}
