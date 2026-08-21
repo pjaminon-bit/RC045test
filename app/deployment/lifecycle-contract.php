@@ -167,11 +167,13 @@ function lifecycle48Plan(array $c): array
             'tombstone_dir' => $stateDir . '/tombstones',
             'tombstone_file' => $stateDir . '/tombstones/' . $tenant . '.json',
             'export_root' => $exportRoot,
+            'lock_file' => '/run/lock/verenigingsplatform-lifecycle-' . $tenant . '.lock',
         ],
         'lifecycle' => [
             'managed_states' => ['active', 'suspended', 'pending_delete'],
             'adopt_active_required_for_existing_installation' => true,
             'suspend_blocks_web_database_and_fpm' => true,
+            'suspend_keeps_http01_for_acme' => true,
             'export_requires_suspended' => true,
             'delete_requires_suspended_and_verified_export' => true,
             'delete_enters_pending_delete' => true,
@@ -190,6 +192,7 @@ function lifecycle48Plan(array $c): array
             'state_root_owned' => true,
             'audit_append_only_intent' => true,
             'root_plan_snapshot_required_before_mutation' => true,
+            'one_lifecycle_action_per_tenant_at_a_time' => true,
         ],
     ];
 }
