@@ -66,7 +66,7 @@ function vpOps46Log(array $config, string $event, string $level = 'info', array 
 
 function vpOps46RegisterFatalLogger(array $config): void
 {
-    if (vpOps46ExternTenant($config) === null) return;
+    if (PHP_SAPI === 'cli' || vpOps46ExternTenant($config) === null) return;
     static $geregistreerd = false;
     if ($geregistreerd) return;
     $geregistreerd = true;
