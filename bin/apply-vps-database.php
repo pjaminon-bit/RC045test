@@ -21,7 +21,7 @@ function apply45Help(): void
     echo "  php bin/apply-vps-database.php --database-plan=/srv/verenigingen/club/database/database-plan.json --check\n";
     echo "  sudo php bin/apply-vps-database.php --database-plan=/srv/verenigingen/club/database/database-plan.json --apply\n\n";
     echo "--check valideert alleen de secretvrije bundle en heeft geen root/PostgreSQL nodig.\n";
-    echo "--apply vereist Linux root, PostgreSQL >=16 en de fase-4.1 tenant Linux-user.\n";
+    echo "--apply vereist Linux root, PostgreSQL >=16, socket-only PostgreSQL en de fase-4.1 tenant Linux-user.\n";
     echo "Er wordt bewust geen databasewachtwoord aangemaakt: lokale Unix-socket peer-auth bindt DB-login aan de kernel OS-user.\n";
 }
 
@@ -97,7 +97,6 @@ function apply45HbaInstalleer(array $plan): array
 {
     $includeDir = (string)$plan['postgresql']['hba_include_dir'];
     $includeRegel = (string)$plan['postgresql']['hba_include_directive'];
-    $bronHba = (string)$plan['bundle']['hba_file'];
     $tenantHba = $includeDir . '/' . (string)$plan['postgresql']['tenant_hba_filename'];
     $verwachtHba = database45HbaConfig($plan);
 
@@ -146,10 +145,15 @@ function apply45HbaInstalleer(array $plan): array
         $allow = apply45PgQuery("SELECT count(*) FROM pg_hba_file_rules WHERE file_name={$tenantLiteral} AND type='local' AND database=ARRAY[{$dbLiteral}]::text[] AND user_name=ARRAY[{$userLiteral}]::text[] AND auth_method='peer'");
         $deny = apply45PgQuery("SELECT count(*) FROM pg_hba_file_rules WHERE file_name={$tenantLiteral} AND type='local' AND database=ARRAY['all']::text[] AND user_name=ARRAY[{$userLiteral}]::text[] AND auth_method='reject'");
         if ($allow !== '1' || $deny !== '1') throw new RuntimeException('Exacte tenant peer-allow + cross-database reject zijn niet zichtbaar in pg_hba_file_rules.');
-        $eerste = apply45PgQuery("SELECT min(rule_number) FROM pg_hba_file_rules WHERE file_name={$tenantLiteral}");
-        $eersteGeneriek = apply45PgQuery("SELECT min(rule_number) FROM pg_hba_file_rules WHERE file_name<>{$tenantLiteral}");
-        if ($eerste === '' || ($eersteGeneriek !== '' && (int)$eerste > (int)$eersteGeneriek)) {
-            throw new RuntimeException('Platform-HBA staat niet vóór de bestaande generieke HBA-regels.');
+
+        // Meerdere tenantbestanden delen dezelfde include_dir. Een tenant mag dus
+        // na een eerder tenantbestand komen; alle platformregels samen moeten
+        // vóór iedere regel buiten de gecontroleerde platform-include staan.
+        $eersteTenant = apply45PgQuery("SELECT min(rule_number) FROM pg_hba_file_rules WHERE file_name={$tenantLiteral}");
+        $platformPrefix = database45SqlLiteral(rtrim($includeDir, '/') . '/');
+        $eersteBuitenPlatform = apply45PgQuery("SELECT min(rule_number) FROM pg_hba_file_rules WHERE strpos(file_name, {$platformPrefix}) <> 1");
+        if ($eersteTenant === '' || ($eersteBuitenPlatform !== '' && (int)$eersteTenant > (int)$eersteBuitenPlatform)) {
+            throw new RuntimeException('Platform-HBA include staat niet vóór de bestaande niet-platform HBA-regels.');
         }
         if (apply45PgQuery('SELECT pg_reload_conf()') !== 't') throw new RuntimeException('PostgreSQL HBA reload kon niet worden aangevraagd.');
     } catch (Throwable $e) {
@@ -238,6 +242,13 @@ try {
     }
     $versie = (int)apply45PgQuery('SHOW server_version_num');
     if ($versie < 160000) throw new RuntimeException('Fase 4.5 vereist PostgreSQL 16 of nieuwer voor gecontroleerde HBA includes/rule_number-validatie.');
+
+    // De productie-DB hoort uitsluitend lokaal via Unix sockets bereikbaar te
+    // zijn. Daarmee kan een brede TCP/host HBA-regel nooit een tweede loginpad
+    // naar de passwordloze tenantrollen openen.
+    if (trim(apply45PgQuery('SHOW listen_addresses')) !== '') {
+        throw new RuntimeException("Fase 4.5 vereist socket-only PostgreSQL: zet listen_addresses='' en herstart PostgreSQL gecontroleerd vóór --apply.");
+    }
     $socketDirs = array_map(static fn($v) => trim($v, " \t\n\r\0\x0B\"'"), explode(',', apply45PgQuery('SHOW unix_socket_directories')));
     if (!in_array('/var/run/postgresql', $socketDirs, true)) throw new RuntimeException('PostgreSQL luistert niet op de verplichte Unix-socket /var/run/postgresql.');
 
