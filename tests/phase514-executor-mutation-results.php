@@ -26,6 +26,7 @@ $production=[
  'tls'=>$root.'/bin/apply-vps-tls.php',
  'database'=>$root.'/bin/apply-vps-database.php',
  'monitoring'=>$root.'/bin/apply-vps-monitoring.php',
+ 'health'=>$root.'/bin/check-vps-health.php',
  'release'=>$root.'/bin/apply-vps-release.php',
  'lifecycle'=>$root.'/bin/apply-vps-lifecycle.php',
  'control-plane'=>$root.'/bin/apply-vps-control-plane.php',
@@ -39,6 +40,8 @@ $database=(string)file_get_contents($production['database']);c514(str_contains($
 $release=(string)file_get_contents($production['release']);$releaseLock=strpos($release,"\$lock=@fopen((string)\$plan['paths']['lock'],'c+')");$releaseDeps=strpos($release,'apply47Deps();');c514($releaseDeps!==false&&$releaseLock!==false&&$releaseDeps<$releaseLock&&str_contains($release,"'/usr/sbin/runuser','/usr/bin/env','/usr/bin/systemctl','/usr/sbin/apache2ctl'"),'release valideert vaste absolute executables vóór het release-lockbestand');
 $tls=(string)file_get_contents($production['tls']);c514(str_contains($tls,"'certbot'=>['/usr/bin/certbot','/usr/local/bin/certbot']")&&str_contains($tls,"'openssl'=>['/usr/bin/openssl']")&&str_contains($tls,'apply44Deps($plan)'),'TLS lost certbot/openssl/systemctl fail-closed naar absolute binaries op');
 $monitor=(string)file_get_contents($production['monitoring']);$monitorContract=(string)file_get_contents($root.'/app/deployment/monitoring-contract.php');c514(str_contains($monitor,"\$php='/usr/bin/php'.(string)\$p['runtime']['php_version']")&&str_contains($monitorContract,"'php_binary'=>'/usr/bin/php'.\$php")&&str_contains($monitorContract,"'ExecStart='.\$php.' "),'monitoring apply en systemd-service zijn aan exacte tenant-PHP gekoppeld');
+$health=(string)file_get_contents($production['health']);c514(str_contains($health,"'runuser'=>['/usr/sbin/runuser','/usr/bin/runuser']")&&str_contains($health,"'psql'=>['/usr/bin/psql']")&&str_contains($health,"'curl'=>['/usr/bin/curl']")&&str_contains($health,'health46Deps($plan)'),'healthcheck pint service-, TLS-, database- en HTTP-probes aan absolute binaries');
+c514(str_contains($health,"[$code,,$err]=health46Run([$adapter],$json.\"\\n\");")&&!str_contains($health,'@proc_open'),'alert-adapter gebruikt dezelfde begrensde runner met payload via STDIN');
 $web=(string)file_get_contents($production['webserver']);c514(str_contains($web,'process521Run($cmd, null, null, null, 300)')&&str_contains($web,'Apache control-binary ontbreekt of is niet absoluut.'),'webserver gebruikt gedeelde runner en eist absoluut Apache executablepad');
 
 $workflow=(string)file_get_contents($root.'/.github/workflows/deploy-dev.yml');c514(str_contains($workflow,'phase514-executor-mutation-results.php'),'fase 5.1.4 executor mutation-resulttest draait in CI');
