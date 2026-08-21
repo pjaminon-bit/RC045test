@@ -20,21 +20,20 @@ jobs:
       - name: Checkout acceptatietests
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - name: Wacht op actuele DEV deploy
+      - name: Wacht op actuele securitydeploy
         shell: bash
         run: |
           set -euo pipefail
-          url="$LIVE_DEV_BASE_URL/acceptance-hardening.css"
           for poging in $(seq 1 24); do
-            status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --connect-timeout 10 --max-time 20 "$url" || true)"
-            if [[ "$status" == '200' ]]; then
-              echo "DEV fixbatch is zichtbaar: $url -> 200"
+            headers="$(curl --silent --show-error --head --connect-timeout 10 --max-time 20 "$LIVE_DEV_BASE_URL/" || true)"
+            if ! grep -qi '^X-Powered-By:' <<<"$headers"; then
+              echo 'DEV securityfix is zichtbaar: X-Powered-By ontbreekt.'
               exit 0
             fi
-            echo "Wacht op DEV deploy ($poging/24): HTTP ${status:-geen}"
+            echo "Wacht op PHP securitydeploy ($poging/24)"
             sleep 5
           done
-          echo 'FOUT: nieuwe DEV fixbatch werd niet zichtbaar binnen de acceptatiewachtlus' >&2
+          echo 'FOUT: X-Powered-By bleef aanwezig tijdens de volledige acceptatiewachtlus' >&2
           exit 1
 
       - name: Actieve DEV securityregressie
