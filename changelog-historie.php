@@ -3,6 +3,54 @@
 // ongewijzigd in app/core/changelog-historie-legacy.php.
 $recent = [
   [
+    'datum' => '2026-08-21',
+    'cat' => 'beveiliging',
+    'titel' => 'Database-isolatie opnieuw aangescherpt na heraudit',
+    'tekst' => 'De PostgreSQL tenantrole blijft voortaan NOLOGIN totdat de tenant-HBA-regels en exact least-privilege aantoonbaar actief zijn. Bij fouten valt de role weer terug naar NOLOGIN, beschermende rejectregels blijven staan en onveilige symlinks in PostgreSQL-configpaden worden geweigerd.',
+  ],
+  [
+    'datum' => '2026-08-21',
+    'cat' => 'verbetering',
+    'titel' => 'PostgreSQL provisioning per vereniging toegevoegd',
+    'tekst' => 'Nieuwe productie-tenants kunnen een eigen lokale PostgreSQL-database krijgen met een aparte NOLOGIN-owner en een app-role die via Unix-socket peer authentication exact aan de eigen Linux/PHP-FPM-user is gekoppeld. Databasewachtwoorden zijn daardoor niet nodig en cross-tenant databaseverkeer wordt expliciet geweigerd.',
+  ],
+  [
+    'datum' => '2026-08-21',
+    'cat' => 'onderhoud',
+    'titel' => 'Monitoring en privacybewuste operationele logging voorbereid',
+    'tekst' => 'Fase 4.6 voegt een informatie-arme healthcheck, lokale service/TLS/database/app-probes, 14-daagse logrotatie en gededupliceerde storingsalerts toe. Apache accesslogging bewaart bewust geen IP, requestpad/query, referrer, user-agent, cookies of Authorization.',
+  ],
+  [
+    'datum' => '2026-08-20',
+    'cat' => 'beveiliging',
+    'titel' => 'TLS/HTTPS-automatisering fail-closed voorbereid',
+    'tekst' => 'Per tenant zijn Certbot webroot-uitgifte, neutrale HTTP/HTTPS catch-alls, exacte Host- en SNI-binding, certificaatvalidatie, HSTS, configtest vóór reload en rollback bij mislukte eerste activatie toegevoegd. Private keys en ACME-accountgegevens komen niet in Git of tenantbundles.',
+  ],
+  [
+    'datum' => '2026-08-20',
+    'cat' => 'beveiliging',
+    'titel' => 'DNS-readiness en exacte tenantrouting toegevoegd',
+    'tekst' => 'DNS-plannen ondersteunen direct A/AAAA of één CNAME-hop en eisen exacte RRsets. Oude of extra IPv4/IPv6-records, gemengde CNAME/addressprofielen en verlopen readiness blokkeren de volgende TLS-stap. De productie-VPS moet minimaal drie consistente resolvermetingen zien.',
+  ],
+  [
+    'datum' => '2026-08-20',
+    'cat' => 'beveiliging',
+    'titel' => 'Apache-vhosts en Linux/PHP-FPM-isolatie per tenant voorbereid',
+    'tekst' => 'Iedere vereniging krijgt een deterministische Linux-user, unieke primary group, eigen PHP-FPM pool/socket en afgeschermde session/tmp-opslag. Apache gebruikt een neutrale default-vhost, exacte ServerName en vaste tenant-FPM-routing; private data, tooling en VCS-bestanden blijven buiten het HTTP-oppervlak.',
+  ],
+  [
+    'datum' => '2026-08-20',
+    'cat' => 'verbetering',
+    'titel' => 'Multi-tenant provisioning en veilige eerste beheerder afgerond',
+    'tekst' => 'De template kan nu aantoonbaar twee volledig gescheiden verenigingen provisionen met eigen configuratie, private opslag, auth, sessies, backups, assets en branding. Een eerste beheeraccount wordt via een aparte bootstrapstap geactiveerd zonder plaintext secret in CLI-argumenten.',
+  ],
+  [
+    'datum' => '2026-08-20',
+    'cat' => 'verbetering',
+    'titel' => 'Beheerinterface en groepenmodel verder gemodulariseerd',
+    'tekst' => 'Ledenlabels, groepen, commissies, werkgroepen en rollen zijn verder centraal gemaakt en de beheerinterface is technisch en visueel opgeschoond. De tenantconfig bepaalt welke modules zichtbaar en beschikbaar zijn.',
+  ],
+  [
     'datum' => '2026-08-19',
     'cat' => 'onderhoud',
     'titel' => 'Overbodige compatibility-loaders uit de webroot verwijderd',
