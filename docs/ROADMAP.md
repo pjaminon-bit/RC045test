@@ -91,11 +91,14 @@ Zie `docs/VPS-CONTROL-PLANE.md`.
 
 ### 5.2 — First-VPS productiebootstrap
 
-**Status: implementatie op aparte kandidaatbranch; CI/merge volgen pas na volledige bronreview. Productietoepassing blijft uitgesteld tot de echte VPS.**
+**Status: code gereed en volledig gehard in 5.2.1; CI op de kandidaat-PR is groen. Productietoepassing blijft uitgesteld tot de echte VPS.**
 
-Doel: de handmatige productievoorbereiding reduceren tot één gecontroleerde, hervatbare operatorflow. De kandidaat omvat:
+Doel: de handmatige productievoorbereiding reduceren tot één gecontroleerde, hervatbare operatorflow. De implementatie omvat:
 
 - Debian/Ubuntu basispreflight zonder automatische package-installatie;
+- volledige production preflight vóór de eerste mutatie, inclusief Apache/PHP-FPM/Fail2ban-configtests, servicechecks en PostgreSQL `SELECT 1`;
+- expliciete Git source-binding: exact repository-root, exact geplande 40-hex commit en schone working tree;
+- root-owned, niet group/world-writable bronboom en manifestbinding vóór first-release bootstrap;
 - fase-4.7 immutable first-release bootstrap vóór iedere andere productieconfig;
 - platformbeheer-DNS readiness met exacte A/AAAA of één CNAME-hop;
 - neutrale HTTP/HTTPS catch-alls vóór het eerste publieke certificaat;
@@ -106,15 +109,24 @@ Doel: de handmatige productievoorbereiding reduceren tot één gecontroleerde, h
 - PostgreSQL provisioning vóór tenant-FPM activatie;
 - tenant-DNS/TLS/monitoring/lifecycle uitsluitend via de reeds geteste onderliggende tools;
 - root-owned checkpoints en `--resume`, cryptografisch gebonden aan exact hetzelfde 5.2-plan;
+- deadlock-veilige gedeelde subprocess-runner die stdout/stderr gelijktijdig draint, shellgebruik omzeilt en alleen absolute executablepaden accepteert;
+- vaste, vooraf geverifieerde absolute binaries voor privileged productiehandelingen;
+- fail-closed metadata- en deletecontroles voor lifecycle, control-plane queue/resultaten en release-state;
 - eindcontrole op control-plane Basic Auth en tenanthealth;
 - geen DNS-providercredentials of providerwrites in de generieke codebase.
 
 Zie `docs/VPS-FIRST-BOOTSTRAP.md`.
 
+### 5.2.1 — Production security hardening
+
+**Status: kandidaatimplementatie afgerond; volledige regressiematrix groen.**
+
+Deze heraudit sluit de resterende productiegrenzen rond 4.7 t/m 5.2: immutable release-metadata, purge/recovery-binding, control-plane identity/auth/rate limiting, executor-resultaatintegriteit, subprocess-deadlocks, absolute PATH-binding, production preflight en Git source/commit-binding. De volgende stap is de kandidaat-PR afronden en mergen; daarna volgt pas de echte VPS-validatie.
+
 ## Volgorde vanaf nu
 
 De ontwikkelvolgorde is:
 
-**5.2 code/CI/merge → echte VPS-validatie met een eerste tenant → verdere platformfuncties.**
+**5.2.1 PR afronden/merge → echte VPS-validatie met een eerste tenant → verdere platformfuncties.**
 
 Een fase kan code/automation al gereed hebben voordat de daadwerkelijke productiehandeling op de VPS is uitgevoerd. Dat verschil blijft per fase expliciet vermeld; **“code gereed” is nooit hetzelfde als “op productie toegepast”.**
