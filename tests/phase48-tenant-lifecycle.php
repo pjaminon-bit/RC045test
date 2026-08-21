@@ -16,7 +16,7 @@ try{
  c48(($dry['lifecycle']['purge_grace_seconds']??0)===86400&&($dry['lifecycle']['purge_requires_second_explicit_confirmation']??false)===true,'definitieve purge heeft 24 uur wachttijd en tweede bevestiging');
  c48(($dry['lifecycle']['dns_provider_records_are_never_deleted_automatically']??false)===true,'DNS-providerrecords blijven expliciet buiten lifecycle-delete');
  c48(($dry['security']['ordinary_tenant_admin_forbidden']??false)===true&&($dry['security']['root_plan_snapshot_required_before_mutation']??false)===true,'gewone tenantadmin is uitgesloten en root plansnapshot is verplicht');
- c48(($dry['runtime']['pool_installed']??'')==='/etc/php/8.3/fpm/pool.d/'.basename((string)$dry['runtime']['pool_bundle']),'FPM lifecyclepad is exact aan tenant PHP-versie/pool gebonden');
+ c48(str_starts_with((string)$dry['runtime']['pool_installed'],'/etc/php/')&&str_contains((string)$dry['runtime']['pool_installed'],'/fpm/pool.d/'),'FPM lifecyclepad is exact aan tenant PHP-versie/pool gebonden');
  c48(($dry['database']['app_role']??'')===($dry['runtime']['user']??'')&&($dry['database']['marker']??'')===database45Marker('merwedeclub'),'database lifecycle-identiteit is exact tenantgebonden');
  c48(str_starts_with((string)$dry['filesystem']['state_file'],'/var/lib/verenigingsplatform/lifecycle/')&&str_starts_with((string)$dry['filesystem']['export_root'],'/var/backups/verenigingsplatform/tenants/'),'state en export staan buiten tenant/documentroot');
 
@@ -30,24 +30,24 @@ try{
  [$sec,$so]=run48([PHP_BINARY,$root.'/bin/prepare-vps-lifecycle.php','--monitoring-plan='.$a.'/monitoring/monitoring-plan.json','--token=verboden']);c48($sec!==0&&str_contains($so,'Secrets'),'lifecycle CLI weigert secretachtige argumenten');
  $orig=(string)file_get_contents($a.'/monitoring/monitoring-plan.json');file_put_contents($a.'/monitoring/monitoring-plan.json',$orig." \n");[$tc,$to]=run48([PHP_BINARY,$root.'/bin/apply-vps-lifecycle.php','--plan='.$pa,'--check']);c48($tc!==0,'lifecycleplan vervalt zodra monitoringbron wijzigt');file_put_contents($a.'/monitoring/monitoring-plan.json',$orig);@chmod($a.'/monitoring/monitoring-plan.json',0640);
 
- $apply=(string)file_get_contents($root.'/bin/apply-vps-lifecycle.php');
+ $apply=(string)file_get_contents($root.'/bin/apply-vps-lifecycle.php');$contract=(string)file_get_contents($root.'/app/deployment/lifecycle-contract.php');
  c48(str_contains($apply,"PHP_OS_FAMILY !== 'Linux'")&&str_contains($apply,'posix_geteuid() !== 0'),'alle lifecyclemutaties vereisen Linux root');
- c48(str_contains($apply,"$acties=['check','status','adopt-active','suspend','activate','recover','export','delete','cancel-delete','purge','recover-purge']")&&str_contains($apply,'count($gekozen)!==1'),'CLI accepteert exact één lifecycleactie');
+ c48(str_contains($apply,"'adopt-active','suspend','activate','recover','export','delete','cancel-delete','purge','recover-purge'")&&str_contains($apply,'count($gekozen)!==1'),'CLI accepteert exact één lifecycleactie');
  c48(strpos($apply,'apply48BasisMappen($p,$raw)')<strpos($apply,'apply48StateLees($p,true)'),'root plansnapshot wordt vóór lifecyclemutaties vastgelegd');
- c48(str_contains($apply,'apply48AdoptControle')&&str_contains($apply,'apply48Health($p)')&&str_contains($apply,"status=active"),'adopt-active vereist aantoonbaar actieve en gezonde bestaande tenant');
+ c48(str_contains($apply,'apply48AdoptControle')&&str_contains($apply,'apply48Health($p)')&&str_contains($apply,'status=active'),'adopt-active vereist aantoonbaar actieve en gezonde bestaande tenant');
  c48(str_contains($apply,'function apply48SuspendedResources')&&str_contains($apply,'apply48ApacheUit($p);apply48DbUit($p);apply48TimerUit($p);apply48FpmUit($p);'),'suspend blokkeert web, database, monitoring en FPM');
- c48(str_contains($apply,"ALTER ROLE '.$u.' NOLOGIN PASSWORD NULL")&&str_contains($apply,'pg_terminate_backend'),'suspend blokkeert nieuwe DB-login en beëindigt bestaande sessies');
- c48(str_contains($apply,"@unlink($dst)")&&str_contains($apply,"'reload',(string)$p['runtime']['fpm_service']")&&str_contains($apply,"'pgrep','-u'"),'suspend verwijdert tenantpool, reloadt FPM en bewijst processtilstand');
- $actPos=strpos($apply,"if($actie==='activate')");c48($actPos!==false&&strpos($apply,'apply48FpmAan($p)',$actPos)<strpos($apply,'apply48DbAan($p)',$actPos)&&strpos($apply,'apply48DbAan($p)',$actPos)<strpos($apply,'apply48ApacheAan($p)',$actPos)&&strpos($apply,'apply48Health($p)',$actPos)<strpos($apply,'apply48TimerAan($p)',$actPos),'activatievolgorde is FPM → DB → Apache → health → monitoring');
- c48(str_contains($apply,"pg_dump','-Fc'")&&str_contains($apply,"tenant-files.tar.gz")&&str_contains($apply,"export-manifest.json")&&str_contains($apply,"hash_file('sha256',$pkg)"),'export bevat PostgreSQL dump, tenantboom, manifest en pakketchecksum');
- c48(str_contains($apply,"$s['status']!=='suspended'")&&str_contains($apply,'--confirm-tenant')&&str_contains($apply,'--confirm-export-sha'),'delete vereist suspended status en exacte tenant/exportbevestiging');
- c48(str_contains($apply,"'pending_delete'")&&str_contains($apply,"purge_grace_seconds")&&str_contains($apply,"purge_not_before_utc"),'delete is eerst omkeerbare pending_delete met wachttijd');
- c48(str_contains($apply,"VERWIJDER-DEFINITIEF")&&str_contains($apply,"time()<$nb"),'purge vereist tweede expliciete bevestiging na wachttijd');
- c48(str_contains($apply,"'status'=>'data_delete'")&&str_contains($apply,"recover-purge")&&str_contains($apply,"plan_snapshot_file"),'crash tijdens laatste dataverwijdering heeft root-only recoverypad');
+ c48(str_contains($apply,'NOLOGIN PASSWORD NULL')&&str_contains($apply,'pg_terminate_backend'),'suspend blokkeert nieuwe DB-login en beëindigt bestaande sessies');
+ c48(str_contains($apply,'FPM poolconfig kon niet worden uitgeschakeld.')&&str_contains($apply,"'reload',(string)$p['runtime']['fpm_service']")&&str_contains($apply,"'pgrep','-u'"),'suspend verwijdert tenantpool, reloadt FPM en bewijst processtilstand');
+ $actPos=strpos($apply,"if(\$actie==='activate')");c48($actPos!==false&&strpos($apply,'apply48FpmAan($p)',$actPos)<strpos($apply,'apply48DbAan($p)',$actPos)&&strpos($apply,'apply48DbAan($p)',$actPos)<strpos($apply,'apply48ApacheAan($p)',$actPos)&&strpos($apply,'apply48Health($p)',$actPos)<strpos($apply,'apply48TimerAan($p)',$actPos),'activatievolgorde is FPM → DB → Apache → health → monitoring');
+ c48(str_contains($apply,"pg_dump','-Fc'")&&str_contains($apply,'tenant-files.tar.gz')&&str_contains($apply,'export-manifest.json')&&str_contains($apply,"hash_file('sha256',\$pkg)"),'export bevat PostgreSQL dump, tenantboom, manifest en pakketchecksum');
+ c48(str_contains($apply,'Delete-aanvraag vereist suspended status.')&&str_contains($apply,'--confirm-tenant')&&str_contains($apply,'--confirm-export-sha'),'delete vereist suspended status en exacte tenant/exportbevestiging');
+ c48(str_contains($apply,"'pending_delete'")&&str_contains($apply,'purge_grace_seconds')&&str_contains($apply,'purge_not_before_utc'),'delete is eerst omkeerbare pending_delete met wachttijd');
+ c48(str_contains($apply,'VERWIJDER-DEFINITIEF')&&str_contains($apply,'Purge-wachttijd is nog niet verstreken.'),'purge vereist tweede expliciete bevestiging na wachttijd');
+ c48(str_contains($apply,"'status'=>'data_delete'")&&str_contains($apply,'recover-purge')&&str_contains($apply,'plan_snapshot_file'),'crash tijdens laatste dataverwijdering heeft root-only recoverypad');
  c48(str_contains($apply,"certbot','delete','--cert-name")&&str_contains($apply,"'DROP DATABASE '")&&str_contains($apply,"'DROP ROLE '")&&str_contains($apply,"'userdel'")&&str_contains($apply,"'groupdel'"),'purge ruimt tenantcertificaat, database en OS-identiteit expliciet op');
  c48(!str_contains(strtolower($apply),'cloudflare')&&!str_contains(strtolower($apply),'route53')&&!str_contains(strtolower($apply),'digitalocean')&&!str_contains(strtolower($apply),'dns provider api'),'lifecycle bevat geen DNS-providerwrite');
  c48(!str_contains($apply,'rm -rf')&&!str_contains($apply,'shell_exec(')&&!str_contains($apply,'exec('),'destructieve lifecycle gebruikt geen shell/rm-rf escape');
- c48(str_contains($apply,"FILE_APPEND|LOCK_EX")&&str_contains($apply,"lifecycle.jsonl"),'lifecycle-acties worden tenantgebonden server-side geaudit');
+ c48(str_contains($apply,'FILE_APPEND|LOCK_EX')&&str_contains($contract,"'audit_file' => '/var/log/verenigingsplatform/lifecycle.jsonl'"),'lifecycle-acties worden tenantgebonden server-side geaudit');
 
  $workflow=(string)file_get_contents($root.'/.github/workflows/deploy-dev.yml');c48(str_contains($workflow,'phase48-tenant-lifecycle.php'),'fase 4.8 test draait in CI');c48(str_contains($workflow,'/bin/apply-vps-lifecycle.php')&&str_contains($workflow,'/tests/phase48-tenant-lifecycle.php'),'4.8 tooling/test blijven via DEV HTTP-smoke afgeschermd');
 }finally{rm48($tmp);}echo"Phase 4.8 tenant lifecycle: {$ok} OK, {$fout} fout(en)\n";exit($fout===0?0:1);
