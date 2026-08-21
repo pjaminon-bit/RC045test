@@ -1,0 +1,55 @@
+name: Full live DEV acceptance
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+env:
+  LIVE_DEV_BASE_URL: https://rc045.nl/dev
+  PLAYWRIGHT_TEST_BASE_URL: https://rc045.nl/dev
+
+jobs:
+  live-security:
+    if: github.head_ref == 'agent/full-live-acceptance-2'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout acceptatietests
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Actieve DEV securityregressie
+        shell: bash
+        run: bash tests/live-dev-security.sh
+
+  live-browser:
+    if: github.head_ref == 'agent/full-live-acceptance-2'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout acceptatietests
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Installeer exact Playwright 1.62.1
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --no-save --no-package-lock @playwright/test@1.62.1
+          npx playwright install --with-deps chromium
+
+      - name: Functionele en optische browseracceptatie
+        shell: bash
+        run: npx playwright test tests/live-dev-browser.spec.js --workers=1 --reporter=line,html
+
+      - name: Bewaar screenshots en browserrapport
+        if: ${{ always() }}
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: live-browser-acceptance-${{ github.run_id }}
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: warn
+          retention-days: 30
