@@ -41,7 +41,20 @@ function b52PlatformHttp(array$p):void
 }
 function b52CertValid(array$p):bool{$base='/etc/letsencrypt/archive/'.$p['platform']['cert_name'].'/';$fc='/etc/letsencrypt/live/'.$p['platform']['cert_name'].'/fullchain.pem';$pk='/etc/letsencrypt/live/'.$p['platform']['cert_name'].'/privkey.pem';foreach([$fc,$pk]as$f){if(!is_file($f))return false;$r=realpath($f);if($r===false||!str_starts_with($r,$base))return false;}$cr=@file_get_contents($fc);$kr=@file_get_contents($pk);$c=is_string($cr)?@openssl_x509_read($cr):false;$k=is_string($kr)?@openssl_pkey_get_private($kr):false;if($c===false||$k===false||!openssl_x509_check_private_key($c,$k))return false;$i=openssl_x509_parse($c);if(!is_array($i)||(int)($i['validTo_time_t']??0)<time()+86400)return false;$dns=[];foreach(explode(',',(string)($i['extensions']['subjectAltName']??''))as$x){$x=trim($x);if(str_starts_with($x,'DNS:'))$dns[]=strtolower(substr($x,4));}$perm=@fileperms($pk);return$dns===[strtolower($p['platform']['host'])]&&$perm!==false&&(($perm&0077)===0);}
 function b52Cert(array$p,string$certbot):void{if(b52CertValid($p))return;b52LiveDns($p['platform']['dns'],$p['platform']['host'],3,2);[$c]=b52Run([$certbot,'show_account','--non-interactive']);if($c!==0)b52Ok([$certbot,'register','--non-interactive','--agree-tos','--register-unsafely-without-email']);b52Ok([$certbot,'certonly','--non-interactive','--agree-tos','--webroot','-w',$p['platform']['acme']['webroot'],'-d',$p['platform']['host'],'--cert-name',$p['platform']['cert_name'],'--key-type','ecdsa','--elliptic-curve','secp256r1']);if(!b52CertValid($p))throw new RuntimeException('Platformcertificaat faalt eigen SAN/key/lineage-validatie.');}
-function b52Secrets(bool$required):array{if(!$required)return[];$raw=stream_get_contents(STDIN);if(!is_string($raw)||trim($raw)==='')throw new RuntimeException('Gebruik --secrets-stdin met JSON voor operator_password en tenant_admin_password.');try{$s=json_decode($raw,true,8,JSON_THROW_ON_ERROR);}catch(Throwable$e){throw new RuntimeException('Secrets-stdin bevat geen geldige JSON.');}if(!is_array($s)||array_keys($s)!==['operator_password','tenant_admin_password'])throw new RuntimeException('Secrets-stdin moet exact operator_password en tenant_admin_password bevatten, in die volgorde.');foreach($s as$k=>$v){if(!is_string($v)||strlen($v)<14||strlen($v)>200||preg_match('/[\x00-\x1F\x7F]/',$v))throw new RuntimeException('Ongeldig wachtwoord via secrets-stdin: '.$k);}return$s;}
+function b52Secrets(bool$required):array{
+    if(!$required)return[];
+    global $state,$o;
+    if(!isset($o['secrets-stdin']))throw new RuntimeException('Gebruik --secrets-stdin zolang nog bootstrapwachtwoorden nodig zijn.');
+    $verwacht=[];
+    if(b52Voor((string)$state['stage'],'operator_ready'))$verwacht[]='operator_password';
+    if(b52Voor((string)$state['stage'],'tenant_admin_ready'))$verwacht[]='tenant_admin_password';
+    $raw=stream_get_contents(STDIN);
+    if(!is_string($raw)||trim($raw)==='')throw new RuntimeException('Secrets-stdin bevat geen JSON.');
+    try{$s=json_decode($raw,true,8,JSON_THROW_ON_ERROR);}catch(Throwable$e){throw new RuntimeException('Secrets-stdin bevat geen geldige JSON.');}
+    if(!is_array($s)||array_keys($s)!==$verwacht)throw new RuntimeException('Secrets-stdin moet exact de nog benodigde wachtwoordsleutels bevatten: '.implode(', ',$verwacht).'.');
+    foreach($s as$k=>$v){if(!is_string($v)||strlen($v)<14||strlen($v)>200||preg_match('/[\x00-\x1F\x7F]/',$v))throw new RuntimeException('Ongeldig wachtwoord via secrets-stdin: '.$k);}
+    return$s;
+}
 function b52Child(string$current,string$script,array$args=[],?string$stdin=null):string{return b52Ok(array_merge(['/usr/bin/php',$current.'/bin/'.$script],$args),$stdin);}
 function b52OperatorExists(array$p):bool{$f='/etc/verenigingsplatform/control-plane/operators.htpasswd';if(is_link($f)||!is_file($f))return false;$r=@file_get_contents($f);return is_string($r)&&preg_match('/^'.preg_quote($p['platform']['operator_user'],'/').':\$2[aby]\$/m',$r)===1;}
 function b52TenantMasterExists(array$p):bool{$f=$p['paths']['tenant_root'].'/private/auth/master.php';if(is_link($f)||!is_file($f))return false;$r=@file_get_contents($f);return is_string($r)&&str_contains($r,'$BEHEER_WACHTWOORD_HASH');}
