@@ -210,13 +210,21 @@ Op de VPS hoort `/srv/verenigingen` alleen schrijfbaar te zijn voor de vertrouwd
 
 `--force` geldt voor gecontroleerde vervanging van provisioningconfiguratie en **niet** voor de mastercredential. Credentialrotatie gebruikt apart `bootstrap-tenant-admin.php --rotate`.
 
-## Nog te automatiseren voor de VPS-fase
+## Productie-infrastructuurstatus
 
-De tenantapplicatielaag kan nu veilig worden geprovisioneerd en van een eerste beheerder worden voorzien. In de deployment/VPS-fase blijven onder meer over:
+De lijst die na fase 3.5.1 nog openstond is inmiddels door fase 4.1 t/m 5.2 geautomatiseerd:
 
-- DNS-records;
-- TLS-certificaten;
-- Apache/Nginx-vhost per domein;
-- PHP-FPM/runtime-isolatie en environmentinjectie;
-- PDO/database-secret provisioning wanneer PDO wordt gebruikt;
-- operationele monitoring, logging en lifecycle-automation voor tenants.
+- Linux/PHP-FPM runtime-isolatie — fase 4.1/4.1.1;
+- Apache-vhosts en veilige catch-alls — fase 4.2;
+- DNS-readiness — fase 4.3;
+- TLS/Certbot — fase 4.4;
+- PostgreSQL provisioning en peer-authenticatie — fase 4.5/4.5.1;
+- monitoring/logging — fase 4.6;
+- release/rollback — fase 4.7;
+- tenant lifecycle/export/delete — fase 4.8;
+- platformbeheer/control-plane — fase 5.1;
+- georkestreerde first-VPS bootstrap — fase 5.2/5.2.1.
+
+Deze onderdelen zijn **code/CI-gereed**, maar zijn nog niet als complete keten op de eerste echte productie-VPS geaccepteerd. Voor een nieuwe VPS wordt de provisioner daarom niet los als eindstap uitgevoerd; fase 5.2 orkestreert hem samen met de infrastructuurlagen.
+
+De eerstvolgende stap is fase 5.3: server-readiness, DNS, exacte productiecheckout, root-vrije bootstrapcheck en daarna de echte first-VPS acceptatie. Zie `docs/VPS-READINESS.md`, `docs/VPS-FIRST-BOOTSTRAP.md` en `docs/ROADMAP.md`.
