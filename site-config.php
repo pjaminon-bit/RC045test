@@ -55,4 +55,10 @@ if ($overridePad !== null) {
 
 $config['vereniging']['sleutel'] = tenantRuntimeVeiligeSleutel((string)($config['vereniging']['sleutel'] ?? 'default'));
 $timezone=trim((string)($config['vereniging']['timezone']??''));if($timezone!==''&&in_array($timezone,timezone_identifiers_list(),true))date_default_timezone_set($timezone);
+
+// Fase 4.6: externe VPS-tenants registreren een privacy-arme fatal logger.
+// Standalone/DEV en CLI blijven volledig ongemoeid.
+require_once __DIR__ . '/app/operational-log.php';
+vpOps46RegisterFatalLogger($config);
+
 return $config;
