@@ -138,7 +138,7 @@ Zie `docs/VPS-DATABASE.md`.
 
 ### 4.6 — Monitoring & logging
 
-**Status: code/automation in uitvoering op branch; productie-installatie volgt op de echte VPS.**
+**Status: code en CI gereed; productie-installatie volgt op de echte VPS.**
 
 Omvat:
 
