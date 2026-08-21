@@ -46,6 +46,10 @@ try{
  c47(str_contains($apply,'apply47Herstel')&&str_contains($apply,'deploy_failed_rolled_back'),'mislukte post-switch deploy heeft expliciet rollbackpad');
  c47(str_contains($apply,"\$state['previous']")&&str_contains($apply,'Geen vorige gevalideerde release beschikbaar'),'handmatige rollback gebruikt alleen previous uit state');
  c47(str_contains($apply,"apply47FpmReload(\$tenants)&&apply47Health((string)\$state['active']['path'],\$tenants,false)"),'mislukte handmatige rollback bewijst herstelde oorspronkelijke health');
+ c47(str_contains($apply,"'recover'=>isset(\$opt['recover'])")&&str_contains($apply,'apply47Recover($plan)'),'onderbroken transition heeft expliciete recover-modus');
+ c47(str_contains($apply,'apply47GeenTransition($state)')&&str_contains($apply,'Voer eerst --recover uit'),'nieuwe deploy of rollback overschrijft nooit een onafgeronde transition');
+ c47(str_contains($apply,'candidate-reverted')&&str_contains($apply,"apply47FpmReload(\$tenants)&&apply47Health((string)\$from['path'],\$tenants,false)"),'recovery rolt half geschakelde kandidaat terug en bewijst oorspronkelijke health');
+ c47(str_contains($apply,'Release transition is niet exact aan active/from/to gebonden'),'transition from/to wordt marker- en active-gebonden gevalideerd');
  c47(!str_contains($apply,'rm -rf')&&!str_contains($apply,'unlink($final)'),'bestaande immutable releases worden nooit automatisch verwijderd');
  c47(str_contains($apply,"\$mode==='bootstrap'")&&str_contains($apply,'tenantbasis is niet leeg'),'bootstrap is expliciet en alleen vóór tenantactivatie');
  $cand=(string)file_get_contents($root.'/bin/check-release-tenant.php');c47(str_contains($cand,"SELECT 1")&&!str_contains($cand,'INSERT ')&&!str_contains($cand,'UPDATE ')&&!str_contains($cand,'DELETE '),'kandidaattenantprobe is database read-only');
