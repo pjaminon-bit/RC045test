@@ -1,5 +1,8 @@
 <?php
 require_once dirname(__DIR__) . '/control-plane/control-plane-runtime.php';
+header('Cache-Control: no-store, max-age=0');
+header('Pragma: no-cache');
+header('X-Robots-Tag: noindex, nofollow, noarchive');
 
 $operator = cp51Operator();
 $csrf = cp51Csrf();
