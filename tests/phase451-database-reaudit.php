@@ -39,7 +39,9 @@ c451(str_contains($apply, 'gevaarlijke privilege/password-drift; role wordt fail
 c451(str_contains($apply, 'appRoleTenantGebonden') && str_contains($apply, "ALTER ROLE ' . \$appUser . ' NOLOGIN PASSWORD NULL"), 'foutpad sluit tenantgebonden app-role opnieuw fail-closed');
 c451(str_contains($apply, 'Beschermende tenant-HBA blijft actief'), 'foutpad documenteert dat geladen HBA-reject niet wordt teruggedraaid');
 c451(!str_contains($apply, 'apply45HbaRollback('), 'na rolecreatie bestaat geen rollbackpad dat tenant-HBA weer kan verwijderen');
-c451(str_contains($apply, "['which', 'pgrep']"), 'root-apply behandelt pgrep als verplichte beveiligingsdependency');
+$posDeps = strpos($apply, 'apply45Deps();');
+$posFirstMutation = strpos($apply, 'apply45RuntimeMoetInactiefZijn($appUser);');
+c451(str_contains($apply, "'pgrep' => ['/usr/bin/pgrep']") && $posDeps !== false && $posFirstMutation !== false && $posDeps < $posFirstMutation, 'root-apply behandelt pgrep via vaste absolute dependency vóór beveiligingsmutaties');
 
 c451(str_contains($apply, "foreach (['/etc/verenigingsplatform', '/etc/verenigingsplatform/postgresql', \$includeDir] as \$veiligPad)"), 'HBA-installatie controleert ook bovenliggende platformconfigpaden');
 c451(substr_count($apply, 'runtime41SymlinkInPad(') >= 5, 'root-HBA writes en bundle ownership gebruiken ancestor-symlinkcontrole');
