@@ -1,0 +1,55 @@
+name: Deploy DEV runtime security
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-dev-runtime-security
+  cancel-in-progress: true
+
+jobs:
+  runtime-security:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact main-commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Valideer lokale PHP-runtimeconfig
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f .user.ini
+          grep -Eqi '^\s*expose_php\s*=\s*Off\s*$' .user.ini
+
+      - name: Upload .user.ini expliciet naar DEV
+        uses: wlixcc/SFTP-Deploy-Action@a5ccb9c6211a94cc59404f0fdb2a9936a6dfee64 # v1.2.6
+        with:
+          username: ${{ secrets.FTP_USERNAME }}
+          server: ${{ secrets.FTP_SERVER }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          port: 22
+          sftp_only: true
+          local_path: './.user.ini'
+          remote_path: '/'
+
+      - name: Bewijs runtimeheader live afwezig
+        shell: bash
+        run: |
+          set -euo pipefail
+          url='https://rc045.nl/dev/'
+          for poging in $(seq 1 18); do
+            headers="$(curl --silent --show-error --head --connect-timeout 10 --max-time 20 "$url" || true)"
+            if [[ -n "$headers" ]] && ! grep -qi '^X-Powered-By:' <<<"$headers"; then
+              echo 'OK: DEV lekt geen X-Powered-By.'
+              exit 0
+            fi
+            echo "Wacht op PHP-configcache ($poging/18)"
+            sleep 5
+          done
+          echo 'FOUT: DEV lekt nog X-Powered-By na expliciete .user.ini upload' >&2
+          exit 1
