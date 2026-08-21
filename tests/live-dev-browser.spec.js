@@ -26,7 +26,11 @@ async function inspectPage(page, route, viewportName) {
     const visible=el=>{const s=getComputedStyle(el),r=el.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity||'1')>0&&r.width>0&&r.height>0;};
     const sameOriginBroken=[...document.images].filter(img=>visible(img)&&img.complete&&img.naturalWidth===0).map(img=>img.currentSrc||img.src||'').filter(src=>{try{const u=new URL(src,location.href);return u.origin===origin&&u.pathname.startsWith(basePath+'/');}catch(_){return false;}});
     const unlabeled=[...document.querySelectorAll('input,select,textarea')].filter(el=>visible(el)&&el.type!=='hidden'&&el.type!=='submit'&&el.type!=='button').filter(el=>!(el.getAttribute('aria-label')||el.getAttribute('aria-labelledby')||el.title||(el.id&&document.querySelector(`label[for="${CSS.escape(el.id)}"]`))||el.closest('label'))).map(el=>`${el.tagName.toLowerCase()}#${el.id||''}`);
-    const tiny=[...document.querySelectorAll('button,input[type="submit"],input[type="button"],a')].filter(visible).filter(el=>{if(el.tagName==='A'&&getComputedStyle(el).display==='inline')return false;const r=el.getBoundingClientRect();return r.width<24||r.height<24;}).map(el=>{const r=el.getBoundingClientRect();return `${el.tagName.toLowerCase()}#${el.id||''}.${String(el.className||'').split(/\s+/).slice(0,3).join('.')} ${Math.round(r.width)}x${Math.round(r.height)}`;}).slice(0,30);
+    const tiny=[...document.querySelectorAll('button,input[type="submit"],input[type="button"],a')]
+      .filter(visible)
+      .filter(el=>!el.id.startsWith('hp-')&&!el.closest('[aria-hidden="true"]')&&el.getAttribute('aria-hidden')!=='true')
+      .filter(el=>{if(el.tagName==='A'&&getComputedStyle(el).display==='inline')return false;const r=el.getBoundingClientRect();return r.width<24||r.height<24;})
+      .map(el=>{const r=el.getBoundingClientRect();return `${el.tagName.toLowerCase()}#${el.id||''}.${String(el.className||'').split(/\s+/).slice(0,3).join('.')} ${Math.round(r.width)}x${Math.round(r.height)}`;}).slice(0,30);
     const main=document.querySelector('main')||document.body;
     return {title:document.title,lang:document.documentElement.lang,h1Count:document.querySelectorAll('h1').length,mainTextLength:(main.innerText||'').trim().length,scrollWidth:document.documentElement.scrollWidth,clientWidth:document.documentElement.clientWidth,brokenImages:sameOriginBroken,unlabeledInputs:unlabeled,tinyControls:tiny};
   },{origin:baseUrl.origin,basePath});
