@@ -5,19 +5,48 @@
 if (PHP_SAPI !== 'cli') { http_response_code(403); exit('Alleen via CLI beschikbaar.'); }
 require_once dirname(__DIR__) . '/app/deployment/lifecycle-contract.php';
 require_once dirname(__DIR__) . '/app/deployment/lifecycle-purge-hardening.php';
+require_once dirname(__DIR__) . '/app/deployment/process-runner.php';
 
 function apply48Stop(string $m, int $c = 1): never { fwrite(STDERR, "FOUT: {$m}\n"); exit($c); }
+function apply48Binary(string $name): string
+{
+    static $cache = [];
+    if (isset($cache[$name])) return $cache[$name];
+    if (str_starts_with($name, '/')) {
+        if (!is_file($name) || !is_executable($name)) throw new RuntimeException('Vereiste lifecycle-executable ontbreekt: ' . $name);
+        return $cache[$name] = $name;
+    }
+    $known = [
+        'runuser' => ['/usr/sbin/runuser','/usr/bin/runuser'],
+        'psql' => ['/usr/bin/psql'],
+        'pg_dump' => ['/usr/bin/pg_dump'],
+        'systemctl' => ['/usr/bin/systemctl'],
+        'pgrep' => ['/usr/bin/pgrep'],
+        'certbot' => ['/usr/bin/certbot','/usr/local/bin/certbot'],
+        'userdel' => ['/usr/sbin/userdel'],
+        'groupdel' => ['/usr/sbin/groupdel'],
+    ];
+    if (!isset($known[$name])) throw new RuntimeException('Niet-toegestane lifecycle PATH-binary: ' . $name);
+    foreach ($known[$name] as $candidate) {
+        if (is_file($candidate) && is_executable($candidate)) return $cache[$name] = $candidate;
+    }
+    throw new RuntimeException('Vereiste lifecycle-executable ontbreekt: ' . $name);
+}
 function apply48Run(array $cmd, ?string $stdin = null, ?string $stdoutFile = null): array
 {
-    $d = [0=>['pipe','r'], 1=>$stdoutFile === null ? ['pipe','w'] : ['file',$stdoutFile,'wb'], 2=>['pipe','w']];
-    $p = @proc_open($cmd, $d, $x, null, null, ['bypass_shell'=>true]);
-    if (!is_resource($p)) return [255,'','proces kon niet starten'];
-    if ($stdin !== null) fwrite($x[0], $stdin);
-    fclose($x[0]);
-    $out = $stdoutFile === null ? stream_get_contents($x[1]) : '';
-    if ($stdoutFile === null) fclose($x[1]);
-    $err = stream_get_contents($x[2]); fclose($x[2]);
-    return [proc_close($p), trim((string)$out), trim((string)$err)];
+    if ($cmd === [] || !isset($cmd[0])) throw new RuntimeException('Lifecycle subprocesscommando ontbreekt.');
+    $cmd[0] = apply48Binary((string)$cmd[0]);
+    if (basename((string)$cmd[0]) === 'runuser') {
+        $sep = array_search('--', $cmd, true);
+        if ($sep === false || !isset($cmd[$sep + 1])) throw new RuntimeException('runuser lifecyclecommando mist exact child-executable.');
+        $cmd[$sep + 1] = apply48Binary((string)$cmd[$sep + 1]);
+    }
+    return process521Run($cmd, $stdin, $stdoutFile, null, 3600);
+}
+function apply48Deps(array $p): void
+{
+    foreach (['runuser','psql','pg_dump','systemctl','pgrep','certbot','userdel','groupdel'] as $name) apply48Binary($name);
+    foreach ([(string)$p['apache']['control_binary'],(string)$p['runtime']['php_binary'],(string)$p['runtime']['fpm_test_binary'],'/usr/bin/tar'] as $binary) apply48Binary($binary);
 }
 function apply48Pg(string $sql, string $db = 'postgres'): string
 {
@@ -238,13 +267,13 @@ if(isset($o['help'])){echo"Gebruik: php bin/apply-vps-lifecycle.php --plan=... -
 $acties=['check','status','adopt-active','suspend','activate','recover','export','delete','cancel-delete','purge','recover-purge'];$gekozen=array_values(array_filter($acties,fn($a)=>isset($o[$a])));if(count($gekozen)!==1)apply48Stop('Kies exact één lifecycleactie.');$actie=$gekozen[0];
 try{
     if($actie==='recover-purge'){
-        apply48Root();$tenant=trim((string)($o['tenant']??''));if(!runtime41CanoniekeTenantKey($tenant))throw new RuntimeException('--tenant is verplicht en moet canoniek zijn.');[$pr,$tb,$snap]=apply48RecoveryMeta($tenant);$lock=apply48Lock($pr);$root=apply48DeleteBoundary($pr,$tb);$status=(string)($tb['status']??'');
+        apply48Root();$tenant=trim((string)($o['tenant']??''));if(!runtime41CanoniekeTenantKey($tenant))throw new RuntimeException('--tenant is verplicht en moet canoniek zijn.');[$pr,$tb,$snap]=apply48RecoveryMeta($tenant);apply48Deps($pr);$lock=apply48Lock($pr);$root=apply48DeleteBoundary($pr,$tb);$status=(string)($tb['status']??'');
         if($status==='purging_infrastructure'){apply48PurgeInfra($pr);apply48Tombstone($pr,array_merge($tb,['status'=>'data_delete','data_delete_started_at_utc'=>apply48Utc(),'tenant_root'=>$root]));$tb['status']='data_delete';$tb['tenant_root']=$root;}
         if(($tb['status']??'')!=='data_delete')throw new RuntimeException('recover-purge accepteert alleen purging_infrastructure of data_delete tombstones.');
         $root=apply48DeleteBoundary($pr,$tb);if(file_exists($root)){apply48RmStrict($root);if(file_exists($root))throw new RuntimeException('Tenantroot bleef bestaan na purge-recovery.');}
         apply48Tombstone($pr,array_merge($tb,['status'=>'deleted','completed_at_utc'=>apply48Utc()]));apply48Unlink((string)$pr['filesystem']['state_file'],'Lifecycle-state');apply48Audit($pr,'recover-purge','ok','pending_delete','deleted',['export_sha256'=>(string)($tb['export']['sha256']??'')]);apply48Unlink($snap,'Lifecycle plansnapshot');echo'RECOVER PURGE OK tenant='.$tenant."\n";exit(0);
     }
-    $planPad=trim((string)($o['plan']??''));if($planPad==='')throw new RuntimeException('--plan is verplicht.');$ctx=lifecycle48PlanLeesEnValideer($planPad);$p=$ctx['plan'];if($actie==='check'){echo'CHECK OK tenant='.$p['tenant_key']."\n";exit(0);}apply48Root();$lock=apply48Lock($p);
+    $planPad=trim((string)($o['plan']??''));if($planPad==='')throw new RuntimeException('--plan is verplicht.');$ctx=lifecycle48PlanLeesEnValideer($planPad);$p=$ctx['plan'];if($actie==='check'){echo'CHECK OK tenant='.$p['tenant_key']."\n";exit(0);}apply48Root();if($actie!=='status')apply48Deps($p);$lock=apply48Lock($p);
     if($actie==='status'){$state=apply48StateLees($p,true);echo lifecycle48Json(['tenant_key'=>$p['tenant_key'],'status'=>$state['status']??'unmanaged','state'=>$state]);exit(0);}
     if(is_file((string)$p['filesystem']['tombstone_file']))throw new RuntimeException('Tenant heeft een lifecycle-tombstone; hergebruik/activatie wordt fail-closed geweigerd.');$raw=@file_get_contents($ctx['path']);if(!is_string($raw))throw new RuntimeException('Lifecycleplan kon niet voor rootsnapshot worden gelezen.');apply48BasisMappen($p,$raw);$state=apply48StateLees($p,true);
     if($actie==='adopt-active'){if($state!==null)throw new RuntimeException('Tenant heeft al lifecycle-state; adoptie is eenmalig.');apply48AdoptControle($p);$state=apply48NieuweState($p,'active',['adopted_at_utc'=>apply48Utc()]);apply48StateSchrijf($p,$state);apply48Audit($p,$actie,'ok','unmanaged','active',['generation'=>1]);echo'ADOPT OK tenant='.$p['tenant_key'].' status=active'."\n";exit(0);}
