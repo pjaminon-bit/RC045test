@@ -72,6 +72,7 @@ jobs:
           php tests/phase47-release-rollback.php
           php tests/phase48-tenant-lifecycle.php
           php tests/phase51-control-plane.php
+          php tests/phase52-first-vps-bootstrap.php
           php tests/private-store-pdo-sqlite.php
           php tests/phase321-pdo-isolation.php
           php tests/private-store-pdo-failclosed.php
@@ -167,6 +168,7 @@ jobs:
           wacht_op_status "$basis/app/deployment/release-contract.php" 403 nee
           wacht_op_status "$basis/app/deployment/lifecycle-contract.php" 403 nee
           wacht_op_status "$basis/app/deployment/control-plane-contract.php" 403 nee
+          wacht_op_status "$basis/app/deployment/first-vps-bootstrap-contract.php" 403 nee
           wacht_op_status "$basis/app/control-plane/control-plane-runtime.php" 403 nee
           wacht_op_status "$basis/app/control-plane-web/index.php" 403 nee
           wacht_op_status "$basis/aanmeldingen-opslag.php" 403 nee
@@ -199,6 +201,8 @@ jobs:
           wacht_op_status "$basis/bin/apply-vps-control-plane.php" 403 nee
           wacht_op_status "$basis/bin/control-plane-executor.php" 403 nee
           wacht_op_status "$basis/bin/bootstrap-control-plane-operator.php" 403 nee
+          wacht_op_status "$basis/bin/prepare-first-vps-bootstrap.php" 403 nee
+          wacht_op_status "$basis/bin/apply-first-vps-bootstrap.php" 403 nee
           wacht_op_status "$basis/tests/phase35-vps-deployment.php" 403 nee
           wacht_op_status "$basis/tests/phase351-security-reaudit.php" 403 nee
           wacht_op_status "$basis/tests/phase41-vps-runtime-isolation.php" 403 nee
@@ -212,6 +216,7 @@ jobs:
           wacht_op_status "$basis/tests/phase47-release-rollback.php" 403 nee
           wacht_op_status "$basis/tests/phase48-tenant-lifecycle.php" 403 nee
           wacht_op_status "$basis/tests/phase51-control-plane.php" 403 nee
+          wacht_op_status "$basis/tests/phase52-first-vps-bootstrap.php" 403 nee
           wacht_op_status "$basis/docs/VPS-DEPLOYMENT.md" 403 nee
           wacht_op_status "$basis/docs/VPS-WEBSERVER.md" 403 nee
           wacht_op_status "$basis/docs/VPS-DNS.md" 403 nee
@@ -221,4 +226,5 @@ jobs:
           wacht_op_status "$basis/docs/VPS-RELEASES.md" 403 nee
           wacht_op_status "$basis/docs/VPS-LIFECYCLE.md" 403 nee
           wacht_op_status "$basis/docs/VPS-CONTROL-PLANE.md" 403 nee
+          wacht_op_status "$basis/docs/VPS-FIRST-BOOTSTRAP.md" 403 nee
           wacht_op_status "$basis/dev-build.json" 403 nee

@@ -70,6 +70,7 @@ function control51Plan(
     $site = '050-verenigingsplatform-control-plane.conf';
     $service = 'verenigingsplatform-control-plane.service';
     $pathUnit = 'verenigingsplatform-control-plane.path';
+    $acme = '/var/lib/verenigingsplatform/acme/control-plane';
 
     return [
         'schema' => 1,
@@ -101,6 +102,8 @@ function control51Plan(
             'cert_name' => $certName,
             'fullchain' => '/etc/letsencrypt/live/' . $certName . '/fullchain.pem',
             'privkey' => '/etc/letsencrypt/live/' . $certName . '/privkey.pem',
+            'acme_webroot' => $acme,
+            'acme_challenge_dir' => $acme . '/.well-known/acme-challenge',
             'required_modules' => [
                 'auth_basic_module', 'authn_file_module', 'authz_core_module',
                 'headers_module', 'proxy_module', 'proxy_fcgi_module',
@@ -144,6 +147,7 @@ function control51Plan(
             'csrf_required_for_mutations' => true,
             'tenant_secrets_never_exposed_in_snapshot' => true,
             'ordinary_tenant_admin_has_no_control_plane_access' => true,
+            'http_only_serves_acme_else_https_redirect' => true,
         ],
     ];
 }
@@ -214,12 +218,28 @@ function control51ApacheConfig(array $plan): string
     $doc = $plan['apache']['document_root'];
     $socket = $plan['php_fpm']['socket'];
     $backend = 'fcgi://' . $plan['php_fpm']['pool'] . '/';
+    $acme = $plan['apache']['acme_webroot'];
+    $challenge = $plan['apache']['acme_challenge_dir'];
     return implode("\n", [
         '# Fase 5.1 — aparte platformbeheer-vhost',
         '<VirtualHost *:80>',
         '    ServerName ' . $host,
         '    StrictHostCheck On',
-        '    Redirect permanent "/" "https://' . $host . '/"',
+        '    ProxyRequests Off',
+        '    DocumentRoot "' . $acme . '"',
+        '    <Directory "' . $acme . '">',
+        '        Options None',
+        '        AllowOverride None',
+        '        Require all denied',
+        '    </Directory>',
+        '    <Directory "' . $challenge . '">',
+        '        Options None',
+        '        AllowOverride None',
+        '        Require all granted',
+        '    </Directory>',
+        '    RewriteEngine On',
+        '    RewriteCond %{REQUEST_URI} !^/\\.well-known/acme-challenge/[A-Za-z0-9_-]+$ [NC]',
+        '    RewriteRule ^ https://' . $host . '%{REQUEST_URI} [R=308,L,NE]',
         '</VirtualHost>',
         '',
         '<VirtualHost *:443>',

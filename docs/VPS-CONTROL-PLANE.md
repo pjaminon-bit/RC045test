@@ -30,6 +30,16 @@ Vaste runtimeidentity:
 
 De platformvhost gebruikt als DocumentRoot `app/control-plane-web` binnen de gedeelde release. Tenant-vhosts kunnen deze code niet bereiken omdat `/app` al server-side buiten het tenant-HTTP-oppervlak ligt.
 
+## HTTP, HTTPS en Certbot renewal
+
+De GUI is alleen via HTTPS beschikbaar. De definitieve HTTP-vhost heeft als enige publieke uitzondering:
+
+`/.well-known/acme-challenge/<token>`
+
+uit `/var/lib/verenigingsplatform/acme/control-plane`. De rest van HTTP wordt met een vaste 308 naar de canonieke beheerhost gestuurd. Hierdoor kan Certbot webroot zowel het eerste certificaat als latere renewals uitvoeren zonder de GUI ooit via HTTP te publiceren.
+
+Fase 5.2 installeert bovendien de gedeelde deploy-hook `/etc/letsencrypt/renewal-hooks/deploy/50-verenigingsplatform-apache-reload`, die altijd eerst `apache2ctl configtest` uitvoert en alleen daarna Apache reloadt.
+
 ## GUI
 
 De GUI toont uitsluitend operationele metadata:
@@ -61,7 +71,7 @@ De bundle is secretvrij en kan zonder root worden gegenereerd:
 php bin/prepare-vps-control-plane.php \
   --host=beheer.platform.example \
   --app-root=/srv/verenigingsplatform/current \
-  --tenants-root=/srv/verenigingsplatform/tenants \
+  --tenants-root=/srv/verenigingen \
   --output=/root/control-plane \
   --php-version=8.3 \
   --cert-name=verenigingsplatform-beheer
@@ -90,9 +100,9 @@ Minimale wachtwoordlengte is 14 tekens. Het bestand wordt root:www-data `0640` e
 
 ## TLS-voorwaarde in 5.1
 
-Fase 5.1 installeert of wijzigt geen DNS-providerrecords en vraagt nog niet zelfstandig het platformcertificaat aan. Vóór `--apply` moet de genoemde Certbot-lineage al bestaan en minimaal 24 uur geldig zijn. De lineage wordt exact gecontroleerd onder `/etc/letsencrypt/archive/<cert-name>/`.
+Fase 5.1 zelf schrijft geen DNS-providerrecords en vraagt niet zelfstandig het eerste platformcertificaat aan. Vóór een losse `--apply` moet de genoemde Certbot-lineage al bestaan en minimaal 24 uur geldig zijn. De lineage wordt exact gecontroleerd onder `/etc/letsencrypt/archive/<cert-name>/`.
 
-De geautomatiseerde **eerste productiebootstrap inclusief platformhost/DNS/TLS** is de volgende stap, fase 5.2. Tenant-DNS blijft provider-side expliciet zoals in fase 4.
+De normale eerste productie-installatie loopt daarom via **fase 5.2**, die de immutable release, platform-DNS, neutrale catch-all, ACME-account/certificaat, operator en vervolgens deze 5.1 bundle in vaste volgorde opbouwt. DNS-providerrecords blijven operator/provider-side.
 
 ## Root-installatie
 
@@ -120,4 +130,4 @@ Bij een fout na een nieuw aangemaakte Apache enable-link wordt die link terugged
 
 ## Geen toegang vanuit DEV of tenantbeheer
 
-De control-plane broncode staat onder `app/` en de roottools onder `bin/`; beide zijn al uit het gewone HTTP-oppervlak verwijderd. CI controleert aanvullend dat de nieuwe bestanden op DEV HTTP 403 blijven geven. De platformbeheer-GUI wordt pas via zijn **eigen VPS-vhost** bereikbaar.
+De control-plane broncode staat onder `app/` en de roottools onder `bin/`; beide zijn uit het gewone HTTP-oppervlak verwijderd. CI controleert aanvullend dat de nieuwe bestanden op DEV HTTP 403 blijven geven. De platformbeheer-GUI wordt alleen via zijn **eigen VPS-vhost** bereikbaar.
