@@ -1,12 +1,12 @@
 <?php
 if (PHP_SAPI !== 'cli') { http_response_code(403); exit('Alleen via CLI beschikbaar.'); }
 require_once dirname(__DIR__) . '/app/deployment/lifecycle-contract.php';
+require_once dirname(__DIR__) . '/app/deployment/process-runner.php';
 
 function cpeStop(string $m, int $c=1): never { fwrite(STDERR,"FOUT: {$m}\n"); exit($c); }
 function cpeRun(array $cmd): array
 {
-    $d=[0=>['pipe','r'],1=>['pipe','w'],2=>['pipe','w']];$p=@proc_open($cmd,$d,$x,null,null,['bypass_shell'=>true]);
-    if(!is_resource($p))return[255,'','proces kon niet starten'];fclose($x[0]);$o=stream_get_contents($x[1]);fclose($x[1]);$e=stream_get_contents($x[2]);fclose($x[2]);return[proc_close($p),trim((string)$o),trim((string)$e)];
+    return process521Run($cmd, null, null, null, 3600);
 }
 function cpeAbs(string$p):bool{return str_starts_with($p,'/')&&!str_contains($p,"\0")&&!preg_match('#(?:^|/)\.\.?(/|$)#',$p);}
 function cpeUid(string|int$owner):int{if(is_int($owner)||ctype_digit((string)$owner))return(int)$owner;if(!function_exists('posix_getpwnam'))throw new RuntimeException('Ownercontrole vereist posix_getpwnam.');$u=@posix_getpwnam((string)$owner);if(!is_array($u))throw new RuntimeException('Verwachte owner bestaat niet: '.$owner);return(int)$u['uid'];}
