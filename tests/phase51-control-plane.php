@@ -41,11 +41,15 @@ try{
  c51(str_contains($exec,'posix_geteuid()!==0')&&str_contains($exec,'lifecycle48PlanLeesEnValideer')&&str_contains($exec,"['bypass_shell'=>true]"),'executor vereist root, herverifieert 4.8 en gebruikt geen shell');
  c51(str_contains($exec,"abs(time()-\$ts)>900")&&str_contains($exec,"'phase'=>'5.1-request'")&&str_contains($exec,"['adopt-active','suspend','activate','recover','export','delete','cancel-delete','purge']"),'executor gebruikt kortlevend strikt request-schema en vaste actieallowlist');
  c51(str_contains($exec,"'--confirm-purge=VERWIJDER-DEFINITIEF'")&&str_contains($exec,"'--confirm-export-sha='")&&str_contains($exec,"'--confirm-tenant='"),'destructieve bevestigingen worden expliciet naar 4.8 doorgegeven');
+ c51(str_contains($exec,'while(true)')&&str_contains($exec,'sort($files,SORT_STRING)')&&str_contains($exec,'if($verwerkt===0)break'),'executor draint queue deterministisch zonder vast te lopen op niet-overneembare items');
+ c51(str_contains($exec,"\$lockDir=dirname(\$c['executor_lock'])")&&!str_contains($exec,"cpeDir(dirname(\$c['executor_lock'])"),'executor wijzigt globale /run/lock map niet');
  c51(!str_contains($exec,'shell_exec(')&&!str_contains($exec,'`')&&!str_contains($exec,'rm -rf'),'executor bevat geen shell escape of rm-rf');
  c51(str_contains($boot,"'/usr/bin/htpasswd'")&&str_contains($boot,"'-B'")&&str_contains($boot,"'-i'")&&!str_contains($boot,"'-b'"),'operatorbootstrap gebruikt bcrypt en wachtwoord via STDIN, nooit CLI');
  c51(str_contains($boot,'strlen($pw)<14'),'operatorwachtwoord heeft minimaal 14 tekens');
- c51(str_contains($apply,'Operatorbestand ontbreekt')&&str_contains($apply,'Platformbeheer-certificaat ontbreekt'),'root-apply vereist operator en TLS-certificaat vóór activatie');
- c51(str_contains($apply,"'groupadd','--system'")&&str_contains($apply,"'useradd','--system'")&&str_contains($apply,"'/usr/sbin/nologin'"),'root-apply maakt aparte system identity zonder login');
- c51(str_contains($apply,"'systemd-analyze','verify'")&&str_contains($apply,"'configtest'")&&str_contains($apply,"'enable','--now'"),'root-apply valideert FPM/Apache/systemd vóór queue-activatie');
+ c51(str_contains($apply,'Operatorbestand ontbreekt')&&str_contains($apply,'Platformbeheer-certificaatbestand ontbreekt'),'root-apply vereist operator en TLS-certificaat vóór activatie');
+ c51(str_contains($apply,'openssl_x509_check_private_key')&&str_contains($apply,"\$perm&0077")&&str_contains($apply,'subjectAltName'),'platformcertificaat wordt op key-match, private-keyrechten en exacte SAN gecontroleerd');
+ c51(str_contains($apply,"'/usr/sbin/groupadd','--system'")&&str_contains($apply,"'/usr/sbin/useradd','--system'")&&str_contains($apply,"'/usr/sbin/nologin'"),'root-apply maakt aparte system identity zonder login');
+ c51(str_contains($apply,"'/usr/bin/systemd-analyze','verify'")&&str_contains($apply,"'configtest'")&&str_contains($apply,"'enable','--now'"),'root-apply valideert FPM/Apache/systemd vóór queue-activatie');
+ c51(str_contains($apply,'function cpaDeps')&&str_contains($apply,"'/usr/bin/systemctl'")&&str_contains($apply,"'/usr/bin/id'"),'root-apply valideert vaste systeemdependencies vóór mutaties');
  $workflow=(string)file_get_contents($root.'/.github/workflows/deploy-dev.yml');c51(str_contains($workflow,'phase51-control-plane.php'),'fase 5.1 test draait in CI');
 }finally{rm51($tmp);}echo"Phase 5.1 control-plane: {$ok} OK, {$fout} fout(en)\n";exit($fout===0?0:1);
