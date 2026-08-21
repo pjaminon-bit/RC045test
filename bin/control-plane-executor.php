@@ -61,7 +61,7 @@ function cpeRequest(string$f):array
 }
 function cpeCommand(array$c,array$r):array
 {
-    $key=$r['tenant_key'];$plan=$c['tenants_root'].'/'.$key.'/lifecycle/lifecycle-plan.json';$ctx=lifecycle48PlanLeesEnValideer($plan);if(!hash_equals($key,(string)$ctx['plan']['tenant_key']))throw new RuntimeException('Lifecycleplan hoort bij andere tenant.');$a=$r['action'];$cmd=['/usr/bin/php',$c['lifecycle_apply'],'--plan='.$plan,'--'.$a];
+    $key=$r['tenant_key'];$plan=$c['tenants_root'].'/'.$key.'/lifecycle/lifecycle-plan.json';$ctx=lifecycle48PlanLeesEnValideer($plan);if(!hash_equals($key,(string)$ctx['plan']['tenant_key']))throw new RuntimeException('Lifecycleplan hoort bij andere tenant.');$php=(string)($ctx['plan']['runtime']['php_binary']??'');if(!preg_match('#^/usr/bin/php[0-9]{1,2}\.[0-9]{1,2}$#D',$php)||!is_file($php)||!is_executable($php))throw new RuntimeException('Lifecycleplan bevat geen beschikbare exacte tenant-PHP-binary.');$a=$r['action'];$cmd=[$php,$c['lifecycle_apply'],'--plan='.$plan,'--'.$a];
     if(in_array($a,['delete','purge'],true)){$ct=(string)($r['confirm']['tenant']??'');$sha=(string)($r['confirm']['export_sha256']??'');if(!hash_equals($key,$ct)||preg_match('/^[0-9a-f]{64}$/D',$sha)!==1)throw new RuntimeException('Destructieve bevestiging is ongeldig.');$cmd[]='--confirm-tenant='.$ct;$cmd[]='--confirm-export-sha='.$sha;}
     if($a==='purge'){if(!hash_equals('VERWIJDER-DEFINITIEF',(string)($r['confirm']['purge']??'')))throw new RuntimeException('Purgebevestiging is ongeldig.');$cmd[]='--confirm-purge=VERWIJDER-DEFINITIEF';}
     return$cmd;
