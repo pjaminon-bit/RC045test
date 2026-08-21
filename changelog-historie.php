@@ -5,6 +5,12 @@ $recent = [
   [
     'datum' => '2026-08-21',
     'cat' => 'verbetering',
+    'titel' => 'Veilige tenantlevenscyclus voorbereid',
+    'tekst' => 'Fase 4.8 voegt een aparte operatorlaag toe voor bestaande verenigingen: gecontroleerd adopteren, uitschakelen, opnieuw activeren, volledig exporteren en uiteindelijk verwijderen. Verwijderen vereist eerst een geverifieerde export, daarna een omkeerbare pending-delete-fase en minimaal 24 uur wachttijd vóór een tweede expliciete purgebevestiging. Lifecycle-acties zijn tenantgebonden, root-only, geserialiseerd en auditbaar; gewone verenigingsbeheerders krijgen geen directe serverrechten.',
+  ],
+  [
+    'datum' => '2026-08-21',
+    'cat' => 'verbetering',
     'titel' => 'Veilige releases en automatische rollback voorbereid',
     'tekst' => 'Fase 4.7 voegt immutable releases per commit toe met een inhoudsmanifest, een atomische current-wissel, tenantpreflight en volledige healthchecks na activatie. Als een nieuwe release na de wissel faalt wordt automatisch naar de vorige gezonde release teruggeschakeld. Handmatige rollback gebruikt alleen de eerder gevalideerde previous-release uit server-state.',
   ],
