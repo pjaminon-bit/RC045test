@@ -104,6 +104,8 @@ Omvat:
 - mislukte eerste ACME-uitgifte rolt nieuw geactiveerde tenant-HTTP-route zo mogelijk terug;
 - geen ACME-accountmail, certificaatprivate key of andere secrets in tenantbundles/Git.
 
+**Heraudit 21-08-2026:** opnieuw gecontroleerd tegen actuele Apache/Certbot-contracten; geen nieuwe blocker of codewijziging nodig.
+
 Zie `docs/VPS-TLS.md`.
 
 ### 4.5 — Database provisioning
@@ -129,6 +131,8 @@ Omvat:
 - root-vrije bundlecheck en aparte Linux-root `--apply`;
 - post-apply runtimecheck draait als de echte tenant Linux-user, test DML rollback-safe en eist DDL-weigering;
 - geen DB-secrets in Git, `config.php`, `deployment.json`, environment of runtimebundles.
+
+**4.5.1 — database security heraudit:** code/CI-fix in afronding. De root-apply vereist een stilstaande tenant-runtime, houdt de app-role `NOLOGIN` totdat tenant-HBA en least privilege aantoonbaar actief zijn, zet de role bij fouten opnieuw `NOLOGIN`, laat beschermende HBA-rejects na latere provisioningfouten staan en weigert symlinks in alle root-HBA/configpaden.
 
 Zie `docs/VPS-DATABASE.md`.
 

@@ -34,7 +34,8 @@ Voor een tenant moeten vooraf aanwezig zijn:
 3. `deployment.json` uit fase 3.5;
 4. fase-4.1 runtimebundle;
 5. de fase-4.1 Linux-user/group moet daadwerkelijk op de VPS zijn toegepast voordat `--apply` wordt gebruikt;
-6. PostgreSQL moet gecontroleerd met `listen_addresses=''` zijn gestart en `/var/run/postgresql` als Unix-socket aanbieden.
+6. PostgreSQL moet gecontroleerd met `listen_addresses=''` zijn gestart en `/var/run/postgresql` als Unix-socket aanbieden;
+7. de tenant-PHP-FPM pool moet vóór iedere database-`--apply` zijn gestopt. Fase 4.5.1 weigert actieve processen van de tenant-runtimeuser fail-closed.
 
 Fase 4.5 schakelt een bestaande JSON-tenant **niet automatisch** om. Een datamigratie is een afzonderlijke, expliciete operatie en mag niet verstopt zitten in infrastructuurprovisioning.
 
@@ -77,6 +78,8 @@ Deze stap controleert uitsluitend planbinding en hashes en wijzigt PostgreSQL of
 
 ## Op de echte VPS toepassen
 
+Stop eerst de tenant-PHP-FPM pool en voer daarna uit:
+
 ```bash
 sudo php bin/apply-vps-database.php \
   --database-plan=/srv/verenigingen/noorderhaven/database/database-plan.json \
@@ -87,24 +90,32 @@ De apply-tool:
 
 1. vereist Linux root;
 2. controleert dat de fase-4.1 tenantuser/group werkelijk bestaat;
-3. vereist PostgreSQL >=16, `listen_addresses=''` en socket `/var/run/postgresql`;
-4. controleert vóór mutaties of deterministische role-/databasenamen niet door een ander object zijn bezet;
-5. markeert platformobjecten expliciet met de tenant-key;
-6. maakt een NOLOGIN owner-role;
-7. maakt de app-role als LOGIN zonder password en zonder superuser/CREATEDB/CREATEROLE/replication/BYPASSRLS;
-8. maakt één database waarvan alleen de owner-role eigenaar is;
-9. revoke't `PUBLIC` database- en schemarechten;
-10. past schema/migratie v1 toe als PostgreSQL-admin;
-11. geeft de app-role alleen CONNECT, schema-USAGE, SELECT op de schemamarker en SELECT/INSERT/UPDATE/DELETE op de private-store tabel;
-12. installeert de tenant-HBA-regels in `/etc/verenigingsplatform/postgresql/pg_hba.d`;
-13. zet de platform `include_dir` vóór de niet-platformregels in de actieve `pg_hba.conf`;
-14. valideert de actuele HBA-bestanden via `pg_hba_file_rules` vóór reload;
-15. ondersteunt meerdere tenant-HBA-bestanden in dezelfde gecontroleerde include-dir zonder ze als generieke regels te behandelen;
-16. reloadt PostgreSQL alleen na geldige HBA-config;
-17. test een echte peer-login als de tenant Linux-user;
-18. bewijst dat dezelfde tenantuser niet naar de `postgres` database kan uitwijken.
+3. bewijst met `pgrep -u <tenantuser>` dat de tenant-runtime stil staat;
+4. vereist PostgreSQL >=16, `listen_addresses=''` en socket `/var/run/postgresql`;
+5. controleert vóór mutaties of deterministische role-/databasenamen niet door een ander object zijn bezet;
+6. markeert platformobjecten expliciet met de tenant-key;
+7. maakt de NOLOGIN owner-role en maakt/normaliseert de app-role eerst als **NOLOGIN**, zonder password en zonder superuser/CREATEDB/CREATEROLE/replication/BYPASSRLS;
+8. weigert gevaarlijke privilege-, membership- of password-drift op een bestaande tenantrole;
+9. installeert en valideert **vóór LOGIN** de tenant-HBA allow-own/reject-other in `/etc/verenigingsplatform/postgresql/pg_hba.d`;
+10. zet de platform `include_dir` vóór de niet-platformregels in de actieve `pg_hba.conf`, valideert die met `pg_hba_file_rules` en reloadt PostgreSQL alleen na een geldige preflight;
+11. maakt één database waarvan alleen de owner-role eigenaar is;
+12. revoke't `PUBLIC` database- en schemarechten, normaliseert oude app-grants en past schema/migratie v1 toe als PostgreSQL-admin;
+13. bewijst exact dat de app-role alleen CONNECT, schema-USAGE, SELECT op de schemamarker en SELECT/INSERT/UPDATE/DELETE op de private-store tabel heeft;
+14. schakelt de app-role pas daarna als laatste databasebeveiligingsstap naar **LOGIN**;
+15. test een echte peer-login als de tenant Linux-user;
+16. bewijst dat dezelfde tenantuser niet naar de `postgres` database kan uitwijken;
+17. zet bij iedere mislukte apply een reeds tenantgebonden app-role zo mogelijk terug naar **NOLOGIN**;
+18. laat een reeds succesvol geladen beschermende tenant-HBA bij een latere provisioningfout bewust staan, zodat een fout nooit een LOGIN-role zonder cross-database reject kan achterlaten.
 
 Afwijkende bestaande PostgreSQL-objecten worden niet met `--force` overgenomen. Een collision zonder correcte tenantmarker vereist handmatige inspectie.
+
+### Fase 4.5.1 — security heraudit
+
+De heraudit van 21-08-2026 sloot een provisioningrace in de oorspronkelijke 4.5-volgorde. Een PostgreSQL LOGIN-role mocht niet al bestaan voordat de tenant-HBA reject aantoonbaar actief was. De vaste volgorde is daarom nu:
+
+**tenant-runtime stil → app-role NOLOGIN → HBA allow-own/reject-other geladen → database/schema/least-privilege → app-role LOGIN → peer/cross-database check**.
+
+Bij een fout wordt de app-role fail-closed weer NOLOGIN gezet. Een reeds geladen tenant-HBA wordt niet teruggedraaid nadat databaseobjecten voor de tenant bestaan.
 
 ## HBA-contract
 
@@ -116,6 +127,8 @@ local all              <eigen-linux-db-user> reject
 ```
 
 Alle bestanden in de gecontroleerde platform-include staan vóór bestaande niet-platform HBA-regels. Daardoor kan een latere brede `local all all ...` regel de tenantgrens niet omzeilen. De socket-only serverinstelling voorkomt daarnaast dat TCP/`host`-regels als alternatief authenticatiepad dienen.
+
+PostgreSQL verwerkt HBA-regels op volgorde en gebruikt de eerste passende regel. Daarom staat de specifieke eigen-database allow vóór de expliciete reject voor alle overige databases van dezelfde tenantuser.
 
 ## Schema v1
 
