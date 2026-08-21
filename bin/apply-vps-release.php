@@ -1,15 +1,19 @@
 <?php
 if (PHP_SAPI !== 'cli') { http_response_code(403); exit('Alleen via CLI beschikbaar.'); }
 require_once dirname(__DIR__) . '/app/deployment/release-contract.php';
+require_once dirname(__DIR__) . '/app/deployment/process-runner.php';
 
 function apply47Stop(string $m, int $c = 1): void { fwrite(STDERR, "FOUT: {$m}\n"); exit($c); }
 function apply47Run(array $cmd, ?array $env = null): array
 {
-    $d=[0=>['pipe','r'],1=>['pipe','w'],2=>['pipe','w']];
-    $p=@proc_open($cmd,$d,$x,null,$env,['bypass_shell'=>true]);
-    if(!is_resource($p)) return [255,'','proces kon niet starten'];
-    fclose($x[0]); $o=stream_get_contents($x[1]); fclose($x[1]); $e=stream_get_contents($x[2]); fclose($x[2]);
-    return [proc_close($p),trim((string)$o),trim((string)$e)];
+    return process521Run($cmd, null, null, $env, 3600);
+}
+function apply47Deps(): void
+{
+    foreach(['/usr/sbin/runuser','/usr/bin/env','/usr/bin/systemctl','/usr/sbin/apache2ctl'] as $b) {
+        if(!is_file($b)||!is_executable($b))apply47Stop('Vereiste release-executable ontbreekt: '.$b);
+    }
+    if(!str_starts_with(PHP_BINARY,'/')||!is_file(PHP_BINARY)||!is_executable(PHP_BINARY))apply47Stop('Actieve PHP CLI is geen veilig absoluut executablepad.');
 }
 function apply47RootMeta(string $pad, int $mode, bool $map): void
 {
@@ -132,7 +136,7 @@ function apply47CandidateProbe(string $release, array $tenants): void
 }
 function apply47Health(string $release, array $tenants, bool $stop=true): bool
 {
-    $checker=$release.'/bin/check-vps-health.php';foreach($tenants as$t){$php='/usr/bin/php'.(string)$t['php_version'];[$c,,$e]=apply47Run([$php,$checker,'--monitoring-plan='.$t['monitoring_plan'],'--probe','--write-status']);if($c!==0){if($stop)apply47Stop('Healthcheck faalt voor '.$t['tenant'].($e!==''?': '.$e:''));return false;}}return true;
+    $checker=$release.'/bin/check-vps-health.php';foreach($tenants as$t){$php='/usr/bin/php'.(string)$t['php_version'];[$c,,$e]=apply47Run([$php,$checker,'--monitoring-plan='.$t['monitoring_plan'],'--probe','--write-status']);if($c!==0){if($stop)apply47Stop('Healthcheck faalt voor '.$t['tenant'].($e!==''?': '.$e));return false;}}return true;
 }
 function apply47FpmReload(array $tenants): bool
 {
@@ -168,6 +172,7 @@ $modes=array_filter(['check'=>isset($opt['check']),'bootstrap'=>isset($opt['boot
 if(!in_array($mode,['rollback','recover'],true)){$planPad=trim((string)($opt['plan']??''));if($planPad==='')apply47Stop('--plan is verplicht.');try{$ctx=release47PlanLeesEnValideer($planPad);$plan=$ctx['plan'];$manifest=$ctx['manifest'];}catch(Throwable$e){apply47Stop($e->getMessage());}if($mode==='check'){echo'CHECK OK  commit='.$plan['commit'].' files='.$plan['source']['file_count']."\n";exit(0);}}
 else{$platform=release47VeiligAbsoluut(trim((string)($opt['platform-root']??'/srv/verenigingsplatform')),'Platformroot');$tenBase=release47VeiligAbsoluut(trim((string)($opt['tenant-base']??'/srv/verenigingen')),'Tenantbasis');$plan=['paths'=>['platform_root'=>$platform,'releases_root'=>$platform.'/releases','current'=>$platform.'/current','state'=>$platform.'/release-state.json','events'=>$platform.'/release-events.jsonl','lock'=>'/var/lock/verenigingsplatform-release.lock','tenant_base'=>$tenBase]];}
 if(PHP_OS_FAMILY!=='Linux'||!function_exists('posix_geteuid')||posix_geteuid()!==0)apply47Stop('Release-activatie vereist Linux root.');
+apply47Deps();
 $lock=@fopen((string)$plan['paths']['lock'],'c+');if(!is_resource($lock)||!flock($lock,LOCK_EX|LOCK_NB))apply47Stop('Een andere releasehandeling is al actief.');if(!@chown((string)$plan['paths']['lock'],0)||!@chgrp((string)$plan['paths']['lock'],0)||!@chmod((string)$plan['paths']['lock'],0600))apply47Stop('Release-lock kon niet root-only worden gemaakt.');apply47RootMeta((string)$plan['paths']['lock'],0600,false);
 apply47SafeDir((string)$plan['paths']['platform_root']);apply47SafeDir((string)$plan['paths']['releases_root']);
 if($mode==='recover'){apply47Recover($plan);exit(0);}
