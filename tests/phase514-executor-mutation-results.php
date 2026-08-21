@@ -19,5 +19,27 @@ $payloadCode='for($i=0;$i<128;$i++){fwrite(STDOUT,str_repeat("O",8192));fwrite(S
 [$pc,$po,$pe]=process521Run([PHP_BINARY,'-r',$payloadCode],null,null,null,10,4194304);c514($pc===0&&strlen($po)===1048576&&strlen($pe)===1048576,'runner draint >1 MiB stdout en stderr gelijktijdig zonder pipe-deadlock');
 $stdin=str_repeat('xY7-',65536);[$ic,$io,$ie]=process521Run([PHP_BINARY,'-r','$s=stream_get_contents(STDIN);fwrite(STDOUT,hash("sha256",$s));fwrite(STDERR,(string)strlen($s));'],$stdin,null,null,10);c514($ic===0&&$io===hash('sha256',$stdin)&&$ie===(string)strlen($stdin),'runner schrijft grote stdin terwijl stdout/stderr gelijktijdig worden gedraind');
 $absolute=false;try{process521Run(['php','-v']);}catch(Throwable$e){$absolute=str_contains($e->getMessage(),'absoluut executablepad');}c514($absolute,'runner weigert niet-absolute executablepaden fail-closed');
+
+$production=[
+ 'runtime'=>$root.'/bin/apply-vps-runtime.php',
+ 'webserver'=>$root.'/bin/apply-vps-webserver.php',
+ 'tls'=>$root.'/bin/apply-vps-tls.php',
+ 'database'=>$root.'/bin/apply-vps-database.php',
+ 'monitoring'=>$root.'/bin/apply-vps-monitoring.php',
+ 'release'=>$root.'/bin/apply-vps-release.php',
+ 'lifecycle'=>$root.'/bin/apply-vps-lifecycle.php',
+ 'control-plane'=>$root.'/bin/apply-vps-control-plane.php',
+ 'first-vps'=>$root.'/bin/apply-first-vps-bootstrap.php',
+ 'executor'=>$root.'/bin/control-plane-executor.php',
+ 'operator'=>$root.'/bin/bootstrap-control-plane-operator.php',
+];
+foreach($production as$name=>$file){$src=(string)file_get_contents($file);c514(!str_contains($src,'proc_open('),$name.' bevat geen eigen directe proc_open meer');c514(str_contains($src,'process-runner.php')&&str_contains($src,'process521Run('),$name.' gebruikt de gedeelde subprocess-runner');}
+$runtime=(string)file_get_contents($production['runtime']);c514(str_contains($runtime,"'getent' => '/usr/bin/getent'")&&str_contains($runtime,"'groupadd' => '/usr/sbin/groupadd'")&&str_contains($runtime,"'pgrep' => '/usr/bin/pgrep'")&&str_contains($runtime,'apply41Deps();'),'runtime zet PATH-tools vast op absolute binaries vóór mutaties');
+$database=(string)file_get_contents($production['database']);c514(str_contains($database,"'runuser' => ['/usr/sbin/runuser','/usr/bin/runuser']")&&str_contains($database,"'psql' => ['/usr/bin/psql']")&&str_contains($database,"\$command[\$sep + 1] = apply45Binary")&&str_contains($database,'apply45Deps();'),'database pint runuser én child-psql en preflight dependencies');
+$release=(string)file_get_contents($production['release']);$releaseLock=strpos($release,"\$lock=@fopen((string)\$plan['paths']['lock'],'c+')");$releaseDeps=strpos($release,'apply47Deps();');c514($releaseDeps!==false&&$releaseLock!==false&&$releaseDeps<$releaseLock&&str_contains($release,"'/usr/sbin/runuser','/usr/bin/env','/usr/bin/systemctl','/usr/sbin/apache2ctl'"),'release valideert vaste absolute executables vóór het release-lockbestand');
+$tls=(string)file_get_contents($production['tls']);c514(str_contains($tls,"'certbot'=>['/usr/bin/certbot','/usr/local/bin/certbot']")&&str_contains($tls,"'openssl'=>['/usr/bin/openssl']")&&str_contains($tls,'apply44Deps($plan)'),'TLS lost certbot/openssl/systemctl fail-closed naar absolute binaries op');
+$monitor=(string)file_get_contents($production['monitoring']);$monitorContract=(string)file_get_contents($root.'/app/deployment/monitoring-contract.php');c514(str_contains($monitor,"\$php='/usr/bin/php'.(string)\$p['runtime']['php_version']")&&str_contains($monitorContract,"'php_binary'=>'/usr/bin/php'.\$php")&&str_contains($monitorContract,"'ExecStart='.\$php.' "),'monitoring apply en systemd-service zijn aan exacte tenant-PHP gekoppeld');
+$web=(string)file_get_contents($production['webserver']);c514(str_contains($web,'process521Run($cmd, null, null, null, 300)')&&str_contains($web,'Apache control-binary ontbreekt of is niet absoluut.'),'webserver gebruikt gedeelde runner en eist absoluut Apache executablepad');
+
 $workflow=(string)file_get_contents($root.'/.github/workflows/deploy-dev.yml');c514(str_contains($workflow,'phase514-executor-mutation-results.php'),'fase 5.1.4 executor mutation-resulttest draait in CI');
 echo"Phase 5.1.4 executor mutation results: {$ok} OK, {$fout} fout(en)\n";exit($fout===0?0:1);
