@@ -132,21 +132,28 @@ Omvat:
 - post-apply runtimecheck draait als de echte tenant Linux-user, test DML rollback-safe en eist DDL-weigering;
 - geen DB-secrets in Git, `config.php`, `deployment.json`, environment of runtimebundles.
 
-**4.5.1 — database security heraudit:** code/CI-fix in afronding. De root-apply vereist een stilstaande tenant-runtime, houdt de app-role `NOLOGIN` totdat tenant-HBA en least privilege aantoonbaar actief zijn, zet de role bij fouten opnieuw `NOLOGIN`, laat beschermende HBA-rejects na latere provisioningfouten staan en weigert symlinks in alle root-HBA/configpaden.
+**4.5.1 — database security heraudit:** afgerond en CI-groen. De root-apply vereist een stilstaande tenant-runtime, houdt de app-role `NOLOGIN` totdat tenant-HBA en least privilege aantoonbaar actief zijn, zet de role bij fouten opnieuw `NOLOGIN`, laat beschermende HBA-rejects na latere provisioningfouten staan en weigert symlinks in alle root-HBA/configpaden.
 
 Zie `docs/VPS-DATABASE.md`.
 
 ### 4.6 — Monitoring & logging
 
-**Status: gepland.**
+**Status: code/automation in uitvoering op branch; productie-installatie volgt op de echte VPS.**
 
 Omvat:
 
-- healthchecks;
-- uptime/error monitoring;
-- PHP-FPM/webserver/app logging;
-- tenantidentiteit in operationele logs zonder secrets/persoonsdata te lekken;
-- alerts voor relevante storingen.
+- informatie-arme publieke healthcheck: 204 gezond, 503 ongezond, 404 op standalone/DEV;
+- lokale root-only minuutprobe voor Apache, PHP-FPM, PostgreSQL, TLS, FPM-socket, database-peerbinding, app-health en schijfruimte;
+- Certbot-lineagecontrole die geldige `live/` symlinks uitsluitend binnen de eigen `archive/<cert-name>/` accepteert;
+- privacybewust Apache accesslog zonder IP, URI/query, referrer, user-agent, cookies of Authorization;
+- PHP-FPM servicelog via systemd-journal zonder de fase-4.1 poolconfig achteraf te muteren;
+- tenantgebonden operationele app-log met vaste contextallowlist;
+- 14-daagse logrotatie;
+- root-only statusbestanden buiten documentroot;
+- optionele alert-adapter buiten Git, met up/down-transities en maximaal één reminder per uur;
+- systemd minuut-timer wordt pas enabled nadat Apache/systemd/logrotate-validatie en een eerste volledige healthprobe slagen.
+
+Zie `docs/VPS-MONITORING.md`.
 
 ### 4.7 — Release & rollback automation
 
@@ -171,7 +178,8 @@ Omvat:
 - gecontroleerd uitschakelen;
 - exporteren;
 - verwijderen met expliciete veiligheidsstappen;
-- lifecycle-acties tenantgebonden auditen.
+- lifecycle-acties tenantgebonden auditen;
+- uiteindelijk een aparte platform-/superbeheer-GUI voor deze operatoracties; niet in het gewone verenigingsbeheer.
 
 ## Volgorde
 
