@@ -83,7 +83,7 @@ try{
  c45(str_contains($apply,"local all")===false&&str_contains($apply,'database45HbaConfig'),'HBA-inhoud komt uitsluitend uit het gevalideerde pure contract');
  c45(str_contains($apply,'laatstePlatform')&&str_contains($apply,'eersteBuitenPlatform')&&str_contains($apply,'type IS NOT NULL'),'HBA ordering bewijst dat alle platform-authregels vóór niet-platformregels staan');
  c45(str_contains($apply,"'-d', 'postgres'")&&str_contains($apply,'Cross-database HBA-reject'),'apply-tool bewijst dat tenant OS-user niet naar postgres/andere database kan uitwijken');
- c45(str_contains($apply,'REVOKE ALL ON DATABASE')&&str_contains($apply,'FROM ' . '$appUser')&&str_contains($apply,'has_database_privilege')&&str_contains($apply,"'TEMPORARY'")&&str_contains($apply,"'TRIGGER'"),'root-apply normaliseert en controleert database/schema/table least privilege exact');
+ c45(str_contains($apply,'REVOKE ALL ON DATABASE')&&str_contains($apply,'has_database_privilege')&&str_contains($apply,'has_schema_privilege')&&str_contains($apply,'has_table_privilege')&&str_contains($apply,"'TEMPORARY'")&&str_contains($apply,"'TRIGGER'"),'root-apply normaliseert en controleert database/schema/table least privilege exact');
  c45(str_contains($check,'posix_geteuid()')&&str_contains($check,"extension_loaded('pdo_pgsql')"),'runtimecheck moet als exact tenant Linux-user met pdo_pgsql draaien');
  c45(str_contains($check,'beginTransaction()')&&str_contains($check,'rollBack()')&&str_contains($check,'CREATE TABLE vst.__phase45_ddl_probe'),'runtimecheck test DML rollback-safe en verwacht DDL-weigering');
 }finally{putenv('VERENIGING_CONFIG_FILE');rr45($tmp);}
