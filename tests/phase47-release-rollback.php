@@ -40,7 +40,7 @@ try{
  c47(str_contains($apply,"'/.current.tmp.'")&&str_contains($apply,'rename($tmp,$current)')&&str_contains($apply,'symlink($rel,$tmp)'),'current-wissel gebruikt tijdelijke symlink plus atomische rename');
  c47(str_contains($apply,'apply47Health((string)$state[\'active\'][\'path\']')&&str_contains($apply,'apply47CandidateProbe'),'deploy vereist gezonde huidige release en read-only kandidaatprobe');
  c47(strpos($apply,'apply47CandidateProbe')<strpos($apply,'apply47ApacheTest')&&strpos($apply,'apply47ApacheTest')<strrpos($apply,'apply47Switch($plan,$candidate)'),'tenantprobe en Apache configtest gebeuren vóór kandidaatswitch');
- c47(str_contains($apply,"['systemctl','reload'"),'PHP-FPM wordt na codewissel gecontroleerd herladen');
+ c47(str_contains($apply,"['/usr/bin/systemctl','reload'"),'PHP-FPM wordt na codewissel gecontroleerd herladen via absolute systemctl');
  c47(substr_count($apply,"'/usr/bin/php'.(string)\$t['php_version']")>=2,'syntax- en tenantprobe gebruiken exact de tenant PHP-versie');
  $boot=strpos($apply,"if(\$mode==='bootstrap')");$bootLint=strpos($apply,"apply47PhpSyntax((string)\$entry['path'],\$manifest)",$boot);$bootSwitch=strpos($apply,'apply47Switch($plan,$entry)',$boot);c47($boot!==false&&$bootLint!==false&&$bootSwitch!==false&&$bootLint<$bootSwitch,'eerste VPS-bootstrap lint volledige release vóór current-wissel');
  c47(str_contains($apply,'apply47Herstel')&&str_contains($apply,'deploy_failed_rolled_back'),'mislukte post-switch deploy heeft expliciet rollbackpad');
