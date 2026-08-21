@@ -265,14 +265,17 @@ try {
 
     $appBestond = apply45Bestaat('role', $appUser);
     if ($appBestond) {
+        // De marker is hierboven al exact gevalideerd: vanaf dit punt is de
+        // role aantoonbaar platform/tenant-owned en mag elk foutpad hem sluiten.
+        $appRoleTenantGebonden = true;
         $preProps = apply45PgQuery("SELECT rolsuper::text || '|' || rolinherit::text || '|' || rolcreaterole::text || '|' || rolcreatedb::text || '|' || rolreplication::text || '|' || rolbypassrls::text || '|' || rolconnlimit::text || '|' || (rolpassword IS NULL)::text FROM pg_authid WHERE rolname=" . database45SqlLiteral($appUser));
         if (!hash_equals('false|true|false|false|false|false|10|true', $preProps)) {
-            throw new RuntimeException('Bestaande app-role heeft gevaarlijke privilege/password-drift; provisioning stopt vóór HBA-wijziging.');
+            throw new RuntimeException('Bestaande app-role heeft gevaarlijke privilege/password-drift; role wordt fail-closed gesloten.');
         }
     } else {
         apply45PgQuery('CREATE ROLE ' . $appUser . ' NOLOGIN INHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS CONNECTION LIMIT 10 PASSWORD NULL; COMMENT ON ROLE ' . $appUser . ' IS ' . database45SqlLiteral($marker));
+        $appRoleTenantGebonden = true;
     }
-    $appRoleTenantGebonden = true;
 
     $memberships = apply45PgQuery("SELECT count(*) FROM pg_auth_members WHERE member IN (SELECT oid FROM pg_roles WHERE rolname IN (" . database45SqlLiteral($owner) . ',' . database45SqlLiteral($appUser) . ")) OR roleid IN (SELECT oid FROM pg_roles WHERE rolname IN (" . database45SqlLiteral($owner) . ',' . database45SqlLiteral($appUser) . '))');
     if ($memberships !== '0') throw new RuntimeException('Tenant PostgreSQL-roles mogen geen role-memberships hebben.');
