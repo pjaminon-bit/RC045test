@@ -4,6 +4,7 @@
 // ============================================================
 if (PHP_SAPI !== 'cli') { http_response_code(403); exit('Alleen via CLI beschikbaar.'); }
 require_once dirname(__DIR__) . '/app/deployment/lifecycle-contract.php';
+require_once dirname(__DIR__) . '/app/deployment/lifecycle-purge-hardening.php';
 
 function apply48Stop(string $m, int $c = 1): never { fwrite(STDERR, "FOUT: {$m}\n"); exit($c); }
 function apply48Run(array $cmd, ?string $stdin = null, ?string $stdoutFile = null): array
@@ -158,6 +159,18 @@ function apply48AdoptControle(array$p):void
 }
 function apply48SuspendedResources(array$p):void{apply48ApacheSuspend($p);if(apply48DbBestaat('role',(string)$p['database']['app_role']))apply48DbUit($p);apply48TimerUit($p);apply48FpmUit($p);}
 function apply48TreeGeenSymlinks(string$root):void{if(is_link($root)||!is_dir($root))throw new RuntimeException('Tenantboom is geen veilige directory.');$it=new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root,FilesystemIterator::SKIP_DOTS),RecursiveIteratorIterator::SELF_FIRST);foreach($it as$i)if(is_link($i->getPathname()))throw new RuntimeException('Symlink in tenantboom: '.$i->getPathname());}
+function apply48DeleteBoundary(array$p,?array$tombstone=null):string
+{
+    $b=lifecycle481DeleteBinding($p,$tombstone);$base=(string)$b['tenant_base'];$root=(string)$b['tenant_root'];
+    foreach([$base,$root]as$pad){$link=runtime41SymlinkInPad($pad);if($link!==null)throw new RuntimeException('Purgepad bevat symlink-ancestor: '.$link);}
+    $baseReal=realpath($base);if($baseReal===false||!is_dir($baseReal)||!hash_equals(runtime41NormPad($base),runtime41NormPad($baseReal)))throw new RuntimeException('Tenantbasis voor purge kan niet exact symlinkvrij worden bewezen.');
+    if(file_exists($root)||is_link($root)){
+        if(is_link($root)||!is_dir($root))throw new RuntimeException('Tenantroot voor purge is geen veilige directory.');
+        $rootReal=realpath($root);$expected=runtime41NormPad($baseReal.'/'.$b['tenant_key']);if($rootReal===false||!hash_equals($expected,runtime41NormPad($rootReal)))throw new RuntimeException('Tenantroot voor purge valt niet exact binnen de bewezen tenantbasis.');
+        apply48TreeGeenSymlinks($root);
+    }
+    return$root;
+}
 function apply48Rm(string$p):void{if(is_link($p)){@unlink($p);return;}if(!file_exists($p))return;if(is_dir($p)){foreach(scandir($p)?:[]as$n){if($n==='.'||$n==='..')continue;apply48Rm($p.'/'.$n);}@rmdir($p);}else@unlink($p);}
 function apply48Export(array$p,array$s):array
 {
@@ -183,11 +196,16 @@ function apply48PurgeInfra(array$p):void
     $u=(string)$p['runtime']['user'];if(!apply48ProcessenStil($p))throw new RuntimeException('Tenant Linux-user heeft nog processen vóór userdel.');if(function_exists('posix_getpwnam')&&is_array(@posix_getpwnam($u))){[$c,,$e]=apply48Run(['userdel',$u]);if($c!==0||is_array(@posix_getpwnam($u)))throw new RuntimeException('Tenant system user kon niet worden verwijderd: '.$e);}if(function_exists('posix_getgrnam')&&is_array(@posix_getgrnam((string)$p['runtime']['group']))){[$c,,$e]=apply48Run(['groupdel',(string)$p['runtime']['group']]);if($c!==0||is_array(@posix_getgrnam((string)$p['runtime']['group'])))throw new RuntimeException('Tenant system group kon niet worden verwijderd: '.$e);}
 }
 function apply48Tombstone(array$p,array$data):void{apply48SafeDir((string)$p['filesystem']['tombstone_dir']);apply48Write((string)$p['filesystem']['tombstone_file'],lifecycle48Json(array_merge(['schema'=>1,'phase'=>'4.8-tombstone','tenant_key'=>$p['tenant_key']],$data)),0640);}
+function apply48RecoveryMetaFile(string$p,string$label):void
+{
+    $link=runtime41SymlinkInPad($p);$s=@lstat($p);if($link!==null||!is_array($s)||!is_file($p)||(int)$s['uid']!==0||(((int)$s['mode']&0777)!==0640))throw new RuntimeException($label.' ontbreekt, bevat een symlink-ancestor of heeft onveilige metadata.');
+}
 function apply48RecoveryMeta(string $tenant): array
 {
     $snap='/var/lib/verenigingsplatform/lifecycle/plans/'.$tenant.'.json';$tomb='/var/lib/verenigingsplatform/lifecycle/tombstones/'.$tenant.'.json';
-    if(runtime41SymlinkInPad($snap)!==null||!is_file($snap)||is_link($tomb)||!is_file($tomb))throw new RuntimeException('Recovery snapshot/tombstone ontbreekt of is onveilig.');
-    $pr=json_decode((string)file_get_contents($snap),true);$tb=json_decode((string)file_get_contents($tomb),true);if(!is_array($pr)||($pr['phase']??'')!=='4.8'||!hash_equals($tenant,(string)($pr['tenant_key']??''))||!is_array($tb)||!hash_equals($tenant,(string)($tb['tenant_key']??'')))throw new RuntimeException('Recovery metadata is niet geldig voor deze tenant.');
+    apply48RecoveryMetaFile($snap,'Recovery plansnapshot');apply48RecoveryMetaFile($tomb,'Recovery tombstone');
+    $pr=json_decode((string)file_get_contents($snap),true);$tb=json_decode((string)file_get_contents($tomb),true);if(!is_array($pr)||!is_array($tb))throw new RuntimeException('Recovery metadata bevat ongeldige JSON.');
+    lifecycle481DeleteBinding($pr,$tb);
     $sha=hash_file('sha256',$snap);if(!is_string($sha)||!hash_equals($sha,(string)($tb['plan_snapshot_sha256']??'')))throw new RuntimeException('Recovery plansnapshot wijkt af van de purge-tombstone.');
     return[$pr,$tb,$snap];
 }
@@ -198,10 +216,10 @@ if(isset($o['help'])){echo"Gebruik: php bin/apply-vps-lifecycle.php --plan=... -
 $acties=['check','status','adopt-active','suspend','activate','recover','export','delete','cancel-delete','purge','recover-purge'];$gekozen=array_values(array_filter($acties,fn($a)=>isset($o[$a])));if(count($gekozen)!==1)apply48Stop('Kies exact één lifecycleactie.');$actie=$gekozen[0];
 try{
     if($actie==='recover-purge'){
-        apply48Root();$tenant=trim((string)($o['tenant']??''));if(!runtime41CanoniekeTenantKey($tenant))throw new RuntimeException('--tenant is verplicht en moet canoniek zijn.');[$pr,$tb,$snap]=apply48RecoveryMeta($tenant);$lock=apply48Lock($pr);$status=(string)($tb['status']??'');
-        if($status==='purging_infrastructure'){apply48PurgeInfra($pr);apply48Tombstone($pr,array_merge($tb,['status'=>'data_delete','data_delete_started_at_utc'=>apply48Utc()]));$tb['status']='data_delete';}
+        apply48Root();$tenant=trim((string)($o['tenant']??''));if(!runtime41CanoniekeTenantKey($tenant))throw new RuntimeException('--tenant is verplicht en moet canoniek zijn.');[$pr,$tb,$snap]=apply48RecoveryMeta($tenant);$lock=apply48Lock($pr);$root=apply48DeleteBoundary($pr,$tb);$status=(string)($tb['status']??'');
+        if($status==='purging_infrastructure'){apply48PurgeInfra($pr);apply48Tombstone($pr,array_merge($tb,['status'=>'data_delete','data_delete_started_at_utc'=>apply48Utc(),'tenant_root'=>$root]));$tb['status']='data_delete';$tb['tenant_root']=$root;}
         if(($tb['status']??'')!=='data_delete')throw new RuntimeException('recover-purge accepteert alleen purging_infrastructure of data_delete tombstones.');
-        $root=(string)$pr['filesystem']['tenant_root'];if(file_exists($root)){apply48TreeGeenSymlinks($root);apply48Rm($root);if(file_exists($root))throw new RuntimeException('Tenantroot bleef bestaan na purge-recovery.');}
+        $root=apply48DeleteBoundary($pr,$tb);if(file_exists($root)){apply48Rm($root);if(file_exists($root))throw new RuntimeException('Tenantroot bleef bestaan na purge-recovery.');}
         apply48Tombstone($pr,array_merge($tb,['status'=>'deleted','completed_at_utc'=>apply48Utc()]));@unlink((string)$pr['filesystem']['state_file']);apply48Audit($pr,'recover-purge','ok','pending_delete','deleted',['export_sha256'=>(string)($tb['export']['sha256']??'')]);@unlink($snap);echo'RECOVER PURGE OK tenant='.$tenant."\n";exit(0);
     }
     $planPad=trim((string)($o['plan']??''));if($planPad==='')throw new RuntimeException('--plan is verplicht.');$ctx=lifecycle48PlanLeesEnValideer($planPad);$p=$ctx['plan'];if($actie==='check'){echo'CHECK OK tenant='.$p['tenant_key']."\n";exit(0);}apply48Root();$lock=apply48Lock($p);
@@ -216,6 +234,6 @@ try{
     if($actie==='export'){$x=apply48Export($p,$state);$state=apply48CommitState($p,$state,'suspended',['last_export'=>$x]);apply48Audit($p,$actie,'ok','suspended','suspended',['export_sha256'=>$x['sha256'],'generation'=>$state['generation']]);echo'EXPORT OK tenant='.$p['tenant_key'].' sha256='.$x['sha256']."\n";exit(0);}
     if($actie==='delete'){if($state['status']!=='suspended')throw new RuntimeException('Delete-aanvraag vereist suspended status.');$ct=trim((string)($o['confirm-tenant']??''));$cs=trim((string)($o['confirm-export-sha']??''));if(!hash_equals((string)$p['tenant_key'],$ct))throw new RuntimeException('--confirm-tenant moet exact de tenant-key zijn.');$x=apply48ExportControle($state,$cs);$notBefore=time()+(int)$p['lifecycle']['purge_grace_seconds'];$state=apply48CommitState($p,$state,'pending_delete',['delete_requested_at_utc'=>apply48Utc(),'purge_not_before_utc'=>gmdate('Y-m-d\TH:i:s\Z',$notBefore),'delete_export'=>$x]);apply48Audit($p,$actie,'ok','suspended','pending_delete',['export_sha256'=>$cs,'generation'=>$state['generation']]);echo'DELETE PENDING tenant='.$p['tenant_key'].' purge_not_before='.$state['purge_not_before_utc']."\n";exit(0);}
     if($actie==='cancel-delete'){if($state['status']!=='pending_delete')throw new RuntimeException('Er is geen pending_delete om te annuleren.');unset($state['delete_requested_at_utc'],$state['purge_not_before_utc'],$state['delete_export']);$state=apply48CommitState($p,$state,'suspended',['delete_cancelled_at_utc'=>apply48Utc()]);apply48Audit($p,$actie,'ok','pending_delete','suspended',['generation'=>$state['generation']]);echo'CANCEL DELETE OK tenant='.$p['tenant_key']."\n";exit(0);}
-    if($actie==='purge'){if($state['status']!=='pending_delete')throw new RuntimeException('Purge vereist pending_delete status.');$ct=trim((string)($o['confirm-tenant']??''));$cs=trim((string)($o['confirm-export-sha']??''));$cp=trim((string)($o['confirm-purge']??''));if(!hash_equals((string)$p['tenant_key'],$ct)||!hash_equals('VERWIJDER-DEFINITIEF',$cp))throw new RuntimeException('Purge vereist exacte tenant- en definitieve bevestiging.');$x=apply48ExportControle($state,$cs);$nb=strtotime((string)($state['purge_not_before_utc']??''));if($nb===false||time()<$nb)throw new RuntimeException('Purge-wachttijd is nog niet verstreken.');$snapSha=hash_file('sha256',(string)$p['filesystem']['plan_snapshot_file']);if(!is_string($snapSha))throw new RuntimeException('Lifecycle plansnapshot checksum ontbreekt.');apply48Tombstone($p,['status'=>'purging_infrastructure','started_at_utc'=>apply48Utc(),'plan_snapshot_sha256'=>$snapSha,'export'=>$x]);apply48PurgeInfra($p);apply48Tombstone($p,['status'=>'data_delete','started_at_utc'=>apply48Utc(),'plan_snapshot_sha256'=>$snapSha,'export'=>$x,'tenant_root'=>$p['filesystem']['tenant_root']]);apply48TreeGeenSymlinks((string)$p['filesystem']['tenant_root']);apply48Rm((string)$p['filesystem']['tenant_root']);if(file_exists((string)$p['filesystem']['tenant_root']))throw new RuntimeException('Tenantroot bleef bestaan na definitieve purge.');apply48Tombstone($p,['status'=>'deleted','completed_at_utc'=>apply48Utc(),'plan_snapshot_sha256'=>$snapSha,'export'=>$x]);@unlink((string)$p['filesystem']['state_file']);apply48Audit($p,$actie,'ok','pending_delete','deleted',['export_sha256'=>$cs]);@unlink((string)$p['filesystem']['plan_snapshot_file']);echo'PURGE OK tenant='.$p['tenant_key'].' DNS-records niet automatisch gewijzigd'."\n";exit(0);}
+    if($actie==='purge'){if($state['status']!=='pending_delete')throw new RuntimeException('Purge vereist pending_delete status.');$ct=trim((string)($o['confirm-tenant']??''));$cs=trim((string)($o['confirm-export-sha']??''));$cp=trim((string)($o['confirm-purge']??''));if(!hash_equals((string)$p['tenant_key'],$ct)||!hash_equals('VERWIJDER-DEFINITIEF',$cp))throw new RuntimeException('Purge vereist exacte tenant- en definitieve bevestiging.');$x=apply48ExportControle($state,$cs);$nb=strtotime((string)($state['purge_not_before_utc']??''));if($nb===false||time()<$nb)throw new RuntimeException('Purge-wachttijd is nog niet verstreken.');$deleteRoot=apply48DeleteBoundary($p);$snapSha=hash_file('sha256',(string)$p['filesystem']['plan_snapshot_file']);if(!is_string($snapSha))throw new RuntimeException('Lifecycle plansnapshot checksum ontbreekt.');apply48Tombstone($p,['status'=>'purging_infrastructure','started_at_utc'=>apply48Utc(),'plan_snapshot_sha256'=>$snapSha,'export'=>$x]);apply48PurgeInfra($p);apply48Tombstone($p,['status'=>'data_delete','started_at_utc'=>apply48Utc(),'plan_snapshot_sha256'=>$snapSha,'export'=>$x,'tenant_root'=>$deleteRoot]);$deleteRoot=apply48DeleteBoundary($p,['schema'=>1,'phase'=>'4.8-tombstone','tenant_key'=>$p['tenant_key'],'status'=>'data_delete','tenant_root'=>$deleteRoot]);apply48Rm($deleteRoot);if(file_exists($deleteRoot))throw new RuntimeException('Tenantroot bleef bestaan na definitieve purge.');apply48Tombstone($p,['status'=>'deleted','completed_at_utc'=>apply48Utc(),'plan_snapshot_sha256'=>$snapSha,'export'=>$x]);@unlink((string)$p['filesystem']['state_file']);apply48Audit($p,$actie,'ok','pending_delete','deleted',['export_sha256'=>$cs]);@unlink((string)$p['filesystem']['plan_snapshot_file']);echo'PURGE OK tenant='.$p['tenant_key'].' DNS-records niet automatisch gewijzigd'."\n";exit(0);}
     throw new RuntimeException('Onbekende lifecycleactie.');
 } catch(Throwable$e){apply48Stop($e->getMessage());}
