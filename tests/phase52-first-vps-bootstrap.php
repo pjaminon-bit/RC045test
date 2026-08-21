@@ -33,11 +33,17 @@ try{
  $hook=(string)file_get_contents($bundle.'/50-verenigingsplatform-apache-reload');c52(str_contains($hook,'apache2ctl configtest')&&str_contains($hook,'systemctl reload apache2'),'Certbot deploy-hook doet configtest vóór reload');
 
  require_once $root.'/app/deployment/first-vps-bootstrap-contract.php';
+ require_once $root.'/app/deployment/security-hardening.php';
  $prof=$plan['platform']['dns'];$good=['a'=>['203.0.113.10'],'aaaa'=>[],'cname'=>[]];$bad=['a'=>['203.0.113.10','203.0.113.11'],'aaaa'=>[],'cname'=>[]];
  c52((bootstrap52DnsBeoordeel($prof,'beheer.platform.example',$good,null)['ready']??false)===true,'exact direct platform-DNS-profiel is ready');
  c52((bootstrap52DnsBeoordeel($prof,'beheer.platform.example',$bad,null)['ready']??true)===false,'extra stale platform-IP maakt DNS fail-closed');
  $cnameProf=bootstrap52Dns('cname','203.0.113.10','','vps.platform.example','beheer2.platform.example');$owner=['a'=>[],'aaaa'=>[],'cname'=>['vps.platform.example']];$terminal=['a'=>['203.0.113.10'],'aaaa'=>[],'cname'=>[]];
  c52((bootstrap52DnsBeoordeel($cnameProf,'beheer2.platform.example',$owner,$terminal)['ready']??false)===true,'platform-DNS ondersteunt exact één CNAME-hop naar verwachte adressen');
+ $rc=str_repeat('c',40);$rm=str_repeat('d',64);$rp='/srv/verenigingsplatform/releases/'.$rc;$marker=['schema'=>1,'phase'=>'4.7-release','immutable'=>true,'commit'=>$rc,'manifest_sha256'=>$rm];$state=['schema'=>1,'phase'=>'4.7-state','active'=>['commit'=>$rc,'path'=>$rp,'manifest_sha256'=>$rm],'previous'=>null,'transition'=>null];
+ try{security521ReleaseBinding($rc,$rp,$rm,$rp,$marker,$state);c52(true,'exacte fase-5.2 releasebinding wordt geaccepteerd');}catch(Throwable$e){c52(false,'exacte fase-5.2 releasebinding wordt geaccepteerd');}
+ try{security521ReleaseBinding($rc,$rp,$rm,'/srv/verenigingsplatform/releases/'.str_repeat('e',40),$marker,$state);c52(false,'onverwachte current-wissel wordt fail-closed geweigerd');}catch(Throwable$e){c52(str_contains($e->getMessage(),'current'),'onverwachte current-wissel wordt fail-closed geweigerd');}
+ $stateAndere=$state;$stateAndere['active']['commit']=str_repeat('e',40);try{security521ReleaseBinding($rc,$rp,$rm,$rp,$marker,$stateAndere);c52(false,'andere actieve releasecommit in state wordt geweigerd');}catch(Throwable$e){c52(str_contains($e->getMessage(),'Actieve'),'andere actieve releasecommit in state wordt geweigerd');}
+ $stateTransition=$state;$stateTransition['transition']=['mode'=>'deploy','from'=>$state['active'],'to'=>$state['active']];try{security521ReleaseBinding($rc,$rp,$rm,$rp,$marker,$stateTransition);c52(false,'lopende 4.7 transition blokkeert first-VPS vervolg');}catch(Throwable$e){c52(str_contains($e->getMessage(),'stabiel'),'lopende 4.7 transition blokkeert first-VPS vervolg');}
 
  $apply=(string)file_get_contents($root.'/bin/apply-first-vps-bootstrap.php');
  c52(str_contains($apply,'plan_sha256')&&str_contains($apply,"\$p['paths']['state_file']")&&str_contains($apply,"\$p['paths']['lock_file']")&&str_contains($apply,'flock($lh,LOCK_EX|LOCK_NB)'),'resume-state is plan-gebonden en globaal gelockt');
@@ -61,6 +67,9 @@ try{
  c52(str_contains($apply,'b52TrustedReleasePlan')&&str_contains($apply,'b52SourceTrust')&&str_contains($apply,"b52PlatformHttp(\$p,\$ctx['artifacts'])"),'root-apply gebruikt root-owned releaseplan en in-memory gevalideerde bootstrapartifacts');
  c52(str_contains($apply,"(int)\$s['uid']!==0")&&str_contains($apply,"((int)\$s['mode']&0022)!==0"),'first-VPS root-apply weigert niet-root-owned of group/world-writable releasebron');
  c52(str_contains($apply,'b52ExactBytes')&&!str_contains($apply,'function b52ExactInstall'),'serverartifacts worden uit gevalideerde bytes geplaatst en niet opnieuw uit mutable bundle gelezen');
+ c52(str_contains($apply,'b52ReleaseEnsure')&&str_contains($apply,'b52ReleaseLock')&&substr_count($apply,'b52ReleaseExact($p)')>=10,'first-VPS reconcileert bestaande release, houdt 4.7 lock vast en herbewijst releasebinding rond mutaties');
+ c52(str_contains($apply,"if(\$c||\$s){if(!\$c||!\$s)")&&str_contains($apply,'b52ReleaseExact($p);return;'),'crash na geslaagde release-bootstrap wordt gereconcileerd in plaats van opnieuw gebootstrapt');
+ c52(str_contains($apply,"if(\$status==='unmanaged')")&&str_contains($apply,"if(\$status==='active')")&&str_contains($apply,"'--activate'"),'lifecycle-resume adopteert alleen unmanaged en valideert reeds active idempotent');
 
  $cpApply=(string)file_get_contents($root.'/bin/apply-vps-control-plane.php');
  c52(str_contains($cpApply,"\$art=\$ctx['artifacts']")&&str_contains($cpApply,'cpaExactBytes')&&!str_contains($cpApply,'function cpaExact(string$src'),'control-plane root-apply installeert uitsluitend in-memory gevalideerde artifactbytes');
