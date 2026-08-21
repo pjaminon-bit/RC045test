@@ -67,6 +67,7 @@ jobs:
           php tests/phase43-dns-readiness.php
           php tests/phase44-tls-https.php
           php tests/phase45-database-provisioning.php
+          php tests/phase451-database-reaudit.php
           php tests/private-store-pdo-sqlite.php
           php tests/phase321-pdo-isolation.php
           php tests/private-store-pdo-failclosed.php
@@ -182,6 +183,7 @@ jobs:
           wacht_op_status "$basis/tests/phase43-dns-readiness.php" 403 nee
           wacht_op_status "$basis/tests/phase44-tls-https.php" 403 nee
           wacht_op_status "$basis/tests/phase45-database-provisioning.php" 403 nee
+          wacht_op_status "$basis/tests/phase451-database-reaudit.php" 403 nee
           wacht_op_status "$basis/docs/VPS-DEPLOYMENT.md" 403 nee
           wacht_op_status "$basis/docs/VPS-WEBSERVER.md" 403 nee
           wacht_op_status "$basis/docs/VPS-DNS.md" 403 nee
