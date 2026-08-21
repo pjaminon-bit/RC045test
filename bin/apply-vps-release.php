@@ -136,7 +136,7 @@ function apply47CandidateProbe(string $release, array $tenants): void
 }
 function apply47Health(string $release, array $tenants, bool $stop=true): bool
 {
-    $checker=$release.'/bin/check-vps-health.php';foreach($tenants as$t){$php='/usr/bin/php'.(string)$t['php_version'];[$c,,$e]=apply47Run([$php,$checker,'--monitoring-plan='.$t['monitoring_plan'],'--probe','--write-status']);if($c!==0){if($stop)apply47Stop('Healthcheck faalt voor '.$t['tenant'].($e!==''?': '.$e));return false;}}return true;
+    $checker=$release.'/bin/check-vps-health.php';foreach($tenants as$t){$php='/usr/bin/php'.(string)$t['php_version'];[$c,,$e]=apply47Run([$php,$checker,'--monitoring-plan='.$t['monitoring_plan'],'--probe','--write-status']);if($c!==0){if($stop)apply47Stop('Healthcheck faalt voor '.$t['tenant'].($e!==''?': '.$e:''));return false;}}return true;
 }
 function apply47FpmReload(array $tenants): bool
 {
