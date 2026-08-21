@@ -13,6 +13,7 @@ if (!$isMaster && !in_array('changelog', $rechten['toegestaneTabs'] ?? [], true)
 
 $bestand = dirname(__DIR__) . '/data/changelog.json';
 $vastPad = dirname(__DIR__) . '/changelog-historie.php';
+$platformPad = dirname(__DIR__) . '/app/core/changelog-historie-platform.php';
 $categorieen = [
     'nieuw' => 'Nieuw',
     'verbeterd' => 'Verbeterd',
@@ -124,8 +125,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
 }
 
 $eigen = clEigen($bestand);
+$platform = is_file($platformPad) ? require $platformPad : [];
 $vast = is_file($vastPad) ? require $vastPad : [];
+if (!is_array($platform)) $platform = [];
 if (!is_array($vast)) $vast = [];
+$vast = array_values(array_merge($platform, $vast));
 ?><!doctype html>
 <html lang="nl">
 <head>
