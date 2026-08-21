@@ -20,6 +20,23 @@ jobs:
       - name: Checkout acceptatietests
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
+      - name: Wacht op actuele DEV deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          url="$LIVE_DEV_BASE_URL/acceptance-hardening.css"
+          for poging in $(seq 1 24); do
+            status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --connect-timeout 10 --max-time 20 "$url" || true)"
+            if [[ "$status" == '200' ]]; then
+              echo "DEV fixbatch is zichtbaar: $url -> 200"
+              exit 0
+            fi
+            echo "Wacht op DEV deploy ($poging/24): HTTP ${status:-geen}"
+            sleep 5
+          done
+          echo 'FOUT: nieuwe DEV fixbatch werd niet zichtbaar binnen de acceptatiewachtlus' >&2
+          exit 1
+
       - name: Actieve DEV securityregressie
         shell: bash
         run: bash tests/live-dev-security.sh
@@ -31,6 +48,19 @@ jobs:
     steps:
       - name: Checkout acceptatietests
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Wacht op actuele DEV deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          url="$LIVE_DEV_BASE_URL/acceptance-hardening.css"
+          for poging in $(seq 1 24); do
+            status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --connect-timeout 10 --max-time 20 "$url" || true)"
+            if [[ "$status" == '200' ]]; then exit 0; fi
+            sleep 5
+          done
+          echo 'FOUT: nieuwe DEV fixbatch werd niet zichtbaar binnen de acceptatiewachtlus' >&2
+          exit 1
 
       - name: Installeer exact Playwright 1.62.1
         shell: bash
