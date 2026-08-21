@@ -13,6 +13,7 @@ if (PHP_SAPI !== 'cli') {
 }
 
 require_once dirname(__DIR__) . '/app/deployment/webserver-contract.php';
+require_once dirname(__DIR__) . '/app/deployment/process-runner.php';
 
 function apply42Stop(string $melding, int $code = 1): void
 {
@@ -55,19 +56,14 @@ function apply42Bundle(string $planPad): array
 
 function apply42Run(array $cmd): array
 {
-    $desc = [0 => ['pipe','r'], 1 => ['pipe','w'], 2 => ['pipe','w']];
-    $proc = @proc_open($cmd, $desc, $pipes, null, null, ['bypass_shell' => true]);
-    if (!is_resource($proc)) return [255, '', 'proces kon niet worden gestart'];
-    fclose($pipes[0]);
-    $out = stream_get_contents($pipes[1]); fclose($pipes[1]);
-    $err = stream_get_contents($pipes[2]); fclose($pipes[2]);
-    $code = proc_close($proc);
-    return [$code, trim((string)$out), trim((string)$err)];
+    return process521Run($cmd, null, null, null, 300);
 }
 
 function apply42ApachePreflight(array $plan): void
 {
-    [$vCode, $vOut, $vErr] = apply42Run([(string)$plan['apache']['control_binary'], '-v']);
+    $binary=(string)$plan['apache']['control_binary'];
+    if(!str_starts_with($binary,'/')||!is_file($binary)||!is_executable($binary))apply42Stop('Apache control-binary ontbreekt of is niet absoluut.');
+    [$vCode, $vOut, $vErr] = apply42Run([$binary, '-v']);
     $versieTekst = trim($vOut . "\n" . $vErr);
     if ($vCode !== 0 || preg_match('~Apache/([0-9]+\.[0-9]+\.[0-9]+)~', $versieTekst, $m) !== 1) {
         apply42Stop('Apache-versie kon niet betrouwbaar worden vastgesteld.');
@@ -76,7 +72,7 @@ function apply42ApachePreflight(array $plan): void
         apply42Stop('Apache ' . $m[1] . ' is te oud; minimaal ' . $plan['apache']['minimum_version'] . ' is vereist voor StrictHostCheck.');
     }
 
-    [$mCode, $mOut, $mErr] = apply42Run([(string)$plan['apache']['control_binary'], '-M']);
+    [$mCode, $mOut, $mErr] = apply42Run([$binary, '-M']);
     if ($mCode !== 0) apply42Stop('Apache modulelijst kon niet worden gecontroleerd: ' . ($mErr !== '' ? $mErr : 'onbekende fout'));
     $geladen = [];
     foreach (preg_split('/\r?\n/', $mOut . "\n" . $mErr) ?: [] as $regel) {

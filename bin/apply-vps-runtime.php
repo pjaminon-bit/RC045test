@@ -13,6 +13,7 @@ if (PHP_SAPI !== 'cli') {
 }
 
 require_once dirname(__DIR__) . '/app/deployment/runtime-contract.php';
+require_once dirname(__DIR__) . '/app/deployment/process-runner.php';
 
 function apply41Stop(string $melding, int $code = 1): void
 {
@@ -56,16 +57,33 @@ function apply41Bundle(string $planPad): array
     }
 }
 
+function apply41Binary(string $name): string
+{
+    static $cache = [];
+    if (isset($cache[$name])) return $cache[$name];
+    $known = [
+        'getent' => '/usr/bin/getent',
+        'groupadd' => '/usr/sbin/groupadd',
+        'useradd' => '/usr/sbin/useradd',
+        'id' => '/usr/bin/id',
+        'pgrep' => '/usr/bin/pgrep',
+    ];
+    if (!isset($known[$name])) throw new RuntimeException('Niet-toegestane runtime PATH-binary: ' . $name);
+    $binary = $known[$name];
+    if (!is_file($binary) || !is_executable($binary)) throw new RuntimeException('Vereiste runtime-executable ontbreekt: ' . $binary);
+    return $cache[$name] = $binary;
+}
+
 function apply41Run(array $cmd): array
 {
-    $desc = [0 => ['pipe','r'], 1 => ['pipe','w'], 2 => ['pipe','w']];
-    $proc = @proc_open($cmd, $desc, $pipes, null, null, ['bypass_shell' => true]);
-    if (!is_resource($proc)) return [255, '', 'proces kon niet worden gestart'];
-    fclose($pipes[0]);
-    $out = stream_get_contents($pipes[1]); fclose($pipes[1]);
-    $err = stream_get_contents($pipes[2]); fclose($pipes[2]);
-    $code = proc_close($proc);
-    return [$code, trim((string)$out), trim((string)$err)];
+    if ($cmd === [] || !isset($cmd[0])) throw new RuntimeException('Runtime subprocesscommando ontbreekt.');
+    $cmd[0] = apply41Binary((string)$cmd[0]);
+    return process521Run($cmd, null, null, null, 300);
+}
+
+function apply41Deps(): void
+{
+    foreach (['getent','groupadd','useradd','id','pgrep'] as $name) apply41Binary($name);
 }
 
 function apply41Getent(string $database, string $sleutel): ?array
@@ -327,6 +345,7 @@ if (PHP_OS_FAMILY !== 'Linux') apply41Stop('--apply is uitsluitend voor Linux be
 if (!function_exists('posix_geteuid') || posix_geteuid() !== 0) apply41Stop('--apply vereist root (EUID 0).');
 $fpmPoolDir = trim((string)($opt['fpm-pool-dir'] ?? ''));
 if ($fpmPoolDir === '') apply41Stop('--fpm-pool-dir=/etc/.../pool.d is verplicht bij --apply.');
+apply41Deps();
 
 $tenantUser = (string)$plan['os']['user'];
 $tenantGroup = (string)$plan['os']['group'];

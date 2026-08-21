@@ -4,6 +4,7 @@
 // ============================================================
 if (PHP_SAPI !== 'cli') { http_response_code(403); exit('Alleen via CLI beschikbaar.'); }
 require_once dirname(__DIR__) . '/app/deployment/tls-contract.php';
+require_once dirname(__DIR__) . '/app/deployment/process-runner.php';
 
 function apply44Stop(string $m, int $c = 1): void { fwrite(STDERR, "FOUT: {$m}\n"); exit($c); }
 function apply44Help(): void
@@ -11,12 +12,24 @@ function apply44Help(): void
     echo "Gebruik:\n  php bin/apply-vps-tls.php --plan=/srv/verenigingen/club/tls/tls-plan.json --check\n  sudo php bin/apply-vps-tls.php --plan=... --apply [--force]\n\n";
     echo "--check vereist verse DNS-readiness maar geen root. --apply activeert eerst uitsluitend HTTP-01, vraagt via Certbot webroot het certificaat aan, valideert certificaat+key en activeert HTTPS pas na volledige Apache configtest.\n";
 }
+function apply44Binary(string$name):string
+{
+    static$cache=[];if(isset($cache[$name]))return$cache[$name];
+    $known=['certbot'=>['/usr/bin/certbot','/usr/local/bin/certbot'],'openssl'=>['/usr/bin/openssl'],'systemctl'=>['/usr/bin/systemctl']];
+    if(!isset($known[$name]))throw new RuntimeException('Niet-toegestane TLS PATH-binary: '.$name);
+    foreach($known[$name]as$b)if(is_file($b)&&is_executable($b))return$cache[$name]=$b;
+    throw new RuntimeException('Vereiste TLS-executable ontbreekt: '.$name);
+}
 function apply44Run(array $cmd): array
 {
-    $d=[0=>['pipe','r'],1=>['pipe','w'],2=>['pipe','w']]; $p=@proc_open($cmd,$d,$pipes,null,null,['bypass_shell'=>true]);
-    if(!is_resource($p)) return [255,'','proces kon niet worden gestart']; fclose($pipes[0]);
-    $o=stream_get_contents($pipes[1]);fclose($pipes[1]);$e=stream_get_contents($pipes[2]);fclose($pipes[2]);
-    return [proc_close($p),trim((string)$o),trim((string)$e)];
+    if($cmd===[]||!isset($cmd[0]))throw new RuntimeException('TLS subprocesscommando ontbreekt.');
+    $first=(string)$cmd[0];if(!str_starts_with($first,'/'))$cmd[0]=apply44Binary($first);
+    return process521Run($cmd,null,null,null,1800);
+}
+function apply44Deps(array$plan):void
+{
+    foreach(['certbot','openssl','systemctl']as$n)apply44Binary($n);
+    $apache=(string)$plan['apache']['control_binary'];if(!is_file($apache)||!is_executable($apache))throw new RuntimeException('Apache control-binary ontbreekt: '.$apache);
 }
 function apply44Bundle(string $planPad, bool $vers): array
 {
@@ -134,6 +147,7 @@ function apply44RollbackHttp(array $plan,array $dirs,bool $tenantWas,bool $catch
 foreach($_SERVER['argv']??[] as $arg)if(preg_match('/^--(?:password|hash|secret|dsn|db-password|token|key|certificate|private-key|email)(?:=|$)/i',(string)$arg)===1)apply44Stop('Secrets/contactdata horen niet in fase-4.4 CLI-argumenten.');
 $opt=getopt('',['plan:','check','apply','force','help']);if(isset($opt['help'])){apply44Help();exit(0);}$planPad=trim((string)($opt['plan']??''));if($planPad==='')apply44Stop('--plan is verplicht.');$check=isset($opt['check']);$apply=isset($opt['apply']);if($check===$apply)apply44Stop('Kies exact één van --check of --apply.');
 $ctx=apply44Bundle($planPad,true);$plan=$ctx['plan'];if($check){echo 'CHECK OK  tenant='.$plan['tenant_key'].' host='.$plan['canonical_host'].' cert='.$plan['acme']['cert_name']."\n";exit(0);}if(PHP_OS_FAMILY!=='Linux'||!function_exists('posix_geteuid')||posix_geteuid()!==0)apply44Stop('--apply vereist Linux root (EUID 0).');
+try{apply44Deps($plan);}catch(Throwable$e){apply44Stop($e->getMessage());}
 apply44ApachePreflight($plan);apply44CertbotPreflight($plan);$dirs=apply44Dirs($plan);$force=isset($opt['force']);
 if(@filetype((string)$ctx['context']['web']['php_fpm']['socket'])!=='socket')apply44Stop('Tenant PHP-FPM socket is niet actief; voer fase 4.1 root-runtime eerst uit.');
 $frag=$plan['apache']['routing_fragment_installed'];$src=(string)$ctx['context']['routing_fragment_source'];if(!is_file($frag)||!is_file($src)||!hash_equals(hash_file('sha256',$frag),hash_file('sha256',$src)))apply44Stop('Geïnstalleerd 4.2 HTTPS-routingfragment ontbreekt of wijkt af.');

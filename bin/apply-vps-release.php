@@ -1,44 +1,59 @@
 <?php
 if (PHP_SAPI !== 'cli') { http_response_code(403); exit('Alleen via CLI beschikbaar.'); }
 require_once dirname(__DIR__) . '/app/deployment/release-contract.php';
+require_once dirname(__DIR__) . '/app/deployment/process-runner.php';
 
 function apply47Stop(string $m, int $c = 1): void { fwrite(STDERR, "FOUT: {$m}\n"); exit($c); }
 function apply47Run(array $cmd, ?array $env = null): array
 {
-    $d=[0=>['pipe','r'],1=>['pipe','w'],2=>['pipe','w']];
-    $p=@proc_open($cmd,$d,$x,null,$env,['bypass_shell'=>true]);
-    if(!is_resource($p)) return [255,'','proces kon niet starten'];
-    fclose($x[0]); $o=stream_get_contents($x[1]); fclose($x[1]); $e=stream_get_contents($x[2]); fclose($x[2]);
-    return [proc_close($p),trim((string)$o),trim((string)$e)];
+    return process521Run($cmd, null, null, $env, 3600);
+}
+function apply47Deps(): void
+{
+    foreach(['/usr/sbin/runuser','/usr/bin/env','/usr/bin/systemctl','/usr/sbin/apache2ctl'] as $b) {
+        if(!is_file($b)||!is_executable($b))apply47Stop('Vereiste release-executable ontbreekt: '.$b);
+    }
+    if(!str_starts_with(PHP_BINARY,'/')||!is_file(PHP_BINARY)||!is_executable(PHP_BINARY))apply47Stop('Actieve PHP CLI is geen veilig absoluut executablepad.');
+}
+function apply47RootMeta(string $pad, int $mode, bool $map): void
+{
+    $s=@lstat($pad);if(!is_array($s)||is_link($pad)||($map?!is_dir($pad):!is_file($pad)))apply47Stop('Onveilig serverobject: '.$pad);
+    if((int)$s['uid']!==0||(int)$s['gid']!==0||(((int)$s['mode']&0777)!==$mode))apply47Stop('Owner/group/mode wijkt af van root-immutabilitycontract: '.$pad);
 }
 function apply47SafeDir(string $pad, int $mode = 0755): void
 {
     $pad=release47VeiligAbsoluut($pad,'Servermap'); $link=runtime41SymlinkInPad($pad); if($link!==null)apply47Stop("Symlink in serverpad: {$link}");
     if(!is_dir($pad)&&!@mkdir($pad,$mode,true)&&!is_dir($pad))apply47Stop("Map kon niet worden aangemaakt: {$pad}");
-    @chown($pad,'root'); @chgrp($pad,'root'); @chmod($pad,$mode);
+    if(!@chown($pad,0)||!@chgrp($pad,0)||!@chmod($pad,$mode))apply47Stop('Servermaprechten konden niet exact worden gezet: '.$pad);apply47RootMeta($pad,$mode,true);
 }
 function apply47AtomicJson(string $pad, array $data, int $mode = 0644): void
 {
-    if(is_link($pad))apply47Stop("Symlink statebestand geweigerd: {$pad}");
+    if(runtime41SymlinkInPad($pad)!==null)apply47Stop("Symlink statebestand geweigerd: {$pad}");
     $json=json_encode($data,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_PRETTY_PRINT); if(!is_string($json))apply47Stop('State kon niet als JSON worden opgebouwd.');
     $tmp=dirname($pad).'/.'.basename($pad).'.tmp.'.bin2hex(random_bytes(6));
     if(@file_put_contents($tmp,$json."\n",LOCK_EX)===false)apply47Stop('State kon niet tijdelijk worden geschreven.');
-    @chown($tmp,'root');@chgrp($tmp,'root');@chmod($tmp,$mode);
+    if(!@chown($tmp,0)||!@chgrp($tmp,0)||!@chmod($tmp,$mode)){@unlink($tmp);apply47Stop('Tijdelijke state kon niet veilig worden gemetadateerd.');}
     if(is_link($pad)){@unlink($tmp);apply47Stop('Statepad werd tijdens write een symlink.');}
     if(!@rename($tmp,$pad)){@unlink($tmp);apply47Stop('State kon niet atomisch worden geplaatst.');}
-    @chown($pad,'root');@chgrp($pad,'root');@chmod($pad,$mode);
+    if(!@chown($pad,0)||!@chgrp($pad,0)||!@chmod($pad,$mode))apply47Stop('State-rechten konden niet worden genormaliseerd.');apply47RootMeta($pad,$mode,false);
 }
 function apply47Event(array $plan, string $event, array $context=[]): void
 {
-    $pad=(string)$plan['paths']['events']; if(is_link($pad))apply47Stop('Release-eventlog mag geen symlink zijn.');
+    $pad=(string)$plan['paths']['events']; if(runtime41SymlinkInPad($pad)!==null)apply47Stop('Release-eventlog mag geen symlink bevatten.');
     $safe=[]; foreach(['mode','from_commit','to_commit','result','tenant_count','reason']as$k){if(isset($context[$k])&&(is_scalar($context[$k])||$context[$k]===null))$safe[$k]=$context[$k];}
     $regel=['ts_utc'=>gmdate('Y-m-d\TH:i:s\Z'),'event'=>$event,'context'=>$safe];
     $json=json_encode($regel,JSON_UNESCAPED_SLASHES); if(!is_string($json)||@file_put_contents($pad,$json."\n",FILE_APPEND|LOCK_EX)===false)apply47Stop('Release-eventlog kon niet worden geschreven.');
-    @chown($pad,'root');@chgrp($pad,'root');@chmod($pad,0644);
+    if(!@chown($pad,0)||!@chgrp($pad,0)||!@chmod($pad,0644))apply47Stop('Release-eventlogrechten konden niet worden genormaliseerd.');apply47RootMeta($pad,0644,false);
+}
+function apply47ImmutableRechten(string $root): void
+{
+    if(runtime41SymlinkInPad($root)!==null||!is_dir($root))apply47Stop('Immutable release-root is onveilig: '.$root);apply47RootMeta($root,0555,true);
+    $it=new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root,FilesystemIterator::SKIP_DOTS),RecursiveIteratorIterator::SELF_FIRST);
+    foreach($it as$info){$p=$info->getPathname();if(is_link($p))apply47Stop('Symlink in immutable release: '.$p);if($info->isDir())apply47RootMeta($p,0555,true);elseif($info->isFile())apply47RootMeta($p,0444,false);else apply47Stop('Onverwacht object in immutable release: '.$p);}
 }
 function apply47MarkerEntry(string $pad, string $releases): array
 {
-    $ctx=release47MarkerLees($pad,true); if(!hash_equals(runtime41NormPad(dirname($ctx['path'])),runtime41NormPad($releases)))apply47Stop('Release ligt niet direct onder releases/.');
+    $ctx=release47MarkerLees($pad,true); if(!hash_equals(runtime41NormPad(dirname($ctx['path'])),runtime41NormPad($releases)))apply47Stop('Release ligt niet direct onder releases/.');apply47ImmutableRechten((string)$ctx['path']);
     return release47StateEntry($ctx);
 }
 function apply47EntryGelijk(array $a, array $b): bool
@@ -48,7 +63,7 @@ function apply47EntryGelijk(array $a, array $b): bool
 function apply47StateLees(array $plan, bool $magOntbreken=false): ?array
 {
     $pad=(string)$plan['paths']['state']; if(!file_exists($pad)){if($magOntbreken)return null;apply47Stop('release-state.json ontbreekt.');}
-    if(is_link($pad)||!is_file($pad))apply47Stop('release-state.json moet een regulier bestand zijn.');
+    if(runtime41SymlinkInPad($pad)!==null||!is_file($pad))apply47Stop('release-state.json moet een veilig regulier bestand zijn.');apply47RootMeta($pad,0644,false);
     $raw=@file_get_contents($pad);$s=is_string($raw)?json_decode($raw,true):null;
     if(!is_array($s)||(int)($s['schema']??0)!==1||($s['phase']??'')!=='4.7-state'||!is_array($s['active']??null))apply47Stop('release-state.json is ongeldig.');
     $active=apply47MarkerEntry((string)($s['active']['path']??''),(string)$plan['paths']['releases_root']);
@@ -67,11 +82,11 @@ function apply47CurrentReal(array $plan): string
 }
 function apply47CurrentMoet(array $plan, array $entry): void
 {
-    if(!hash_equals(apply47CurrentReal($plan),runtime41NormPad((string)$entry['path'])))apply47Stop('current wijst niet naar de actieve release-state.');
+    if(!hash_equals(apply47CurrentReal($plan),runtime41NormPad((string)$entry['path'])))apply47Stop('current wijst niet naar de actieve release-state.');apply47ImmutableRechten((string)$entry['path']);
 }
 function apply47Switch(array $plan, array $entry): void
 {
-    $current=(string)$plan['paths']['current'];$tmp=dirname($current).'/.current.tmp.'.bin2hex(random_bytes(6));
+    apply47ImmutableRechten((string)$entry['path']);$current=(string)$plan['paths']['current'];$tmp=dirname($current).'/.current.tmp.'.bin2hex(random_bytes(6));
     $rel='releases/'.(string)$entry['commit']; if(!@symlink($rel,$tmp))apply47Stop('Tijdelijke current-symlink kon niet worden gemaakt.');
     if(!@rename($tmp,$current)){@unlink($tmp);apply47Stop('current kon niet atomisch worden gewisseld.');}
     $real=realpath($current);if($real===false||!hash_equals(runtime41NormPad($real),runtime41NormPad((string)$entry['path'])))apply47Stop('current-wissel kon niet worden geverifieerd.');
@@ -79,8 +94,8 @@ function apply47Switch(array $plan, array $entry): void
 function apply47Freeze(string $root): void
 {
     $it=new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root,FilesystemIterator::SKIP_DOTS),RecursiveIteratorIterator::CHILD_FIRST);
-    foreach($it as$info){$p=$info->getPathname();if(is_link($p))apply47Stop("Symlink in kandidaat-release: {$p}");@chown($p,'root');@chgrp($p,'root');@chmod($p,$info->isDir()?0555:0444);}
-    @chown($root,'root');@chgrp($root,'root');@chmod($root,0555);
+    foreach($it as$info){$p=$info->getPathname();if(is_link($p))throw new RuntimeException("Symlink in kandidaat-release: {$p}");$mode=$info->isDir()?0555:0444;if(!@chown($p,0)||!@chgrp($p,0)||!@chmod($p,$mode))throw new RuntimeException('Kandidaatrelease kon niet immutable worden gemaakt: '.$p);}
+    if(!@chown($root,0)||!@chgrp($root,0)||!@chmod($root,0555))throw new RuntimeException('Release-root kon niet immutable worden gemaakt.');apply47ImmutableRechten($root);
 }
 function apply47Stage(array $plan, array $manifest): array
 {
@@ -89,12 +104,12 @@ function apply47Stage(array $plan, array $manifest): array
         if(is_link($final)||!is_dir($final))apply47Stop('Bestaande release is geen veilige directory.');
         $entry=apply47MarkerEntry($final,$releases);if(!hash_equals((string)$entry['commit'],(string)$plan['commit'])||!hash_equals((string)$entry['manifest_sha256'],(string)$plan['source']['manifest_sha256']))apply47Stop('Bestaande immutable release wijkt af; overschrijven is verboden.');return $entry;
     }
-    $tmp=$releases.'/.'.(string)$plan['commit'].'.tmp.'.bin2hex(random_bytes(6));if(!@mkdir($tmp,0755))apply47Stop('Tijdelijke releasedirectory kon niet worden gemaakt.');@chown($tmp,'root');@chgrp($tmp,'root');
+    $tmp=$releases.'/.'.(string)$plan['commit'].'.tmp.'.bin2hex(random_bytes(6));if(!@mkdir($tmp,0755))apply47Stop('Tijdelijke releasedirectory kon niet worden gemaakt.');if(!@chown($tmp,0)||!@chgrp($tmp,0))apply47Stop('Tijdelijke release-root kon niet root-owned worden gemaakt.');
     try{
-        foreach($manifest['files']as$rel=>$meta){$src=(string)$manifest['root'].'/'.$rel;$dst=$tmp.'/'.$rel;$dir=dirname($dst);if(!is_dir($dir)&&!@mkdir($dir,0755,true)&&!is_dir($dir))throw new RuntimeException("Release submap kon niet worden gemaakt: {$rel}");if(is_link($src)||!is_file($src)||!@copy($src,$dst))throw new RuntimeException("Releasebestand kon niet veilig worden gekopieerd: {$rel}");@chown($dst,'root');@chgrp($dst,'root');@chmod($dst,0444);}
+        foreach($manifest['files']as$rel=>$meta){$src=(string)$manifest['root'].'/'.$rel;$dst=$tmp.'/'.$rel;$dir=dirname($dst);if(!is_dir($dir)&&!@mkdir($dir,0755,true)&&!is_dir($dir))throw new RuntimeException("Release submap kon niet worden gemaakt: {$rel}");if(is_link($src)||!is_file($src)||!@copy($src,$dst))throw new RuntimeException("Releasebestand kon niet veilig worden gekopieerd: {$rel}");if(!@chown($dst,0)||!@chgrp($dst,0)||!@chmod($dst,0444))throw new RuntimeException('Releasebestand kon niet root-owned/read-only worden gemaakt: '.$rel);}
         $na=release47Manifest($tmp);if(!hash_equals((string)$manifest['sha256'],(string)$na['sha256'])||$manifest['file_count']!==$na['file_count']||$manifest['bytes']!==$na['bytes'])throw new RuntimeException('Gekopieerde release wijkt af van bronmanifest.');
-        $marker=release47Marker($plan);$markerPad=$tmp.'/.verenigingsplatform-release.json';if(@file_put_contents($markerPad,release47Json($marker),LOCK_EX)===false)throw new RuntimeException('Release marker kon niet worden geschreven.');@chown($markerPad,'root');@chgrp($markerPad,'root');@chmod($markerPad,0444);
-        apply47Freeze($tmp);if(file_exists($final)||is_link($final))throw new RuntimeException('Release verscheen tijdens staging; overschrijven geweigerd.');if(!@rename($tmp,$final))throw new RuntimeException('Immutable release kon niet atomisch worden geplaatst.');
+        $marker=release47Marker($plan);$markerPad=$tmp.'/.verenigingsplatform-release.json';if(@file_put_contents($markerPad,release47Json($marker),LOCK_EX)===false)throw new RuntimeException('Release marker kon niet worden geschreven.');if(!@chown($markerPad,0)||!@chgrp($markerPad,0)||!@chmod($markerPad,0444))throw new RuntimeException('Release marker kon niet veilig worden gemetadateerd.');
+        apply47Freeze($tmp);if(file_exists($final)||is_link($final))throw new RuntimeException('Release verscheen tijdens staging; overschrijven geweigerd.');if(!@rename($tmp,$final))throw new RuntimeException('Immutable release kon niet atomisch worden geplaatst.');apply47ImmutableRechten($final);
     }catch(Throwable$e){if(is_dir($tmp)){@chmod($tmp,0755);$it=new RecursiveIteratorIterator(new RecursiveDirectoryIterator($tmp,FilesystemIterator::SKIP_DOTS),RecursiveIteratorIterator::CHILD_FIRST);foreach($it as$i){@chmod($i->getPathname(),$i->isDir()?0755:0644);$i->isDir()?@rmdir($i->getPathname()):@unlink($i->getPathname());}@rmdir($tmp);}apply47Stop($e->getMessage());}
     return apply47MarkerEntry($final,$releases);
 }
@@ -117,15 +132,15 @@ function apply47PhpSyntax(string $release, array $manifest, array $tenants=[]): 
 }
 function apply47CandidateProbe(string $release, array $tenants): void
 {
-    $checker=$release.'/bin/check-release-tenant.php';foreach($tenants as$t){$php='/usr/bin/php'.(string)$t['php_version'];if(!is_file($php)||!is_executable($php))apply47Stop('PHP CLI voor tenantprobe ontbreekt of is niet executable: '.$php);$env=['VERENIGING_REQUIRE_TENANT_CONFIG'=>'1','VERENIGING_CONFIG_FILE'=>$t['config'],'VERENIGING_PRIVATE_ROOT'=>$t['private'],'PATH'=>'/usr/sbin:/usr/bin:/sbin:/bin'];[$c,,$e]=apply47Run(['runuser','-u',$t['user'],'--','/usr/bin/env','VERENIGING_REQUIRE_TENANT_CONFIG=1','VERENIGING_CONFIG_FILE='.$t['config'],'VERENIGING_PRIVATE_ROOT='.$t['private'],$php,$checker,'--expected-tenant='.$t['tenant']],$env);if($c!==0)apply47Stop('Kandidaatrelease faalt tenantprobe voor '.$t['tenant'].($e!==''?': '.$e:''));}
+    $checker=$release.'/bin/check-release-tenant.php';foreach($tenants as$t){$php='/usr/bin/php'.(string)$t['php_version'];if(!is_file($php)||!is_executable($php))apply47Stop('PHP CLI voor tenantprobe ontbreekt of is niet executable: '.$php);$env=['VERENIGING_REQUIRE_TENANT_CONFIG'=>'1','VERENIGING_CONFIG_FILE'=>$t['config'],'VERENIGING_PRIVATE_ROOT'=>$t['private'],'PATH'=>'/usr/sbin:/usr/bin:/sbin:/bin'];[$c,,$e]=apply47Run(['/usr/sbin/runuser','-u',$t['user'],'--','/usr/bin/env','VERENIGING_REQUIRE_TENANT_CONFIG=1','VERENIGING_CONFIG_FILE='.$t['config'],'VERENIGING_PRIVATE_ROOT='.$t['private'],$php,$checker,'--expected-tenant='.$t['tenant']],$env);if($c!==0)apply47Stop('Kandidaatrelease faalt tenantprobe voor '.$t['tenant'].($e!==''?': '.$e:''));}
 }
 function apply47Health(string $release, array $tenants, bool $stop=true): bool
 {
-    $checker=$release.'/bin/check-vps-health.php';foreach($tenants as$t){[$c,,$e]=apply47Run(['/usr/bin/php',$checker,'--monitoring-plan='.$t['monitoring_plan'],'--probe','--write-status']);if($c!==0){if($stop)apply47Stop('Healthcheck faalt voor '.$t['tenant'].($e!==''?': '.$e:''));return false;}}return true;
+    $checker=$release.'/bin/check-vps-health.php';foreach($tenants as$t){$php='/usr/bin/php'.(string)$t['php_version'];[$c,,$e]=apply47Run([$php,$checker,'--monitoring-plan='.$t['monitoring_plan'],'--probe','--write-status']);if($c!==0){if($stop)apply47Stop('Healthcheck faalt voor '.$t['tenant'].($e!==''?': '.$e:''));return false;}}return true;
 }
 function apply47FpmReload(array $tenants): bool
 {
-    $services=[];foreach($tenants as$t)$services['php'.$t['php_version'].'-fpm.service']=true;foreach(array_keys($services)as$s){[$c,,$e]=apply47Run(['systemctl','reload',$s]);if($c!==0){fwrite(STDERR,"FOUT: reload {$s} faalt: {$e}\n");return false;}}return true;
+    $services=[];foreach($tenants as$t)$services['php'.$t['php_version'].'-fpm.service']=true;foreach(array_keys($services)as$s){[$c,,$e]=apply47Run(['/usr/bin/systemctl','reload',$s]);if($c!==0){fwrite(STDERR,"FOUT: reload {$s} faalt: {$e}\n");return false;}}return true;
 }
 function apply47ApacheTest(): void { [$c,,$e]=apply47Run(['/usr/sbin/apache2ctl','configtest']);if($c!==0)apply47Stop('Apache configtest faalt: '.$e); }
 function apply47State(array $active, ?array $previous, ?array $transition, int $tenants, bool $bootstrap=false): array
@@ -157,7 +172,8 @@ $modes=array_filter(['check'=>isset($opt['check']),'bootstrap'=>isset($opt['boot
 if(!in_array($mode,['rollback','recover'],true)){$planPad=trim((string)($opt['plan']??''));if($planPad==='')apply47Stop('--plan is verplicht.');try{$ctx=release47PlanLeesEnValideer($planPad);$plan=$ctx['plan'];$manifest=$ctx['manifest'];}catch(Throwable$e){apply47Stop($e->getMessage());}if($mode==='check'){echo'CHECK OK  commit='.$plan['commit'].' files='.$plan['source']['file_count']."\n";exit(0);}}
 else{$platform=release47VeiligAbsoluut(trim((string)($opt['platform-root']??'/srv/verenigingsplatform')),'Platformroot');$tenBase=release47VeiligAbsoluut(trim((string)($opt['tenant-base']??'/srv/verenigingen')),'Tenantbasis');$plan=['paths'=>['platform_root'=>$platform,'releases_root'=>$platform.'/releases','current'=>$platform.'/current','state'=>$platform.'/release-state.json','events'=>$platform.'/release-events.jsonl','lock'=>'/var/lock/verenigingsplatform-release.lock','tenant_base'=>$tenBase]];}
 if(PHP_OS_FAMILY!=='Linux'||!function_exists('posix_geteuid')||posix_geteuid()!==0)apply47Stop('Release-activatie vereist Linux root.');
-$lock=@fopen((string)$plan['paths']['lock'],'c+');if(!is_resource($lock)||!flock($lock,LOCK_EX|LOCK_NB))apply47Stop('Een andere releasehandeling is al actief.');@chown((string)$plan['paths']['lock'],'root');@chgrp((string)$plan['paths']['lock'],'root');@chmod((string)$plan['paths']['lock'],0600);
+apply47Deps();
+$lock=@fopen((string)$plan['paths']['lock'],'c+');if(!is_resource($lock)||!flock($lock,LOCK_EX|LOCK_NB))apply47Stop('Een andere releasehandeling is al actief.');if(!@chown((string)$plan['paths']['lock'],0)||!@chgrp((string)$plan['paths']['lock'],0)||!@chmod((string)$plan['paths']['lock'],0600))apply47Stop('Release-lock kon niet root-only worden gemaakt.');apply47RootMeta((string)$plan['paths']['lock'],0600,false);
 apply47SafeDir((string)$plan['paths']['platform_root']);apply47SafeDir((string)$plan['paths']['releases_root']);
 if($mode==='recover'){apply47Recover($plan);exit(0);}
 if($mode==='bootstrap'){

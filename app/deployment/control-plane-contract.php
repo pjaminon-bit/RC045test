@@ -71,6 +71,8 @@ function control51Plan(
     $service = 'verenigingsplatform-control-plane.service';
     $pathUnit = 'verenigingsplatform-control-plane.path';
     $acme = '/var/lib/verenigingsplatform/acme/control-plane';
+    $jail = 'verenigingsplatform-control-plane';
+    $fail2banFile = 'verenigingsplatform-control-plane.local';
 
     return [
         'schema' => 1,
@@ -99,6 +101,7 @@ function control51Plan(
             'site_enabled' => '/etc/apache2/sites-enabled/' . $site,
             'document_root' => $webRoot,
             'auth_file' => $etc . '/operators.htpasswd',
+            'error_log' => '/var/log/apache2/verenigingsplatform-control-plane-error.log',
             'cert_name' => $certName,
             'fullchain' => '/etc/letsencrypt/live/' . $certName . '/fullchain.pem',
             'privkey' => '/etc/letsencrypt/live/' . $certName . '/privkey.pem',
@@ -109,6 +112,19 @@ function control51Plan(
                 'headers_module', 'proxy_module', 'proxy_fcgi_module',
                 'rewrite_module', 'ssl_module',
             ],
+        ],
+        'rate_limit' => [
+            'provider' => 'fail2ban',
+            'jail_name' => $jail,
+            'filter' => 'apache-auth',
+            'filter_file' => '/etc/fail2ban/filter.d/apache-auth.conf',
+            'client_binary' => '/usr/bin/fail2ban-client',
+            'service' => 'fail2ban.service',
+            'jail_dir' => '/etc/fail2ban/jail.d',
+            'jail_target' => '/etc/fail2ban/jail.d/' . $fail2banFile,
+            'maxretry' => 5,
+            'findtime_seconds' => 600,
+            'bantime_seconds' => 3600,
         ],
         'runtime' => [
             'config_file' => $etc . '/runtime.json',
@@ -134,6 +150,7 @@ function control51Plan(
             'runtime_file' => $outputDir . '/control-plane-runtime.json',
             'fpm_file' => $outputDir . '/50-vst-control.conf',
             'apache_file' => $outputDir . '/' . $site,
+            'fail2ban_file' => $outputDir . '/' . $fail2banFile,
             'service_file' => $outputDir . '/' . $service,
             'path_file' => $outputDir . '/' . $pathUnit,
         ],
@@ -148,6 +165,9 @@ function control51Plan(
             'tenant_secrets_never_exposed_in_snapshot' => true,
             'ordinary_tenant_admin_has_no_control_plane_access' => true,
             'http_only_serves_acme_else_https_redirect' => true,
+            'responses_are_never_cacheable' => true,
+            'failed_auth_rate_limit_required' => true,
+            'rate_limit_is_scoped_to_control_plane_log' => true,
         ],
     ];
 }
@@ -251,10 +271,14 @@ function control51ApacheConfig(array $plan): string
         '    SSLCompression Off',
         '    SSLCertificateFile "' . $plan['apache']['fullchain'] . '"',
         '    SSLCertificateKeyFile "' . $plan['apache']['privkey'] . '"',
+        '    ErrorLog "' . $plan['apache']['error_log'] . '"',
         '    Header always set Strict-Transport-Security "max-age=31536000"',
         '    Header always set X-Content-Type-Options "nosniff"',
         '    Header always set Referrer-Policy "no-referrer"',
         '    Header always set X-Frame-Options "DENY"',
+        '    Header always set Cache-Control "no-store, max-age=0"',
+        '    Header always set Pragma "no-cache"',
+        '    Header always set X-Robots-Tag "noindex, nofollow, noarchive"',
         '    Header always set Content-Security-Policy "default-src \'self\'; style-src \'self\' \'unsafe-inline\'; form-action \'self\'; frame-ancestors \'none\'; base-uri \'none\'"',
         '    RewriteEngine On',
         '    RewriteCond %{SSL:SSL_TLS_SNI} !^' . $hostRe . '$ [NC,OR]',
@@ -280,6 +304,23 @@ function control51ApacheConfig(array $plan): string
         '        SetHandler "proxy:unix:' . $socket . '|' . $backend . '"',
         '    </FilesMatch>',
         '</VirtualHost>',
+        '',
+    ]);
+}
+
+function control51Fail2banConfig(array $plan): string
+{
+    $r = $plan['rate_limit'];
+    return implode("\n", [
+        '# Fase 5.1.3 — uitsluitend control-plane Basic-Auth rate limiting',
+        '[' . $r['jail_name'] . ']',
+        'enabled = true',
+        'filter = ' . $r['filter'],
+        'port = https',
+        'logpath = ' . $plan['apache']['error_log'],
+        'maxretry = ' . (int)$r['maxretry'],
+        'findtime = ' . (int)$r['findtime_seconds'],
+        'bantime = ' . (int)$r['bantime_seconds'],
         '',
     ]);
 }
@@ -324,6 +365,7 @@ function control51Artifacts(array $plan): array
         $plan['bundle']['runtime_file'] => control51Json(control51RuntimeConfig($plan)),
         $plan['bundle']['fpm_file'] => control51FpmConfig($plan),
         $plan['bundle']['apache_file'] => control51ApacheConfig($plan),
+        $plan['bundle']['fail2ban_file'] => control51Fail2banConfig($plan),
         $plan['bundle']['service_file'] => control51ServiceUnit($plan),
         $plan['bundle']['path_file'] => control51PathUnit($plan),
     ];

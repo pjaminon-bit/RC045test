@@ -33,11 +33,20 @@ try{
  $hook=(string)file_get_contents($bundle.'/50-verenigingsplatform-apache-reload');c52(str_contains($hook,'apache2ctl configtest')&&str_contains($hook,'systemctl reload apache2'),'Certbot deploy-hook doet configtest vóór reload');
 
  require_once $root.'/app/deployment/first-vps-bootstrap-contract.php';
+ require_once $root.'/app/deployment/security-hardening.php';
  $prof=$plan['platform']['dns'];$good=['a'=>['203.0.113.10'],'aaaa'=>[],'cname'=>[]];$bad=['a'=>['203.0.113.10','203.0.113.11'],'aaaa'=>[],'cname'=>[]];
  c52((bootstrap52DnsBeoordeel($prof,'beheer.platform.example',$good,null)['ready']??false)===true,'exact direct platform-DNS-profiel is ready');
  c52((bootstrap52DnsBeoordeel($prof,'beheer.platform.example',$bad,null)['ready']??true)===false,'extra stale platform-IP maakt DNS fail-closed');
  $cnameProf=bootstrap52Dns('cname','203.0.113.10','','vps.platform.example','beheer2.platform.example');$owner=['a'=>[],'aaaa'=>[],'cname'=>['vps.platform.example']];$terminal=['a'=>['203.0.113.10'],'aaaa'=>[],'cname'=>[]];
  c52((bootstrap52DnsBeoordeel($cnameProf,'beheer2.platform.example',$owner,$terminal)['ready']??false)===true,'platform-DNS ondersteunt exact één CNAME-hop naar verwachte adressen');
+ $rc=str_repeat('c',40);$rm=str_repeat('d',64);$rp='/srv/verenigingsplatform/releases/'.$rc;$marker=['schema'=>1,'phase'=>'4.7-release','immutable'=>true,'commit'=>$rc,'manifest_sha256'=>$rm];$state=['schema'=>1,'phase'=>'4.7-state','active'=>['commit'=>$rc,'path'=>$rp,'manifest_sha256'=>$rm],'previous'=>null,'transition'=>null];
+ try{security521ReleaseBinding($rc,$rp,$rm,$rp,$marker,$state);c52(true,'exacte fase-5.2 releasebinding wordt geaccepteerd');}catch(Throwable$e){c52(false,'exacte fase-5.2 releasebinding wordt geaccepteerd');}
+ try{security521ReleaseBinding($rc,$rp,$rm,'/srv/verenigingsplatform/releases/'.str_repeat('e',40),$marker,$state);c52(false,'onverwachte current-wissel wordt fail-closed geweigerd');}catch(Throwable$e){c52(str_contains($e->getMessage(),'current'),'onverwachte current-wissel wordt fail-closed geweigerd');}
+ $stateAndere=$state;$stateAndere['active']['commit']=str_repeat('e',40);try{security521ReleaseBinding($rc,$rp,$rm,$rp,$marker,$stateAndere);c52(false,'andere actieve releasecommit in state wordt geweigerd');}catch(Throwable$e){c52(str_contains($e->getMessage(),'Actieve'),'andere actieve releasecommit in state wordt geweigerd');}
+ $stateTransition=$state;$stateTransition['transition']=['mode'=>'deploy','from'=>$state['active'],'to'=>$state['active']];try{security521ReleaseBinding($rc,$rp,$rm,$rp,$marker,$stateTransition);c52(false,'lopende 4.7 transition blokkeert first-VPS vervolg');}catch(Throwable$e){c52(str_contains($e->getMessage(),'stabiel'),'lopende 4.7 transition blokkeert first-VPS vervolg');}
+ try{security521GitSourceBinding($rc,$root,$root,$rc,'');c52(true,'Git source-binding accepteert exact root, HEAD en schone working tree');}catch(Throwable$e){c52(false,'Git source-binding accepteert exact root, HEAD en schone working tree');}
+ try{security521GitSourceBinding($rc,$root,$root,str_repeat('e',40),'');c52(false,'Git source-binding weigert een andere HEAD dan het plan');}catch(Throwable$e){c52(str_contains($e->getMessage(),'HEAD'),'Git source-binding weigert een andere HEAD dan het plan');}
+ try{security521GitSourceBinding($rc,$root,$root,$rc,' M auth.php');c52(false,'Git source-binding weigert een dirty working tree');}catch(Throwable$e){c52(str_contains($e->getMessage(),'wijzigingen'),'Git source-binding weigert een dirty working tree');}
 
  $apply=(string)file_get_contents($root.'/bin/apply-first-vps-bootstrap.php');
  c52(str_contains($apply,'plan_sha256')&&str_contains($apply,"\$p['paths']['state_file']")&&str_contains($apply,"\$p['paths']['lock_file']")&&str_contains($apply,'flock($lh,LOCK_EX|LOCK_NB)'),'resume-state is plan-gebonden en globaal gelockt');
@@ -48,9 +57,13 @@ try{
  c52(str_contains($apply,'b52LiveDns')&&str_contains($apply,"b52Cert(\$p,\$bins['certbot'])"),'platform-DNS wordt vóór certificaatuitgifte live bewezen');
  c52(str_contains($apply,'bootstrap-control-plane-operator.php')&&str_contains($apply,"'--password-stdin'"),'platformoperator loopt via bestaande bcrypt STDIN-bootstrap');
  c52(str_contains($apply,'bootstrap-tenant-admin.php')&&str_contains($apply,"'--password-stdin'"),'eerste tenantbeheerder loopt via bestaande STDIN-bootstrap');
- c52(str_contains($apply,"if(!isset(\$o['secrets-stdin']))")&&strpos($apply,"if(!isset(\$o['secrets-stdin']))")<strpos($apply,'stream_get_contents(STDIN)'),'secrets-stdin vlag wordt gecontroleerd vóór enige STDIN-read');
+ $flagPos=strpos($apply,"if(!isset(\$o['secrets-stdin']))");$readPos=strpos($apply,'fgets(STDIN)');c52($flagPos!==false&&$readPos!==false&&$flagPos<$readPos&&!str_contains($apply,'stream_get_contents(STDIN)'),'secrets-stdin vlag wordt vóór één stagegebonden JSON-regelread gecontroleerd; bulk-read is verwijderd');
+ $opSecret=strpos($apply,"b52SecretLees('operator_password')");$certStage=strpos($apply,"if(b52Voor(\$state['stage'],'platform_certificate_ready'))");$tenantSecret=strpos($apply,"b52SecretLees('tenant_admin_password')");$provision=strpos($apply,"if(b52Voor(\$state['stage'],'tenant_provisioned'))");c52($opSecret!==false&&$certStage!==false&&$certStage<$opSecret&&$tenantSecret!==false&&$provision!==false&&$provision<$tenantSecret,'wachtwoorden worden pas vlak in hun eigen operator- en tenant-adminstage gelezen');
+ c52(str_contains($apply,"count(\$s)!==1||!array_key_exists(\$key,\$s)")&&!str_contains($apply,'array_keys($s)!=='),'secret-JSON valideert exact één vereiste sleutel zonder object-keyvolgorde-afhankelijkheid');
+ c52(substr_count($apply,'finally{b52SecretWis(')===2&&str_contains($apply,'$raw=str_repeat("\\0",strlen($raw))'),'beide stagecredentials en hun ruwe JSON-regel worden ook bij fouten direct gewist');
+ c52(!str_contains($apply,'$needSecrets')&&!str_contains($apply,'$secrets=b52Secrets'),'bootstrap houdt geen vroeg ingelezen secrets-array meer vast');
  c52(!str_contains($apply,'shell_exec(')&&!str_contains($apply,'`')&&!str_contains($apply,'rm -rf'),'5.2 gebruikt geen shell escape of rm-rf');
- c52(str_contains($apply,"['bypass_shell'=>true]")&&str_contains($apply,'proc_open('),'childprocessen gebruiken vaste argv zonder shell');
+ c52(str_contains($apply,"require_once dirname(__DIR__).'/app/deployment/process-runner.php'")&&str_contains($apply,'process521Run($cmd,$stdin,null,null,3600)')&&!str_contains($apply,'proc_open('),'childprocessen gebruiken gedeelde deadlock-veilige argv-runner zonder shell');
  c52(str_contains($apply,'packages_are_not_auto_installed')===false&&!str_contains($apply,"'apt'")&&!str_contains($apply,'apt-get'),'root-flow installeert bewust geen packages');
  c52(strpos($apply,'b52TenantDb($p,$current)')<strpos($apply,'b52TenantFpm($p)'),'database apply gebeurt vóór tenant-FPM reload');
  c52(strpos($apply,'b52TenantTls($p,$current)')<strpos($apply,'b52TenantMonitoring($p,$current)'),'tenant-TLS staat vóór monitoring');
@@ -58,6 +71,23 @@ try{
  c52(str_contains($apply,"'--adopt-active'")&&str_contains($apply,"'--refresh-only'"),'gezonde tenant wordt geadopteerd en control-plane snapshot daarna ververst');
  c52(str_contains($apply,"trim(\$o)!=='401'")&&str_contains($apply,"'--probe','--write-status'"),'eindcontrole bewijst Basic Auth 401 en tenant healthprobe');
  c52(str_contains($apply,"'operator_password'")&&str_contains($apply,"'tenant_admin_password'")&&!str_contains($apply,'VERENIGING_PASSWORD'),'secrets hebben alleen de twee bootstrapdoelen en gaan niet via environment');
+ c52(str_contains($apply,'b52TrustedReleasePlan')&&str_contains($apply,'b52SourceTrust')&&str_contains($apply,"b52PlatformHttp(\$p,\$ctx['artifacts'])"),'root-apply gebruikt root-owned releaseplan en in-memory gevalideerde bootstrapartifacts');
+ c52(str_contains($apply,"(int)\$s['uid']!==0")&&str_contains($apply,"((int)\$s['mode']&0022)!==0"),'first-VPS root-apply weigert niet-root-owned of group/world-writable releasebron');
+ c52(str_contains($apply,'b52ExactBytes')&&!str_contains($apply,'function b52ExactInstall'),'serverartifacts worden uit gevalideerde bytes geplaatst en niet opnieuw uit mutable bundle gelezen');
+ c52(str_contains($apply,'b52ReleaseEnsure')&&str_contains($apply,'b52ReleaseLock')&&substr_count($apply,'b52ReleaseExact($p)')>=10,'first-VPS reconcileert bestaande release, houdt 4.7 lock vast en herbewijst releasebinding rond mutaties');
+ c52(str_contains($apply,"if(\$c||\$s){if(!\$c||!\$s)")&&str_contains($apply,'b52ReleaseExact($p);return;'),'crash na geslaagde release-bootstrap wordt gereconcileerd in plaats van opnieuw gebootstrapt');
+ c52(str_contains($apply,"if(\$status==='unmanaged')")&&str_contains($apply,"if(\$status==='active')")&&str_contains($apply,"'--activate'"),'lifecycle-resume adopteert alleen unmanaged en valideert reeds active idempotent');
+ c52(str_contains($apply,"'/usr/bin/git'")&&str_contains($apply,"'rev-parse','--verify','HEAD^{commit}'")&&str_contains($apply,"'status','--porcelain=v1','--untracked-files=all'")&&str_contains($apply,'security521GitSourceBinding'),'production bootstrap bindt bron expliciet aan Git top-level, HEAD en schone working tree');
+ $preflightPos=strpos($apply,"if(\$mode!=='status')b52ProductionPreflight(\$p,\$bins)");$lockPos=strpos($apply,"\$lh=@fopen(\$p['paths']['lock_file'],'c')");c52($preflightPos!==false&&$lockPos!==false&&$preflightPos<$lockPos,'volledige production preflight gebeurt vóór het eerste bootstrap-lockbestand');
+ c52(str_contains($apply,"'/usr/sbin/apache2ctl','configtest'")&&str_contains($apply,"\$bins['fpm'],'-t'")&&str_contains($apply,"\$bins['fail2ban'],'-t'")&&str_contains($apply,"'SELECT 1;'"),'production preflight bewijst Apache, PHP-FPM, Fail2ban en PostgreSQL vóór mutaties');
+ c52(str_contains($apply,"'apache2','php'.\$v.'-fpm.service','postgresql'")&&str_contains($apply,"'is-active','--quiet'"),'kritieke productieservices moeten al actief zijn vóór first-VPS mutaties');
+
+ $cpApply=(string)file_get_contents($root.'/bin/apply-vps-control-plane.php');
+ c52(str_contains($cpApply,"\$art=\$ctx['artifacts']")&&str_contains($cpApply,'cpaExactBytes')&&!str_contains($cpApply,'function cpaExact(string$src'),'control-plane root-apply installeert uitsluitend in-memory gevalideerde artifactbytes');
+ c52(str_contains($cpApply,'cpaVerifyMeta')&&str_contains($cpApply,'chown($dst,0)')&&str_contains($cpApply,"['mode']&0777"),'control-plane normaliseert en verifieert owner/group/mode van bestaande artifacts');
+ $releaseApply=(string)file_get_contents($root.'/bin/apply-vps-release.php');
+ c52(str_contains($releaseApply,'apply47ImmutableRechten')&&str_contains($releaseApply,'0555')&&str_contains($releaseApply,'0444')&&str_contains($releaseApply,"['uid']!==0")&&str_contains($releaseApply,"['gid']!==0"),'4.7 bewijst root:root en exact read-only metadata voor iedere immutable release');
+ c52(str_contains($releaseApply,"'/usr/sbin/runuser'")&&str_contains($releaseApply,"'/usr/bin/systemctl'"),'kritieke 4.7 childprocessen gebruiken absolute systeembinaries');
 
  $cp=(string)file_get_contents($root.'/app/deployment/control-plane-contract.php');c52(str_contains($cp,"'acme_webroot'")&&str_contains($cp,'/.well-known/acme-challenge'),'definitieve 5.1 control-plane blijft ACME-renewal ondersteunen');
  c52(str_contains($cp,'RewriteCond %{REQUEST_URI}')&&str_contains($cp,'acme-challenge')&&str_contains($cp,'[R=308,L,NE]')&&str_contains($cp,"'    RewriteRule ^ https://' . \$host"),'definitieve HTTP-vhost serveert alleen challenge en redirect overige paden vast naar HTTPS');

@@ -1,15 +1,38 @@
 <?php
 if (PHP_SAPI !== 'cli') { http_response_code(403); exit('Alleen via CLI beschikbaar.'); }
 require_once dirname(__DIR__) . '/app/deployment/monitoring-contract.php';
+require_once dirname(__DIR__) . '/app/deployment/process-runner.php';
 
 function health46Stop(string $m, int $c = 1): void { fwrite(STDERR, "FOUT: {$m}\n"); exit($c); }
-function health46Run(array $cmd): array
+function health46Binary(string $name): string
 {
-    $d=[0=>['pipe','r'],1=>['pipe','w'],2=>['pipe','w']];
-    $p=@proc_open($cmd,$d,$x,null,null,['bypass_shell'=>true]);
-    if(!is_resource($p)) return [255,'','proces kon niet starten'];
-    fclose($x[0]); $o=stream_get_contents($x[1]); fclose($x[1]); $e=stream_get_contents($x[2]); fclose($x[2]);
-    return [proc_close($p),trim((string)$o),trim((string)$e)];
+    static $cache=[];
+    if(isset($cache[$name]))return$cache[$name];
+    $known=[
+        'systemctl'=>['/usr/bin/systemctl'],
+        'openssl'=>['/usr/bin/openssl'],
+        'runuser'=>['/usr/sbin/runuser','/usr/bin/runuser'],
+        'psql'=>['/usr/bin/psql'],
+        'curl'=>['/usr/bin/curl'],
+    ];
+    if(!isset($known[$name]))throw new RuntimeException('Niet-toegestane health PATH-binary: '.$name);
+    foreach($known[$name]as$b)if(is_file($b)&&is_executable($b))return$cache[$name]=$b;
+    throw new RuntimeException('Vereiste health-executable ontbreekt: '.$name);
+}
+function health46Run(array $cmd, ?string $stdin=null): array
+{
+    if($cmd===[]||!isset($cmd[0]))throw new RuntimeException('Health subprocesscommando ontbreekt.');
+    $first=(string)$cmd[0];if(!str_starts_with($first,'/'))$cmd[0]=health46Binary($first);
+    if(basename((string)$cmd[0])==='runuser'){
+        $sep=array_search('--',$cmd,true);if($sep===false||!isset($cmd[$sep+1]))throw new RuntimeException('runuser healthcommando mist exact child-executable.');
+        $child=(string)$cmd[$sep+1];if(!str_starts_with($child,'/'))$cmd[$sep+1]=health46Binary($child);
+    }
+    return process521Run($cmd,$stdin,null,null,120);
+}
+function health46Deps(array $plan): void
+{
+    foreach(['systemctl','openssl','runuser','psql','curl']as$n)health46Binary($n);
+    $apache=(string)$plan['apache']['control_binary'];if(!str_starts_with($apache,'/')||!is_file($apache)||!is_executable($apache))throw new RuntimeException('Apache health control-binary ontbreekt of is niet absoluut.');
 }
 function health46Check(bool $ok, string $code, array &$checks): void { $checks[$code]=$ok?'ok':'fail'; }
 function health46SafeDir(string $dir, int $mode = 0750): void
@@ -49,12 +72,11 @@ function health46Alert(array $plan, array $status): void
         $adapter=(string)$plan['alerts']['adapter'];
         if(is_file($adapter)&&!is_link($adapter)){
             $st=@stat($adapter); $mode=is_array($st)?((int)$st['mode']&0777):-1;
-            if(!is_array($st)||(int)$st['uid']!==0||($mode&0022)!==0||!is_executable($adapter)) health46Stop('Alert-adapter bestaat maar is niet veilig root-owned/executable.');
+            if(!is_array($st)||(int)$st['uid']!==0||($mode&0022)!==0||!is_executable($adapter)||!str_starts_with($adapter,'/')) health46Stop('Alert-adapter bestaat maar is niet veilig root-owned/absoluut/executable.');
             $payload=['schema'=>1,'tenant_key'=>$plan['tenant_key'],'state'=>$nu,'previous_state'=>$vorig,'checked_at_utc'=>$status['checked_at_utc'],'failed_checks'=>array_keys(array_filter($status['checks'],static fn($v)=>$v==='fail'))];
-            $d=[0=>['pipe','r'],1=>['pipe','w'],2=>['pipe','w']]; $p=@proc_open([$adapter],$d,$x,null,null,['bypass_shell'=>true]);
-            if(!is_resource($p)) health46Stop('Alert-adapter kon niet worden gestart.');
-            fwrite($x[0],json_encode($payload,JSON_UNESCAPED_SLASHES)."\n"); fclose($x[0]); stream_get_contents($x[1]); fclose($x[1]); $err=stream_get_contents($x[2]); fclose($x[2]);
-            if(proc_close($p)!==0) health46Stop('Alert-adapter meldde een fout'.($err!==''?': '.trim($err):'.'));
+            $json=json_encode($payload,JSON_UNESCAPED_SLASHES);if(!is_string($json))health46Stop('Alert-payload kon niet veilig worden opgebouwd.');
+            [$code,,$err]=health46Run([$adapter],$json."\n");
+            if($code!==0) health46Stop('Alert-adapter meldde een fout'.($err!==''?': '.trim($err):'.'));
         }
     }
     health46AtomicJson($statePad,$nieuw);
@@ -68,6 +90,7 @@ try{$ctx=monitoring46PlanLeesEnValideer($planPad);$plan=$ctx['plan'];}catch(Thro
 if(isset($opt['check'])&&!isset($opt['probe'])){echo 'CHECK OK  tenant='.$plan['tenant_key']."\n";exit(0);}
 if(!isset($opt['probe'])||isset($opt['check']))health46Stop('Kies exact --check of --probe.');
 if(PHP_OS_FAMILY!=='Linux'||!function_exists('posix_geteuid')||posix_geteuid()!==0)health46Stop('--probe vereist Linux root.');
+try{health46Deps($plan);}catch(Throwable$e){health46Stop($e->getMessage());}
 
 $checks=[];
 foreach([$plan['runtime']['apache_service'],$plan['runtime']['fpm_service'],$plan['runtime']['postgresql_service']]as$svc){[$c,$o]=health46Run(['systemctl','is-active',(string)$svc]);health46Check($c===0&&$o==='active','service:'.(string)$svc,$checks);}

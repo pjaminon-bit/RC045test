@@ -1,5 +1,8 @@
 <?php
 require_once dirname(__DIR__) . '/control-plane/control-plane-runtime.php';
+header('Cache-Control: no-store, max-age=0');
+header('Pragma: no-cache');
+header('X-Robots-Tag: noindex, nofollow, noarchive');
 
 $operator = cp51Operator();
 $csrf = cp51Csrf();
@@ -18,7 +21,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 if (isset($_GET['queued']) && preg_match('/^[0-9a-f]{32}$/D', (string)$_GET['queued'])) {
-    $melding = 'Aanvraag ' . substr((string)$_GET['queued'], 0, 8) . ' is veilig in de uitvoerqueue geplaatst.';
+    $queued = (string)$_GET['queued'];
+    $resultaat = cp51RecentResult($queued, $operator);
+    if (is_array($resultaat)) {
+        $samenvatting = trim((string)$resultaat['message']);
+        if ($resultaat['result'] === 'ok') {
+            $melding = 'Aanvraag ' . substr($queued, 0, 8) . ' is uitgevoerd.' . ($samenvatting !== '' ? ' ' . $samenvatting : '');
+        } else {
+            $fout = 'Aanvraag ' . substr($queued, 0, 8) . ' is mislukt.' . ($samenvatting !== '' ? ' ' . $samenvatting : '');
+        }
+    } else {
+        $melding = 'Aanvraag ' . substr($queued, 0, 8) . ' staat in de uitvoerqueue of wordt nog verwerkt. Vernieuw de pagina voor de definitieve uitkomst.';
+    }
 }
 $snapshot = cp51Snapshot();
 $tenants = $snapshot['tenants'];

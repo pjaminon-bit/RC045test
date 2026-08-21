@@ -156,12 +156,37 @@ function cp51Request(string $tenantKey, string $actie, array $input): string
     return $id;
 }
 
-function cp51RecentResult(string $requestId): ?array
+function cp51RecentResult(string $requestId, ?string $operator = null): ?array
 {
     if (preg_match('/^[0-9a-f]{32}$/D', $requestId) !== 1) return null;
+    $operator ??= cp51Operator();
+    if (preg_match('/^[A-Za-z0-9][A-Za-z0-9._@-]{1,63}$/D', $operator) !== 1) return null;
     $f = cp51Config()['results_dir'] . '/' . $requestId . '.json';
     if (is_link($f) || !is_file($f)) return null;
     $raw = @file_get_contents($f);
-    $r = is_string($raw) ? json_decode($raw, true) : null;
-    return is_array($r) && ($r['request_id'] ?? '') === $requestId ? $r : null;
+    try { $r = is_string($raw) ? json_decode($raw, true, 32, JSON_THROW_ON_ERROR) : null; }
+    catch (Throwable $e) { $r = null; }
+    $acties = ['adopt-active','suspend','activate','recover','export','delete','cancel-delete','purge'];
+    if (!is_array($r)
+        || (int)($r['schema'] ?? 0) !== 1
+        || ($r['phase'] ?? '') !== '5.1-result'
+        || !hash_equals($requestId, (string)($r['request_id'] ?? ''))
+        || !hash_equals($operator, (string)($r['operator'] ?? ''))
+        || preg_match('/^[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])?$/D', (string)($r['tenant_key'] ?? '')) !== 1
+        || !in_array((string)($r['action'] ?? ''), $acties, true)
+        || !in_array((string)($r['result'] ?? ''), ['ok','failed'], true)
+        || !is_string($r['message'] ?? null)
+        || mb_strlen((string)$r['message']) > 500
+        || strtotime((string)($r['completed_at_utc'] ?? '')) === false) {
+        return null;
+    }
+    return [
+        'request_id'=>$requestId,
+        'tenant_key'=>(string)$r['tenant_key'],
+        'action'=>(string)$r['action'],
+        'operator'=>(string)$r['operator'],
+        'result'=>(string)$r['result'],
+        'message'=>(string)$r['message'],
+        'completed_at_utc'=>(string)$r['completed_at_utc'],
+    ];
 }

@@ -71,7 +71,13 @@ jobs:
           php tests/phase46-monitoring-logging.php
           php tests/phase47-release-rollback.php
           php tests/phase48-tenant-lifecycle.php
+          php tests/phase481-purge-recovery-hardening.php
+          php tests/phase482-lifecycle-mutation-results.php
           php tests/phase51-control-plane.php
+          php tests/phase511-control-plane-identity.php
+          php tests/phase512-control-plane-auth.php
+          php tests/phase513-control-plane-rate-limit.php
+          php tests/phase514-executor-mutation-results.php
           php tests/phase52-first-vps-bootstrap.php
           php tests/private-store-pdo-sqlite.php
           php tests/phase321-pdo-isolation.php
@@ -167,7 +173,10 @@ jobs:
           wacht_op_status "$basis/app/deployment/monitoring-contract.php" 403 nee
           wacht_op_status "$basis/app/deployment/release-contract.php" 403 nee
           wacht_op_status "$basis/app/deployment/lifecycle-contract.php" 403 nee
+          wacht_op_status "$basis/app/deployment/lifecycle-purge-hardening.php" 403 nee
           wacht_op_status "$basis/app/deployment/control-plane-contract.php" 403 nee
+          wacht_op_status "$basis/app/deployment/control-plane-identity.php" 403 nee
+          wacht_op_status "$basis/app/deployment/control-plane-auth-hardening.php" 403 nee
           wacht_op_status "$basis/app/deployment/first-vps-bootstrap-contract.php" 403 nee
           wacht_op_status "$basis/app/control-plane/control-plane-runtime.php" 403 nee
           wacht_op_status "$basis/app/control-plane-web/index.php" 403 nee
@@ -215,7 +224,13 @@ jobs:
           wacht_op_status "$basis/tests/phase46-monitoring-logging.php" 403 nee
           wacht_op_status "$basis/tests/phase47-release-rollback.php" 403 nee
           wacht_op_status "$basis/tests/phase48-tenant-lifecycle.php" 403 nee
+          wacht_op_status "$basis/tests/phase481-purge-recovery-hardening.php" 403 nee
+          wacht_op_status "$basis/tests/phase482-lifecycle-mutation-results.php" 403 nee
           wacht_op_status "$basis/tests/phase51-control-plane.php" 403 nee
+          wacht_op_status "$basis/tests/phase511-control-plane-identity.php" 403 nee
+          wacht_op_status "$basis/tests/phase512-control-plane-auth.php" 403 nee
+          wacht_op_status "$basis/tests/phase513-control-plane-rate-limit.php" 403 nee
+          wacht_op_status "$basis/tests/phase514-executor-mutation-results.php" 403 nee
           wacht_op_status "$basis/tests/phase52-first-vps-bootstrap.php" 403 nee
           wacht_op_status "$basis/docs/VPS-DEPLOYMENT.md" 403 nee
           wacht_op_status "$basis/docs/VPS-WEBSERVER.md" 403 nee
