@@ -111,6 +111,13 @@ function rc045SeoHead($pagina, $indexeerbaar = true) {
   $afbeelding = $socialAsset !== '' ? htmlspecialchars(siteUrl() . '/' . $socialAsset, ENT_QUOTES, 'UTF-8') : '';
   $titelMetaPrefix = tenantRuntimePrivateRoot(siteConfig()) === null ? 'rc045-title-' : 'site-title-';
 
+  // Deze twee bestanden bevatten uitsluitend generieke responsive/browser-
+  // garanties die uit de live eindacceptatie voortkomen. Ze worden via de
+  // centrale head geladen zodat iedere publieke template exact dezelfde
+  // ondergrenzen voor viewport, targets en formuliersemantiek krijgt.
+  echo "  <link rel=\"stylesheet\" href=\"acceptance-hardening.css\">\n";
+  echo "  <script src=\"acceptance-hardening.js\" defer></script>\n";
+
   echo "  <title>$titel</title>\n";
   foreach (array_keys($RC045_TALEN) as $t) {
     if (!isset($RC045_PAGINAS[$pagina][$t])) continue;

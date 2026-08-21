@@ -19,6 +19,18 @@ if ($sleutel === '' || publicContentBestandsnaam($sleutel) === null) {
 
 $data = publicContentLees($sleutel);
 if ($data === null) {
+    // Standalone/DEV draait met ingebouwde template-defaults als een optionele
+    // beheeroverride nog niet bestaat. Voor dat compatibiliteitsscenario is
+    // "geen override" geen fout: 204 voorkomt onnodige browser-404's terwijl
+    // de pagina zijn bestaande defaults behoudt. Externe tenants mogen juist
+    // nooit op gedeelde/legacy data terugvallen en blijven daarom fail-closed
+    // met 404 wanneer hun eigen tenantdataset ontbreekt.
+    if (publicContentTenantRoot() === null) {
+        http_response_code(204);
+        header('Cache-Control: no-store');
+        header('X-Content-Type-Options: nosniff');
+        exit;
+    }
     http_response_code(404);
     header('Cache-Control: no-store');
     exit;
