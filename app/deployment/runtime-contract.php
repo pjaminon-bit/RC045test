@@ -96,6 +96,56 @@ function runtime41VerwachtePool(string $tenantKey): string
     return 'vst-' . substr($tenantKey, 0, 24) . '-' . $hash;
 }
 
+/**
+ * Fase 4.7 mag de logische `current` symlink naar een andere immutable release
+ * laten wijzen zonder alle bestaande 4.1-4.6 infrastructuurplannen te herschrijven.
+ * Dat is alleen toegestaan wanneer een geldige 4.7 release-state de actuele
+ * fysieke target expliciet als active of als exact transition from/to bindt.
+ */
+function runtime41BeheerdeReleaseCurrent(string $appLogical, string $logicalReal): bool
+{
+    $appLogical = runtime41NormPad($appLogical);
+    $logicalReal = runtime41NormPad($logicalReal);
+    if (basename($appLogical) !== 'current' || !is_link($appLogical)) return false;
+    $platformRoot = runtime41NormPad(dirname($appLogical));
+    $releases = $platformRoot . '/releases';
+    $statePad = $platformRoot . '/release-state.json';
+    if (runtime41SymlinkInPad($platformRoot) !== null || runtime41SymlinkInPad($releases) !== null || !is_dir($releases)) return false;
+    $releasesReal = realpath($releases);
+    if ($releasesReal === false || runtime41NormPad(dirname($logicalReal)) !== runtime41NormPad($releasesReal)) return false;
+    $commit = basename($logicalReal);
+    if (preg_match('/^[0-9a-f]{40}$/D', $commit) !== 1) return false;
+
+    $markerPad = $logicalReal . '/.verenigingsplatform-release.json';
+    if (is_link($markerPad) || !is_file($markerPad)) return false;
+    $markerRaw = @file_get_contents($markerPad);
+    $marker = is_string($markerRaw) ? json_decode($markerRaw, true) : null;
+    if (!is_array($marker)
+        || (int)($marker['schema'] ?? 0) !== 1
+        || ($marker['phase'] ?? '') !== '4.7-release'
+        || ($marker['immutable'] ?? false) !== true
+        || !hash_equals($commit, (string)($marker['commit'] ?? ''))
+        || preg_match('/^[0-9a-f]{64}$/D', (string)($marker['manifest_sha256'] ?? '')) !== 1) return false;
+
+    if (is_link($statePad) || !is_file($statePad) || runtime41SymlinkInPad(dirname($statePad)) !== null) return false;
+    $stateRaw = @file_get_contents($statePad);
+    $state = is_string($stateRaw) ? json_decode($stateRaw, true) : null;
+    if (!is_array($state) || (int)($state['schema'] ?? 0) !== 1 || ($state['phase'] ?? '') !== '4.7-state') return false;
+
+    $entries = [];
+    if (is_array($state['active'] ?? null)) $entries[] = $state['active'];
+    if (is_array($state['transition'] ?? null)) {
+        if (is_array($state['transition']['from'] ?? null)) $entries[] = $state['transition']['from'];
+        if (is_array($state['transition']['to'] ?? null)) $entries[] = $state['transition']['to'];
+    }
+    foreach ($entries as $entry) {
+        if (hash_equals($commit, (string)($entry['commit'] ?? ''))
+            && hash_equals($logicalReal, runtime41NormPad((string)($entry['path'] ?? '')))
+            && hash_equals((string)$marker['manifest_sha256'], (string)($entry['manifest_sha256'] ?? ''))) return true;
+    }
+    return false;
+}
+
 function runtime41DeploymentLees(string $pad): array
 {
     $pad = runtime41BestaandPad($pad, 'deployment.json');
@@ -130,10 +180,13 @@ function runtime41DeploymentLees(string $pad): array
         throw new RuntimeException('Logische app-root is geen veilig absoluut POSIX-pad.');
     }
     $logicalReal = realpath($appLogical);
-    if ($logicalReal === false || runtime41NormPad($logicalReal) !== runtime41NormPad($appReal)) {
-        throw new RuntimeException('Logische en fysieke app-root wijzen niet naar dezelfde release.');
+    if ($logicalReal === false) throw new RuntimeException('Logische app-root kan niet fysiek worden opgelost.');
+    $currentReal = runtime41NormPad($logicalReal);
+    if ($currentReal !== runtime41NormPad($appReal) && !runtime41BeheerdeReleaseCurrent($appLogical, $currentReal)) {
+        throw new RuntimeException('Logische en fysieke app-root wijzen niet naar dezelfde of een geldig beheerde fase-4.7 release.');
     }
-    if (runtime41Binnen($tenantRoot, $appReal) || runtime41Binnen($appReal, $tenantRoot)) {
+    if (runtime41Binnen($tenantRoot, $appReal) || runtime41Binnen($appReal, $tenantRoot)
+        || runtime41Binnen($tenantRoot, $currentReal) || runtime41Binnen($currentReal, $tenantRoot)) {
         throw new RuntimeException('Gedeelde applicatiecode en tenantroot mogen fysiek niet overlappen.');
     }
 
@@ -175,6 +228,7 @@ function runtime41DeploymentLees(string $pad): array
         'private_root' => $privateRoot,
         'app_root' => rtrim($appLogical, '/'),
         'app_root_real' => $appReal,
+        'app_root_current_real' => $currentReal,
         'os_user' => $verwachteUser,
         'pool' => $verwachtePool,
         'socket' => $verwachteSocket,
