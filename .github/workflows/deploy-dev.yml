@@ -72,6 +72,7 @@ jobs:
           php tests/phase47-release-rollback.php
           php tests/phase48-tenant-lifecycle.php
           php tests/phase481-purge-recovery-hardening.php
+          php tests/phase482-lifecycle-mutation-results.php
           php tests/phase51-control-plane.php
           php tests/phase511-control-plane-identity.php
           php tests/phase512-control-plane-auth.php
@@ -224,6 +225,7 @@ jobs:
           wacht_op_status "$basis/tests/phase47-release-rollback.php" 403 nee
           wacht_op_status "$basis/tests/phase48-tenant-lifecycle.php" 403 nee
           wacht_op_status "$basis/tests/phase481-purge-recovery-hardening.php" 403 nee
+          wacht_op_status "$basis/tests/phase482-lifecycle-mutation-results.php" 403 nee
           wacht_op_status "$basis/tests/phase51-control-plane.php" 403 nee
           wacht_op_status "$basis/tests/phase511-control-plane-identity.php" 403 nee
           wacht_op_status "$basis/tests/phase512-control-plane-auth.php" 403 nee
