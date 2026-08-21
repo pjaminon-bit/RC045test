@@ -22,6 +22,7 @@ function apply45Help(): void
     echo "  sudo php bin/apply-vps-database.php --database-plan=/srv/verenigingen/club/database/database-plan.json --apply\n\n";
     echo "--check valideert alleen de secretvrije bundle en heeft geen root/PostgreSQL nodig.\n";
     echo "--apply vereist Linux root, PostgreSQL >=16, socket-only PostgreSQL en de fase-4.1 tenant Linux-user.\n";
+    echo "Stop vóór --apply de tenant-PHP-FPM pool: database/HBA provisioning gebeurt uitsluitend met een inactieve tenant-runtime.\n";
     echo "Er wordt bewust geen databasewachtwoord aangemaakt: lokale Unix-socket peer-auth bindt DB-login aan de kernel OS-user.\n";
 }
 
@@ -41,6 +42,16 @@ function apply45Exec(array $command, ?string $stdin = null): array
     fclose($pipes[1]); fclose($pipes[2]);
     $code = proc_close($proc);
     return [$code, is_string($stdout) ? trim($stdout) : '', is_string($stderr) ? trim($stderr) : ''];
+}
+
+function apply45RuntimeMoetInactiefZijn(string $tenantUser): void
+{
+    [$code, $out, $err] = apply45Exec(['pgrep', '-u', $tenantUser]);
+    if ($code === 1) return;
+    if ($code === 0 && $out !== '') {
+        throw new RuntimeException('Tenant-runtimeuser heeft actieve processen. Stop eerst de tenant-PHP-FPM pool vóór database --apply.');
+    }
+    throw new RuntimeException('Actieve tenantprocessen konden niet fail-closed worden gecontroleerd: ' . ($err !== '' ? $err : 'pgrep ontbreekt of gaf een onverwachte status'));
 }
 
 function apply45PgQuery(string $sql, string $database = 'postgres'): string
@@ -146,9 +157,6 @@ function apply45HbaInstalleer(array $plan): array
         $deny = apply45PgQuery("SELECT count(*) FROM pg_hba_file_rules WHERE file_name={$tenantLiteral} AND type='local' AND database=ARRAY['all']::text[] AND user_name=ARRAY[{$userLiteral}]::text[] AND auth_method='reject'");
         if ($allow !== '1' || $deny !== '1') throw new RuntimeException('Exacte tenant peer-allow + cross-database reject zijn niet zichtbaar in pg_hba_file_rules.');
 
-        // Alle echte authregels uit de gecontroleerde platform-include moeten
-        // vóór iedere echte authregel buiten die include staan. Zo blijft dit
-        // correct wanneer meerdere tenant-HBA-bestanden naast elkaar bestaan.
         $platformPrefix = database45SqlLiteral(rtrim($includeDir, '/') . '/');
         $laatstePlatform = apply45PgQuery("SELECT max(rule_number) FROM pg_hba_file_rules WHERE type IS NOT NULL AND strpos(file_name, {$platformPrefix}) = 1");
         $eersteBuitenPlatform = apply45PgQuery("SELECT min(rule_number) FROM pg_hba_file_rules WHERE type IS NOT NULL AND strpos(file_name, {$platformPrefix}) <> 1");
@@ -167,20 +175,6 @@ function apply45HbaInstalleer(array $plan): array
     }
 
     return ['hba_file' => $hbaPad, 'tenant_hba' => $tenantHba, 'old_main' => $oudeMain, 'old_tenant' => $oudeTenant, 'old_tenant_existed' => $oudeTenantBestond, 'stat' => $stat, 'pg_gid' => $pgGid];
-}
-
-function apply45HbaRollback(array $state): void
-{
-    $hbaPad = (string)$state['hba_file'];
-    $tenantHba = (string)$state['tenant_hba'];
-    $stat = (array)$state['stat'];
-    if (($state['old_tenant_existed'] ?? false) === true && is_string($state['old_tenant'] ?? null)) {
-        apply45VeiligSchrijf($tenantHba, (string)$state['old_tenant'], 0640, 0, (int)$state['pg_gid']);
-    } elseif (is_file($tenantHba) && !is_link($tenantHba)) {
-        @unlink($tenantHba);
-    }
-    apply45VeiligSchrijf($hbaPad, (string)$state['old_main'], ((int)$stat['mode']) & 0777, (int)$stat['uid'], (int)$stat['gid']);
-    try { apply45PgQuery('SELECT pg_reload_conf()'); } catch (Throwable $ignored) {}
 }
 
 function apply45PeerCheck(array $plan): void
@@ -235,8 +229,11 @@ if (!is_array($pw) || !is_array($gr) || (int)($pw['gid'] ?? -1) !== (int)($gr['g
     apply45Stop('Fase-4.1 tenant Linux-user/group bestaat niet exact; pas 4.1 eerst op de VPS toe.');
 }
 
+$appRoleTenantGebonden = false;
+$hbaBeschermingActief = false;
 try {
-    foreach ([['which', 'psql'], ['which', 'runuser']] as $cmd) {
+    apply45RuntimeMoetInactiefZijn($appUser);
+    foreach ([['which', 'psql'], ['which', 'runuser'], ['which', 'pgrep']] as $cmd) {
         [$code] = apply45Exec($cmd);
         if ($code !== 0) throw new RuntimeException($cmd[1] . ' ontbreekt op de VPS.');
     }
@@ -265,26 +262,42 @@ try {
     if (!apply45Bestaat('role', $owner)) {
         apply45PgQuery('CREATE ROLE ' . $owner . ' NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS; COMMENT ON ROLE ' . $owner . ' IS ' . database45SqlLiteral($marker));
     }
-    if (!apply45Bestaat('role', $appUser)) {
-        apply45PgQuery('CREATE ROLE ' . $appUser . ' LOGIN INHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS CONNECTION LIMIT 10 PASSWORD NULL; COMMENT ON ROLE ' . $appUser . ' IS ' . database45SqlLiteral($marker));
+
+    $appBestond = apply45Bestaat('role', $appUser);
+    if ($appBestond) {
+        $preProps = apply45PgQuery("SELECT rolsuper::text || '|' || rolinherit::text || '|' || rolcreaterole::text || '|' || rolcreatedb::text || '|' || rolreplication::text || '|' || rolbypassrls::text || '|' || rolconnlimit::text || '|' || (rolpassword IS NULL)::text FROM pg_authid WHERE rolname=" . database45SqlLiteral($appUser));
+        if (!hash_equals('false|true|false|false|false|false|10|true', $preProps)) {
+            throw new RuntimeException('Bestaande app-role heeft gevaarlijke privilege/password-drift; provisioning stopt vóór HBA-wijziging.');
+        }
+    } else {
+        apply45PgQuery('CREATE ROLE ' . $appUser . ' NOLOGIN INHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS CONNECTION LIMIT 10 PASSWORD NULL; COMMENT ON ROLE ' . $appUser . ' IS ' . database45SqlLiteral($marker));
     }
+    $appRoleTenantGebonden = true;
+
+    $memberships = apply45PgQuery("SELECT count(*) FROM pg_auth_members WHERE member IN (SELECT oid FROM pg_roles WHERE rolname IN (" . database45SqlLiteral($owner) . ',' . database45SqlLiteral($appUser) . ")) OR roleid IN (SELECT oid FROM pg_roles WHERE rolname IN (" . database45SqlLiteral($owner) . ',' . database45SqlLiteral($appUser) . '))');
+    if ($memberships !== '0') throw new RuntimeException('Tenant PostgreSQL-roles mogen geen role-memberships hebben.');
+
+    // Fase 4.5.1: nooit een LOGIN-role laten bestaan zonder bewezen tenant-HBA.
+    // Ook bij re-apply gaat de role eerst dicht; de runtime moet daarom stil zijn.
+    apply45PgQuery('ALTER ROLE ' . $appUser . ' NOLOGIN INHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS CONNECTION LIMIT 10 PASSWORD NULL');
+    $noLoginProps = apply45PgQuery("SELECT rolcanlogin::text || '|' || (rolpassword IS NULL)::text FROM pg_authid WHERE rolname=" . database45SqlLiteral($appUser));
+    if (!hash_equals('false|true', $noLoginProps)) throw new RuntimeException('App-role kon niet aantoonbaar NOLOGIN/no-password worden gezet vóór HBA provisioning.');
+
+    // De HBA allow-own/reject-other wordt geladen vóórdat LOGIN ooit wordt toegestaan.
+    // Als latere provisioning faalt, blijft deze beschermende HBA-regel staan.
+    apply45HbaInstalleer($plan);
+    $hbaBeschermingActief = true;
+
     if (!apply45Bestaat('database', $database)) {
         apply45PgQuery('CREATE DATABASE ' . $database . ' OWNER ' . $owner . " TEMPLATE template0 ENCODING 'UTF8'");
         apply45PgQuery('COMMENT ON DATABASE ' . $database . ' IS ' . database45SqlLiteral($marker));
     }
 
-    $appProps = apply45PgQuery("SELECT rolsuper::text || '|' || rolinherit::text || '|' || rolcreaterole::text || '|' || rolcreatedb::text || '|' || rolcanlogin::text || '|' || rolreplication::text || '|' || rolbypassrls::text || '|' || rolconnlimit::text || '|' || (rolpassword IS NULL)::text FROM pg_authid WHERE rolname=" . database45SqlLiteral($appUser));
-    if (!hash_equals('false|true|false|false|true|false|false|10|true', $appProps)) throw new RuntimeException('Bestaande app-role wijkt af van least-privilege/no-password contract.');
     $ownerProps = apply45PgQuery("SELECT rolsuper::text || '|' || rolcreaterole::text || '|' || rolcreatedb::text || '|' || rolcanlogin::text || '|' || rolreplication::text || '|' || rolbypassrls::text FROM pg_roles WHERE rolname=" . database45SqlLiteral($owner));
     if (!hash_equals('false|false|false|false|false|false', $ownerProps)) throw new RuntimeException('Owner-role wijkt af van NOLOGIN least-privilege contract.');
-    $memberships = apply45PgQuery("SELECT count(*) FROM pg_auth_members WHERE member IN (SELECT oid FROM pg_roles WHERE rolname IN (" . database45SqlLiteral($owner) . ',' . database45SqlLiteral($appUser) . ")) OR roleid IN (SELECT oid FROM pg_roles WHERE rolname IN (" . database45SqlLiteral($owner) . ',' . database45SqlLiteral($appUser) . '))');
-    if ($memberships !== '0') throw new RuntimeException('Tenant PostgreSQL-roles mogen geen role-memberships hebben.');
     $dbOwner = apply45PgQuery("SELECT r.rolname FROM pg_database d JOIN pg_roles r ON r.oid=d.datdba WHERE d.datname=" . database45SqlLiteral($database));
     if (!hash_equals($owner, $dbOwner)) throw new RuntimeException('Tenantdatabase is niet eigendom van de NOLOGIN owner-role.');
 
-    // Re-apply normaliseert privilege drift: eerst alle directe app/database-
-    // rechten intrekken en daarna uitsluitend CONNECT teruggeven. Schema/table
-    // grants worden op dezelfde manier in de migratie genormaliseerd.
     apply45PgQuery('REVOKE ALL ON DATABASE ' . $database . ' FROM PUBLIC; REVOKE ALL ON DATABASE ' . $database . ' FROM ' . $appUser . '; GRANT CONNECT ON DATABASE ' . $database . ' TO ' . $owner . '; GRANT CONNECT ON DATABASE ' . $database . ' TO ' . $appUser . '; ALTER ROLE ' . $appUser . ' IN DATABASE ' . $database . ' SET search_path TO vst, pg_catalog;');
     $migration = @file_get_contents((string)$plan['bundle']['migration_file']);
     if (!is_string($migration)) throw new RuntimeException('Migratieartifact kon niet worden gelezen.');
@@ -319,9 +332,12 @@ try {
     $verwachtePriv = 'true|false|false|false|false|true|false|true|false|false|false|true|true|true|true|false|false|false';
     if (!hash_equals($verwachtePriv, $priv)) throw new RuntimeException('App-role database/schema/table privileges wijken af van het exact least-privilege contract.');
 
-    $hbaState = apply45HbaInstalleer($plan);
-    try { apply45PeerCheck($plan); }
-    catch (Throwable $e) { apply45HbaRollback($hbaState); throw $e; }
+    // LOGIN is de laatste databasebeveiligingsmutatie, pas nadat HBA + least privilege bewezen zijn.
+    apply45PgQuery('ALTER ROLE ' . $appUser . ' LOGIN INHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS CONNECTION LIMIT 10 PASSWORD NULL');
+    $appProps = apply45PgQuery("SELECT rolsuper::text || '|' || rolinherit::text || '|' || rolcreaterole::text || '|' || rolcreatedb::text || '|' || rolcanlogin::text || '|' || rolreplication::text || '|' || rolbypassrls::text || '|' || rolconnlimit::text || '|' || (rolpassword IS NULL)::text FROM pg_authid WHERE rolname=" . database45SqlLiteral($appUser));
+    if (!hash_equals('false|true|false|false|true|false|false|10|true', $appProps)) throw new RuntimeException('App-role kon niet exact volgens least-privilege/no-password LOGIN-contract worden geactiveerd.');
+
+    apply45PeerCheck($plan);
 
     $bundleDir = (string)$plan['bundle']['output_dir'];
     if (is_link($bundleDir) || !@chown($bundleDir, 0) || !@chgrp($bundleDir, (int)$gr['gid']) || !@chmod($bundleDir, 0750)) {
@@ -334,9 +350,16 @@ try {
         }
     }
 } catch (Throwable $e) {
-    apply45Stop($e->getMessage());
+    // Fail-closed: zodra deze role aantoonbaar bij de tenant hoort, mag een
+    // mislukte apply nooit een bruikbare LOGIN-role achterlaten. De HBA-reject
+    // blijft juist staan wanneer hij al succesvol geladen was.
+    if ($appRoleTenantGebonden) {
+        try { apply45PgQuery('ALTER ROLE ' . $appUser . ' NOLOGIN PASSWORD NULL'); } catch (Throwable $ignored) {}
+    }
+    $extra = $hbaBeschermingActief ? ' Beschermende tenant-HBA blijft actief; app-role is zo mogelijk NOLOGIN gezet.' : '';
+    apply45Stop($e->getMessage() . $extra);
 }
 
 echo 'OK: fase 4.5 toegepast voor tenant ' . $plan['tenant_key'] . ".\n";
 echo 'PostgreSQL: database=' . $plan['isolation']['database'] . ', owner=' . $plan['isolation']['owner_role'] . ', app-role=' . $plan['isolation']['app_role'] . ".\n";
-echo "Authenticatie: lokale Unix-socket peer; geen databasewachtwoord opgeslagen. Cross-database toegang voor de tenantuser wordt in HBA geweigerd.\n";
+echo "Authenticatie: lokale Unix-socket peer; geen databasewachtwoord opgeslagen. Cross-database toegang voor de tenantuser wordt vóór LOGIN in HBA geweigerd.\n";
