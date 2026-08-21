@@ -9,6 +9,16 @@
 //   VERENIGING_CONFIG_FILE=/srv/verenigingen/<tenant>/config.php
 //
 // `private_root` hoort eveneens buiten de publieke documentroot te staan.
+//
+// Productie-PDO vanaf fase 4.5:
+//   provision de tenant met private_driver=pdo en laat dsn/user/password hier
+//   leeg. `prepare-vps-database.php` maakt vervolgens het vaste secretvrije
+//   <tenantroot>/database/database-runtime.json. De canonieke lokale
+//   PostgreSQL-stack gebruikt Unix-socket peer authentication en bewaart dus
+//   bewust geen databasewachtwoord.
+//
+// De expliciete pdo dsn/user/password velden hieronder blijven alleen bestaan
+// voor standalone/legacy ontwikkel- of migratiesituaties.
 
 return [
     'vereniging' => [
@@ -40,9 +50,6 @@ return [
         'private_driver'=>'json',
         'private_root'=>'/srv/verenigingen/voorbeeldvereniging/private',
         'pdo'=>[
-            // PostgreSQL voorbeeld. Bij private_driver=pdo is tenant_key in
-            // de tabel onderdeel van de primaire sleutel.
-            // 'dsn' => 'pgsql:host=127.0.0.1;port=5432;dbname=verenigingen',
             'dsn'=>'','user'=>'','password'=>'',
         ],
     ],
