@@ -176,11 +176,11 @@ Na fase 2 zijn nog enkele compatibiliteits-/opruimpunten bekend. Deze blokkeren 
 - fysiek runtime-dode legacyformuliercode in `beheer/index.php`;
 - enkele oudere JSON-writers die nog niet op één gedeelde atomische writer zijn gestandaardiseerd;
 - publieke legacy-markup die runtime door de templatefilter wordt gecorrigeerd;
-- historische `rc045*` functienamen/variabelen/comments;
-- RC045-stijlwaarden als standalone fallback-defaults;
 - legacy standalone masterconfigcompatibiliteit buiten nieuwe VPS-tenants.
 
-Deze punten horen bij een latere mechanische opschoningsfase en mogen niet ongemerkt onderdeel worden van de eerste productiebootstrap.
+De eerder genoteerde RC045-specifieke functienamen/variabelen/comments en RC045-stijl-fallbacks zijn niet meer aanwezig in de actuele templatecode en zijn daarom uit deze schuldlijst verwijderd.
+
+Deze resterende punten horen bij een latere mechanische opschoningsfase en mogen niet ongemerkt onderdeel worden van de eerste productiebootstrap.
 
 ## Volgorde vanaf nu
 
