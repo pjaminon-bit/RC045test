@@ -37,73 +37,52 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
-
       - name: Runtimeversies
-        shell: bash
         run: |
           set -euo pipefail
           php -v
           node --version
           npm --version
-
       - name: PHP syntax van volledige repository
-        shell: bash
         run: |
           set -euo pipefail
-          while IFS= read -r -d '' bestand; do
-            php -l "$bestand"
-          done < <(find . -type f -name '*.php' -not -path './node_modules/*' -print0)
-
+          while IFS= read -r -d '' bestand; do php -l "$bestand"; done < <(find . -type f -name '*.php' -not -path './node_modules/*' -print0)
+          node --check tests/live-dev-browser.spec.js
+          node --check tests/live-dev-authenticated.spec.js
       - name: Alle functionele technische en securityregressies
-        shell: bash
         run: bash tests/run-all.sh
 
   live-security:
     needs: source-regression
     if: >-
       github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'workflow_run' &&
-       github.event.workflow_run.event == 'push' &&
-       github.event.workflow_run.head_branch == 'main' &&
-       github.event.workflow_run.conclusion == 'success')
+      (github.event_name == 'workflow_run' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.conclusion == 'success')
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout exact gedeployde bron
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
-
       - name: Actieve DEV securityregressie
-        shell: bash
         run: bash tests/live-dev-security.sh
 
   live-browser:
     needs: source-regression
     if: >-
       github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'workflow_run' &&
-       github.event.workflow_run.event == 'push' &&
-       github.event.workflow_run.head_branch == 'main' &&
-       github.event.workflow_run.conclusion == 'success')
+      (github.event_name == 'workflow_run' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.conclusion == 'success')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - name: Checkout exact gedeployde bron
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
-
       - name: Installeer exact Playwright 1.62.1
-        shell: bash
         run: |
           set -euo pipefail
           npm install --no-save --no-package-lock @playwright/test@1.62.1
           npx playwright install --with-deps chromium
-
       - name: Functionele en optische browseracceptatie
-        shell: bash
         run: npx playwright test tests/live-dev-browser.spec.js --workers=1 --reporter=line,html
-
       - name: Bewaar screenshots en browserrapport
         if: ${{ always() }}
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
@@ -114,3 +93,73 @@ jobs:
             test-results/
           if-no-files-found: warn
           retention-days: 30
+
+  live-authenticated:
+    needs: source-regression
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.conclusion == 'success')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
+      FTP_SERVER: ${{ secrets.FTP_SERVER }}
+      FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+    steps:
+      - name: Checkout exact gedeployde bron
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      - name: Installeer SFTP- en browsertooling
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq sshpass
+          npm install --no-save --no-package-lock @playwright/test@1.62.1
+          npx playwright install --with-deps chromium
+      - name: Maak eenmalige gemaskeerde E2E-identiteiten
+        shell: bash
+        run: |
+          set -euo pipefail
+          pw="$(php -r 'echo bin2hex(random_bytes(24));')"
+          admin="e2e-admin-${GITHUB_RUN_ID}"
+          member="e2e-member-${GITHUB_RUN_ID}"
+          echo "::add-mask::$pw"
+          echo "E2E_PASSWORD=$pw" >> "$GITHUB_ENV"
+          echo "E2E_ADMIN_USER=$admin" >> "$GITHUB_ENV"
+          echo "E2E_MEMBER_USER=$member" >> "$GITHUB_ENV"
+      - name: Backup en injecteer tijdelijke DEV-authaccounts
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh /tmp/e2e-auth
+          chmod 700 ~/.ssh
+          ssh-keyscan -p 22 "$FTP_SERVER" > ~/.ssh/known_hosts 2>/dev/null
+          chmod 600 ~/.ssh/known_hosts
+          export SSHPASS="$FTP_PASSWORD"
+          sftp_cmd() { sshpass -e sftp -q -oBatchMode=no -oStrictHostKeyChecking=yes -P 22 "$FTP_USERNAME@$FTP_SERVER"; }
+          printf 'pwd\nls /\n' | sftp_cmd >/dev/null
+          if printf 'get /beheer-users.json /tmp/e2e-auth/original.json\n' | sftp_cmd >/dev/null 2>&1; then
+            echo 'E2E_AUTHSTORE_EXISTED=1' >> "$GITHUB_ENV"
+          else
+            printf '[]\n' > /tmp/e2e-auth/original.json
+            echo 'E2E_AUTHSTORE_EXISTED=0' >> "$GITHUB_ENV"
+          fi
+          php tests/authenticated-e2e-userfile.php /tmp/e2e-auth/original.json /tmp/e2e-auth/temporary.json
+          printf 'put /tmp/e2e-auth/temporary.json /beheer-users.json\n' | sftp_cmd >/dev/null
+          rm -f /tmp/e2e-auth/temporary.json
+      - name: Bewijs authenticated beheer en ledenportaal
+        run: npx playwright test tests/live-dev-authenticated.spec.js --workers=1 --reporter=line
+      - name: Herstel originele DEV-authstore
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          export SSHPASS="$FTP_PASSWORD"
+          sftp_cmd() { sshpass -e sftp -q -oBatchMode=no -oStrictHostKeyChecking=yes -P 22 "$FTP_USERNAME@$FTP_SERVER"; }
+          if [[ "${E2E_AUTHSTORE_EXISTED:-0}" == '1' && -f /tmp/e2e-auth/original.json ]]; then
+            printf 'put /tmp/e2e-auth/original.json /beheer-users.json\n' | sftp_cmd >/dev/null
+          else
+            printf 'rm /beheer-users.json\n' | sftp_cmd >/dev/null || true
+          fi
+          rm -rf /tmp/e2e-auth
