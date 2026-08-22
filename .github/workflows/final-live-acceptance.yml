@@ -1,0 +1,90 @@
+name: Final live DEV acceptance
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+env:
+  LIVE_DEV_BASE_URL: https://rc045.nl/dev
+  PLAYWRIGHT_TEST_BASE_URL: https://rc045.nl/dev
+
+jobs:
+  live-security:
+    if: github.head_ref == 'agent/final-live-acceptance'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout acceptatietests
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Wacht op exacte finale DEV-fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          for poging in $(seq 1 36); do
+            headers="$(curl --silent --show-error --head --connect-timeout 10 --max-time 20 "$LIVE_DEV_BASE_URL/" || true)"
+            content_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --connect-timeout 10 --max-time 20 "$LIVE_DEV_BASE_URL/data/contact.json" || true)"
+            image_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --connect-timeout 10 --max-time 20 "$LIVE_DEV_BASE_URL/images/crawlergroep.jpg" || true)"
+            if ! printf '%s\n' "$headers" | grep -qi '^X-Powered-By:' \
+              && [[ "$content_status" == '204' ]] \
+              && [[ "$image_status" == '200' ]]; then
+              echo "DEV finale fixes zichtbaar: header schoon, contact=$content_status, image=$image_status"
+              exit 0
+            fi
+            echo "Wacht op DEV ($poging/36): X-Powered=$(printf '%s\n' "$headers" | grep -ic '^X-Powered-By:' || true), contact=${content_status:-geen}, image=${image_status:-geen}"
+            sleep 5
+          done
+          echo 'FOUT: finale DEV-fixes werden niet aantoonbaar zichtbaar' >&2
+          exit 1
+
+      - name: Actieve DEV securityregressie
+        shell: bash
+        run: bash tests/live-dev-security.sh
+
+  live-browser:
+    if: github.head_ref == 'agent/final-live-acceptance'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout acceptatietests
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Wacht op exacte finale DEV-fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          for poging in $(seq 1 36); do
+            content_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --connect-timeout 10 --max-time 20 "$LIVE_DEV_BASE_URL/data/contact.json" || true)"
+            image_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --connect-timeout 10 --max-time 20 "$LIVE_DEV_BASE_URL/images/crawlergroep.jpg" || true)"
+            if [[ "$content_status" == '204' && "$image_status" == '200' ]]; then exit 0; fi
+            echo "Wacht op DEV ($poging/36): contact=${content_status:-geen}, image=${image_status:-geen}"
+            sleep 5
+          done
+          echo 'FOUT: finale DEV-fixes werden niet zichtbaar' >&2
+          exit 1
+
+      - name: Installeer exact Playwright 1.62.1
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install --no-save --no-package-lock @playwright/test@1.62.1
+          npx playwright install --with-deps chromium
+
+      - name: Functionele en optische browseracceptatie
+        shell: bash
+        run: npx playwright test tests/live-dev-browser.spec.js --workers=1 --reporter=line,html
+
+      - name: Bewaar screenshots en browserrapport
+        if: ${{ always() }}
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: final-live-browser-acceptance-${{ github.run_id }}
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: warn
+          retention-days: 30
