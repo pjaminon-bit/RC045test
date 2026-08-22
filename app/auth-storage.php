@@ -33,9 +33,6 @@ function authStorageMasterGeneratie(string $privateRoot): string
  * installaties op hetzelfde domein (bijvoorbeeld PROD / en DEV /dev/) nooit
  * dezelfde PHP-sessie vertrouwen, zelfs niet als de hosting globaal dezelfde
  * session.save_path zou gebruiken.
- *
- * Deze functie berekent alleen context en wijzigt bewust geen PHP-runtime.
- * Daardoor blijft authStoragePaden() veilig bruikbaar in CLI, tooling en tests.
  */
 function authStorageSessieContext(array $siteConfig, string $projectRoot, ?string $privateRoot = null): array
 {
@@ -66,7 +63,6 @@ function authStorageSessieContext(array $siteConfig, string $projectRoot, ?strin
 /**
  * Activeert vóór session_start() de installatie-eigen PHP-session namespace.
  * Er bestaat bewust geen terugval naar de globale PHP session.save_path.
- * Alleen de echte sessiebootstrap mag deze side-effectvolle functie aanroepen.
  */
 function authStorageActiveerSessieIsolatie(array $siteConfig, string $projectRoot, ?string $privateRoot = null): array
 {
@@ -109,14 +105,19 @@ function authStorageActiveerSessieIsolatie(array $siteConfig, string $projectRoo
  * externe tenants blijft volledig onder private_root. Standalone gebruikt nog
  * zijn legacy databestanden, maar niet langer een gedeelde PHP-sessieruimte.
  *
- * Belangrijk: deze resolver is side-effectvrij. PHP-sessionconfiguratie wordt
- * pas door authStorageActiveerSessieIsolatie() uitgevoerd bij de echte login-
- * of beheersessiebootstrap.
+ * In echte HTTP-runtime wordt de sessie-isolatie hier vóór auth.php zijn
+ * session_start() fail-closed geactiveerd. CLI-tests en onderhoudstooling die
+ * na console-output alleen paden willen resolveren krijgen uitsluitend de
+ * berekende context; zo verandert een read-only opslaginspectie geen PHP ini.
  */
 function authStoragePaden(array $siteConfig, string $projectRoot): array
 {
     $privateRoot = tenantRuntimePrivateRoot($siteConfig);
-    $sessieContext = authStorageSessieContext($siteConfig, $projectRoot, $privateRoot);
+    if (PHP_SAPI === 'cli' && headers_sent()) {
+        $sessieContext = authStorageSessieContext($siteConfig, $projectRoot, $privateRoot);
+    } else {
+        $sessieContext = authStorageActiveerSessieIsolatie($siteConfig, $projectRoot, $privateRoot);
+    }
 
     if ($privateRoot === null) {
         return [
