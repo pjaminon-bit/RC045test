@@ -15,7 +15,7 @@ $out=[];$exit=0;exec(escapeshellcmd(PHP_BINARY).' '.escapeshellarg($launcher).' 
 laf3($exit===0&&trim(implode("\n",$out))==='STATUS=204','standalone ontbrekende homepage override eindigt werkelijk als HTTP 204');
 
 $leden=(string)file_get_contents($root.'/leden/index.php');
-laf3(str_contains($leden,'.wrap button{min-height:36px')&&str_contains($leden,'padding:8px 14px'),'leden-loginbutton heeft minimaal 36px hoogte en bruikbare padding');
+laf3(str_contains($leden,'.wrap button{min-height:44px!important')&&str_contains($leden,'padding:10px 16px'),'leden-loginbutton heeft minimaal 44px hoogte en bruikbare padding');
 
 $isolatie=(string)file_get_contents($root.'/tests/phase321-public-content-isolation.php');
 laf3(str_contains($isolatie,"trim(\$outMissing)==='STATUS=404'"),'externe tenant zonder dataset blijft regressiematig 404/fail-closed');
