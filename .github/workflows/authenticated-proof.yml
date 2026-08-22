@@ -1,0 +1,71 @@
+name: Authenticated DEV E2E proof
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  live-authenticated:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PLAYWRIGHT_TEST_BASE_URL: https://rc045.nl/dev
+      FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
+      FTP_SERVER: ${{ secrets.FTP_SERVER }}
+      FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+    steps:
+      - name: Checkout bewijsbranch
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Installeer SFTP- en browsertooling
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq sshpass
+          npm install --no-save --no-package-lock @playwright/test@1.62.1
+          npx playwright install --with-deps chromium
+      - name: Maak eenmalige gemaskeerde E2E-identiteiten
+        run: |
+          set -euo pipefail
+          pw="$(php -r 'echo bin2hex(random_bytes(24));')"
+          echo "::add-mask::$pw"
+          echo "E2E_PASSWORD=$pw" >> "$GITHUB_ENV"
+          echo "E2E_ADMIN_USER=e2e-admin-${GITHUB_RUN_ID}" >> "$GITHUB_ENV"
+          echo "E2E_MEMBER_USER=e2e-member-${GITHUB_RUN_ID}" >> "$GITHUB_ENV"
+      - name: Backup en injecteer tijdelijke DEV-authaccounts
+        run: |
+          set -euo pipefail
+          test -n "$FTP_USERNAME" && test -n "$FTP_SERVER" && test -n "$FTP_PASSWORD"
+          mkdir -p ~/.ssh /tmp/e2e-auth
+          chmod 700 ~/.ssh
+          ssh-keyscan -p 22 "$FTP_SERVER" > ~/.ssh/known_hosts 2>/dev/null
+          chmod 600 ~/.ssh/known_hosts
+          export SSHPASS="$FTP_PASSWORD"
+          sftp_cmd() { sshpass -e sftp -q -oBatchMode=no -oStrictHostKeyChecking=yes -P 22 "$FTP_USERNAME@$FTP_SERVER"; }
+          printf 'pwd\nls /\n' | sftp_cmd >/dev/null
+          if printf 'get /beheer-users.json /tmp/e2e-auth/original.json\n' | sftp_cmd >/dev/null 2>&1; then
+            echo 'E2E_AUTHSTORE_EXISTED=1' >> "$GITHUB_ENV"
+          else
+            printf '[]\n' > /tmp/e2e-auth/original.json
+            echo 'E2E_AUTHSTORE_EXISTED=0' >> "$GITHUB_ENV"
+          fi
+          php tests/authenticated-e2e-userfile.php /tmp/e2e-auth/original.json /tmp/e2e-auth/temporary.json
+          printf 'put /tmp/e2e-auth/temporary.json /beheer-users.json\n' | sftp_cmd >/dev/null
+          rm -f /tmp/e2e-auth/temporary.json
+      - name: Bewijs authenticated beheer en ledenportaal
+        run: npx playwright test tests/live-dev-authenticated.spec.js --workers=1 --reporter=line
+      - name: Herstel originele DEV-authstore
+        if: ${{ always() }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${FTP_USERNAME:-}" || -z "${FTP_SERVER:-}" || -z "${FTP_PASSWORD:-}" ]]; then exit 0; fi
+          export SSHPASS="$FTP_PASSWORD"
+          sftp_cmd() { sshpass -e sftp -q -oBatchMode=no -oStrictHostKeyChecking=yes -P 22 "$FTP_USERNAME@$FTP_SERVER"; }
+          if [[ "${E2E_AUTHSTORE_EXISTED:-0}" == '1' && -f /tmp/e2e-auth/original.json ]]; then
+            printf 'put /tmp/e2e-auth/original.json /beheer-users.json\n' | sftp_cmd >/dev/null
+          elif [[ "${E2E_AUTHSTORE_EXISTED:-0}" == '0' ]]; then
+            printf 'rm /beheer-users.json\n' | sftp_cmd >/dev/null || true
+          fi
+          rm -rf /tmp/e2e-auth
