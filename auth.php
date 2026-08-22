@@ -1,52 +1,16 @@
 <?php
 // ============================================================
-// RC045 auth: inloggen, sessie, logboek en rechten
+// Centrale beheer-authenticatie, sessie, audit en legacy-tabrechten
 // ============================================================
-// Gedeelde inlogafhandeling voor de afgeschermde pagina's van de site.
-// Dit bestand stond tot nu toe verspreid door beheer.php; het is er
-// ongewijzigd uitgehaald zodat een tweede pagina (leden.php) straks
-// exact dezelfde sessie, dezelfde gebruikers en hetzelfde rechtenmodel
-// gebruikt, in plaats van een tweede inlogsysteem ernaast.
-//
-// Gebruik bovenin een afgeschermde pagina, vóór elke uitvoer:
-//
-//   require_once __DIR__ . '/auth.php';
-//
-// Daarna zijn beschikbaar:
-//   $configOk         - beheer-config.php aanwezig en ingevuld
-//   $ingelogd         - true als er iemand is ingelogd
-//   $huidigeGebruiker - inlognaam van die persoon
-//   $isMaster         - ingelogd met het beheerderswachtwoord (mag alles)
-//   $csrfToken        - verplicht mee te sturen in elk formulier
-//   $inlogFout        - foutmelding voor het inlogscherm ('' = geen)
-//   $melding / $meldingType - flash-meldingen na een Post-Redirect-Get
-//
-// Inloggen en uitloggen worden hier al afgehandeld (POST met
-// formulier=inloggen / formulier=uitloggen). De redirect gaat terug naar
-// de pagina die dit bestand insluit, niet naar een vaste beheer.php, zodat
-// hetzelfde formulier op elke afgeschermde pagina werkt.
-//
-// Standalone/legacy gebruikt tijdelijk de bestaande rootbestanden. Een tenant
-// met expliciete private_root gebruikt uitsluitend tenant-lokale authpaden.
-// ============================================================
-
 date_default_timezone_set('Europe/Amsterdam');
 header('X-Robots-Tag: noindex, nofollow');
 header('Cache-Control: no-store');
-// Voorkomt dat een afgeschermde pagina in een iframe op een andere site
-// getoond kan worden (clickjacking): X-Frame-Options voor oudere browsers,
-// de CSP-regel is de moderne vervanger. Beide beïnvloeden alleen framing,
-// niet de eigen inline <script>/<style> die deze pagina's gebruiken.
 header('X-Frame-Options: DENY');
-header("Content-Security-Policy: frame-ancestors 'none'");
+header("Content-Security-Policy: default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self'; media-src 'self' blob:; worker-src 'self' blob:; frame-src 'none'; upgrade-insecure-requests");
 
-// De ledenadministratie bepaalt mede de rechten (zie authRechten hieronder):
-// wie daar een bestuursfunctie heeft, krijgt de bestuursonderdelen erbij.
 require_once __DIR__ . '/leden-opslag.php';
 require_once __DIR__ . '/app/auth-storage.php';
 
-// Resolveer alle authpaden uit dezelfde tenantconfig. Bij een expliciete
-// private_root bestaat bewust geen fallback naar authdata in de projectroot.
 $authSiteConfigGeladen = require __DIR__ . '/site-config.php';
 $authSiteConfig = is_array($authSiteConfigGeladen) ? $authSiteConfigGeladen : [];
 $authPaden = authStoragePaden($authSiteConfig, __DIR__);
@@ -57,247 +21,171 @@ $loginPogingenBestand = $authPaden['login_attempts'];
 $loginPogingenSlotBestand = $authPaden['login_lock'];
 $authBackupMap = $authPaden['backups'];
 
-// ===== Sessie: een week ingelogd blijven, niet halverwege een lang formulier uitloggen =====
+// ===== Sessie =====
 $sessieduur = 60 * 60 * 24 * 7;
-ini_set('session.gc_maxlifetime', (string) $sessieduur);
-// Weiger een sessie-ID dat PHP niet zelf heeft uitgegeven. Zonder dit
-// accepteert PHP elk ID dat in de cookie staat en maakt daar een lege sessie
-// mee aan, waardoor een ID dat na het uitloggen in de browser is blijven
-// hangen (of door een ander is opgedrongen) eindeloos blijft leven. Moet
-// vóór session_start() staan om effect te hebben.
+ini_set('session.gc_maxlifetime', (string)$sessieduur);
 ini_set('session.use_strict_mode', '1');
+ini_set('session.use_only_cookies', '1');
 session_set_cookie_params([
   'lifetime' => $sessieduur,
   'path' => '/',
-  // Hard op true, niet afgeleid uit $_SERVER['HTTPS']: Strato handelt de
-  // beveiligde verbinding af voordat PHP aan de beurt is, waardoor die
-  // variabele ook bij een https-bezoek leeg blijft en de cookie stilzwijgend
-  // zonder Secure-vlag verstuurd zou worden. HTTPS wordt door de hostinglaag
-  // of op de VPS door de vhost/reverse proxy afgedwongen; de gedeelde
-  // .htaccess reflecteert sinds fase 3.5.1 bewust geen Host-header meer.
   'secure' => true,
   'httponly' => true,
   'samesite' => 'Lax',
 ]);
-session_start();
+if (!session_start()) throw new RuntimeException('Beheersessie kon niet worden gestart.');
 
-// ===== CSRF-token: één per sessie, verplicht veld in elk formulier =====
-if (empty($_SESSION['csrf'])) {
+if (!isset($_SESSION['csrf']) || !is_string($_SESSION['csrf']) || preg_match('/^[0-9a-f]{64}$/D', $_SESSION['csrf']) !== 1) {
   $_SESSION['csrf'] = bin2hex(random_bytes(32));
 }
 $csrfToken = $_SESSION['csrf'];
 
-// Geeft true als het meegestuurde csrf-veld bij een POST klopt met de sessie.
-function csrfOk() {
-  return isset($_POST['csrf']) && hash_equals($_SESSION['csrf'], $_POST['csrf']);
+function csrfOk(): bool {
+  return isset($_POST['csrf'], $_SESSION['csrf'])
+    && is_string($_POST['csrf'])
+    && is_string($_SESSION['csrf'])
+    && hash_equals($_SESSION['csrf'], $_POST['csrf']);
 }
 
-// De pagina waar een redirect na in- of uitloggen naartoe moet: het script
-// dat dit bestand insluit. Stond hier eerder hard als "beheer.php", waardoor
-// een tweede afgeschermde pagina na het inloggen in beheer zou belanden.
-function authHuidigePagina() {
-  $script = basename($_SERVER['SCRIPT_NAME'] ?? '');
+function authHuidigePagina(): string {
+  $script = basename((string)($_SERVER['SCRIPT_NAME'] ?? ''));
   return $script !== '' ? $script : 'beheer.php';
 }
 
-// Lockout bij te veel mislukte inlogpogingen. Er gelden twee grenzen binnen
-// hetzelfde venster: per gebruikersnaam en per bron-IP. De gebruikersnaam-
-// grens remt gericht raden op één account af; de ruimere IP-grens voorkomt
-// dat één bron eindeloos verschillende gebruikersnamen probeert. De teller
-// wordt onder een apart flock-slot gelezen én gewijzigd, zodat parallelle
-// verzoeken geen mislukte pogingen meer kunnen verliezen.
-$loginLockoutVenster   = 15 * 60;
-$loginLockoutDrempel   = 5;
-$loginLockoutIpDrempel = 20;
+// ===== Backups, gebruikers en audit =====
+$dataBackupMap = __DIR__ . '/data-backups';
+$dataBackupBewaardagen = 90;
+$dataBackupMaxPerBestand = 200;
 
-// Automatische back-up van de databestanden: vlak voordat schrijfJson() of
-// schrijfGebruikers() een bestand overschrijft, gaat er eerst een
-// tijdgestempelde kopie naar data-backups/. Zo is een verkeerde opslag- of
-// bugactie altijd terug te draaien. Bewaartermijn gelijk aan het logboek (90
-// dagen), met een hardstop per bestand zodat de map nooit ongelimiteerd kan
-// groeien. Deze map blijft in deze auth-fase bewust de algemene legacy map;
-// gebruikersbackups gebruiken apart $authBackupMap. De algemene backupmigratie
-// volgt als eigen auditstap.
-$dataBackupMap              = __DIR__ . '/data-backups';
-$dataBackupBewaardagen      = 90;
-$dataBackupMaxPerBestand    = 200;
-
-// Zet een tijdgestempelde kopie van $pad in $backupMap en ruimt daarna de
-// oude kopieën van datzelfde bestand op: alles ouder dan $bewaardagen weg,
-// en als er dan nog meer dan $maxPerBestand over zijn, gaan de oudste eruit.
-function maakDataBackup($pad, $backupMap, $bewaardagen, $maxPerBestand) {
-  if (!file_exists($pad)) return; // nieuw bestand, er is nog niets te bewaren
-
-  if (!is_dir($backupMap)) {
-    @mkdir($backupMap, 0750, true);
-  }
-  if (!is_dir($backupMap)) return;
+function maakDataBackup($pad, $backupMap, $bewaardagen, $maxPerBestand): void {
+  if (!is_file($pad) || is_link($pad)) return;
+  if (!is_dir($backupMap) && !@mkdir($backupMap, 0750, true) && !is_dir($backupMap)) return;
+  if (is_link($backupMap)) return;
   @chmod($backupMap, 0750);
   $basisnaam = basename($pad);
-  // Eén tijdmeting voedt zowel seconden als microseconden. Daardoor kan een
-  // secondewisseling tussen twee microtime()-calls nooit een negatieve of
-  // verkeerd gesorteerde microsecondecomponent opleveren.
   $nu = microtime(true);
-  $seconde = (int) floor($nu);
-  $micro = (int) floor(($nu - $seconde) * 1000000);
-  $micro = max(0, min(999999, $micro));
+  $seconde = (int)floor($nu);
+  $micro = max(0, min(999999, (int)floor(($nu - $seconde) * 1000000)));
   $doelpad = $backupMap . '/' . date('Y-m-d_His', $seconde) . '_' . sprintf('%06d', $micro) . '_' . $basisnaam;
   if (@copy($pad, $doelpad)) @chmod($doelpad, 0640);
 
   $bestanden = @glob($backupMap . '/*_' . $basisnaam);
-  if ($bestanden === false || count($bestanden) === 0) return;
-  sort($bestanden); // tijdstempel voorop => alfabetisch is ook chronologisch
-
-  $grens = time() - $bewaardagen * 24 * 60 * 60;
-  $overgebleven = [];
-  foreach ($bestanden as $b) {
-    $tijd = @filemtime($b);
-    if ($tijd !== false && $tijd >= $grens) {
-      $overgebleven[] = $b;
-    } else {
-      @unlink($b);
-    }
+  if (!is_array($bestanden) || !$bestanden) return;
+  sort($bestanden, SORT_STRING);
+  $grens = time() - (int)$bewaardagen * 86400;
+  $over = [];
+  foreach ($bestanden as $bestand) {
+    if (is_link($bestand)) { @unlink($bestand); continue; }
+    $tijd = @filemtime($bestand);
+    if ($tijd !== false && $tijd >= $grens) $over[] = $bestand;
+    else @unlink($bestand);
   }
-  $teveel = count($overgebleven) - $maxPerBestand;
-  for ($i = 0; $i < $teveel; $i++) {
-    @unlink($overgebleven[$i]);
-  }
+  $teveel = count($over) - (int)$maxPerBestand;
+  for ($i = 0; $i < $teveel; $i++) @unlink($over[$i]);
 }
 
-// ===== Gebruikers en logboek =====
-function laadGebruikers($pad) {
-  if (!file_exists($pad)) return [];
+function laadGebruikers($pad): array {
+  if (!is_file($pad) || is_link($pad)) return [];
   $ruw = @file_get_contents($pad);
-  if ($ruw === false) return [];
+  if (!is_string($ruw)) return [];
   $json = json_decode($ruw, true);
   return is_array($json) ? $json : [];
 }
 
-function schrijfGebruikers($pad, $gebruikers) {
+function schrijfGebruikers($pad, $gebruikers): bool {
   global $authBackupMap, $dataBackupBewaardagen, $dataBackupMaxPerBestand;
-  if (!authStorageMaakSchrijfmap($pad)) return false;
+  if (!is_array($gebruikers) || !authStorageMaakSchrijfmap($pad) || is_link($pad)) return false;
   maakDataBackup($pad, $authBackupMap, $dataBackupBewaardagen, $dataBackupMaxPerBestand);
   $json = json_encode($gebruikers, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
-  if ($json === false) return false;
-  try {
-    $suffix = bin2hex(random_bytes(4));
-  } catch (Throwable $e) {
-    $suffix = str_replace('.', '', (string) microtime(true));
-  }
+  if (!is_string($json)) return false;
+  try { $suffix = bin2hex(random_bytes(5)); }
+  catch (Throwable $e) { $suffix = str_replace('.', '', (string)microtime(true)); }
   $tmp = $pad . '.tmp.' . $suffix;
-  if (file_put_contents($tmp, $json, LOCK_EX) === false) return false;
+  if (@file_put_contents($tmp, $json, LOCK_EX) === false) { @unlink($tmp); return false; }
   @chmod($tmp, 0640);
-  if (!@rename($tmp, $pad)) {
-    @unlink($tmp);
-    return false;
-  }
+  if (!@rename($tmp, $pad)) { @unlink($tmp); return false; }
   @chmod($pad, 0640);
   return true;
 }
 
-// Auditlog is een read-modify-write-bestand. LOCK_EX alleen op de uiteindelijke
-// file_put_contents() voorkomt niet dat twee requests eerst dezelfde oude
-// versie lezen en daarna één van beide nieuwe regels verliezen. Houd daarom
-// één flock vast vanaf het lezen tot en met truncate/write/flush.
-function schrijfLog($pad, $gebruiker, $actie, $details = '') {
-  if (!authStorageMaakSchrijfmap($pad)) return false;
+function schrijfLog($pad, $gebruiker, $actie, $details = ''): bool {
+  if (!authStorageMaakSchrijfmap($pad) || is_link($pad)) return false;
   $handvat = @fopen($pad, 'c+');
-  if ($handvat === false) return false;
+  if (!is_resource($handvat)) return false;
   @chmod($pad, 0640);
-  if (!flock($handvat, LOCK_EX)) {
-    fclose($handvat);
-    return false;
-  }
-
+  if (!flock($handvat, LOCK_EX)) { fclose($handvat); return false; }
   try {
     rewind($handvat);
     $ruw = stream_get_contents($handvat);
-    $log = $ruw !== false && $ruw !== '' ? json_decode($ruw, true) : [];
+    $log = is_string($ruw) && $ruw !== '' ? json_decode($ruw, true) : [];
     if (!is_array($log)) $log = [];
-
-    $log[] = ['tijd' => date('c'), 'gebruiker' => $gebruiker, 'actie' => $actie, 'details' => $details];
-
-    // Bewaren op tijd (een paar maanden), niet op een vast aantal regels: bij
-    // een vast aantal duwt een drukke dag (bijv. een grote foto-upload) meteen
-    // oudere, nog prima relevante regels eruit. De harde bovengrens van 5000 is
-    // alleen een noodrem tegen onbeperkte bestandsgroei, geen streefwaarde.
-    $bewaarGrens = strtotime('-90 days');
-    $log = array_values(array_filter($log, function($regel) use ($bewaarGrens) {
-      $tijd = strtotime($regel['tijd'] ?? '');
-      return $tijd === false || $tijd >= $bewaarGrens;
+    $log[] = ['tijd'=>date('c'),'gebruiker'=>(string)$gebruiker,'actie'=>(string)$actie,'details'=>(string)$details];
+    $grens = strtotime('-90 days');
+    $log = array_values(array_filter($log, static function($regel) use ($grens) {
+      if (!is_array($regel)) return false;
+      $tijd = strtotime((string)($regel['tijd'] ?? ''));
+      return $tijd === false || $tijd >= $grens;
     }));
-    if (count($log) > 5000) {
-      $log = array_slice($log, -5000);
-    }
-
+    if (count($log) > 5000) $log = array_slice($log, -5000);
     $json = json_encode($log, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
-    if ($json === false) return false;
+    if (!is_string($json)) return false;
     rewind($handvat);
     if (!ftruncate($handvat, 0)) return false;
     $geschreven = fwrite($handvat, $json);
-    if ($geschreven === false || $geschreven < strlen($json)) return false;
-    return fflush($handvat);
+    return $geschreven !== false && $geschreven === strlen($json) && fflush($handvat);
   } finally {
     flock($handvat, LOCK_UN);
     fclose($handvat);
   }
 }
 
-// ===== Lockout bij mislukte inlogpogingen =====
-// Bestandsformaat: sleutels "user:<naam>" en "ip:<sha256>" met per sleutel
-// een lijst unix-tijdstippen. Het IP zelf wordt dus niet op schijf bewaard.
-// Alle lees-wijzig-schrijfhandelingen hieronder gebruiken één apart slot;
-// LOCK_EX op alleen file_put_contents() is daarvoor niet voldoende.
-function laadLoginPogingen($pad) {
+// ===== Login rate limiting =====
+$loginLockoutVenster = 15 * 60;
+$loginLockoutDrempel = 5;
+$loginLockoutIpDrempel = 20;
+
+function laadLoginPogingen($pad): array {
   if (!file_exists($pad)) return [];
+  if (!is_file($pad) || is_link($pad)) return [];
   $ruw = @file_get_contents($pad);
-  if ($ruw === false) return [];
+  if (!is_string($ruw)) return [];
   $json = json_decode($ruw, true);
   return is_array($json) ? $json : [];
 }
 
-function schrijfLoginPogingen($pad, $pogingen) {
-  if (!authStorageMaakSchrijfmap($pad)) return false;
+function schrijfLoginPogingen($pad, $pogingen): bool {
+  if (!is_array($pogingen) || !authStorageMaakSchrijfmap($pad) || is_link($pad)) return false;
   $json = json_encode($pogingen, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
-  if ($json === false) return false;
-  $ok = file_put_contents($pad, $json, LOCK_EX) !== false;
+  if (!is_string($json)) return false;
+  $ok = @file_put_contents($pad, $json, LOCK_EX) !== false;
   if ($ok) @chmod($pad, 0640);
   return $ok;
 }
 
 function loginPogingenSlotOpen() {
   global $loginPogingenSlotBestand;
-  if (!authStorageMaakSchrijfmap($loginPogingenSlotBestand)) return false;
+  if (!authStorageMaakSchrijfmap($loginPogingenSlotBestand) || is_link($loginPogingenSlotBestand)) return false;
   $slot = @fopen($loginPogingenSlotBestand, 'c');
-  if ($slot === false) return false;
+  if (!is_resource($slot)) return false;
   @chmod($loginPogingenSlotBestand, 0640);
-  if (!flock($slot, LOCK_EX)) {
-    fclose($slot);
-    return false;
-  }
+  if (!flock($slot, LOCK_EX)) { fclose($slot); return false; }
   return $slot;
 }
 
-function loginPogingenSlotDicht($slot) {
-  if (!$slot) return;
+function loginPogingenSlotDicht($slot): void {
+  if (!is_resource($slot)) return;
   flock($slot, LOCK_UN);
   fclose($slot);
 }
 
-function loginPogingenOpschonen(&$pogingen, $sleutel, $venster, $nu) {
-  $recent = array_values(array_filter($pogingen[$sleutel] ?? [], function($t) use ($nu, $venster) {
-    return is_numeric($t) && (int) $t > $nu - $venster;
-  }));
+function loginPogingenOpschonen(&$pogingen, $sleutel, $venster, $nu): array {
+  $recent = array_values(array_filter((array)($pogingen[$sleutel] ?? []), static fn($t) => is_numeric($t) && (int)$t > $nu - $venster && (int)$t <= $nu + 60));
   if ($recent) $pogingen[$sleutel] = $recent;
   else unset($pogingen[$sleutel]);
   return $recent;
 }
 
-// Geeft het hoogste aantal minuten van de actieve limieten, 0 als er geen
-// blokkade is, of null als de limiter-opslag niet veilig gelockt kon worden.
-// In dat laatste geval faalt inloggen gesloten: liever even niet inloggen dan
-// brute-forcebescherming ongemerkt uitschakelen.
-function loginLockoutMinuten($pad, array $limieten, $venster) {
+function loginLockoutMinuten($pad, array $limieten, $venster): ?int {
   $slot = loginPogingenSlotOpen();
   if (!$slot) return null;
   try {
@@ -305,115 +193,93 @@ function loginLockoutMinuten($pad, array $limieten, $venster) {
     $nu = time();
     $minuten = 0;
     foreach ($limieten as $sleutel => $drempel) {
-      $recent = loginPogingenOpschonen($pogingen, $sleutel, $venster, $nu);
-      if (count($recent) >= (int) $drempel) {
-        $minuten = max($minuten, (int) ceil((min($recent) + $venster - $nu) / 60));
-      }
+      $recent = loginPogingenOpschonen($pogingen, (string)$sleutel, (int)$venster, $nu);
+      if (count($recent) >= (int)$drempel) $minuten = max($minuten, (int)ceil((min($recent) + $venster - $nu) / 60));
     }
-    schrijfLoginPogingen($pad, $pogingen);
+    if (!schrijfLoginPogingen($pad, $pogingen)) return null;
     return $minuten;
-  } finally {
-    loginPogingenSlotDicht($slot);
-  }
+  } finally { loginPogingenSlotDicht($slot); }
 }
 
-// Registreert één mislukte poging tegelijk voor alle meegegeven sleutels
-// (hier: gebruikersnaam én IP), onder hetzelfde slot.
-function loginPogingRegistreren($pad, array $sleutels, $venster) {
+function loginPogingRegistreren($pad, array $sleutels, $venster): bool {
   $slot = loginPogingenSlotOpen();
   if (!$slot) return false;
   try {
     $pogingen = laadLoginPogingen($pad);
     $nu = time();
     foreach (array_unique($sleutels) as $sleutel) {
-      $recent = loginPogingenOpschonen($pogingen, $sleutel, $venster, $nu);
+      $recent = loginPogingenOpschonen($pogingen, (string)$sleutel, (int)$venster, $nu);
       $recent[] = $nu;
-      $pogingen[$sleutel] = $recent;
+      $pogingen[(string)$sleutel] = $recent;
     }
     return schrijfLoginPogingen($pad, $pogingen);
-  } finally {
-    loginPogingenSlotDicht($slot);
-  }
+  } finally { loginPogingenSlotDicht($slot); }
 }
 
-// Na een geslaagde login alleen de teller van dit account wissen. De IP-teller
-// blijft staan: één succesvolle login mag mislukte pogingen op andere accounts
-// vanaf hetzelfde adres niet ineens uitwissen.
-function loginPogingenWissen($pad, $sleutel) {
+function loginPogingenWissen($pad, $sleutel): bool {
   $slot = loginPogingenSlotOpen();
   if (!$slot) return false;
   try {
     $pogingen = laadLoginPogingen($pad);
-    if (isset($pogingen[$sleutel])) unset($pogingen[$sleutel]);
+    unset($pogingen[(string)$sleutel]);
     return schrijfLoginPogingen($pad, $pogingen);
-  } finally {
-    loginPogingenSlotDicht($slot);
-  }
+  } finally { loginPogingenSlotDicht($slot); }
 }
 
-$configOk = file_exists($configPad);
+// ===== Mastercredential =====
+// Externe/multi-tenant installaties accepteren uitsluitend password_hash().
+// Standalone RC045 behoudt tijdelijk alleen voor migratie een expliciet
+// gemarkeerd plaintext-pad; de securitylaag rapporteert dit via de bestaande
+// $beheerGebruiktLegacyWachtwoord-vlag zodat het kan worden verwijderd zodra
+// de huidige serverconfig is omgezet.
+$configOk = is_file($configPad) && !is_link($configPad);
 $beheerGebruiktLegacyWachtwoord = false;
+$beheerHashOk = false;
+$beheerLegacyOk = false;
 if ($configOk) {
   require $configPad;
-
-  // Voorkeur: alleen een password_hash() in beheer-config.php bewaren.
-  // De oude plaintext-variabele blijft tijdelijk ondersteund zodat een
-  // deploy niemand buitensluit voordat het server-only configbestand via
-  // FTP is omgezet. Zodra een geldige hash aanwezig is, wordt het oude
-  // wachtwoord volledig genegeerd, ook als die variabele nog bestaat.
   $beheerHashOk = isset($BEHEER_WACHTWOORD_HASH)
     && is_string($BEHEER_WACHTWOORD_HASH)
     && $BEHEER_WACHTWOORD_HASH !== ''
     && ((password_get_info($BEHEER_WACHTWOORD_HASH)['algoName'] ?? 'unknown') !== 'unknown');
-  $beheerLegacyOk = isset($BEHEER_WACHTWOORD)
+  $beheerLegacyOk = empty($authPaden['tenant_private'])
+    && isset($BEHEER_WACHTWOORD)
     && is_string($BEHEER_WACHTWOORD)
     && $BEHEER_WACHTWOORD !== ''
     && $BEHEER_WACHTWOORD !== 'VeranderDitWachtwoord';
-
   $configOk = $beheerHashOk || $beheerLegacyOk;
   $beheerGebruiktLegacyWachtwoord = !$beheerHashOk && $beheerLegacyOk;
+  if ($beheerGebruiktLegacyWachtwoord) error_log('[security] standalone mastercredential gebruikt nog legacy plaintext; migreer naar BEHEER_WACHTWOORD_HASH');
 }
 
-function authMasterWachtwoordKlopt($invoer) {
-  global $BEHEER_WACHTWOORD_HASH, $BEHEER_WACHTWOORD;
-
+function authMasterWachtwoordKlopt($invoer): bool {
+  global $BEHEER_WACHTWOORD_HASH, $BEHEER_WACHTWOORD, $authPaden;
   if (isset($BEHEER_WACHTWOORD_HASH)
       && is_string($BEHEER_WACHTWOORD_HASH)
       && $BEHEER_WACHTWOORD_HASH !== ''
       && ((password_get_info($BEHEER_WACHTWOORD_HASH)['algoName'] ?? 'unknown') !== 'unknown')) {
-    return password_verify((string) $invoer, $BEHEER_WACHTWOORD_HASH);
+    return password_verify((string)$invoer, $BEHEER_WACHTWOORD_HASH);
   }
-
-  // Alleen migratiepad voor bestaande installaties. Verwijder deze
-  // variabele uit beheer-config.php zodra de hash is ingesteld.
-  return isset($BEHEER_WACHTWOORD)
+  // Alleen bestaande standalone-installatie; externe tenants falen hierboven.
+  return empty($authPaden['tenant_private'])
+    && isset($BEHEER_WACHTWOORD)
     && is_string($BEHEER_WACHTWOORD)
     && $BEHEER_WACHTWOORD !== ''
-    && hash_equals($BEHEER_WACHTWOORD, (string) $invoer);
+    && hash_equals($BEHEER_WACHTWOORD, (string)$invoer);
 }
 
 // ===== Uitloggen =====
-// Bewust een POST-formulier met csrf-controle in plaats van een simpele link:
-// een gewone GET-link kan door een pagina van een ander (bijv. als afbeelding)
-// worden misbruikt om een ingelogde beheerder ongevraagd uit te loggen.
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['formulier'] ?? '') === 'uitloggen' && csrfOk()) {
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['formulier'] ?? '') === 'uitloggen' && csrfOk()) {
   $_SESSION = [];
-
-  // session_destroy() ruimt alleen de sessie op de server op; de browser
-  // blijft het sessie-ID daarna gewoon meesturen. Daarom de cookie ook
-  // expliciet laten verlopen, met exact dezelfde eigenschappen als waarmee
-  // hij is gezet: een browser ziet hem anders niet als dezelfde cookie en
-  // laat de oude gewoon staan.
   $cookieParams = session_get_cookie_params();
   setcookie(session_name(), '', [
-    'expires'  => time() - 42000,
-    'path'     => $cookieParams['path'],
-    'domain'   => $cookieParams['domain'],
-    'secure'   => $cookieParams['secure'],
-    'httponly' => $cookieParams['httponly'],
-    'samesite' => $cookieParams['samesite'],
+    'expires'=>time()-42000,
+    'path'=>$cookieParams['path'],
+    'domain'=>$cookieParams['domain'],
+    'secure'=>$cookieParams['secure'],
+    'httponly'=>$cookieParams['httponly'],
+    'samesite'=>$cookieParams['samesite'],
   ]);
-
   session_destroy();
   header('Location: ' . authHuidigePagina());
   exit;
@@ -422,11 +288,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['formulier'] ?? '') === 'ui
 $melding = [];
 $meldingType = [];
 $inlogFout = '';
-
-// Meldingen die via Post-Redirect-Get zijn doorgegeven: één keer tonen en
-// direct weer weggooien.
 if (!empty($_SESSION['flash']) && is_array($_SESSION['flash'])) {
   foreach ($_SESSION['flash'] as $sleutel => $flash) {
+    if (!is_array($flash)) continue;
     $melding[$sleutel] = $flash['tekst'] ?? '';
     $meldingType[$sleutel] = $flash['type'] ?? 'ok';
   }
@@ -434,35 +298,24 @@ if (!empty($_SESSION['flash']) && is_array($_SESSION['flash'])) {
 }
 
 // ===== Inloggen =====
-// Gebruikersnaam leeg + het beheerderswachtwoord -> ingelogd als "beheerder",
-// met toegang tot gebruikersbeheer en het logboek. Een bekende gebruikersnaam
-// + bijbehorend wachtwoord -> gewone toegang tot de inhoud.
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['formulier'] ?? '') === 'inloggen' && $configOk && !csrfOk()) {
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['formulier'] ?? '') === 'inloggen' && $configOk && !csrfOk()) {
   $inlogFout = 'Sessie verlopen. Ververs de pagina en probeer het opnieuw.';
-} elseif ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['formulier'] ?? '') === 'inloggen' && $configOk) {
-  $gebruikersnaamInvoer = trim($_POST['gebruikersnaam'] ?? '');
-  $wachtwoordInvoer = $_POST['wachtwoord'] ?? '';
+} elseif (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_POST['formulier'] ?? '') === 'inloggen' && $configOk) {
+  $gebruikersnaamInvoer = trim((string)($_POST['gebruikersnaam'] ?? ''));
+  $wachtwoordInvoer = (string)($_POST['wachtwoord'] ?? '');
   $lockoutNaam = $gebruikersnaamInvoer === '' ? 'beheerder' : $gebruikersnaamInvoer;
   $lockoutGebruikerSleutel = 'user:' . strtolower($lockoutNaam);
-  $bronIp = (string) ($_SERVER['REMOTE_ADDR'] ?? 'onbekend');
-  $lockoutIpSleutel = 'ip:' . hash('sha256', $bronIp);
+  $lockoutIpSleutel = 'ip:' . hash('sha256', (string)($_SERVER['REMOTE_ADDR'] ?? 'onbekend'));
   $minutenTeWachten = loginLockoutMinuten($loginPogingenBestand, [
     $lockoutGebruikerSleutel => $loginLockoutDrempel,
-    $lockoutIpSleutel        => $loginLockoutIpDrempel,
+    $lockoutIpSleutel => $loginLockoutIpDrempel,
   ], $loginLockoutVenster);
 
   if ($minutenTeWachten === null) {
     $inlogFout = 'Inloggen is tijdelijk niet beschikbaar. Probeer het over een minuut opnieuw.';
   } elseif ($minutenTeWachten > 0) {
-    // Bij een actieve account- of IP-limiet wordt het wachtwoord niet meer
-    // gecontroleerd. De melding is bewust generiek en verraadt niet welke
-    // van de twee grenzen geraakt is.
     $inlogFout = 'Te veel mislukte inlogpogingen. Probeer het over ' . $minutenTeWachten . ' minuut' . ($minutenTeWachten === 1 ? '' : 'en') . ' opnieuw.';
   } elseif ($gebruikersnaamInvoer === '' && authMasterWachtwoordKlopt($wachtwoordInvoer)) {
-    // Nieuw sessie-ID na succesvol inloggen (session fixation): zonder dit zou
-    // een sessie-ID dat van vóór het inloggen dateert (bijv. opgedrongen door
-    // een aanvaller) na login gewoon geldig blijven. "true" verwijdert meteen
-    // ook het oude sessiebestand op de server.
     session_regenerate_id(true);
     $_SESSION['gebruiker'] = 'beheerder';
     $_SESSION['is_master'] = true;
@@ -474,150 +327,121 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['formulier'] ?? '') === 'in
   } else {
     $gevondenGebruiker = null;
     foreach (laadGebruikers($usersBestand) as $g) {
-      if (isset($g['gebruikersnaam']) && strcasecmp($g['gebruikersnaam'], $gebruikersnaamInvoer) === 0) {
-        $gevondenGebruiker = $g;
-        break;
-      }
+      if (is_array($g) && isset($g['gebruikersnaam']) && strcasecmp((string)$g['gebruikersnaam'], $gebruikersnaamInvoer) === 0) { $gevondenGebruiker = $g; break; }
     }
-    if ($gevondenGebruiker && isset($gevondenGebruiker['hash']) && password_verify($wachtwoordInvoer, $gevondenGebruiker['hash'])) {
+    $accountActief = is_array($gevondenGebruiker) && (($gevondenGebruiker['actief'] ?? true) !== false);
+    if ($accountActief && isset($gevondenGebruiker['hash']) && is_string($gevondenGebruiker['hash']) && password_verify($wachtwoordInvoer, $gevondenGebruiker['hash'])) {
       session_regenerate_id(true);
-      $_SESSION['gebruiker'] = $gevondenGebruiker['gebruikersnaam'];
+      $_SESSION['gebruiker'] = (string)$gevondenGebruiker['gebruikersnaam'];
       $_SESSION['is_master'] = false;
       $_SESSION['user_session_version'] = max(1, (int)($gevondenGebruiker['sessie_versie'] ?? 1));
       loginPogingenWissen($loginPogingenBestand, $lockoutGebruikerSleutel);
-      schrijfLog($logBestand, $gevondenGebruiker['gebruikersnaam'], 'login', '');
+      schrijfLog($logBestand, (string)$gevondenGebruiker['gebruikersnaam'], 'login', '');
       header('Location: ' . authHuidigePagina());
       exit;
     }
-
-    loginPogingRegistreren($loginPogingenBestand, [$lockoutGebruikerSleutel, $lockoutIpSleutel], $loginLockoutVenster);
-    sleep(2); // blijft daarnaast bestaan als simpele, extra afremming
-    $inlogFout = 'Gebruikersnaam of wachtwoord onjuist.';
+    $geregistreerd = loginPogingRegistreren($loginPogingenBestand, [$lockoutGebruikerSleutel, $lockoutIpSleutel], $loginLockoutVenster);
+    sleep(2);
+    $inlogFout = $geregistreerd ? 'Gebruikersnaam of wachtwoord onjuist.' : 'Inloggen is tijdelijk niet beschikbaar. Probeer het over een minuut opnieuw.';
   }
 }
 
-$ingelogd = $configOk && isset($_SESSION['gebruiker']);
-$huidigeGebruiker = $_SESSION['gebruiker'] ?? '';
+$ingelogd = $configOk && isset($_SESSION['gebruiker']) && is_string($_SESSION['gebruiker']);
+$huidigeGebruiker = $ingelogd ? (string)$_SESSION['gebruiker'] : '';
 $isMaster = $ingelogd && !empty($_SESSION['is_master']);
 require __DIR__ . '/app/auth-session-check.php';
 
-// ===== Het gebruikersrecord =====
-// Onthouden na de eerste keer: zowel de rechten als de pagina's zelf hebben
-// het nodig en het staat in een JSON-bestand. Geeft null voor de master
-// (ingelogd met het beheerderswachtwoord) en voor niet-ingelogd.
+// ===== Gebruikersrecord en legacy-tabrechten =====
 function authGebruikerRecord() {
   static $record = false;
   global $ingelogd, $isMaster, $huidigeGebruiker, $usersBestand;
-
   if ($record !== false) return $record;
   $record = null;
   if ($ingelogd && !$isMaster) {
     foreach (laadGebruikers($usersBestand) as $g) {
-      if (isset($g['gebruikersnaam']) && strcasecmp($g['gebruikersnaam'], $huidigeGebruiker) === 0) {
-        $record = $g;
-        break;
-      }
+      if (is_array($g) && isset($g['gebruikersnaam']) && strcasecmp((string)$g['gebruikersnaam'], (string)$huidigeGebruiker) === 0) { $record = $g; break; }
     }
   }
   return $record;
 }
 
-// Gevoelige beheerrechten moeten expliciet op het account staan. Voor oude
-// accounts zonder opgeslagen tabs geldt in authRechten() om compatibiliteits-
-// redenen nog een brede terugval, maar die mag nooit gebruikt worden voor
-// handelingen waarmee iemand zijn eigen autorisatie kan verhogen.
-function authHeeftExplicietRecht($recht) {
+function authHeeftExplicietRecht($recht): bool {
   global $ingelogd, $isMaster;
-
   if (!$ingelogd) return false;
   if ($isMaster) return true;
-
   $record = authGebruikerRecord();
-  if (!is_array($record) || !isset($record['tabs']) || !is_array($record['tabs'])) return false;
-  return in_array((string) $recht, $record['tabs'], true);
+  if (!is_array($record)) return false;
+  if (isset($record['tabs']) && is_array($record['tabs']) && in_array((string)$recht, $record['tabs'], true)) return true;
+  if (isset($record['capabilities']) && is_array($record['capabilities'])) {
+    require_once __DIR__ . '/app/auth-capabilities.php';
+    $vereist = authCapabilitiesVanTabs([(string)$recht]);
+    $expliciet = authCapabilitiesNormaliseer($record['capabilities']);
+    foreach ($vereist as $cap) if (in_array($cap, $expliciet, true)) return true;
+  }
+  return false;
 }
 
-// Bestuursfunctie en de koppeling tussen een lid en een inlogaccount bepalen
-// rechtstreeks welke rolgebonden tabbladen iemand krijgt. Daarom mogen die
-// velden alleen worden gewijzigd door iemand die óók gebruikers en rechten
-// mag beheren. Het recht Gebruikers is al een hoog-vertrouwensrecht: wie dat
-// heeft kan accountrechten aanpassen, dus hiermee ontstaat geen nieuwe macht.
-function authMagLedenAutorisatieWijzigen() {
+function authMagLedenAutorisatieWijzigen(): bool {
   return authHeeftExplicietRecht('gebruikers');
 }
 
-// ===== Rechten =====
-// Bepaalt welke onderdelen de ingelogde persoon mag zien en opslaan.
-//
-// $alleTabs   : sleutel => label van alle onderdelen van de pagina
-// $tabsViaRol : sleutels die niet via de vinkjes bij Gebruikers lopen maar
-//               via de bestuursfunctie in de ledenadministratie
-//
-// Geeft terug: toegestaneTabs, isBestuurslid, eigenRol, gebruikerRecord.
-//
-// Master mag alles. Een gewone gebruiker zonder 'tabs'-veld (nog nooit
-// ingesteld via Gebruikers) mag ook alles, net als voor die functie bestond,
-// zodat bestaande gebruikers niet ineens buiten de deur staan. Pas als er via
-// Gebruikers expliciet een selectie is opgeslagen, geldt die beperking.
-//
-// Voor de rol-tabbladen is de bestuursfunctie leidend, niet de checkboxlijst:
-// wie in het tabblad Leden een bestuursfunctie heeft staan (voorzitter,
-// penningmeester, secretaris of bestuurslid) en daar aan deze inlognaam is
-// gekoppeld, krijgt ze erbij. Wie die functie niet heeft, raakt ze ook weer
-// kwijt als ze per ongeluk via Gebruikers zijn aangevinkt.
-function authRechten(array $alleTabs, array $tabsViaRol = []) {
+/**
+ * Legacy UI-tabprojectie. Ontbrekende/malforme autorisatiemetadata geeft nooit
+ * meer brede toegang. Expliciete capabilities worden naar hun legacy-tabs
+ * geprojecteerd; expliciete tabs blijven tijdens de migratie ondersteund.
+ * Rolgebonden bestuurstabs blijven uitsluitend door de ledenrol bepaald.
+ */
+function authRechten(array $alleTabs, array $tabsViaRol = []): array {
   global $ingelogd, $isMaster, $huidigeGebruiker;
-
   $gebruikerRecord = authGebruikerRecord();
+  $toegestaneTabs = [];
 
   if ($isMaster) {
     $toegestaneTabs = array_keys($alleTabs);
-  } elseif ($gebruikerRecord && isset($gebruikerRecord['tabs']) && is_array($gebruikerRecord['tabs'])) {
-    $toegestaneTabs = array_values(array_intersect(array_keys($alleTabs), $gebruikerRecord['tabs']));
-  } else {
-    $toegestaneTabs = array_keys($alleTabs);
+  } elseif (is_array($gebruikerRecord)) {
+    $explicieteTabs = [];
+    if (array_key_exists('tabs', $gebruikerRecord) && is_array($gebruikerRecord['tabs'])) {
+      $explicieteTabs = $gebruikerRecord['tabs'];
+    } elseif (array_key_exists('capabilities', $gebruikerRecord) && is_array($gebruikerRecord['capabilities'])) {
+      require_once __DIR__ . '/app/auth-capabilities.php';
+      $explicieteTabs = authLegacyTabsVoorCapabilities($gebruikerRecord['capabilities']);
+    }
+    $toegestaneTabs = array_values(array_intersect(array_keys($alleTabs), $explicieteTabs));
   }
 
   $eigenRol = ($ingelogd && !$isMaster)
     ? ledenRolVanGebruiker($huidigeGebruiker)
-    : ['lid' => null, 'bestuurslid' => false, 'functie' => '', 'commissies' => []];
-  $isBestuurslid = $isMaster || $eigenRol['bestuurslid'];
+    : ['lid'=>null,'bestuurslid'=>false,'functie'=>'','commissies'=>[]];
+  if (!is_array($eigenRol)) $eigenRol = ['lid'=>null,'bestuurslid'=>false,'functie'=>'','commissies'=>[]];
+  $isBestuurslid = $isMaster || !empty($eigenRol['bestuurslid']);
 
   foreach ($tabsViaRol as $rolTab) {
-    if (!isset($alleTabs[$rolTab])) continue;
+    if (!is_string($rolTab) || !isset($alleTabs[$rolTab])) continue;
     $heeftNu = in_array($rolTab, $toegestaneTabs, true);
-    if ($isBestuurslid && !$heeftNu) {
-      $toegestaneTabs[] = $rolTab;
-    } elseif (!$isBestuurslid && $heeftNu) {
-      $toegestaneTabs = array_values(array_diff($toegestaneTabs, [$rolTab]));
-    }
+    if ($isBestuurslid && !$heeftNu) $toegestaneTabs[] = $rolTab;
+    elseif (!$isBestuurslid && $heeftNu) $toegestaneTabs = array_values(array_diff($toegestaneTabs, [$rolTab]));
   }
 
   return [
-    'toegestaneTabs'  => $toegestaneTabs,
-    'isBestuurslid'   => $isBestuurslid,
-    'eigenRol'        => $eigenRol,
-    'gebruikerRecord' => $gebruikerRecord,
+    'toegestaneTabs'=>$toegestaneTabs,
+    'isBestuurslid'=>$isBestuurslid,
+    'eigenRol'=>$eigenRol,
+    'gebruikerRecord'=>$gebruikerRecord,
   ];
 }
 
-// Het inlogscherm. Staat hier zodat elke afgeschermde pagina hetzelfde
-// formulier toont; de opmaak komt van de pagina die het insluit.
-// $titel is de regel onder "Inloggen" (bijv. "RC045 beheer").
-function authInlogFormulier($titel) {
+function authInlogFormulier($titel): void {
   global $csrfToken, $inlogFout;
   ?>
     <div class="kaart kaart-smal">
       <h1>Inloggen</h1>
-      <p class="sub"><?php echo htmlspecialchars($titel); ?></p>
-
+      <p class="sub"><?php echo htmlspecialchars((string)$titel, ENT_QUOTES, 'UTF-8'); ?></p>
       <?php if ($inlogFout !== ''): ?>
-        <div class="melding fout"><?php echo htmlspecialchars($inlogFout); ?></div>
+        <div class="melding fout"><?php echo htmlspecialchars((string)$inlogFout, ENT_QUOTES, 'UTF-8'); ?></div>
       <?php endif; ?>
-
-      <form method="post" action="<?php echo htmlspecialchars(authHuidigePagina()); ?>">
+      <form method="post" action="<?php echo htmlspecialchars(authHuidigePagina(), ENT_QUOTES, 'UTF-8'); ?>">
         <input type="hidden" name="formulier" value="inloggen">
-        <input type="hidden" name="csrf" value="<?php echo htmlspecialchars($csrfToken); ?>">
+        <input type="hidden" name="csrf" value="<?php echo htmlspecialchars((string)$csrfToken, ENT_QUOTES, 'UTF-8'); ?>">
         <div class="veld">
           <label for="login-gebruikersnaam">Gebruikersnaam</label>
           <input type="text" id="login-gebruikersnaam" name="gebruikersnaam" autocomplete="username" autocapitalize="off">
