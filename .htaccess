@@ -21,6 +21,14 @@ Options -Indexes
   Header always set Permissions-Policy "camera=(), microphone=(), geolocation=()"
   Header always set X-Frame-Options "SAMEORIGIN"
   Header always set Strict-Transport-Security "max-age=31536000"
+  # Uitvoerbare scripts mogen alleen van de eigen origin komen. De bestaande
+  # templates bevatten nog inline JS/CSS; unsafe-inline blijft daarvoor
+  # tijdelijk beperkt tot script/style. Externe fonts zijn uitsluitend voor de
+  # bestaande Google Fonts stylesheets. Formspree is uitsluitend toegestaan als
+  # formulier-/fetchdoel voor de publieke aanmelding en krijgt geen scriptrecht.
+  # Externe analytics-JS (o.a. GoatCounter) kan met deze policy niet meer onder
+  # de verenigingsorigin uitvoeren.
+  Header always set Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self' https://formspree.io; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://formspree.io; media-src 'self' blob:; worker-src 'self' blob:; frame-src 'none'; upgrade-insecure-requests"
   Header unset X-Powered-By
   Header always unset X-Powered-By
 </IfModule>

@@ -6,40 +6,33 @@
 // $huidigeGebruiker zijn bepaald.
 //
 // Doel:
-// - iedere sessie hoort expliciet bij precies één tenant;
-// - een sessie van tenant A wordt bij tenant B fail-closed verworpen;
+// - iedere sessie hoort expliciet bij één tenant én één installatie;
+// - een sessie van PROD/DEV of tenant A/B wordt fail-closed verworpen;
 // - een verwijderd of geblokkeerd account verliest bij het eerstvolgende
 //   verzoek toegang;
 // - na een rechten- of wachtwoordwijziging kan de bestaande sessie worden
-//   ingetrokken door sessie_versie in beheer-users.json te verhogen;
-// - bestaande accounts zonder sessie_versie gelden als versie 1;
-// - bestaande standalone RC045-sessies zonder tenant_key worden eenmalig
-//   compatibel aan RC045 gebonden.
+//   ingetrokken door sessie_versie in beheer-users.json te verhogen.
 // ============================================================
 
 require_once __DIR__ . '/auth-session-tenant.php';
 
 $authSessionTenantKey = authSessionTenantSleutel($authSiteConfig ?? []);
+$authSessionInstallatieBinding = (string)($authPaden['session_binding'] ?? '');
 $authSessionTenantOk = authSessionTenantBewaak(
     $authSessionTenantKey,
-    !empty($authPaden['tenant_private']),
+    $authSessionInstallatieBinding,
     $csrfToken
 );
 
 if (!$authSessionTenantOk) {
-    // De helper heeft de vreemde sessie met session_abort() losgelaten en een
-    // volledig schone sessie voor deze tenant gestart. Geen authstate uit de
-    // oorspronkelijke sessie mag daarna nog door auth.php gebruikt worden.
     $ingelogd = false;
     $huidigeGebruiker = '';
     $isMaster = false;
-    $inlogFout = 'Je sessie hoort niet bij deze vereniging. Log opnieuw in.';
+    $inlogFout = 'Je sessie hoort niet bij deze installatie. Log opnieuw in.';
     return;
 }
 
-if (!$ingelogd || $isMaster) {
-    return;
-}
+if (!$ingelogd || $isMaster) return;
 
 $sessionAccount = null;
 foreach (laadGebruikers($usersBestand) as $sessionGebruiker) {
@@ -50,9 +43,6 @@ foreach (laadGebruikers($usersBestand) as $sessionGebruiker) {
     }
 }
 
-// Geen record meer = account verwijderd. Een expliciet geblokkeerd account
-// wordt op exact dezelfde fail-closed manier behandeld. Oude accounts zonder
-// 'actief'-veld blijven voor compatibiliteit actief.
 $accountActief = is_array($sessionAccount) && (($sessionAccount['actief'] ?? true) !== false);
 if (!$accountActief) {
     unset($_SESSION['gebruiker'], $_SESSION['is_master'], $_SESSION['user_session_version']);
@@ -66,13 +56,7 @@ if (!$accountActief) {
 }
 
 $actueleVersie = max(1, (int)($sessionAccount['sessie_versie'] ?? 1));
-
-// Sessies die al bestonden vóór invoering van dit veld zijn versie 1.
-// Neem hier nooit de actuele accountversie over: na een beveiligingswijziging
-// moet een oude sessie juist ongeldig worden.
-if (!isset($_SESSION['user_session_version'])) {
-    $_SESSION['user_session_version'] = 1;
-}
+if (!isset($_SESSION['user_session_version'])) $_SESSION['user_session_version'] = 1;
 
 if ((int)$_SESSION['user_session_version'] !== $actueleVersie) {
     unset($_SESSION['gebruiker'], $_SESSION['is_master'], $_SESSION['user_session_version']);

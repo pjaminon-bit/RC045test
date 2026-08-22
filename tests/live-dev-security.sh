@@ -17,8 +17,18 @@ tr -d '\r' < "$TMP/headers" > "$TMP/headers.clean"
 if grep -Eqi '^strict-transport-security:[[:space:]]*.+max-age=' "$TMP/headers.clean"; then ok 'HSTS actief'; else bad 'HSTS ontbreekt'; fi
 if grep -Eqi '^x-content-type-options:[[:space:]]*nosniff' "$TMP/headers.clean"; then ok 'X-Content-Type-Options nosniff actief'; else bad 'X-Content-Type-Options nosniff ontbreekt'; fi
 if grep -Eqi '^referrer-policy:' "$TMP/headers.clean"; then ok 'Referrer-Policy actief'; else bad 'Referrer-Policy ontbreekt'; fi
-if grep -Eqi '^content-security-policy:' "$TMP/headers.clean" || grep -Eqi '^x-frame-options:[[:space:]]*(deny|sameorigin)' "$TMP/headers.clean"; then ok 'clickjackingbescherming actief'; else bad 'clickjackingbescherming ontbreekt'; fi
+if grep -Eqi '^x-frame-options:[[:space:]]*(deny|sameorigin)' "$TMP/headers.clean"; then ok 'legacy clickjackingheader actief'; else bad 'X-Frame-Options ontbreekt'; fi
 if ! grep -Eqi '^x-powered-by:' "$TMP/headers.clean"; then ok 'geen X-Powered-By disclosure'; else bad 'X-Powered-By lekt runtimeinformatie'; fi
+
+# CSP is vanaf de pre-VPS hardening een verplicht contract, niet meer een
+# alternatief voor X-Frame-Options. Uitvoerbare remote scripts moeten geblokkeerd
+# blijven zodat een analytics-CDN nooit dezelfde originrechten krijgt als beheer.
+csp="$(grep -Ei '^content-security-policy:' "$TMP/headers.clean" | tail -n1 || true)"
+if [[ -n "$csp" ]]; then ok 'Content-Security-Policy actief'; else bad 'Content-Security-Policy ontbreekt'; fi
+for directive in "default-src 'self'" "base-uri 'self'" "object-src 'none'" "frame-ancestors 'none'" "form-action 'self'" "script-src 'self'"; do
+  if grep -Fqi "$directive" <<<"$csp"; then ok "CSP bevat $directive"; else bad "CSP mist $directive"; fi
+done
+if ! grep -Eqi 'script-src[^;]*(gc\.zgo\.at|goatcounter)' <<<"$csp"; then ok 'CSP staat geen GoatCounter/externe analytics-scriptorigin toe'; else bad 'CSP laat externe analytics-JS als script toe'; fi
 
 # Onveilige HTTP-methoden mogen geen succesvolle response opleveren.
 trace="$(curl --silent --show-error --request TRACE --output /dev/null --write-out '%{http_code}' --connect-timeout 10 --max-time 30 "$BASE/" || true)"

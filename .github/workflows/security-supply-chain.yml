@@ -1,0 +1,65 @@
+name: Security supply-chain
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rc045test-security-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  secrets-and-dependencies:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout volledige Git-historie
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3, Node 24, commit-pinned
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Installeer checksum-gepinde Gitleaks
+        shell: bash
+        run: |
+          set -euo pipefail
+          versie='8.30.1'
+          verwacht='551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb'
+          archief="$RUNNER_TEMP/gitleaks_${versie}_linux_x64.tar.gz"
+          doel="$RUNNER_TEMP/gitleaks-${versie}"
+          mkdir -p "$doel"
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${versie}/gitleaks_${versie}_linux_x64.tar.gz" \
+            --output "$archief"
+          printf '%s  %s\n' "$verwacht" "$archief" | sha256sum --check --strict
+          tar -xzf "$archief" -C "$doel" gitleaks
+          "$doel/gitleaks" version
+          printf 'GITLEAKS_BIN=%s/gitleaks\n' "$doel" >> "$GITHUB_ENV"
+
+      - name: Scan volledige historie op secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Zonder --log-opts gebruikt Gitleaks voor de git-mode zijn veilige
+          # full-history/all standaard. Dit is bewust géén PR-diffrange.
+          "$GITLEAKS_BIN" git --redact --verbose .
+
+      - name: Installeer uitsluitend gelockte Node dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Controleer Node dependencies op hoge/critical kwetsbaarheden
+        run: npm audit --audit-level=high
+
+      - name: Controleer eigen security source policy
+        run: php tests/security-source-regression.php
+
+      - name: Controleer pre-VPS securitycontract
+        run: php tests/security-pre-vps-hardening.php
