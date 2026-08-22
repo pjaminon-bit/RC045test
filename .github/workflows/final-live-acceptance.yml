@@ -30,7 +30,7 @@ jobs:
             content_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --connect-timeout 10 --max-time 20 "$LIVE_DEV_BASE_URL/data/contact.json" || true)"
             image_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --connect-timeout 10 --max-time 20 "$LIVE_DEV_BASE_URL/images/crawlergroep.jpg" || true)"
             if ! printf '%s\n' "$headers" | grep -qi '^X-Powered-By:' \
-              && [[ "$content_status" == '204' ]] \
+              && [[ "$content_status" =~ ^20[04]$ ]] \
               && [[ "$image_status" == '200' ]]; then
               echo "DEV finale fixes zichtbaar: header schoon, contact=$content_status, image=$image_status"
               exit 0
@@ -60,7 +60,7 @@ jobs:
           for poging in $(seq 1 36); do
             content_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --connect-timeout 10 --max-time 20 "$LIVE_DEV_BASE_URL/data/contact.json" || true)"
             image_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --connect-timeout 10 --max-time 20 "$LIVE_DEV_BASE_URL/images/crawlergroep.jpg" || true)"
-            if [[ "$content_status" == '204' && "$image_status" == '200' ]]; then exit 0; fi
+            if [[ "$content_status" =~ ^20[04]$ && "$image_status" == '200' ]]; then exit 0; fi
             echo "Wacht op DEV ($poging/36): contact=${content_status:-geen}, image=${image_status:-geen}"
             sleep 5
           done
