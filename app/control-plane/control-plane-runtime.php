@@ -41,16 +41,41 @@ function cp51Operator(): string
     return $u;
 }
 
+function cp51SessionBindOperator(): void
+{
+    if (session_status() !== PHP_SESSION_ACTIVE) cp51Fail('operatorbinding zonder actieve sessie');
+    $operator = cp51Operator();
+    $gebonden = $_SESSION['operator_identity'] ?? null;
+    if ($gebonden === null) {
+        if (!session_regenerate_id(true)) cp51Fail('sessie-id kon niet worden vernieuwd');
+        $_SESSION = ['operator_identity' => $operator];
+        return;
+    }
+    if (!is_string($gebonden) || !hash_equals($operator, $gebonden)) {
+        // Een browsercookie die onder een andere REMOTE_USER is aangemaakt mag
+        // geen CSRF-token of control-plane state naar de nieuwe identity dragen.
+        $_SESSION = [];
+        if (!session_regenerate_id(true)) cp51Fail('vreemde operatorsessie kon niet worden vervangen');
+        $_SESSION['operator_identity'] = $operator;
+    }
+}
+
 function cp51SessionStart(): void
 {
-    if (session_status() === PHP_SESSION_ACTIVE) return;
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        cp51SessionBindOperator();
+        return;
+    }
     $c = cp51Config();
     $dir = $c['sessions_dir'];
     if (is_link($dir) || !is_dir($dir) || !is_writable($dir)) cp51Fail('sessiemap niet beschikbaar');
+    ini_set('session.use_strict_mode', '1');
+    ini_set('session.use_only_cookies', '1');
     session_name('vp_control');
     session_save_path($dir);
     session_set_cookie_params(['lifetime'=>0,'path'=>'/','secure'=>true,'httponly'=>true,'samesite'=>'Strict']);
     if (!session_start()) cp51Fail('sessie kon niet starten');
+    cp51SessionBindOperator();
 }
 
 function cp51Csrf(): string
