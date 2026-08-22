@@ -1,6 +1,24 @@
 <?php
 return [
     [
+        'datum' => '2026-08-22',
+        'cat' => 'verbeterd',
+        'titel' => 'Volledige pre-VPS eindacceptatie afgerond',
+        'tekst' => 'Het verenigingsplatform is vóór de eerste echte VPS-installatie opnieuw volledig gecontroleerd. De bron-, functionele, technische en securityregressie is groen, de actieve DEV-securitycontrole is groen en de publieke browseracceptatie is op desktop, tablet en mobiel geslaagd. Ook de ingelogde beheer- en ledenomgeving is met tijdelijke testaccounts en een synthetisch gekoppeld lid doorlopen, inclusief persoonsgegevens, contributie, commissie, vergadering/notulen en taken. Tijdelijke testdata en authenticatiebestanden worden na de test exact hersteld. De bevroren kandidaat voor de eerste VPS-proef is commit 936cf4879f1611d94123fb3d3a0a33b831a49810.',
+    ],
+    [
+        'datum' => '2026-08-22',
+        'cat' => 'beveiliging',
+        'titel' => 'Live security- en browserbevindingen opgelost',
+        'tekst' => 'De eindregressie heeft meerdere concrete verbeteringen opgeleverd. PHP-runtimeinformatie via X-Powered-By is uitgeschakeld, standalone DEV-content en ontbrekende template-assets zijn veilig afgehandeld, tablet/mobile overflow is hersteld, te kleine bedieningselementen zijn vergroot en formuliersemantiek/toegankelijkheid is aangescherpt. De permanente browsertest scrollt pagina’s nu volledig zodat scrollanimaties en verborgen content daadwerkelijk worden gecontroleerd.',
+    ],
+    [
+        'datum' => '2026-08-22',
+        'cat' => 'onderhoud',
+        'titel' => 'VPS-acceptatie uitgebreid met echte hersteltest',
+        'tekst' => 'Fase 5.3 is nu de enige open productieacceptatiefase. Een tenantexport geldt daarbij niet als voldoende bewijs wanneer alleen de SHA-256 klopt: tijdens de eerste VPS-validatie moet de export daadwerkelijk naar een aparte wegwerp-herstelomgeving worden teruggezet en moet representatieve tenantdata na restore worden gecontroleerd. Pas na VPS-readiness, bootstrap, infrastructuur-, lifecycle-, herstel- en release/rollbackacceptatie wordt de eerste VPS productiegeschikt verklaard.',
+    ],
+    [
         'datum' => '2026-08-21',
         'cat' => 'beveiliging',
         'titel' => 'Productiebootstrap en control-plane verder gehard',
