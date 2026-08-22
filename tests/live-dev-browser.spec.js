@@ -13,6 +13,20 @@ const entryRoutes = ['/', '/ontstaan.html', '/baanreglement.html', '/aanmelden.h
 function target(route) { return new URL(basePath + (route === '/' ? '/' : route), baseUrl.origin).toString(); }
 function slug(route) { if (route === '/') return 'home'; return route.replace(/^\//, '').replace(/\/$/, '-index').replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '') || 'page'; }
 
+async function activeerScrollGebondenContent(page) {
+  const viewport = page.viewportSize() || { height: 800 };
+  const totaal = await page.evaluate(() => Math.max(document.body.scrollHeight, document.documentElement.scrollHeight));
+  const stap = Math.max(260, Math.floor(viewport.height * 0.72));
+  for (let y = 0; y < totaal; y += stap) {
+    await page.evaluate(pos => window.scrollTo(0, pos), y);
+    await page.waitForTimeout(110);
+  }
+  await page.evaluate(() => window.scrollTo(0, Math.max(document.body.scrollHeight, document.documentElement.scrollHeight)));
+  await page.waitForTimeout(350);
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.waitForTimeout(300);
+}
+
 async function inspectPage(page, route, viewportName) {
   const consoleErrors=[]; const pageErrors=[]; const failedSameOrigin=[]; const badResponses=[];
   page.on('console', msg => { if (msg.type()==='error') consoleErrors.push(msg.text()); });
@@ -21,7 +35,8 @@ async function inspectPage(page, route, viewportName) {
   page.on('response', res => { try { const u=new URL(res.url()); if(res.status()>=400&&u.origin===baseUrl.origin&&u.pathname.startsWith(basePath+'/')) badResponses.push(`${res.status()} ${res.request().method()} ${res.url()}`); } catch(_){} });
   const response=await page.goto(target(route),{waitUntil:'domcontentloaded',timeout:45000});
   expect(response,`Geen hoofdresponse voor ${route}`).not.toBeNull(); expect(response.status(),`${route} gaf HTTP ${response.status()}`).toBeLessThan(400);
-  await page.waitForTimeout(1000);
+  await page.waitForTimeout(700);
+  await activeerScrollGebondenContent(page);
   const diagnostics=await page.evaluate(({origin,basePath})=>{
     const visible=el=>{const s=getComputedStyle(el),r=el.getBoundingClientRect();return s.display!=='none'&&s.visibility!=='hidden'&&Number(s.opacity||'1')>0&&r.width>0&&r.height>0;};
     const sameOriginBroken=[...document.images].filter(img=>visible(img)&&img.complete&&img.naturalWidth===0).map(img=>img.currentSrc||img.src||'').filter(src=>{try{const u=new URL(src,location.href);return u.origin===origin&&u.pathname.startsWith(basePath+'/');}catch(_){return false;}});
@@ -31,14 +46,18 @@ async function inspectPage(page, route, viewportName) {
       .filter(el=>!el.id.startsWith('hp-')&&!el.closest('[aria-hidden="true"]')&&el.getAttribute('aria-hidden')!=='true')
       .filter(el=>{if(el.tagName==='A'&&getComputedStyle(el).display==='inline')return false;const r=el.getBoundingClientRect();return r.width<24||r.height<24;})
       .map(el=>{const r=el.getBoundingClientRect();return `${el.tagName.toLowerCase()}#${el.id||''}.${String(el.className||'').split(/\s+/).slice(0,3).join('.')} ${Math.round(r.width)}x${Math.round(r.height)}`;}).slice(0,30);
+    const hiddenContent=[...document.querySelectorAll('main section,main article,.agenda-card,.nieuws-card')]
+      .filter(el=>(el.innerText||'').trim().length>50)
+      .filter(el=>{const s=getComputedStyle(el),r=el.getBoundingClientRect();return r.width>0&&r.height>0&&(s.display==='none'||s.visibility==='hidden'||Number(s.opacity||'1')<0.05);})
+      .map(el=>`${el.tagName.toLowerCase()}#${el.id||''}.${String(el.className||'').split(/\s+/).slice(0,4).join('.')}`).slice(0,30);
     const main=document.querySelector('main')||document.body;
-    return {title:document.title,lang:document.documentElement.lang,h1Count:document.querySelectorAll('h1').length,mainTextLength:(main.innerText||'').trim().length,scrollWidth:document.documentElement.scrollWidth,clientWidth:document.documentElement.clientWidth,brokenImages:sameOriginBroken,unlabeledInputs:unlabeled,tinyControls:tiny};
+    return {title:document.title,lang:document.documentElement.lang,h1Count:document.querySelectorAll('h1').length,mainTextLength:(main.innerText||'').trim().length,scrollWidth:document.documentElement.scrollWidth,clientWidth:document.documentElement.clientWidth,brokenImages:sameOriginBroken,unlabeledInputs:unlabeled,tinyControls:tiny,hiddenContent};
   },{origin:baseUrl.origin,basePath});
   await page.screenshot({path:`${outputDir}/${viewportName}-${slug(route)}.png`,fullPage:true});
   console.log(`DIAGNOSTICS ${viewportName} ${route}: ${JSON.stringify({diagnostics,badResponses,consoleErrors,pageErrors,failedSameOrigin})}`);
   expect(diagnostics.title.trim()).not.toBe(''); expect(diagnostics.lang).toMatch(/^[a-z]{2}(?:-|$)/i); expect(diagnostics.h1Count).toBe(1); expect(diagnostics.mainTextLength).toBeGreaterThan(40);
   expect(diagnostics.scrollWidth,`${route} heeft horizontale overflow bij ${viewportName}`).toBeLessThanOrEqual(diagnostics.clientWidth+3);
-  expect(diagnostics.brokenImages,`${route} heeft kapotte same-origin afbeeldingen`).toEqual([]); expect(diagnostics.unlabeledInputs,`${route} heeft ongelabelde formuliervelden`).toEqual([]); expect(diagnostics.tinyControls,`${route} bevat extreem kleine niet-inline controls`).toEqual([]);
+  expect(diagnostics.brokenImages,`${route} heeft kapotte same-origin afbeeldingen`).toEqual([]); expect(diagnostics.unlabeledInputs,`${route} heeft ongelabelde formuliervelden`).toEqual([]); expect(diagnostics.tinyControls,`${route} bevat extreem kleine niet-inline controls`).toEqual([]); expect(diagnostics.hiddenContent,`${route} houdt na volledige scroll inhoud onzichtbaar`).toEqual([]);
   expect(pageErrors,`${route} veroorzaakte JavaScript page errors`).toEqual([]); expect(failedSameOrigin,`${route} heeft mislukte same-origin requests`).toEqual([]); expect(badResponses,`${route} heeft same-origin HTTP-fouten`).toEqual([]); expect(consoleErrors,`${route} schreef console.error`).toEqual([]);
 }
 
