@@ -46,13 +46,18 @@ try {
 }
 
 if ($data === null) {
-    // Een bestaand maar onleesbaar/ongeldig standalone bestand is géén
-    // ontbrekende override en mag dus niet stil als 204 worden gemaskeerd.
-    // Voor externe tenants betekent null eveneens dat de eigen dataset niet
-    // beschikbaar is; daar blijft 404 de veilige uitkomst.
+    // Standalone/DEV heeft voor deze datasets altijd server-side template-
+    // defaults. Een bestaand maar ongeldig/onleesbaar legacybestand is daar
+    // dus een onbruikbare optionele override, niet een reden om de publieke
+    // pagina met 500-responses te vervuilen. Log de afwijking wel zodat beheer
+    // hem kan herstellen, maar geef de browser expliciet "geen override".
+    // Externe tenants blijven strikt: zij mogen nooit naar RC045/defaultdata
+    // terugvallen en krijgen bij ontbrekende eigen content 404.
     if ($externPad === null && !$configVerplicht) {
-        http_response_code(500);
+        error_log('[platform] standalone override is ongeldig voor dataset ' . $sleutel . '; template-default blijft actief');
+        http_response_code(204);
         header('Cache-Control: no-store');
+        header('X-Content-Type-Options: nosniff');
         exit;
     }
     http_response_code(404);
