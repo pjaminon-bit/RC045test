@@ -101,7 +101,16 @@ spvCheck(str_contains($cp, "session.use_strict_mode") && str_contains($cp, 'oper
 $package = json_decode(spvBron($root . '/package-lock.json'), true);
 spvCheck(is_array($package) && (($package['packages']['node_modules/@playwright/test']['version'] ?? '') === '1.62.1') && str_starts_with((string)($package['packages']['node_modules/@playwright/test']['integrity'] ?? ''), 'sha512-'), 'Playwright is exact gelockt met integriteitshash');
 $supply = spvBron($root . '/.github/workflows/security-supply-chain.yml');
-spvCheck(str_contains($supply, 'fetch-depth: 0') && str_contains($supply, 'gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e') && str_contains($supply, 'npm audit --audit-level=high'), 'CI scant volledige Git-historie en dependencykwetsbaarheden');
+spvCheck(
+    str_contains($supply, 'fetch-depth: 0')
+    && str_contains($supply, "versie='8.30.1'")
+    && str_contains($supply, '551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb')
+    && str_contains($supply, 'sha256sum --check --strict')
+    && str_contains($supply, 'git --redact --verbose .')
+    && !str_contains($supply, '--log-opts=')
+    && str_contains($supply, 'npm audit --audit-level=high'),
+    'CI scant volledige Git-historie met checksum-gepinde Gitleaks en controleert dependencykwetsbaarheden'
+);
 
 echo "Pre-VPS security hardening: {$ok} OK, {$fout} fout(en)\n";
 exit($fout === 0 ? 0 : 1);
