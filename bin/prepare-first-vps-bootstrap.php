@@ -11,7 +11,7 @@ function prep52Help(): void
     echo "    --platform-host=beheer.example.nl --platform-strategy=direct --platform-ipv4=203.0.113.10 \\\n";
     echo "    --tenant-key=voorbeeld --tenant-name='Voorbeeldvereniging' --tenant-host=voorbeeld.example.nl \\\n";
     echo "    --tenant-strategy=direct --tenant-ipv4=203.0.113.10 --operator-user=platformadmin [opties]\n\n";
-    echo "Opties: --platform-root=/srv/verenigingsplatform --tenant-base=/srv/verenigingen --php-version=8.3\n";
+    echo "Opties: --platform-root=/srv/verenigingsplatform --tenant-base=/srv/verenigingen --php-version=8.5\n";
     echo "        --platform-ipv6=... --platform-cname=... --tenant-ipv6=... --tenant-cname=...\n";
     echo "        --modules=website,ledenadministratie,... --cert-name=verenigingsplatform-beheer --force --dry-run\n";
     echo "DNS-providerrecords moeten operator-side worden gezet; deze tool schrijft nooit naar een DNS-provider en accepteert geen secrets.\n";
@@ -35,7 +35,7 @@ try{
     $in=[
         'source'=>(string)$o['source'],'commit'=>(string)$o['commit'],'output_dir'=>(string)$o['output'],
         'platform_root'=>(string)($o['platform-root']??'/srv/verenigingsplatform'),'tenant_base'=>(string)($o['tenant-base']??'/srv/verenigingen'),
-        'php_version'=>(string)($o['php-version']??'8.3'),'platform_host'=>(string)$o['platform-host'],'operator_user'=>(string)$o['operator-user'],
+        'php_version'=>(string)($o['php-version']??'8.5'),'platform_host'=>(string)$o['platform-host'],'operator_user'=>(string)$o['operator-user'],
         'cert_name'=>(string)($o['cert-name']??'verenigingsplatform-beheer'),'platform_dns_strategy'=>(string)$o['platform-strategy'],
         'platform_ipv4'=>(string)($o['platform-ipv4']??''),'platform_ipv6'=>(string)($o['platform-ipv6']??''),'platform_cname'=>(string)($o['platform-cname']??''),
         'tenant_key'=>(string)$o['tenant-key'],'tenant_name'=>(string)$o['tenant-name'],'tenant_host'=>(string)$o['tenant-host'],'modules'=>$modules,
