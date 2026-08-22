@@ -1,0 +1,46 @@
+name: PHP 8.5 compatibility
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rc045test-php85-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  php85-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact te testen bron
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Installeer PHP 8.5 runtime
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
+        with:
+          php-version: '8.5'
+          extensions: openssl, pdo_pgsql
+          coverage: none
+
+      - name: Bewijs PHP 8.5 en vereiste modules
+        run: |
+          set -euo pipefail
+          php -v
+          php -r 'if (PHP_VERSION_ID < 80500 || PHP_VERSION_ID >= 80600) { fwrite(STDERR, "PHP 8.5 vereist\n"); exit(1); }'
+          php -m | grep -Fx openssl
+          php -m | grep -Fx pdo_pgsql
+
+      - name: PHP syntax volledige repository
+        run: |
+          set -euo pipefail
+          while IFS= read -r -d '' bestand; do
+            php -l "$bestand"
+          done < <(find . -type f -name '*.php' -not -path './node_modules/*' -print0)
+
+      - name: Functionele technische en securityregressies op PHP 8.5
+        run: bash tests/run-all.sh
