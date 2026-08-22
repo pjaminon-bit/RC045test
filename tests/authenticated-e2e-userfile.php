@@ -3,6 +3,11 @@ if (PHP_SAPI !== 'cli') { fwrite(STDERR, "Alleen CLI.\n"); exit(1); }
 
 $input = $argv[1] ?? '';
 $output = $argv[2] ?? '';
+if ($input === '' && $output === '') {
+    echo "Authenticated E2E authstore helper: alleen actief met expliciete input/output.\n";
+    exit(0);
+}
+
 $admin = getenv('E2E_ADMIN_USER') ?: '';
 $member = getenv('E2E_MEMBER_USER') ?: '';
 $password = getenv('E2E_PASSWORD') ?: '';
