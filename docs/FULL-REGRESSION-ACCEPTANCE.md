@@ -4,31 +4,32 @@ Datum: 22 augustus 2026
 
 ## Doel
 
-Deze acceptatieronde is uitgevoerd naar aanleiding van de eis om het volledige verenigingsplatform van voor tot achter opnieuw te controleren: security, functioneel, technisch en optisch. Een groene bestaande CI-run is daarbij niet als voldoende bewijs geaccepteerd. Ontbrekende testlagen zijn toegevoegd, concrete live-bevindingen zijn als productfouten behandeld en na iedere fix is de totale regressiematrix opnieuw uitgevoerd.
+Deze acceptatieronde controleert het volledige verenigingsplatform van voor tot achter: security, functioneel, technisch en optisch. Een groene bestaande CI-run is niet als voldoende bewijs geaccepteerd. Ontbrekende testlagen zijn toegevoegd, concrete live-bevindingen zijn als productfouten behandeld en na iedere fix is de regressiematrix opnieuw uitgevoerd.
 
-## Geteste productiebron
+## Bevroren VPS-kandidaat
 
-De finale productfixes zijn gemerged naar `main` in commit:
+Na de productfixes, permanente testborging en authenticated E2E-uitbreiding is de definitieve pre-VPS kandidaat op `main`:
 
-`c52222f26195df54f43e619255c2671577991778`
+`936cf4879f1611d94123fb3d3a0a33b831a49810`
 
-De tijdelijke finale acceptatiebranch wijzigde daarna uitsluitend het testharnas, niet de productcode. De strengste eindmeting gebruikte test-head:
+Deze commit is het uitgangspunt voor fase 5.3. Wijzig hem niet voor de eerste VPS-proef tenzij een echte blocker wordt gevonden; een wijziging vereist opnieuw de relevante acceptatiegate en een nieuw vastgelegde kandidaat-SHA.
 
-`053548d3fe5d1866248f10c44a361d35420f5fdf`
+## Definitief eindbewijs
 
-## Eindbewijs
+De finale gecombineerde pre-VPS gate heeft achter elkaar bewezen:
 
-- Validate and deploy RC045test #499: **success**
-- Full regression acceptance #45: **success**
-- Final live DEV acceptance #3: **success**
-- Live securityjob: **success**
-- Live Playwright browseracceptatie: **20/20 tests geslaagd**
-- 18 full-page screenshots: zes hoofdroute-types op desktop, tablet en mobiel
-- Screenshots na volledige scroll handmatig gecontroleerd zodat scroll-/IntersectionObserver-animaties daadwerkelijk geactiveerd waren
+- volledige source/functionele/technische/security-regressie: **groen**;
+- actieve live DEV-security: **groen**;
+- publieke Playwright-browseracceptatie: **20/20 groen** op desktop, tablet en mobiel;
+- authenticated beheer- en ledenacceptatie: **groen**;
+- synthetisch gekoppeld testlid met portaldata: **groen**;
+- restore/cleanup van alle tijdelijk gewijzigde DEV-auth- en ledenbestanden: **groen**.
+
+De test-only eindgate is vastgelegd bij issue #39. Een eerste publieke mobile pass had gelijktijdig `ERR_HTTP2_PROTOCOL_ERROR` op vijf sponsorafbeeldingen terwijl dezelfde assets op desktop/tablet groen waren. Exact dezelfde browserjob is zonder codewijziging herhaald en eindigde 20/20 groen. Dit is daarom als niet-reproduceerbare transportstoring geclassificeerd en niet als productregressie.
 
 ## Bron-, architectuur- en technische regressie
 
-De permanente `tests/run-all.sh` voert alle PHP-regressietests in `tests/` uit. Daardoor kan een nieuwe test niet meer stil buiten de expliciete workflowlijst vallen. Onder meer zijn opnieuw bewezen:
+De permanente `tests/run-all.sh` voert alle PHP-regressietests in `tests/` uit. Daardoor kan een nieuwe test niet stil buiten de workflowlijst vallen. Onder meer zijn opnieuw bewezen:
 
 - tenantgrenzen en tenantconfiguratie;
 - filesystem- en PDO-opslagisolatie;
@@ -67,9 +68,9 @@ De live test tegen `https://rc045.nl/dev` bewijst onder meer:
 - geen CRLF-headerinjectie via query-invoer;
 - cookies van beheer- en ledenlogin op beveiligingsattributen gecontroleerd.
 
-## Functionele en optische browseracceptatie
+## Publieke functionele en optische browseracceptatie
 
-Playwright controleert de volgende routes:
+Playwright controleert onder meer:
 
 - `/`
 - `/ontstaan.html`
@@ -78,30 +79,37 @@ Playwright controleert de volgende routes:
 - `/beheer/`
 - `/leden/`
 
-Iedere route wordt gecontroleerd op:
-
-- desktop 1440×1000;
-- tablet 820×1180;
-- mobiel 390×844;
-- succesvolle hoofdresponse;
-- correcte documenttitel, taal en H1;
-- voldoende zichtbare hoofdcontent;
-- geen horizontale overflow;
-- geen kapotte same-origin afbeeldingen;
-- geen ongelabelde zichtbare formuliervelden;
-- geen extreem kleine niet-inline bedieningselementen;
-- geen inhoud die na een volledige echte scroll door scrollanimaties onzichtbaar blijft;
-- geen JavaScript page errors;
-- geen mislukte same-origin requests;
-- geen same-origin HTTP 4xx/5xx subrequests;
-- geen `console.error`;
-- full-page screenshot na het activeren van scrollgebonden content.
+Per hoofdroute worden desktop 1440×1000, tablet 820×1180 en mobiel 390×844 gecontroleerd op succesvolle responses, titel/taal/H1, zichtbare hoofdcontent, overflow, kapotte same-origin assets, labels, bedieningselementen, scrollanimaties, JavaScript-errors, mislukte requests, HTTP 4xx/5xx subrequests en `console.error`. Full-page screenshots worden pas gemaakt nadat de pagina echt volledig is gescrold.
 
 Daarnaast worden zichtbare interne publiekslinks gecrawld en controleert de test de native browservalidatie en POST-semantiek van het publieke aanmeldformulier.
 
+## Authenticated live E2E
+
+De ontbrekende authenticated bewijslaag is op 22 augustus 2026 alsnog volledig toegevoegd en groen uitgevoerd.
+
+De workflow gebruikt **geen vaste echte gebruikerscredentials**. Per run worden willekeurige tijdelijke accounts gemaakt; secrets worden gemaskeerd. Via de bestaande DEV-SFTP-koppeling worden de benodigde auth-/fixturebestanden eerst veiliggesteld, tijdelijk aangepast en in een `always()` cleanup exact teruggezet.
+
+Bewezen zijn:
+
+- beheerlogin en logout;
+- beheerlogin op desktop en mobiel;
+- sessiecookie met `HttpOnly`, `Secure` en `SameSite=Lax`;
+- beheerder heeft toegang tot leden- en gebruikersbeheer;
+- beperkt ledenaccount krijgt geen beheerrechten en ontvangt 403 op gebruikersbeheer;
+- ledenlogin op desktop en mobiel;
+- gekoppeld synthetisch testlid toont persoonsgegevens;
+- contributiegegevens worden correct getoond;
+- commissie/groepsinformatie wordt correct getoond;
+- ledenvergadering, agenda en definitieve notulen worden correct getoond;
+- toegewezen taak wordt correct getoond;
+- ingelogde beheer- en ledenroutes zijn op desktop, tablet en mobiel vastgelegd en visueel gecontroleerd;
+- alle tijdelijk gewijzigde DEV auth- en ledenbestanden zijn na afloop exact hersteld.
+
+Issue #50 is na dit bewijs gesloten.
+
 ## Bevindingen die tijdens deze ronde zijn opgelost
 
-De regressieronde heeft daadwerkelijk productfouten gevonden en niet alleen bestaande groene tests herhaald. Hersteld zijn onder andere:
+De regressieronde heeft daadwerkelijk productfouten gevonden. Hersteld zijn onder andere:
 
 - `X-Powered-By` lekte PHP-runtimeinformatie; opgelost met Apache defense-in-depth plus `expose_php = Off`;
 - ontbrekende/ongeldige standalone content-overrides veroorzaakten browser-404/500-fouten; standalone DEV gebruikt nu veilig de ingebouwde defaults, externe tenants blijven fail-closed;
@@ -111,18 +119,14 @@ De regressieronde heeft daadwerkelijk productfouten gevonden en niet alleen best
 - `landcode` miste een toegankelijke naam;
 - verplichte aanmeldvelden misten native `required`-semantiek;
 - de leden-loginbutton was live te klein;
-- de eerste screenshotmethodiek activeerde scrollgebonden animaties niet, waardoor grote lege vlakken zichtbaar waren; de permanente browsertest scrollt nu de hele pagina en controleert expliciet op achtergebleven onzichtbare content.
+- de eerste screenshotmethodiek activeerde scrollgebonden animaties niet; de permanente browsertest scrollt nu de hele pagina en controleert expliciet op achtergebleven onzichtbare content.
 
 ## Handmatige visuele controle
 
-De finale, na scroll gemaakte screenshots zijn handmatig bekeken. De homepage is op desktop, tablet en mobiel volledig gevuld zonder de eerdere lege animatievlakken. Het aanmeldformulier is bruikbaar op mobiel, de beheerlogin schaalt correct en de ledenlogin past zonder horizontale overflow. DEV gebruikt bewust neutrale placeholders waar tenant-/historische foto-assets niet als broncode worden meegepackageerd; dit is zichtbaar maar geen kapotte assetstatus.
-
-## Nog niet als live authenticated E2E bewezen
-
-De bron/functionele suites testen de achterliggende beheer-, autorisatie-, leden- en domeinlogica uitgebreid. De live browserlaag heeft echter **geen geldige DEV-beheerder- of ledencredentials** in de repository of het testharnas en heeft daarom alleen de niet-ingelogde beheer- en ledenloginpagina's optisch/live getest.
-
-Daarom wordt niet beweerd dat iedere ingelogde beheerpagina en iedere ledenportaalactie al als echte browsergebruiker op DEV is doorgeklikt. Voor een werkelijk volledige authenticated live E2E-laag is een expliciet tijdelijk DEV-testaccount of een veilig Actions-secret met testcredentials nodig. Dit is de enige bekende ontbrekende bewijslaag binnen de huidige DEV-acceptatie; het is geen bekende productfout.
+De finale screenshots zijn handmatig bekeken. Publieke pagina's, beheer en ledenportaal schalen correct op desktop, tablet en mobiel. Het synthetische lid toont de verwachte portalinformatie zonder horizontale overflow of kapotte layout. DEV gebruikt bewust neutrale placeholders waar tenant-/historische foto-assets niet als broncode worden meegepackageerd; dit is zichtbaar maar geen kapotte assetstatus.
 
 ## VPS-grens
 
-Deze regressie bewijst code en de huidige DEV-hosting. Fase 5.3 blijft apart verantwoordelijk voor validatie van dezelfde provisioning-, security-, monitoring-, lifecycle- en rollbackketen op een echte schone VPS. Een groene DEV-regressie wordt niet gelijkgesteld aan echte VPS-validatie.
+Deze regressie bewijst de code en de huidige DEV-hosting. Fase 5.3 blijft apart verantwoordelijk voor validatie van dezelfde provisioning-, security-, monitoring-, lifecycle-, export/herstel- en rollbackketen op een echte schone VPS. Een groene DEV-regressie wordt niet gelijkgesteld aan echte VPS-validatie.
+
+Voor fase 5.3 wordt aanvullend geëist dat een succesvolle export niet alleen een geldige SHA-256 heeft, maar ook daadwerkelijk naar een wegwerp-herstelomgeving wordt teruggezet en gecontroleerd. Daarmee wordt herstelbaarheid bewezen in plaats van alleen exporteerbaarheid.

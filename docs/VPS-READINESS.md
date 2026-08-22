@@ -1,8 +1,16 @@
 # Eerste productie-VPS — readiness en acceptatie
 
-Status per **21-08-2026**.
+Status per **22-08-2026**.
 
 Dit document beschrijft de stap **vóór** `apply-first-vps-bootstrap.php --apply`. Fase 5.2 installeert bewust geen OS-packages. Een nieuwe VPS moet daarom eerst aantoonbaar aan deze voorwaarden voldoen. Pas daarna mag de eerste productiebootstrap starten.
+
+## 0. Bevroren pre-VPS kandidaat
+
+De volledige software-/DEV-eindacceptatie is op 22 augustus 2026 afgerond. Voor de eerste VPS-proef is de gekozen releasecommit:
+
+`936cf4879f1611d94123fb3d3a0a33b831a49810`
+
+Deze kandidaat heeft de gecombineerde source-, security-, publieke browser- en authenticated browseracceptatie doorlopen. Gebruik voor de eerste VPS-proef exact deze commit. Als vóór de proef productcode wijzigt, moet de relevante regressie opnieuw groen zijn en wordt een nieuwe kandidaat-SHA expliciet vastgelegd.
 
 ## 1. Serverbasis
 
@@ -82,7 +90,7 @@ De source checkout op de VPS is onderdeel van de securitygrens.
 Vóór bootstrap moet gelden:
 
 - de checkout is exact de repository-root;
-- Git `HEAD` is exact de 40-teken commit die in het 5.2-plan staat;
+- Git `HEAD` is exact `936cf4879f1611d94123fb3d3a0a33b831a49810` voor deze eerste proef;
 - de working tree is volledig schoon, inclusief untracked files;
 - de bronboom is root-owned en nergens group/world-writable;
 - het fase-4.7 inhoudsmanifest komt exact overeen met de geplande bron.
@@ -165,6 +173,7 @@ De VPS is pas als **eerste productievalidatie geslaagd** te markeren wanneer min
 - control-plane status toont de tenant correct;
 - suspend → activate werkt op de testtenant;
 - volledige export werkt en checksum wordt vastgelegd;
+- **restoretest:** de export wordt daadwerkelijk in een aparte wegwerp-herstelomgeving teruggezet, de SHA/integriteit wordt gecontroleerd en representatieve tenantdata wordt na restore gelezen;
 - een releasewissel en rollback worden op de productieachtige VPS gecontroleerd zonder tenantdata te verliezen;
 - monitoring/logrotate/healthtimer functioneren over minimaal één echte timercyclus;
 - DNS-providerrecords worden bij lifecycleacties niet onverwacht gewijzigd.
@@ -175,7 +184,7 @@ Een destructieve `purge` hoeft niet op waardevolle data getest te worden. Als pu
 
 Na succesvolle acceptatie kan in de roadmap voor fase 4.1 t/m 5.2 onderscheid worden gemaakt tussen:
 
-- **code/CI gereed**; en
+- **code/CI/pre-VPS gereed**; en
 - **op echte VPS gevalideerd**.
 
 Pas daarna is het verstandig om reguliere verenigingen op dezelfde productie-VPS te gaan onboarden.

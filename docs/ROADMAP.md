@@ -1,6 +1,6 @@
 # Roadmap verenigingsplatform
 
-Status per **21-08-2026**.
+Status per **22-08-2026**.
 
 Dit document is de centrale nummering voor het platformtraject. Detailcontracten staan in de genoemde VPS-documentatie en historische beslissingen blijven in `docs/migratie-log/` bewaard.
 
@@ -22,7 +22,7 @@ De gedeelde applicatie kan daarmee meerdere verenigingen vanuit dezelfde codebas
 
 ## Fase 4 — VPS & productie-infrastructuur
 
-**Ontwikkelstatus: 4.1 t/m 4.8 code/CI/merge afgerond.** De daadwerkelijke root-toepassing en live DNS/TLS/databasehandelingen zijn nog niet als echte productie-VPS-acceptatie uitgevoerd.
+**Ontwikkelstatus: 4.1 t/m 4.8 code/CI/merge afgerond en volledig pre-VPS geregressietest.** De daadwerkelijke root-toepassing en live DNS/TLS/databasehandelingen zijn nog niet als echte productie-VPS-acceptatie uitgevoerd.
 
 ### 4.1 — VPS runtime & Linux-isolatie
 **Status: code en CI gereed; echte VPS-validatie volgt in fase 5.3.**
@@ -91,7 +91,7 @@ Zie `docs/VPS-CONTROL-PLANE.md`.
 
 ### 5.2 — First-VPS productiebootstrap
 
-**Status: code, CI en merge gereed; volledig gehard in 5.2.1. Productietoepassing is nog niet uitgevoerd.**
+**Status: code, CI en merge gereed; volledig gehard in 5.2.1 en pre-VPS geregressietest. Productietoepassing is nog niet uitgevoerd.**
 
 Doel: de handmatige productievoorbereiding reduceren tot één gecontroleerde, hervatbare operatorflow. De implementatie omvat:
 
@@ -123,9 +123,29 @@ Zie `docs/VPS-FIRST-BOOTSTRAP.md`.
 
 Deze heraudit sloot de resterende productiegrenzen rond 4.1 t/m 5.2: immutable release-metadata, purge/recovery-binding, control-plane identity/auth/rate limiting, executor-resultaatintegriteit, subprocess-deadlocks, absolute binary-binding, production preflight en Git source/commit-binding.
 
+### Pre-VPS eindacceptatie — 22 augustus 2026
+
+**Status: afgerond.** De applicatie- en DEV-laag is vóór fase 5.3 nog één keer van voor tot achter geregressietest.
+
+Bewezen zijn onder meer:
+
+- volledige bron-, functionele, technische en securityregressie;
+- actieve securitycontrole op de echte DEV-host;
+- publieke browseracceptatie op desktop, tablet en mobiel;
+- authenticated beheer- en leden-E2E met tijdelijke willekeurige accounts;
+- gekoppeld synthetisch testlid met persoonsgegevens, contributie, commissie, vergadering/notulen en taak;
+- visuele screenshots van ingelogde beheer- en ledenroutes op desktop, tablet en mobiel;
+- volledige restore van de tijdelijk gewijzigde DEV auth- en ledenbestanden na de tests.
+
+De gecombineerde pre-VPS gate eindigde groen. De gekozen en bevroren VPS-kandidaat is:
+
+`936cf4879f1611d94123fb3d3a0a33b831a49810`
+
+Zie `docs/FULL-REGRESSION-ACCEPTANCE.md` en issue #39.
+
 ### 5.3 — Eerste echte VPS-validatie
 
-**Status: volgende fase; nog niet uitgevoerd.**
+**Status: volgende en enige open platformfase; nog niet uitgevoerd.**
 
 Doel: alle reeds gebouwde productiecontracten aantoonbaar op één schone Debian/Ubuntu-VPS uitvoeren en accepteren voordat reguliere verenigingen worden onboard.
 
@@ -135,14 +155,15 @@ Volgorde:
 2. vereiste packages/modules/services vooraf installeren en configureren;
 3. platformbeheerhost en eerste testtenanthost kiezen;
 4. DNS-records handmatig bij de provider zetten;
-5. exacte schone Git-checkout van de gekozen releasecommit op de VPS plaatsen;
+5. exacte schone Git-checkout van de bevroren VPS-kandidaat op de VPS plaatsen;
 6. fase-5.2 bundle genereren en root-vrij `--check` uitvoeren;
 7. first-VPS bootstrap uitvoeren;
 8. platformbeheer en eerste testtenant functioneel controleren;
 9. monitoring/timers/logrotate over echte runtime controleren;
 10. suspend → activate en volledige export op de testtenant beproeven;
-11. releasewissel + rollback op de productieachtige VPS beproeven;
-12. resultaten vastleggen en fase 4.1 t/m 5.2 pas daarna als **op echte VPS gevalideerd** markeren.
+11. export niet alleen op SHA-256 controleren maar ook daadwerkelijk naar een wegwerp-herstelomgeving restoren;
+12. releasewissel + rollback op de productieachtige VPS beproeven;
+13. resultaten vastleggen en fase 4.1 t/m 5.2 pas daarna als **op echte VPS gevalideerd** markeren.
 
 Een destructieve purge wordt alleen op een expliciete wegwerp-testtenant getest.
 
@@ -155,14 +176,14 @@ Na fase 2 zijn nog enkele compatibiliteits-/opruimpunten bekend. Deze blokkeren 
 - fysiek runtime-dode legacyformuliercode in `beheer/index.php`;
 - enkele oudere JSON-writers die nog niet op één gedeelde atomische writer zijn gestandaardiseerd;
 - publieke legacy-markup die runtime door de templatefilter wordt gecorrigeerd;
-- historische `rc045*` functienamen/variabelen/comments;
-- RC045-stijlwaarden als standalone fallback-defaults;
 - legacy standalone masterconfigcompatibiliteit buiten nieuwe VPS-tenants.
 
-Deze punten horen bij een latere mechanische opschoningsfase en mogen niet ongemerkt onderdeel worden van de eerste productiebootstrap.
+De eerder genoteerde RC045-specifieke functienamen/variabelen/comments en RC045-stijl-fallbacks zijn niet meer aanwezig in de actuele templatecode en zijn daarom uit deze schuldlijst verwijderd.
+
+Deze resterende punten horen bij een latere mechanische opschoningsfase en mogen niet ongemerkt onderdeel worden van de eerste productiebootstrap.
 
 ## Volgorde vanaf nu
 
-**Statusdocumentatie afronden → post-merge `main`/DEV opnieuw bewijzen → fase 5.3 VPS-readiness → echte first-VPS bootstrap → acceptatie van control-plane/tenant/monitoring/lifecycle/release-rollback → verdere platformfuncties.**
+**VPS-kandidaat bevroren → fase 5.3 VPS-readiness → echte first-VPS bootstrap → acceptatie van control-plane/tenant/monitoring/lifecycle/export+restore/release-rollback → productiegeschikt verklaren → reguliere verenigingen onboarden.**
 
 Een fase kan code/automation al gereed hebben voordat de daadwerkelijke productiehandeling op de VPS is uitgevoerd. Dat verschil blijft per fase expliciet vermeld; **“code gereed” is nooit hetzelfde als “op productie toegepast/gevalideerd”.**
