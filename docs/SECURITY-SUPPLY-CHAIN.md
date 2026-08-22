@@ -6,6 +6,7 @@ Dit document borgt de afhankelijkheden en externe code die vóór fase 5.3 op ee
 
 - GitHub Actions worden op een volledige commit-SHA gepind; een losse tag zoals `@v4` is niet voldoende.
 - De volledige Git-historie wordt bij iedere pull request en push naar `main` door Gitleaks gescand.
+- Securitytooling die als release-artefact wordt gedownload krijgt een vaste versie én vooraf vastgelegde SHA-256; een download zonder integriteitscontrole is niet toegestaan.
 - Node-afhankelijkheden staan in `package-lock.json` en worden uitsluitend met `npm ci --ignore-scripts` geïnstalleerd.
 - `npm audit --audit-level=high` blokkeert high/critical meldingen voor de Node-tooling.
 - Productiecode mag geen package manager of netwerkdownload nodig hebben om te starten.
@@ -57,13 +58,19 @@ De browseracceptatie gebruikt:
 
 Geen workflow mag `npm install @playwright/test@...` gebruiken als vervanging voor de lockfile.
 
-## GitHub Actions trust
+## Gitleaks en GitHub Actions trust
 
-De securityscan gebruikt Gitleaks Action v3 op commit:
+De full-history secret scan gebruikt **Gitleaks 8.30.1**. Het Linux x64 release-archief wordt alleen uitgevoerd nadat SHA-256 exact overeenkomt met:
 
-`e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e`
+`551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb`
 
-De bestaande acties voor checkout/upload/deploy zijn eveneens commit-pinned. Een upgrade van een action is een codewijziging en moet via pull request plaatsvinden.
+De workflow gebruikt de `git`-modus zonder een PR-bereik in `--log-opts`; daardoor gebruikt Gitleaks zijn volledige `--full-history --all` Git-scan in plaats van alleen de commits uit de pull request.
+
+De securityworkflow gebruikt `actions/checkout` v6.0.3 op commit:
+
+`df4cb1c069e1874edd31b4311f1884172cec0e10`
+
+Andere bestaande GitHub Actions zijn eveneens commit-pinned. Een upgrade van een action of van Gitleaks is een codewijziging en moet via pull request plaatsvinden.
 
 ## SSH/SFTP host trust
 
