@@ -85,7 +85,8 @@ spvCheck(str_contains($signupEndpoint, "aanmeldenAntwoord(503"), 'limiterfout fa
 
 // M-02/M-03 — GitHub Actions trust en fixturemutatie.
 $workflow = spvBron($root . '/.github/workflows/full-regression.yml');
-spvCheck(str_contains($workflow, 'FTP_SSH_KNOWN_HOSTS') && !str_contains($workflow, 'ssh-keyscan'), 'authenticated CI gebruikt vooraf vertrouwde SSH-hostkey en geen TOFU keyscan');
+$heeftUitvoerbareKeyscan = preg_match('/(?:^|\n)\s*ssh-keyscan\b/', $workflow) === 1;
+spvCheck(str_contains($workflow, 'FTP_SSH_KNOWN_HOSTS') && !$heeftUitvoerbareKeyscan, 'authenticated CI gebruikt vooraf vertrouwde SSH-hostkey en geen TOFU keyscan');
 spvCheck(str_contains($workflow, 'group: rc045test-dev-auth-fixture') && str_contains($workflow, 'cancel-in-progress: false'), 'authenticated DEV-fixtures zijn globaal geserialiseerd');
 spvCheck(str_contains($workflow, "grep -Eq 'e2e-(admin|member)-[0-9]+'"), 'CI bewijst na herstel dat synthetische accounts verdwenen zijn');
 spvCheck(substr_count($workflow, 'npm ci --ignore-scripts') >= 2, 'browserjobs installeren uitsluitend gelockte dependencies');
@@ -94,6 +95,7 @@ spvCheck(substr_count($workflow, 'npm ci --ignore-scripts') >= 2, 'browserjobs i
 $ht = spvBron($root . '/.htaccess');
 spvCheck(str_contains($ht, 'Content-Security-Policy') && str_contains($ht, "default-src 'self'") && str_contains($ht, "object-src 'none'") && str_contains($ht, "base-uri 'self'"), 'Apache levert een afdwingbare basis-CSP');
 spvCheck(str_contains($ht, "script-src 'self' 'unsafe-inline'") && !preg_match('/script-src[^;]*(?:gc\\.zgo\\.at|goatcounter)/i', $ht), 'CSP staat uitvoerbare scripts alleen vanaf eigen origin toe');
+spvCheck(str_contains($ht, "form-action 'self' https://formspree.io") && str_contains($ht, "connect-src 'self' https://formspree.io"), 'CSP houdt Formspree-aanmelding functioneel zonder extern scriptrecht');
 
 // Low — control-plane sessie en dependency reproducibility.
 $cp = spvBron($root . '/app/control-plane/control-plane-runtime.php');
