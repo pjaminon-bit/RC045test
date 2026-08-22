@@ -34,6 +34,8 @@ for (const viewport of [
     r = await page.goto(url('/beheer/gebruikers.php'), {waitUntil:'domcontentloaded'});
     expect(r.status()).toBeLessThan(400);
     await expect(page.getByRole('heading',{name:/Gebruikers/i})).toBeVisible();
+    await page.goto(url('/beheer/'), {waitUntil:'domcontentloaded'});
+    await expect(page.getByRole('button',{name:/uitloggen/i})).toBeVisible();
     await page.getByRole('button',{name:/uitloggen/i}).click();
     await expect(page.locator('#login-wachtwoord')).toBeVisible();
   });
