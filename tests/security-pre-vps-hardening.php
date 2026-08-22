@@ -36,7 +36,7 @@ spvCheck(!str_contains($capBron, 'authLegacyBredeCapabilities'), 'brede legacy c
 
 $authBron = spvBron($root . '/auth.php');
 spvCheck(str_contains($authBron, "array_key_exists('capabilities'") && !str_contains($authBron, '$toegestaneTabs = array_keys($alleTabs); // legacy'), 'legacy UI-rechten worden niet meer breed toegekend');
-spvCheck(str_contains($authBron, "empty($authPaden['tenant_private'])") && str_contains($authBron, 'password_verify'), 'plaintext masterfallback is beperkt tot standalone en tenantmaster gebruikt hashverificatie');
+spvCheck(str_contains($authBron, "empty(\$authPaden['tenant_private'])") && str_contains($authBron, 'password_verify'), 'plaintext masterfallback is beperkt tot standalone en tenantmaster gebruikt hashverificatie');
 
 // H-01 — installatiegrens staat als harde sessiecontext in de storage/checklaag.
 $storageBron = spvBron($root . '/app/auth-storage.php');
