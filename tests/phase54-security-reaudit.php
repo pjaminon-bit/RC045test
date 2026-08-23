@@ -105,10 +105,13 @@ try {
     c54(str_contains($auth, '$toegestaneTabs = $authTenantPrivate ? [] : array_keys($alleTabs);'), 'legacy ontbrekende tabs falen bij externe tenant dicht');
 
     $ontvangst = (string)file_get_contents($root . '/aanmelden-ontvangst.php');
-    c54(str_contains($ontvangst, "$privateRoot.'/security'" ) === false, 'test bevat geen per ongeluk hardcoded tijdelijke private root in productiebron');
+    c54(str_contains($ontvangst, 'tenantRuntimePrivateRoot(siteConfig())'), 'aanmeld-rate-limit resolveert de actuele tenant-private root');
     c54(str_contains($ontvangst, "\$map=\$privateRoot.'/security'"), 'aanmeld-rate-limit gebruikt tenant-private securitymap');
     c54(!str_contains($ontvangst, '@file_put_contents($pogingenPad'), 'oude stil falende immutable-release rate-limitwrite is verwijderd');
     c54(str_contains($ontvangst, 'count($passend)===1?$passend[0]:null'), 'ontvangst kiest zonder clientveld alleen een uniek passend lidmaatschapstype');
+    $duplicaatPos = strpos($ontvangst, 'if($zelfdeEmail||$zelfdeTel)');
+    $ratePos = strpos($ontvangst, 'registrationRateLimitToestaan');
+    c54($duplicaatPos !== false && $ratePos !== false && $duplicaatPos < $ratePos, 'identieke tweede lokale POST stopt vóór de rate-limitmutatie');
 } finally {
     wis54($tmp);
 }
