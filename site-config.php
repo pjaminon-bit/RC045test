@@ -56,15 +56,22 @@ if ($overridePad !== null) {
 $config['vereniging']['sleutel'] = tenantRuntimeVeiligeSleutel((string)($config['vereniging']['sleutel'] ?? 'default'));
 $timezone=trim((string)($config['vereniging']['timezone']??''));if($timezone!==''&&in_array($timezone,timezone_identifiers_list(),true))date_default_timezone_set($timezone);
 
-// Securityaudit fase 2: gedeelde templates bevatten nog een standalone RC045-
-// contactintegratie met Formspree. Een externe tenant mag nooit stil gegevens
-// naar die endpoint (of een andere externe form/fetch-bestemming) sturen.
-// Daarom is de browsergrens voor VPS-tenants fail-closed: formulieren mogen
-// alleen naar de eigen origin; fetch/XHR alleen naar de eigen origin plus de
-// expliciet gebruikte publieke weer-API. Dit is bewust een securityvangnet;
-// tenant-specifieke contactfunctionaliteit kan later expliciet worden ingericht.
-if ($externPad !== null && PHP_SAPI !== 'cli' && !headers_sent()) {
-    header("Content-Security-Policy: form-action 'self'; connect-src 'self' https://api.open-meteo.com");
+// Securityaudit: één afdwingbare browserpolicy voor PHP-responses. Uitvoerbare
+// scripts mogen uitsluitend van de eigen origin komen. Externe tenants mogen
+// bovendien nooit het historische RC045/Formspree-contactdoel gebruiken.
+if (PHP_SAPI !== 'cli' && !headers_sent()) {
+    $formAction = $externPad !== null ? "'self'" : "'self' https://formspree.io";
+    $connectSrc = $externPad !== null
+        ? "'self' https://api.open-meteo.com"
+        : "'self' https://api.open-meteo.com https://formspree.io";
+    header(
+        "Content-Security-Policy: default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; "
+        . "form-action {$formAction}; script-src 'self' 'unsafe-inline'; "
+        . "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        . "font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; "
+        . "connect-src {$connectSrc}; media-src 'self' blob:; worker-src 'self' blob:; "
+        . "frame-src 'none'; upgrade-insecure-requests"
+    );
 }
 
 // Fase 4.6: externe VPS-tenants registreren een privacy-arme fatal logger.
