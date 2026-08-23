@@ -96,6 +96,11 @@ spvCheck(
     'PHP-responses krijgen een afdwingbare basis-CSP zonder externe scriptorigin'
 );
 spvCheck(
+    str_contains($siteConfig, 'frame-src https://www.openstreetmap.org')
+    && !str_contains($siteConfig, "script-src 'self' 'unsafe-inline' https://www.openstreetmap.org"),
+    'OpenStreetMap is uitsluitend als frame toegestaan en krijgt geen scriptrechten'
+);
+spvCheck(
     str_contains($siteConfig, '$externPad !== null')
     && str_contains($siteConfig, "https://formspree.io")
     && str_contains($siteConfig, '$formAction')

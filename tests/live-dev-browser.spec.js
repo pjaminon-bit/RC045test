@@ -12,6 +12,11 @@ const viewports = [
 const entryRoutes = ['/', '/ontstaan.html', '/baanreglement.html', '/aanmelden.html', '/beheer/', '/leden/'];
 function target(route) { return new URL(basePath + (route === '/' ? '/' : route), baseUrl.origin).toString(); }
 function slug(route) { if (route === '/') return 'home'; return route.replace(/^\//, '').replace(/\/$/, '-index').replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '') || 'page'; }
+function verwachteSecurityBlokkade(text) {
+  return /gc\.zgo\.at\/count\.js/i.test(text)
+    && /Content Security Policy/i.test(text)
+    && /(violates|blocked)/i.test(text);
+}
 
 async function activeerScrollGebondenContent(page) {
   const viewport = page.viewportSize() || { height: 800 };
@@ -28,8 +33,13 @@ async function activeerScrollGebondenContent(page) {
 }
 
 async function inspectPage(page, route, viewportName) {
-  const consoleErrors=[]; const pageErrors=[]; const failedSameOrigin=[]; const badResponses=[];
-  page.on('console', msg => { if (msg.type()==='error') consoleErrors.push(msg.text()); });
+  const consoleErrors=[]; const expectedSecurityBlocks=[]; const pageErrors=[]; const failedSameOrigin=[]; const badResponses=[];
+  page.on('console', msg => {
+    if (msg.type() !== 'error') return;
+    const text = msg.text();
+    if (verwachteSecurityBlokkade(text)) expectedSecurityBlocks.push(text);
+    else consoleErrors.push(text);
+  });
   page.on('pageerror', err => pageErrors.push(String(err)));
   page.on('requestfailed', req => { try { const u=new URL(req.url()); if(u.origin===baseUrl.origin&&u.pathname.startsWith(basePath+'/')) failedSameOrigin.push(`${req.method()} ${req.url()} :: ${req.failure()?.errorText||'failed'}`); } catch(_){} });
   page.on('response', res => { try { const u=new URL(res.url()); if(res.status()>=400&&u.origin===baseUrl.origin&&u.pathname.startsWith(basePath+'/')) badResponses.push(`${res.status()} ${res.request().method()} ${res.url()}`); } catch(_){} });
@@ -54,11 +64,11 @@ async function inspectPage(page, route, viewportName) {
     return {title:document.title,lang:document.documentElement.lang,h1Count:document.querySelectorAll('h1').length,mainTextLength:(main.innerText||'').trim().length,scrollWidth:document.documentElement.scrollWidth,clientWidth:document.documentElement.clientWidth,brokenImages:sameOriginBroken,unlabeledInputs:unlabeled,tinyControls:tiny,hiddenContent};
   },{origin:baseUrl.origin,basePath});
   await page.screenshot({path:`${outputDir}/${viewportName}-${slug(route)}.png`,fullPage:true});
-  console.log(`DIAGNOSTICS ${viewportName} ${route}: ${JSON.stringify({diagnostics,badResponses,consoleErrors,pageErrors,failedSameOrigin})}`);
+  console.log(`DIAGNOSTICS ${viewportName} ${route}: ${JSON.stringify({diagnostics,badResponses,consoleErrors,expectedSecurityBlocks,pageErrors,failedSameOrigin})}`);
   expect(diagnostics.title.trim()).not.toBe(''); expect(diagnostics.lang).toMatch(/^[a-z]{2}(?:-|$)/i); expect(diagnostics.h1Count).toBe(1); expect(diagnostics.mainTextLength).toBeGreaterThan(40);
   expect(diagnostics.scrollWidth,`${route} heeft horizontale overflow bij ${viewportName}`).toBeLessThanOrEqual(diagnostics.clientWidth+3);
   expect(diagnostics.brokenImages,`${route} heeft kapotte same-origin afbeeldingen`).toEqual([]); expect(diagnostics.unlabeledInputs,`${route} heeft ongelabelde formuliervelden`).toEqual([]); expect(diagnostics.tinyControls,`${route} bevat extreem kleine niet-inline controls`).toEqual([]); expect(diagnostics.hiddenContent,`${route} houdt na volledige scroll inhoud onzichtbaar`).toEqual([]);
-  expect(pageErrors,`${route} veroorzaakte JavaScript page errors`).toEqual([]); expect(failedSameOrigin,`${route} heeft mislukte same-origin requests`).toEqual([]); expect(badResponses,`${route} heeft same-origin HTTP-fouten`).toEqual([]); expect(consoleErrors,`${route} schreef console.error`).toEqual([]);
+  expect(pageErrors,`${route} veroorzaakte JavaScript page errors`).toEqual([]); expect(failedSameOrigin,`${route} heeft mislukte same-origin requests`).toEqual([]); expect(badResponses,`${route} heeft same-origin HTTP-fouten`).toEqual([]); expect(consoleErrors,`${route} schreef onverwachte console.error`).toEqual([]);
 }
 
 for(const viewport of viewports){test.describe(`${viewport.name} optische acceptatie`,()=>{test.use({viewport:{width:viewport.width,height:viewport.height}});for(const route of entryRoutes)test(`${route} rendert foutvrij`,async({page})=>inspectPage(page,route,viewport.name));});}

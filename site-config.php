@@ -59,6 +59,9 @@ $timezone=trim((string)($config['vereniging']['timezone']??''));if($timezone!=='
 // Securityaudit: één afdwingbare browserpolicy voor PHP-responses. Uitvoerbare
 // scripts mogen uitsluitend van de eigen origin komen. Externe tenants mogen
 // bovendien nooit het historische RC045/Formspree-contactdoel gebruiken.
+// De enige externe frame-origin is de read-only OpenStreetMap embed die op de
+// publieke locatiekaart wordt gebruikt; frame-ancestors blijft 'none', zodat
+// onze eigen pagina's zelf nergens ingebed kunnen worden.
 if (PHP_SAPI !== 'cli' && !headers_sent()) {
     $formAction = $externPad !== null ? "'self'" : "'self' https://formspree.io";
     $connectSrc = $externPad !== null
@@ -70,7 +73,7 @@ if (PHP_SAPI !== 'cli' && !headers_sent()) {
         . "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
         . "font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; "
         . "connect-src {$connectSrc}; media-src 'self' blob:; worker-src 'self' blob:; "
-        . "frame-src 'none'; upgrade-insecure-requests"
+        . "frame-src https://www.openstreetmap.org; upgrade-insecure-requests"
     );
 }
 
