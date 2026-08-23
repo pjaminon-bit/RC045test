@@ -10,11 +10,11 @@ foreach ($_SERVER['argv'] ?? [] as $a) {
 }
 $o = getopt('', ['host:', 'app-root:', 'tenants-root:', 'php-version::', 'cert-name::', 'output:', 'dry-run', 'force', 'help']);
 if (isset($o['help'])) {
-    echo "Gebruik: php bin/prepare-vps-control-plane.php --host=beheer.example.nl --app-root=/srv/verenigingsplatform/current --tenants-root=/srv/verenigingsplatform/tenants --output=/root/control-plane [--php-version=8.3] [--cert-name=platform-beheer] [--dry-run] [--force]\n";
+    echo "Gebruik: php bin/prepare-vps-control-plane.php --host=beheer.example.nl --app-root=/srv/verenigingsplatform/current --tenants-root=/srv/verenigingsplatform/tenants --output=/root/control-plane [--php-version=8.5] [--cert-name=platform-beheer] [--dry-run] [--force]\n";
     exit(0);
 }
 foreach (['host','app-root','tenants-root','output'] as $k) if (!isset($o[$k]) || trim((string)$o[$k]) === '') cp51Stop('--' . $k . ' is verplicht.');
-$php = trim((string)($o['php-version'] ?? '8.3'));
+$php = trim((string)($o['php-version'] ?? '8.5'));
 $cert = trim((string)($o['cert-name'] ?? 'verenigingsplatform-beheer'));
 try {
     $plan = control51Plan(trim((string)$o['host']), trim((string)$o['app-root']), trim((string)$o['tenants-root']), $php, $cert, trim((string)$o['output']));
