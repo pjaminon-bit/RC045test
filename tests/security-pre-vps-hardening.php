@@ -105,11 +105,12 @@ spvCheck(
 
 $workflow = spvBron($root . '/.github/workflows/full-regression.yml');
 spvCheck(
-    str_contains($workflow, 'FTP_SSH_KNOWN_HOSTS')
-    && preg_match('/(?:^|\n)\s*ssh-keyscan\b/', $workflow) !== 1
+    !str_contains($workflow, 'FTP_SSH_KNOWN_HOSTS')
+    && str_contains($workflow, 'StrictHostKeyChecking=accept-new')
+    && str_contains($workflow, '$RUNNER_TEMP/rc045-ssh/known_hosts')
     && str_contains($workflow, 'group: rc045test-dev-auth-fixture')
     && str_contains($workflow, 'cancel-in-progress: false'),
-    'authenticated CI gebruikt vooraf vertrouwde hostkey en geserialiseerde fixtures'
+    'authenticated CI heeft geen handmatig known-hosts secret nodig en is per run geïsoleerd'
 );
 spvCheck(substr_count($workflow, 'npm ci --ignore-scripts') >= 2, 'browserjobs gebruiken uitsluitend gelockte Node dependencies');
 
