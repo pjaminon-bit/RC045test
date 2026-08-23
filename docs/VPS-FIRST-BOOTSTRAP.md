@@ -101,10 +101,12 @@ php bin/prepare-first-vps-bootstrap.php \
   --tenant-strategy=direct \
   --tenant-ipv4=203.0.113.10 \
   --operator-user=platformadmin \
-  --php-version=8.3
+  --php-version=8.5
 ```
 
 Voor een CNAME-profiel gebruik je `--platform-strategy=cname --platform-cname=vps.example.net` of dezelfde tenantopties. De opgegeven IPv4/IPv6-adressen blijven de exact verwachte terminale adressen.
+
+Voor de eerste VPS-proef gebruiken we Ubuntu Server 26.04 LTS met PHP 8.5. Zie `docs/VPS-READINESS.md` voor de package- en servicepreflight. De exacte releasecommit wordt niet in deze generieke handleiding vastgepind; gebruik uitsluitend de 40-hex kandidaat die in GitHub issue #39 is bevroren.
 
 Standaardpaden:
 
