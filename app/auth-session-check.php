@@ -14,7 +14,10 @@
 //   ingetrokken door sessie_versie in beheer-users.json te verhogen;
 // - bestaande accounts zonder sessie_versie gelden als versie 1;
 // - bestaande standalone RC045-sessies zonder tenant_key worden eenmalig
-//   compatibel aan RC045 gebonden.
+//   compatibel aan RC045 gebonden;
+// - een externe tenant accepteert nooit een legacy account zonder expliciet
+//   tabs- of capabilityprofiel. Zo kan een migratie geen brede impliciete
+//   beheerrechten erven uit de standalone compatibility-laag.
 // ============================================================
 
 require_once __DIR__ . '/auth-session-tenant.php';
@@ -62,6 +65,21 @@ if (!$accountActief) {
     $inlogFout = is_array($sessionAccount)
         ? 'Dit account is tijdelijk niet beschikbaar. Neem contact op met de beheerder.'
         : '';
+    return;
+}
+
+// Op een externe tenant mag de oude standalone-terugval "geen rechtenveld =
+// brede toegang" nooit gelden. Zo'n account moet eerst door de master worden
+// gemigreerd en daarna expliciet rechten krijgen. Een bestaand leeg profiel is
+// wél expliciet en blijft dus geldig (met eventueel alleen rolrechten).
+$heeftExplicietRechtenprofiel = array_key_exists('capabilities', $sessionAccount)
+    || array_key_exists('tabs', $sessionAccount);
+if (!empty($authPaden['tenant_private']) && !$heeftExplicietRechtenprofiel) {
+    unset($_SESSION['gebruiker'], $_SESSION['is_master'], $_SESSION['user_session_version']);
+    $ingelogd = false;
+    $huidigeGebruiker = '';
+    $isMaster = false;
+    $inlogFout = 'Dit account heeft nog geen expliciet rechtenprofiel voor deze vereniging. Laat de hoofdbeheerder het account migreren en rechten toekennen.';
     return;
 }
 
