@@ -28,10 +28,23 @@ $pad = publicAssetVeiligLeesPad($scope, $relatief);
 $mime = publicAssetMime($scope, $relatief);
 if ($mime === null) publicAssetHttpFout(404);
 
-// Alleen de standalone/DEV-installatie mag een ontbrekend sponsorlogo vervangen
-// door de vaste templateplaceholder. Externe tenants vallen bewust niet terug
-// op gedeelde assets: daar blijft een ontbrekende upload een fail-closed 404.
-if ($pad === null && $scope === 'sponsors') {
+// Alleen een interne rewrite van de echte /dev/images/sponsors/<bestand>-route
+// mag in standalone/DEV een ontbrekend logo vervangen door de vaste SVG. Een
+// directe public-asset.php query blijft dus 404, net als iedere externe tenant.
+// De originele REQUEST_URI blijft bij een interne Apache-rewrite behouden en
+// wordt ook aan hetzelfde gevalideerde relatieve bestand gebonden, zodat een
+// queryparameter de rewritebinding niet kan vervangen.
+$devPlaceholder = isset($_GET['dev_placeholder']) && is_string($_GET['dev_placeholder']) && $_GET['dev_placeholder'] === '1';
+$requestUri = (string) ($_SERVER['REQUEST_URI'] ?? '');
+$requestPath = parse_url($requestUri, PHP_URL_PATH);
+$devSponsorRoute = false;
+if ($devPlaceholder && is_string($requestPath)) {
+    $match = [];
+    if (preg_match('#^/dev/images/sponsors/([A-Za-z0-9][A-Za-z0-9._-]{0,180})$#Di', $requestPath, $match) === 1) {
+        $devSponsorRoute = hash_equals((string) $match[1], $relatief);
+    }
+}
+if ($pad === null && $scope === 'sponsors' && $devSponsorRoute) {
     $placeholder = publicAssetStandaloneSponsorPlaceholder();
     if ($placeholder !== null) {
         $pad = $placeholder;
