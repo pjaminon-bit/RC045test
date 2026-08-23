@@ -22,7 +22,7 @@ function prepare41Help(): void
     echo "    --deployment=/srv/verenigingen/club/deployment.json [opties]\n\n";
     echo "Opties:\n";
     echo "  --output-dir=PAD     standaard: <tenantroot>/runtime\n";
-    echo "  --php-version=8.3    PHP-FPM major.minor (standaard 8.3)\n";
+    echo "  --php-version=8.5    PHP-FPM major.minor (standaard 8.5)\n";
     echo "  --web-user=www-data  user die de FPM-socket mag openen\n";
     echo "  --web-group=www-data groep die de FPM-socket mag openen\n";
     echo "  --force              afwijkende bestaande bundle gecontroleerd vervangen\n";
@@ -71,7 +71,7 @@ try {
     $outputDir = isset($opt['output-dir']) && trim((string)$opt['output-dir']) !== ''
         ? (string)$opt['output-dir']
         : $deployment['tenant_root'] . '/runtime';
-    $phpVersion = isset($opt['php-version']) && trim((string)$opt['php-version']) !== '' ? (string)$opt['php-version'] : '8.3';
+    $phpVersion = isset($opt['php-version']) && trim((string)$opt['php-version']) !== '' ? (string)$opt['php-version'] : '8.5';
     $webUser = isset($opt['web-user']) && trim((string)$opt['web-user']) !== '' ? (string)$opt['web-user'] : 'www-data';
     $webGroup = isset($opt['web-group']) && trim((string)$opt['web-group']) !== '' ? (string)$opt['web-group'] : 'www-data';
     $plan = runtime41Plan($deployment, $outputDir, $phpVersion, $webUser, $webGroup);
