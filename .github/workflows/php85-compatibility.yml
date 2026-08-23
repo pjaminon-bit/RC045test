@@ -24,7 +24,7 @@ jobs:
         uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # 2.37.2
         with:
           php-version: '8.5'
-          extensions: openssl, pdo_pgsql
+          extensions: openssl, pdo_pgsql, mbstring, curl
           coverage: none
 
       - name: Bewijs PHP 8.5 en vereiste modules
@@ -34,6 +34,8 @@ jobs:
           php -r 'if (PHP_VERSION_ID < 80500 || PHP_VERSION_ID >= 80600) { fwrite(STDERR, "PHP 8.5 vereist\n"); exit(1); }'
           php -m | grep -Fx openssl
           php -m | grep -Fx pdo_pgsql
+          php -m | grep -Fx mbstring
+          php -m | grep -Fx curl
 
       - name: PHP syntax volledige repository
         run: |
