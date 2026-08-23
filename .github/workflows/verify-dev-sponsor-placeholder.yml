@@ -21,18 +21,20 @@ jobs:
         run: |
           set -euo pipefail
           url='https://rc045.nl/dev/images/sponsors/traxxas.png?v=verify'
+          verwacht='https://rc045.nl/dev/images/template-placeholder.svg'
           for i in $(seq 1 18); do
             headers="$(mktemp)"
             status="$(curl -sS -D "$headers" -o /dev/null -w '%{http_code}' --connect-timeout 10 --max-time 20 "$url" || true)"
             location="$(tr -d '\r' < "$headers" | awk 'BEGIN{IGNORECASE=1} /^location:/{sub(/^location:[[:space:]]*/,""); print; exit}')"
             rm -f "$headers"
-            echo "poging $i: status=$status location=$location"
-            if [[ "$status" == '302' && "$location" == *'/dev/images/template-placeholder.svg'* ]]; then
+            eindstatus="$(curl -sS -L -o /dev/null -w '%{http_code}' --connect-timeout 10 --max-time 20 "$url" || true)"
+            echo "poging $i: status=$status location=$location eindstatus=$eindstatus"
+            if [[ "$status" == '302' && "$location" == "$verwacht" && "$eindstatus" == '200' ]]; then
               exit 0
             fi
             sleep 5
           done
-          echo 'FOUT: nieuwe sponsorplaceholderredirect staat niet live op DEV' >&2
+          echo 'FOUT: correcte sponsorplaceholderredirect staat niet live op DEV' >&2
           exit 1
 
   live-security:
