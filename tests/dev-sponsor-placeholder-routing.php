@@ -9,7 +9,7 @@ if (!is_string($htaccess)) {
 $errors = [];
 $required = [
     'RewriteCond %{REQUEST_URI} ^/dev/images/sponsors/ [NC]',
-    'RewriteRule ^images/sponsors/[A-Za-z0-9][A-Za-z0-9._-]{0,180}\\.(?:jpe?g|png|webp)$ images/template-placeholder.svg [R=302,L,NC,NE,QSD]',
+    'RewriteRule ^images/sponsors/[A-Za-z0-9][A-Za-z0-9._-]{0,180}\\.(?:jpe?g|png|webp)$ /dev/images/template-placeholder.svg [R=302,L,NC,NE,QSD]',
     'RewriteRule ^images/(?:[A-Za-z0-9_-]+/)*[A-Za-z0-9][A-Za-z0-9._-]{0,180}\\.(?:jpe?g|png|webp|gif|svg)$ images/template-placeholder.svg [L,NC]',
 ];
 foreach ($required as $needle) {
@@ -24,8 +24,8 @@ if ($sponsorPos === false || $generalPos === false || $sponsorPos >= $generalPos
     $errors[] = 'DEV sponsorredirect moet vóór de algemene DEV imagefallback staan';
 }
 
-if (str_contains($htaccess, 'RewriteRule ^images/sponsors/([A-Za-z0-9][A-Za-z0-9._-]{0,180})$ images/template-placeholder.svg [L,NC]')) {
-    $errors[] = 'sponsorplaceholder mag niet via interne rewrite worden geserveerd';
+if (str_contains($htaccess, '$ images/template-placeholder.svg [R=302')) {
+    $errors[] = 'DEV sponsorredirect mag geen relatief target gebruiken op Strato';
 }
 
 if ($errors) {
@@ -33,4 +33,4 @@ if ($errors) {
     exit(1);
 }
 
-echo "OK: DEV sponsorplaceholder gebruikt een expliciete tijdelijke redirect vóór de algemene imagefallback\n";
+echo "OK: DEV sponsorplaceholder gebruikt een absoluut /dev URL-pad vóór de algemene imagefallback\n";
