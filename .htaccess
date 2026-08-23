@@ -36,15 +36,16 @@ RewriteRule ^data/(homepage|ontstaan|baanreglement|aanmelden|bedankt|actueel|age
 
 # ===== Publieke beeldassets =====
 # DEV is een code-/templateacceptatieomgeving en bevat bewust niet alle
-# tenantuploads of historische RC045-foto's. Sponsorlogo's lopen op DEV altijd
-# rechtstreeks via de read-only assetgateway. De marker is uitsluitend een
-# interne aanwijzing dat een ontbrekend, geldig sponsorpad op de echte DEV-
-# afbeeldingsroute de vaste templateplaceholder mag krijgen. Er is geen 302 en
-# geen statische PNG->SVG rewrite meer.
+# tenantuploads of historische RC045-foto's. Ontbrekende sponsorbestanden
+# worden uitsluitend op /dev intern naar een echte PNG-placeholder herschreven.
+# Daardoor blijven URL-type, MIME en bestandstype gelijk en ontstaat geen
+# redirect- of dynamische gatewayketen. Externe tenants vallen niet onder deze
+# regel en blijven voor ontbrekende uploads fail-closed.
 RewriteCond %{REQUEST_URI} ^/dev/images/sponsors/ [NC]
-RewriteRule ^images/sponsors/([A-Za-z0-9][A-Za-z0-9._-]{0,180})$ public-asset.php?scope=sponsors&path=$1&dev_placeholder=1 [L,QSA,NE]
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteRule ^images/sponsors/[A-Za-z0-9][A-Za-z0-9._-]{0,180}\.(?:jpe?g|png|webp)$ images/template-placeholder.png [L,NC]
 
-# Overige ontbrekende DEV-beelden krijgen lokaal de neutrale placeholder.
+# Overige ontbrekende DEV-beelden krijgen lokaal de neutrale SVG-placeholder.
 RewriteCond %{REQUEST_URI} ^/dev/images/ [NC]
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteRule ^images/(?!sponsors/)(?:[A-Za-z0-9_-]+/)*[A-Za-z0-9][A-Za-z0-9._-]{0,180}\.(?:jpe?g|png|webp|gif|svg)$ images/template-placeholder.svg [L,NC]
