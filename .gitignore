@@ -8,6 +8,10 @@ data/
 # Automatische back-ups van de databestanden hierboven
 data-backups/
 
+# Legacy publieke aanmeld-rate-limitstate uit de standalone installatie.
+# Nieuwe tenants schrijven dit uitsluitend onder hun private_root/security.
+aanmelden-pogingen.php
+
 # Fotoboek-foto's en sponsorlogo's, geupload via beheer
 images/fotoboek/
 images/sponsors/

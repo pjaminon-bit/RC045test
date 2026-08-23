@@ -56,6 +56,17 @@ if ($overridePad !== null) {
 $config['vereniging']['sleutel'] = tenantRuntimeVeiligeSleutel((string)($config['vereniging']['sleutel'] ?? 'default'));
 $timezone=trim((string)($config['vereniging']['timezone']??''));if($timezone!==''&&in_array($timezone,timezone_identifiers_list(),true))date_default_timezone_set($timezone);
 
+// Securityaudit fase 2: gedeelde templates bevatten nog een standalone RC045-
+// contactintegratie met Formspree. Een externe tenant mag nooit stil gegevens
+// naar die endpoint (of een andere externe form/fetch-bestemming) sturen.
+// Daarom is de browsergrens voor VPS-tenants fail-closed: formulieren mogen
+// alleen naar de eigen origin; fetch/XHR alleen naar de eigen origin plus de
+// expliciet gebruikte publieke weer-API. Dit is bewust een securityvangnet;
+// tenant-specifieke contactfunctionaliteit kan later expliciet worden ingericht.
+if ($externPad !== null && PHP_SAPI !== 'cli' && !headers_sent()) {
+    header("Content-Security-Policy: form-action 'self'; connect-src 'self' https://api.open-meteo.com");
+}
+
 // Fase 4.6: externe VPS-tenants registreren een privacy-arme fatal logger.
 // Standalone/DEV en CLI blijven volledig ongemoeid.
 require_once __DIR__ . '/app/operational-log.php';

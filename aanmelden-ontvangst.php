@@ -16,9 +16,13 @@ if($voornaam===''||$achternaam==='')aanmeldenAntwoord(400,'Voornaam en achternaa
 $geb=ledenParseDatum($_POST['geboortedatum']??'');if($geb==='')aanmeldenAntwoord(400,'Vul een geldige geboortedatum in.');$jaar=(int)date('Y');$maand=(int)date('n');$leeftijd=ledenLeeftijd($geb,$jaar.'-01-01');$typeId=trim((string)($_POST['lidmaatschap_type']??''));$type=$typeId===''?null:lidmaatschapTypeOpId($typeId);if(!$type||!lidmaatschapTypeToegestaanVoorLeeftijd($type,$leeftijd))aanmeldenAntwoord(400,'Kies een geldig lidmaatschapstype.');$bedrag=lidmaatschapBedragVoorMaand($type,$maand);$inschrijfgeld=(float)($type['inschrijfgeld']??0);
 $slot=dataSlotOpen();
 try{
-    $pogingenPad=__DIR__.'/aanmelden-pogingen.php';$nu=time();$ipSleutel=hash('sha256',(string)($_SERVER['REMOTE_ADDR']??'onbekend'));$pogingen=[];
-    if(is_file($pogingenPad)){$ruw=@file_get_contents($pogingenPad);$start=$ruw===false?false:strpos($ruw,'{');if($start!==false){$gelezen=json_decode(substr($ruw,$start),true);if(is_array($gelezen))$pogingen=$gelezen;}}
-    foreach($pogingen as $k=>$tijden){$pogingen[$k]=array_values(array_filter((array)$tijden,static fn($t)=>is_numeric($t)&&(int)$t>$nu-3600));if(!$pogingen[$k])unset($pogingen[$k]);}if(count((array)($pogingen[$ipSleutel]??[]))>=5)aanmeldenAntwoord(429,'Te veel aanmeldingen achter elkaar. Probeer het later opnieuw.');$pogingen[$ipSleutel][]=$nu;@file_put_contents($pogingenPad,"<?php exit; ?>\n".json_encode($pogingen,JSON_UNESCAPED_UNICODE),LOCK_EX);
+    $nu=time();$ipSleutel=hash('sha256',(string)($_SERVER['REMOTE_ADDR']??'onbekend'));
+    try{
+        if(!aanmeldenPogingRegistreer($ipSleutel,$nu,5,3600))aanmeldenAntwoord(429,'Te veel aanmeldingen achter elkaar. Probeer het later opnieuw.');
+    }catch(Throwable $e){
+        error_log('[platform] aanmeld-rate-limit niet beschikbaar: '.$e->getMessage());
+        aanmeldenAntwoord(503,'Aanmelden is tijdelijk niet beschikbaar. Probeer het later opnieuw.');
+    }
     $inbox=aanmeldingenLees();$emailKlein=strtolower($email);$telCompact=preg_replace('/\D+/','',$telefoon);
     foreach($inbox['aanmeldingen'] as $a){if(!is_array($a)||($a['status']??'nieuw')!=='nieuw')continue;$gemaakt=strtotime((string)($a['aangemaakt']??''));if($gemaakt!==false&&$gemaakt<$nu-86400)continue;$zelfdeEmail=$emailKlein!==''&&strtolower(trim((string)($a['email']??'')))===$emailKlein;$zelfdeTel=$telCompact!==''&&preg_replace('/\D+/','',(string)($a['telefoon']??''))===$telCompact;if($zelfdeEmail||$zelfdeTel)aanmeldenAntwoord(200,'Ontvangen.');}
     $leden=repoLedenLees();if($emailKlein!=='')foreach((array)($leden['leden']??[]) as $lid)if(is_array($lid)&&strtolower(trim((string)($lid['email']??'')))===$emailKlein)aanmeldenAntwoord(200,'Ontvangen.');
