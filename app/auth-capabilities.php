@@ -2,6 +2,8 @@
 // ============================================================
 // Capability-laag voor beheer en verenigingsadministratie
 // ============================================================
+require_once __DIR__ . '/core/tenant-runtime.php';
+
 function authPlatformDefinities(): array{static $p=null;if($p===null){$x=require __DIR__.'/core/platform-definities.php';$p=is_array($x)?$x:[];}return$p;}
 function authCapabilityDefinities(): array{$p=authPlatformDefinities();return is_array($p['capabilities']??null)?$p['capabilities']:[];}
 function authCapabilityLegacyMap(): array{static $m=null;if($m!==null)return$m;$m=[];foreach(authCapabilityDefinities() as $c=>$d)foreach((array)($d['legacy']??[]) as $l){$l=trim((string)$l);if($l==='')continue;if(!isset($m[$l]))$m[$l]=[];if(!in_array((string)$c,$m[$l],true))$m[$l][]=(string)$c;}return$m;}
@@ -9,7 +11,8 @@ function authCapabilitiesNormaliseer(array $caps): array{$g=authCapabilityDefini
 function authCapabilitiesVanTabs(array $tabs): array{$m=authCapabilityLegacyMap();$r=[];foreach($tabs as $t)foreach((array)($m[trim((string)$t)]??[]) as $c)$r[]=$c;return authCapabilitiesNormaliseer($r);}
 function authLegacyTabsVoorCapabilities(array $caps): array{$d=authCapabilityDefinities();$r=[];foreach(authCapabilitiesNormaliseer($caps) as $c)foreach((array)($d[$c]['legacy']??[]) as $l){$l=trim((string)$l);if($l!==''&&!in_array($l,$r,true))$r[]=$l;}sort($r,SORT_STRING);return$r;}
 function authLegacyBredeCapabilities(): array{$r=[];foreach(authCapabilityDefinities() as $c=>$d)if(empty($d['gevoelig']))$r[]=(string)$c;return authCapabilitiesNormaliseer($r);}
-function authGebruikerCapabilities(array $r): array{if(isset($r['capabilities'])&&is_array($r['capabilities']))return authCapabilitiesNormaliseer($r['capabilities']);if(array_key_exists('tabs',$r)&&is_array($r['tabs']))return authCapabilitiesVanTabs($r['tabs']);return authLegacyBredeCapabilities();}
+function authExterneTenantActief(): bool{if(isset($GLOBALS['authPaden'])&&is_array($GLOBALS['authPaden'])&&array_key_exists('tenant_private',$GLOBALS['authPaden']))return !empty($GLOBALS['authPaden']['tenant_private']);try{return tenantRuntimeExternConfigPad()!==null;}catch(Throwable $e){return true;}}
+function authGebruikerCapabilities(array $r): array{if(isset($r['capabilities'])&&is_array($r['capabilities']))return authCapabilitiesNormaliseer($r['capabilities']);if(array_key_exists('tabs',$r)&&is_array($r['tabs']))return authCapabilitiesVanTabs($r['tabs']);return authExterneTenantActief()?[]:authLegacyBredeCapabilities();}
 function authGebruikerId(array $r): string{$id=trim((string)($r['id']??''));if(preg_match('/^usr_[a-zA-Z0-9_-]{8,64}$/',$id))return$id;$n=strtolower(trim((string)($r['gebruikersnaam']??'')));return$n===''?'':'usr_legacy_'.substr(hash('sha256',$n),0,16);}
 function authNieuwGebruikerId(): string{return'usr_'.bin2hex(random_bytes(10));}
 function authGebruikerMigreerRecord(array $r): array{if(trim((string)($r['id']??''))==='')$r['id']=authGebruikerId($r);$r['capabilities']=authGebruikerCapabilities($r);$r['tabs']=authLegacyTabsVoorCapabilities($r['capabilities']);if(!isset($r['sessie_versie']))$r['sessie_versie']=1;if(!array_key_exists('actief',$r))$r['actief']=true;return$r;}
