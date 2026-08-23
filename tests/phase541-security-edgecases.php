@@ -33,10 +33,10 @@ $users=$tmp.'/users.json';
 $worker=$tmp.'/worker.php';
 file_put_contents($worker, <<<'PHP'
 <?php
-$root=$argv[1];$sessionDir=$argv[2];$users=$argv[3];
+$root=$argv[1];$sessionDir=$argv[2];$users=$argv[3];$binding=str_repeat('c',64);
 session_save_path($sessionDir);session_start();
-$_SESSION=['tenant_key'=>'audit-club','csrf'=>str_repeat('b',64),'gebruiker'=>'edge','is_master'=>false,'user_session_version'=>1];
-$authSiteConfig=['vereniging'=>['sleutel'=>'audit-club']];$authPaden=['tenant_private'=>true];
+$_SESSION=['tenant_key'=>'audit-club','installation_binding'=>$binding,'csrf'=>str_repeat('b',64),'gebruiker'=>'edge','is_master'=>false,'user_session_version'=>1];
+$authSiteConfig=['vereniging'=>['sleutel'=>'audit-club']];$authPaden=['tenant_private'=>true,'session_binding'=>$binding];
 $csrfToken=(string)$_SESSION['csrf'];$ingelogd=true;$isMaster=false;$huidigeGebruiker='edge';$usersBestand=$users;$inlogFout='';
 function laadGebruikers($pad){$x=json_decode((string)file_get_contents($pad),true);return is_array($x)?$x:[];}
 require $root.'/app/auth-session-check.php';
@@ -44,18 +44,14 @@ echo json_encode(['ingelogd'=>$ingelogd,'fout'=>$inlogFout]);session_write_close
 PHP);
 
 try {
-    // Capabilities alleen is nog niet voldoende zolang legacy beheerpagina's
-    // rechtstreeks op tabs autoriseren.
     file_put_contents($users,json_encode([['gebruikersnaam'=>'edge','hash'=>'x','sessie_versie'=>1,'actief'=>true,'capabilities'=>['members.view']]]));
     [$c1,$o1]=r541([PHP_BINARY,$worker,$root,$tmp.'/sessions',$users]);$j1=json_decode($o1,true);
     c541($c1===0&&($j1['ingelogd']??true)===false,'capabilities-only account wordt extern fail-closed geweigerd');
 
-    // Een malformat tabs-veld mag de arraycontrole niet omzeilen.
     file_put_contents($users,json_encode([['gebruikersnaam'=>'edge','hash'=>'x','sessie_versie'=>1,'actief'=>true,'capabilities'=>[],'tabs'=>'leden']]));
     [$c2,$o2]=r541([PHP_BINARY,$worker,$root,$tmp.'/sessions',$users]);$j2=json_decode($o2,true);
     c541($c2===0&&($j2['ingelogd']??true)===false,'niet-array tabs-profiel wordt extern geweigerd');
 
-    // Een expliciet leeg arrayprofiel is veilig en mag bestaan.
     file_put_contents($users,json_encode([['gebruikersnaam'=>'edge','hash'=>'x','sessie_versie'=>1,'actief'=>true,'capabilities'=>[],'tabs'=>[]]]));
     [$c3,$o3]=r541([PHP_BINARY,$worker,$root,$tmp.'/sessions',$users]);$j3=json_decode($o3,true);
     c541($c3===0&&($j3['ingelogd']??false)===true,'expliciet leeg tabs-array blijft een geldig beperkt account');

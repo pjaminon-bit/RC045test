@@ -91,7 +91,9 @@ PHP);
     c54($legacyCode === 0 && is_array($legacy) && count((array)($legacy['caps'] ?? [])) > 0, 'standalone RC045 behoudt tijdelijk de legacy compatibilityfallback');
 
     // 2. Centrale sessiepoort: zelfs vóór een expliciete migratie kan een oud
-    // account op een externe tenant geen beheerpagina bereiken.
+    // account op een externe tenant geen beheerpagina bereiken. De synthetische
+    // sessie bevat de nieuwe installatiebinding zodat alleen de rechtenpoort
+    // onderwerp van deze testcase is.
     $users = $private . '/auth/users.json';
     file_put_contents($users, json_encode([
         ['gebruikersnaam'=>'legacy','hash'=>'x','sessie_versie'=>1,'actief'=>true],
@@ -101,12 +103,12 @@ PHP);
     $sessionWorker = $tmp . '/session-worker.php';
     file_put_contents($sessionWorker, <<<'PHP'
 <?php
-$root=$argv[1];$sessionDir=$argv[2];$users=$argv[3];
+$root=$argv[1];$sessionDir=$argv[2];$users=$argv[3];$binding=str_repeat('d',64);
 session_save_path($sessionDir);
 session_start();
-$_SESSION=['tenant_key'=>'audit-club','csrf'=>str_repeat('a',64),'gebruiker'=>'legacy','is_master'=>false,'user_session_version'=>1];
+$_SESSION=['tenant_key'=>'audit-club','installation_binding'=>$binding,'csrf'=>str_repeat('a',64),'gebruiker'=>'legacy','is_master'=>false,'user_session_version'=>1];
 $authSiteConfig=['vereniging'=>['sleutel'=>'audit-club']];
-$authPaden=['tenant_private'=>true];
+$authPaden=['tenant_private'=>true,'session_binding'=>$binding];
 $csrfToken=(string)$_SESSION['csrf'];$ingelogd=true;$isMaster=false;$huidigeGebruiker='legacy';$usersBestand=$users;$inlogFout='';
 function laadGebruikers($pad){$d=json_decode((string)file_get_contents($pad),true);return is_array($d)?$d:[];}
 require $root.'/app/auth-session-check.php';
@@ -115,7 +117,7 @@ session_write_close();
 PHP);
     [$sessCode, $sessRaw, $sessErr] = r54([PHP_BINARY, $sessionWorker, $root, $sessionDir, $users], null, $env);
     $sess = json_decode($sessRaw, true);
-    c54($sessCode === 0 && is_array($sess), 'sessiepoort kan met echte tenantgebonden sessie worden getest');
+    c54($sessCode === 0 && is_array($sess), 'sessiepoort kan met echte tenant/installatiebinding worden getest');
     c54(($sess['ingelogd'] ?? true) === false && ($sess['session_user'] ?? null) === null, 'externe legacy sessie zonder rechtenprofiel wordt fail-closed uitgelogd');
     c54(str_contains((string)($sess['fout'] ?? ''), 'rechtenprofiel'), 'geweigerde legacy sessie geeft gerichte migratiemelding');
 
@@ -152,14 +154,38 @@ PHP);
     c54(($rate['exists'] ?? false) === true && ($rate['corrupt_closed'] ?? false) === true, 'corrupte rate-limitstate faalt gesloten in plaats van bescherming uit te schakelen');
     c54(!file_exists($root . '/aanmelden-pogingen.php'), 'nieuwe limiter schrijft geen runtime-state in de gedeelde applicatierelease');
 
-    // 4. Contactprivacy: in HTTP-modus krijgen externe tenants een CSP die
-    // de nog aanwezige standalone Formspree-action niet kan bereiken.
+    // 4. Privacyretentie: ook nog onbeoordeelde aanmeldingen hebben een harde
+    // maximale bewaartermijn, gerekend vanaf ontvangst.
+    $retentieWorker = $tmp . '/retentie-worker.php';
+    file_put_contents($retentieWorker, <<<'PHP'
+<?php
+$root=$argv[1];
+require $root.'/aanmeldingen-opslag.php';
+$nu=strtotime('2026-08-23T12:00:00+02:00');
+$data=['aanmeldingen'=>[
+ ['id'=>'oud-nieuw','status'=>'nieuw','aangemaakt'=>date('c',$nu-91*86400),'gewijzigd'=>date('c',$nu-1*86400)],
+ ['id'=>'recent-nieuw','status'=>'nieuw','aangemaakt'=>date('c',$nu-10*86400),'gewijzigd'=>date('c',$nu-1*86400)],
+ ['id'=>'oud-beoordeeld','status'=>'afgewezen','aangemaakt'=>date('c',$nu-120*86400),'beoordeeld_op'=>date('c',$nu-91*86400)],
+ ['id'=>'recent-beoordeeld','status'=>'afgewezen','aangemaakt'=>date('c',$nu-120*86400),'beoordeeld_op'=>date('c',$nu-10*86400)],
+ ['id'=>'zonder-datum','status'=>'nieuw'],
+]];
+$removed=aanmeldingenPasRetentieToe($data,$nu);
+echo json_encode(['removed'=>$removed,'ids'=>array_column($data['aanmeldingen'],'id')]);
+PHP);
+    [$retCode, $retRaw, $retErr] = r54([PHP_BINARY, $retentieWorker, $root], null, $env);
+    $ret = json_decode($retRaw, true);
+    c54($retCode === 0 && is_array($ret), 'retentieworker draait onder echte tenantconfig');
+    c54(($ret['removed'] ?? null) === 3, 'oude onbeoordeelde, oude beoordeelde en datumloze aanmeldingen worden verwijderd');
+    c54(($ret['ids'] ?? null) === ['recent-nieuw','recent-beoordeeld'], 'recente aanmeldingen blijven binnen de bewaartermijn beschikbaar');
+
+    // 5. Contactprivacy/CSP: externe tenants krijgen een complete browserpolicy
+    // waarin Formspree alleen voor standalone RC045 kan worden toegestaan.
     $siteConfigSrc = (string)file_get_contents($root . '/site-config.php');
-    c54(str_contains($siteConfigSrc, '$externPad !== null && PHP_SAPI !== \'cli\''), 'contact-CSP is uitsluitend aan externe webtenants gebonden');
-    c54(str_contains($siteConfigSrc, "form-action 'self'"), 'externe tenant-CSP blokkeert formulierposts naar andere origins');
-    c54(str_contains($siteConfigSrc, "connect-src 'self' https://api.open-meteo.com"), 'externe tenant-CSP beperkt fetch tot eigen origin en expliciete weer-API');
-    $cspRegel = "Content-Security-Policy: form-action 'self'; connect-src 'self' https://api.open-meteo.com";
-    c54(str_contains($siteConfigSrc, $cspRegel) && !str_contains($cspRegel, 'formspree'), 'RC045 Formspree staat niet op de tenant-CSP allowlist');
+    c54(str_contains($siteConfigSrc, "if (PHP_SAPI !== 'cli' && !headers_sent())"), 'CSP wordt voor webresponses centraal gezet');
+    c54(str_contains($siteConfigSrc, "default-src 'self'") && str_contains($siteConfigSrc, "script-src 'self' 'unsafe-inline'") && str_contains($siteConfigSrc, "object-src 'none'"), 'centrale CSP bevat afdwingbare basis- en scriptgrenzen');
+    c54(str_contains($siteConfigSrc, '$formAction = $externPad !== null') && str_contains($siteConfigSrc, '$connectSrc = $externPad !== null'), 'CSP maakt expliciet onderscheid tussen externe tenant en standalone');
+    c54(str_contains($siteConfigSrc, "? \"'self'\"") && str_contains($siteConfigSrc, "https://formspree.io"), 'externe tenant form-action is self-only terwijl standalone Formspree kan behouden');
+    c54(str_contains($siteConfigSrc, "'self' https://api.open-meteo.com") && str_contains($siteConfigSrc, "https://api.open-meteo.com https://formspree.io"), 'connect-src houdt externe tenants vrij van standalone Formspree');
 } finally {
     wis54($tmp);
 }
