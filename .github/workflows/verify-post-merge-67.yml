@@ -1,0 +1,53 @@
+name: Verify post-merge 67
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+env:
+  LIVE_DEV_BASE_URL: https://rc045.nl/dev
+  PLAYWRIGHT_TEST_BASE_URL: https://rc045.nl/dev
+
+jobs:
+  wait-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wacht tot nieuwe CSP live staat
+        shell: bash
+        run: |
+          set -euo pipefail
+          for poging in $(seq 1 18); do
+            csp="$(curl -sS -D - -o /dev/null --connect-timeout 10 --max-time 30 https://rc045.nl/dev/ | tr -d '\r' | grep -i '^content-security-policy:' | tail -n1 || true)"
+            echo "Poging $poging: $csp"
+            if grep -Fqi 'frame-src https://www.openstreetmap.org' <<<"$csp"; then
+              exit 0
+            fi
+            sleep 5
+          done
+          echo 'Nieuwe CSP is niet op DEV verschenen' >&2
+          exit 1
+
+  live-security:
+    needs: wait-deploy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - run: bash tests/live-dev-security.sh
+
+  live-browser:
+    needs: wait-deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - name: Installeer browsertooling
+        run: |
+          set -euo pipefail
+          npm ci --ignore-scripts
+          npx playwright install --with-deps chromium
+      - name: Browseracceptatie
+        run: npx playwright test tests/live-dev-browser.spec.js --workers=1 --reporter=line
