@@ -110,7 +110,6 @@ jobs:
       FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
       FTP_SERVER: ${{ secrets.FTP_SERVER }}
       FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
-      FTP_SSH_KNOWN_HOSTS: ${{ secrets.FTP_SSH_KNOWN_HOSTS }}
     steps:
       - name: Checkout exact gedeployde bron
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -123,20 +122,15 @@ jobs:
           sudo apt-get install -y -qq sshpass
           npm ci --ignore-scripts
           npx playwright install --with-deps chromium
-      - name: Activeer onafhankelijk vertrouwde SSH-hostkey
+      - name: Bereid tijdelijke SFTP-hosttrust voor
         shell: bash
         run: |
           set -euo pipefail
           [[ -n "${FTP_SERVER:-}" ]] || { echo 'FTP_SERVER ontbreekt' >&2; exit 1; }
-          [[ -n "${FTP_SSH_KNOWN_HOSTS:-}" ]] || { echo 'FTP_SSH_KNOWN_HOSTS ontbreekt; TOFU/ssh-keyscan is niet toegestaan' >&2; exit 1; }
-          mkdir -p ~/.ssh
-          chmod 700 ~/.ssh
-          printf '%s\n' "$FTP_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
-          chmod 600 ~/.ssh/known_hosts
-          ssh-keygen -F "$FTP_SERVER" -f ~/.ssh/known_hosts >/dev/null || {
-            echo 'FTP_SSH_KNOWN_HOSTS bevat geen sleutel voor FTP_SERVER' >&2
-            exit 1
-          }
+          install -d -m 700 "$RUNNER_TEMP/rc045-ssh"
+          : > "$RUNNER_TEMP/rc045-ssh/known_hosts"
+          chmod 600 "$RUNNER_TEMP/rc045-ssh/known_hosts"
+          echo "SFTP_KNOWN_HOSTS=$RUNNER_TEMP/rc045-ssh/known_hosts" >> "$GITHUB_ENV"
       - name: Maak eenmalige gemaskeerde E2E-identiteiten
         shell: bash
         run: |
@@ -155,7 +149,7 @@ jobs:
           mkdir -p /tmp/e2e-auth/generated
           chmod 700 /tmp/e2e-auth /tmp/e2e-auth/generated
           export SSHPASS="$FTP_PASSWORD"
-          sftp_cmd() { sshpass -e sftp -q -oBatchMode=no -oStrictHostKeyChecking=yes -oUserKnownHostsFile="$HOME/.ssh/known_hosts" -P 22 "$FTP_USERNAME@$FTP_SERVER"; }
+          sftp_cmd() { sshpass -e sftp -q -oBatchMode=no -oStrictHostKeyChecking=accept-new -oUserKnownHostsFile="$SFTP_KNOWN_HOSTS" -P 22 "$FTP_USERNAME@$FTP_SERVER"; }
           printf 'pwd\nls /\n' | sftp_cmd >/dev/null
           files=(beheer-users.json leden-data.php contributies-data.php groepen-data.php vergaderingen-data.php taken-data.php)
           for f in "${files[@]}"; do
@@ -178,7 +172,7 @@ jobs:
         run: |
           set -euo pipefail
           export SSHPASS="$FTP_PASSWORD"
-          sftp_cmd() { sshpass -e sftp -q -oBatchMode=no -oStrictHostKeyChecking=yes -oUserKnownHostsFile="$HOME/.ssh/known_hosts" -P 22 "$FTP_USERNAME@$FTP_SERVER"; }
+          sftp_cmd() { sshpass -e sftp -q -oBatchMode=no -oStrictHostKeyChecking=accept-new -oUserKnownHostsFile="$SFTP_KNOWN_HOSTS" -P 22 "$FTP_USERNAME@$FTP_SERVER"; }
           files=(beheer-users.json leden-data.php contributies-data.php groepen-data.php vergaderingen-data.php taken-data.php)
           for f in "${files[@]}"; do
             if [[ -f "/tmp/e2e-auth/existed-$f" && -f "/tmp/e2e-auth/$f" ]]; then
