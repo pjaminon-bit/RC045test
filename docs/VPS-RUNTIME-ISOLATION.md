@@ -31,7 +31,7 @@ Na fase 3.5:
 ```bash
 php bin/prepare-vps-runtime.php \
   --deployment=/srv/verenigingen/noorderhaven/deployment.json \
-  --php-version=8.3 \
+  --php-version=8.5 \
   --web-user=www-data \
   --web-group=www-data
 ```
@@ -130,7 +130,7 @@ Pas op de echte Linux-VPS:
 sudo php bin/apply-vps-runtime.php \
   --plan=/srv/verenigingen/noorderhaven/runtime/runtime-plan.json \
   --apply \
-  --fpm-pool-dir=/etc/php/8.3/fpm/pool.d
+  --fpm-pool-dir=/etc/php/8.5/fpm/pool.d
 ```
 
 `--apply` vereist expliciet Linux en EUID 0.

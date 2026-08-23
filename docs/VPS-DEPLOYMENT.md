@@ -111,7 +111,7 @@ Op basis van `deployment.json` wordt nu een tweede deterministisch contract gema
 ```bash
 php bin/prepare-vps-runtime.php \
   --deployment=/srv/verenigingen/noorderhaven/deployment.json \
-  --php-version=8.3 \
+  --php-version=8.5 \
   --web-user=www-data \
   --web-group=www-data
 ```
@@ -137,7 +137,7 @@ Op de echte Linux-VPS kan daarna bewust worden toegepast:
 sudo php bin/apply-vps-runtime.php \
   --plan=/srv/verenigingen/noorderhaven/runtime/runtime-plan.json \
   --apply \
-  --fpm-pool-dir=/etc/php/8.3/fpm/pool.d
+  --fpm-pool-dir=/etc/php/8.5/fpm/pool.d
 ```
 
 De apply-tool reloadt PHP-FPM niet automatisch. Eerst moet de volledige serverconfiguratie met de distro-/versiespecifieke testopdracht worden gevalideerd; pas daarna volgt een expliciete reload.
