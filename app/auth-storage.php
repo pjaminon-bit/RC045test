@@ -5,6 +5,40 @@
 require_once __DIR__ . '/core/tenant-runtime.php';
 
 /**
+ * Externe tenantmasters accepteren uitsluitend een geldige password_hash en
+ * mogen geen plaintext compatibiliteitsvariabele bevatten. De standalone
+ * installatie houdt zijn tijdelijke legacypad buiten deze validator.
+ */
+function authStorageValideerExterneMaster(string $privateRoot): void
+{
+    $master = $privateRoot . '/auth/master.php';
+    if (!file_exists($master) && !is_link($master)) return;
+    if (!is_file($master) || is_link($master) || !is_readable($master)) {
+        tenantRuntimeConfiguratieFout('Tenant masterconfig is niet veilig leesbaar.');
+    }
+
+    $waarden = (static function (string $pad): array {
+        $BEHEER_WACHTWOORD_HASH = null;
+        $BEHEER_WACHTWOORD = null;
+        require $pad;
+        return [
+            'hash' => $BEHEER_WACHTWOORD_HASH,
+            'legacy' => $BEHEER_WACHTWOORD,
+        ];
+    })($master);
+
+    $hash = $waarden['hash'] ?? null;
+    $legacy = $waarden['legacy'] ?? null;
+    $hashGeldig = is_string($hash)
+        && $hash !== ''
+        && ((password_get_info($hash)['algoName'] ?? 'unknown') !== 'unknown');
+    $heeftPlaintext = is_string($legacy) && trim($legacy) !== '';
+    if (!$hashGeldig || $heeftPlaintext) {
+        tenantRuntimeConfiguratieFout('Externe tenantmaster vereist uitsluitend een geldige password_hash.');
+    }
+}
+
+/**
  * De actieve masterconfig is ook een sessiegeneratie. Een wachtwoordrotatie
  * moet bestaande mastercookies niet ongemerkt laten doorrollen naar de nieuwe
  * credentialgeneratie.
@@ -113,6 +147,8 @@ function authStorageActiveerSessieIsolatie(array $siteConfig, string $projectRoo
 function authStoragePaden(array $siteConfig, string $projectRoot): array
 {
     $privateRoot = tenantRuntimePrivateRoot($siteConfig);
+    if ($privateRoot !== null) authStorageValideerExterneMaster($privateRoot);
+
     if (PHP_SAPI === 'cli' && headers_sent()) {
         $sessieContext = authStorageSessieContext($siteConfig, $projectRoot, $privateRoot);
     } else {
