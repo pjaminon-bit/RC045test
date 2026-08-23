@@ -28,7 +28,7 @@ function wis541(string $pad): void
 }
 
 $tmp=sys_get_temp_dir().'/rc045-phase541-'.bin2hex(random_bytes(5));
-@sprintf('');@mkdir($tmp.'/sessions',0700,true);
+@mkdir($tmp.'/sessions',0700,true);
 $users=$tmp.'/users.json';
 $worker=$tmp.'/worker.php';
 file_put_contents($worker, <<<'PHP'
@@ -47,7 +47,7 @@ try {
     // Capabilities alleen is nog niet voldoende zolang legacy beheerpagina's
     // rechtstreeks op tabs autoriseren.
     file_put_contents($users,json_encode([['gebruikersnaam'=>'edge','hash'=>'x','sessie_versie'=>1,'actief'=>true,'capabilities'=>['members.view']]]));
-    [$c1,$o1]=$r1=r541([PHP_BINARY,$worker,$root,$tmp.'/sessions',$users]);$j1=json_decode($o1,true);
+    [$c1,$o1]=r541([PHP_BINARY,$worker,$root,$tmp.'/sessions',$users]);$j1=json_decode($o1,true);
     c541($c1===0&&($j1['ingelogd']??true)===false,'capabilities-only account wordt extern fail-closed geweigerd');
 
     // Een malformat tabs-veld mag de arraycontrole niet omzeilen.
