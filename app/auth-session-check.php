@@ -15,9 +15,9 @@
 // - bestaande accounts zonder sessie_versie gelden als versie 1;
 // - bestaande standalone RC045-sessies zonder tenant_key worden eenmalig
 //   compatibel aan RC045 gebonden;
-// - een externe tenant accepteert nooit een legacy account zonder expliciet
-//   tabs- of capabilityprofiel. Zo kan een migratie geen brede impliciete
-//   beheerrechten erven uit de standalone compatibility-laag.
+// - een externe tenant accepteert nooit een beheeraccount zonder expliciet
+//   tabs-array. Zolang legacy beheerpagina's authRechten() gebruiken is dit
+//   veld de fail-closed brug tussen capability- en tabautorisatie.
 // ============================================================
 
 require_once __DIR__ . '/auth-session-tenant.php';
@@ -68,13 +68,14 @@ if (!$accountActief) {
     return;
 }
 
-// Op een externe tenant mag de oude standalone-terugval "geen rechtenveld =
-// brede toegang" nooit gelden. Zo'n account moet eerst door de master worden
-// gemigreerd en daarna expliciet rechten krijgen. Een bestaand leeg profiel is
-// wél expliciet en blijft dus geldig (met eventueel alleen rolrechten).
-$heeftExplicietRechtenprofiel = array_key_exists('capabilities', $sessionAccount)
-    || array_key_exists('tabs', $sessionAccount);
-if (!empty($authPaden['tenant_private']) && !$heeftExplicietRechtenprofiel) {
+// Op een externe tenant mag de oude standalone-terugval "geen tabs-array =
+// brede toegang" nooit gelden. Ook een capabilities-only record is voorlopig
+// onvoldoende: oudere beheerpagina's lezen nog rechtstreeks het tabs-profiel.
+// De migratiehelper schrijft voor een veilig gemigreerd account altijd zowel
+// capabilities als tabs, waarbij een expliciet leeg profiel gewoon geldig is.
+$heeftExplicietTabprofiel = array_key_exists('tabs', $sessionAccount)
+    && is_array($sessionAccount['tabs']);
+if (!empty($authPaden['tenant_private']) && !$heeftExplicietTabprofiel) {
     unset($_SESSION['gebruiker'], $_SESSION['is_master'], $_SESSION['user_session_version']);
     $ingelogd = false;
     $huidigeGebruiker = '';
