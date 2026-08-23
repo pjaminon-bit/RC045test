@@ -98,7 +98,7 @@ try {
     [$secretCode,$secretOut]=run41([PHP_BINARY,$root.'/bin/prepare-vps-runtime.php','--deployment='.$depA,'--password=verboden']);
     check41($secretCode!==0&&str_contains($secretOut,'Secrets'),'runtimegenerator weigert secretachtige CLI-argumenten');
 
-    [$badPhpCode,$badPhpOut]=prepare41($root,$depA,['--dry-run','--php-version=8.3;rm']);
+    [$badPhpCode,$badPhpOut]=prepare41($root,$depA,['--dry-run','--php-version=8.5;rm']);
     check41($badPhpCode!==0&&str_contains($badPhpOut,'PHP-versie'),'PHP-versie kan niet als configuratie-injectie worden misbruikt');
     [$badWebCode,$badWebOut]=prepare41($root,$depA,['--dry-run','--web-user=www data']);
     check41($badWebCode!==0&&str_contains($badWebOut,'Linux-naam'),'webserver identity accepteert alleen veilige Linux-accountnamen');
