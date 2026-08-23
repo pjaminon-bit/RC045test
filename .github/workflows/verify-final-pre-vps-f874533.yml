@@ -1,0 +1,92 @@
+name: Verify final pre-VPS f874533
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/verify-final-pre-vps-f874533.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rc045test-verify-final-f874533-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+env:
+  LIVE_DEV_BASE_URL: https://rc045.nl/dev
+  PLAYWRIGHT_TEST_BASE_URL: https://rc045.nl/dev
+
+jobs:
+  wait-live-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Wacht op statische PNG sponsorfallback
+        shell: bash
+        run: |
+          set -euo pipefail
+          sponsors=(traxxas.png kok-lexmond.png toemen.png shamrock.png rothy.png)
+          for poging in $(seq 1 60); do
+            alles_ok=1
+
+            direct="$(curl --http2 --silent --show-error --output /dev/null --write-out '%{http_code}' 'https://rc045.nl/dev/public-asset.php?scope=sponsors&path=missing-final-check.png' || true)"
+            spoof="$(curl --http2 --silent --show-error --output /dev/null --write-out '%{http_code}' 'https://rc045.nl/dev/public-asset.php?scope=sponsors&path=missing-final-check.png&dev_placeholder=1' || true)"
+            if [[ "$direct" != '404' || "$spoof" != '404' ]]; then
+              alles_ok=0
+            fi
+
+            if [[ "$alles_ok" == '1' ]]; then
+              for naam in "${sponsors[@]}"; do
+                headers="$RUNNER_TEMP/headers"
+                body="$RUNNER_TEMP/body"
+                url="https://rc045.nl/dev/images/sponsors/${naam}?verify=${GITHUB_RUN_ID}-${poging}"
+                meta="$(curl --http2 --silent --show-error --dump-header "$headers" --output "$body" --write-out '%{http_code}|%{redirect_url}|%{content_type}' "$url" || true)"
+                IFS='|' read -r code redirect content_type <<< "$meta"
+                signature="$(od -An -t x1 -N8 "$body" 2>/dev/null | tr -d ' \n' || true)"
+                if [[ "$code" != '200' || -n "$redirect" || "$content_type" != image/png* || "$signature" != '89504e470d0a1a0a' ]]; then
+                  alles_ok=0
+                  break
+                fi
+              done
+            fi
+
+            if [[ "$alles_ok" == '1' ]]; then
+              echo 'LIVE CONTRACT OK: gateway 404, spoof 404, vijf sponsor-URL’s direct HTTP 200 met echte PNG zonder redirect.'
+              exit 0
+            fi
+            sleep 5
+          done
+          echo 'FOUT: statische PNG sponsorfallback is live niet aantoonbaar bereikt.' >&2
+          exit 1
+
+  live-security:
+    needs: wait-live-contract
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout finale main-bron
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: f874533cecf46f9733c1d4c43889353027d45ee9
+      - name: Actieve DEV securityregressie
+        run: bash tests/live-dev-security.sh
+
+  live-browser:
+    needs:
+      - wait-live-contract
+      - live-security
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout finale main-bron
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: f874533cecf46f9733c1d4c43889353027d45ee9
+      - name: Installeer gelockte browserdependencies
+        run: |
+          set -euo pipefail
+          npm ci --ignore-scripts
+          npx playwright install --with-deps chromium
+      - name: Finale publieke browseracceptatie
+        run: npx playwright test tests/live-dev-browser.spec.js --workers=1 --reporter=line
