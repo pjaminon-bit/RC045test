@@ -61,13 +61,14 @@ foreach ($scanPaden as $scanPad) {
     $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($scanPad, FilesystemIterator::SKIP_DOTS));
     foreach ($iterator as $bestand) {
         if (!$bestand->isFile()) continue;
+        $rel = ltrim(str_replace($root, '', $bestand->getPathname()), '/');
+        if ($rel === 'tests/vps-ubuntu2604-baseline.php') continue;
         $ext = strtolower($bestand->getExtension());
         if (!in_array($ext, ['php','md','yml','yaml','sh'], true)) continue;
         $inhoud = @file_get_contents($bestand->getPathname());
         if (!is_string($inhoud)) continue;
         foreach ($verboden as $term) {
             if (!str_contains($inhoud, $term)) continue;
-            $rel = ltrim(str_replace($root, '', $bestand->getPathname()), '/');
             $label = "verouderde VPS-baseline '{$term}' staat nog in {$rel}";
             $errors[] = $label;
             fwrite(STDERR, "FOUT: {$label}\n");
