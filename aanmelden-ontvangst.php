@@ -46,8 +46,15 @@ $jaar=(int)date('Y');
 $maand=(int)date('n');
 $leeftijd=ledenLeeftijd($geb,$jaar.'-01-01');
 $typeId=trim((string)($_POST['lidmaatschap_type']??''));
-$type=$typeId===''?null:lidmaatschapTypeOpId($typeId);
-if(!$type||!lidmaatschapTypeToegestaanVoorLeeftijd($type,$leeftijd))aanmeldenAntwoord(400,'Kies een geldig lidmaatschapstype.');
+if($typeId!==''){
+    $type=lidmaatschapTypeOpId($typeId);
+}else{
+    $passend=lidmaatschapTypesVoorLeeftijd($leeftijd);
+    $type=count($passend)===1?$passend[0]:null;
+}
+if(!$type||!lidmaatschapTypeToegestaanVoorLeeftijd($type,$leeftijd)){
+    aanmeldenAntwoord(400,'Kies een geldig lidmaatschapstype.');
+}
 $bedrag=lidmaatschapBedragVoorMaand($type,$maand);
 $inschrijfgeld=(float)($type['inschrijfgeld']??0);
 
