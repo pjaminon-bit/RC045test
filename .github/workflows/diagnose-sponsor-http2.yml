@@ -12,25 +12,20 @@ jobs:
   compare:
     runs-on: ubuntu-latest
     steps:
-      - name: Vergelijk directe sponsorassets met public asset gateway
+      - name: Inspecteer directe sponsorplaceholder via HTTP2
         shell: bash
         run: |
-          set -euo pipefail
+          set -u
           names=(traxxas.png kok-lexmond.png toemen.png shamrock.png rothy.png)
-          for mode in direct gateway; do
-            echo "=== $mode ==="
-            for name in "${names[@]}"; do
-              if [[ "$mode" == direct ]]; then
-                url="https://rc045.nl/dev/images/sponsors/$name"
-              else
-                url="https://rc045.nl/dev/public-asset.php?scope=sponsors&path=$name"
-              fi
-              curl --http2 --fail --silent --show-error --output "/tmp/${mode}-${name}" --write-out "$name HTTP=%{http_code} HTTP_VERSION=%{http_version} SIZE=%{size_download}\n" --connect-timeout 10 --max-time 30 "$url"
-            done
+          for name in "${names[@]}"; do
+            url="https://rc045.nl/dev/images/sponsors/$name?v=2026-test"
+            echo "=== $name ==="
+            curl --http2 --silent --show-error --dump-header - --output "/tmp/$name" --write-out "HTTP=%{http_code} HTTP_VERSION=%{http_version} SIZE=%{size_download}\n" --connect-timeout 10 --max-time 30 "$url" | tr -d '\r'
+            file "/tmp/$name" || true
+            sha256sum "/tmp/$name" || true
+            printf 'FIRST='; head -c 80 "/tmp/$name" | tr '\n' ' '; echo
           done
 
-          echo '=== gelijktijdig direct ==='
-          printf '%s\n' "${names[@]}" | xargs -P5 -I{} sh -c 'curl --http2 --fail --silent --show-error --output /tmp/parallel-direct-{} --write-out "{} HTTP=%{http_code} HTTP_VERSION=%{http_version} SIZE=%{size_download}\\n" --connect-timeout 10 --max-time 30 "https://rc045.nl/dev/images/sponsors/{}"'
-
-          echo '=== gelijktijdig gateway ==='
-          printf '%s\n' "${names[@]}" | xargs -P5 -I{} sh -c 'curl --http2 --fail --silent --show-error --output /tmp/parallel-gateway-{} --write-out "{} HTTP=%{http_code} HTTP_VERSION=%{http_version} SIZE=%{size_download}\\n" --connect-timeout 10 --max-time 30 "https://rc045.nl/dev/public-asset.php?scope=sponsors&path={}"'
+          echo '=== vijf gelijktijdige directe requests ==='
+          printf '%s\n' "${names[@]}" | xargs -P5 -I{} sh -c 'curl --http2 --silent --show-error --dump-header /tmp/h-{} --output /tmp/p-{} --write-out "{} HTTP=%{http_code} HTTP_VERSION=%{http_version} SIZE=%{size_download} ERR=%{errormsg}\\n" --connect-timeout 10 --max-time 30 "https://rc045.nl/dev/images/sponsors/{}?v=2026-test" || true'
+          for name in "${names[@]}"; do echo "--- $name headers ---"; tr -d '\r' < "/tmp/h-$name" | grep -Ei '^(HTTP/|content-type:|content-length:|content-encoding:|cache-control:|etag:|location:)' || true; done
