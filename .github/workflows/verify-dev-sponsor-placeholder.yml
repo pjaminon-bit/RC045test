@@ -1,0 +1,57 @@
+name: Verify DEV sponsorplaceholder fix
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PLAYWRIGHT_TEST_BASE_URL: https://rc045.nl/dev
+
+jobs:
+  wait-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wacht tot sponsorredirect live staat
+        shell: bash
+        run: |
+          set -euo pipefail
+          url='https://rc045.nl/dev/images/sponsors/traxxas.png?v=verify'
+          for i in $(seq 1 18); do
+            headers="$(mktemp)"
+            status="$(curl -sS -D "$headers" -o /dev/null -w '%{http_code}' --connect-timeout 10 --max-time 20 "$url" || true)"
+            location="$(tr -d '\r' < "$headers" | awk 'BEGIN{IGNORECASE=1} /^location:/{sub(/^location:[[:space:]]*/,""); print; exit}')"
+            rm -f "$headers"
+            echo "poging $i: status=$status location=$location"
+            if [[ "$status" == '302' && "$location" == *'/dev/images/template-placeholder.svg'* ]]; then
+              exit 0
+            fi
+            sleep 5
+          done
+          echo 'FOUT: nieuwe sponsorplaceholderredirect staat niet live op DEV' >&2
+          exit 1
+
+  live-security:
+    needs: wait-deploy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+      - run: bash tests/live-dev-security.sh
+
+  live-browser:
+    needs: wait-deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+      - name: Installeer browsertooling
+        run: |
+          set -euo pipefail
+          npm ci --ignore-scripts
+          npx playwright install --with-deps chromium
+      - name: Volledige browseracceptatie tegen DEV
+        run: npx playwright test tests/live-dev-browser.spec.js --workers=1 --reporter=line
