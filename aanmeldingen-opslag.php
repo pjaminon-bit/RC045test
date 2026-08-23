@@ -20,6 +20,82 @@ function aanmeldingNormaliseer(array $invoer): array
     $nu=date('c');$jaar=(int)($invoer['contributie_jaar']??date('Y'));if($jaar<2000||$jaar>2099)$jaar=(int)date('Y');$maand=(int)($invoer['contributie_maand']??date('n'));$maand=max(1,min(12,$maand));
     return['id'=>aanmeldingNieuwId(),'status'=>'nieuw','voornaam'=>aanmeldingKort($invoer['voornaam']??'',60),'tussenvoegsel'=>aanmeldingKort($invoer['tussenvoegsel']??'',30),'achternaam'=>aanmeldingKort($invoer['achternaam']??'',80),'geboortedatum'=>aanmeldingKort($invoer['geboortedatum']??'',10),'straat'=>aanmeldingKort($invoer['straat']??'',100),'huisnummer'=>aanmeldingKort($invoer['huisnummer']??'',20),'postcode'=>aanmeldingKort($invoer['postcode']??'',20),'gemeente'=>aanmeldingKort($invoer['gemeente']??'',80),'land'=>aanmeldingKort($invoer['land']??'',40),'telefoon'=>aanmeldingKort($invoer['telefoon']??'',40),'email'=>aanmeldingKort($invoer['email']??'',120),'lidmaatschap_type'=>aanmeldingKort($invoer['lidmaatschap_type']??'',40),'contributie_jaar'=>$jaar,'contributie_maand'=>$maand,'berekend_bedrag'=>isset($invoer['berekend_bedrag'])&&is_numeric($invoer['berekend_bedrag'])?round(max(0,(float)$invoer['berekend_bedrag']),2):null,'berekend_inschrijfgeld'=>isset($invoer['berekend_inschrijfgeld'])&&is_numeric($invoer['berekend_inschrijfgeld'])?round(max(0,(float)$invoer['berekend_inschrijfgeld']),2):null,'bron'=>(string)($invoer['bron']??'aanmeldformulier'),'aangemaakt'=>$nu,'gewijzigd'=>$nu,'beoordeeld_op'=>'','beoordeeld_door'=>'','lid_id'=>'','opmerking'=>''];
 }
+
+/**
+ * Publieke abuse-state hoort nooit in de gedeelde release. Externe tenants
+ * krijgen een eigen bestand onder private_root/security; standalone RC045
+ * gebruikt de reeds server-only/gegitignorede data-backups-map.
+ */
+function aanmeldenPogingenPad(): string
+{
+    $config=require __DIR__.'/site-config.php';
+    $privateRoot=tenantRuntimePrivateRoot(is_array($config)?$config:[]);
+    if($privateRoot!==null)return $privateRoot.DIRECTORY_SEPARATOR.'security'.DIRECTORY_SEPARATOR.'aanmelden-pogingen.json';
+    return __DIR__.DIRECTORY_SEPARATOR.'data-backups'.DIRECTORY_SEPARATOR.'aanmelden-pogingen.json';
+}
+
+function aanmeldenPogingenPadVeilig(string $pad): bool
+{
+    $map=dirname($pad);
+    if(!is_dir($map)||is_link($map)||is_link($pad))return false;
+    $mapReal=realpath($map);if($mapReal===false)return false;
+    $config=require __DIR__.'/site-config.php';
+    $privateRoot=tenantRuntimePrivateRoot(is_array($config)?$config:[]);
+    if($privateRoot!==null){
+        if(is_link($privateRoot))return false;
+        $rootReal=realpath($privateRoot);if($rootReal===false)return false;
+        $verwacht=$rootReal.DIRECTORY_SEPARATOR.'security';
+        return hash_equals(str_replace('\\','/',$verwacht),str_replace('\\','/',$mapReal));
+    }
+    $legacy=realpath(__DIR__.DIRECTORY_SEPARATOR.'data-backups');
+    return $legacy!==false&&hash_equals(str_replace('\\','/',$legacy),str_replace('\\','/',$mapReal));
+}
+
+function aanmeldenPogingenLees(string $pad): array
+{
+    if(!aanmeldenPogingenPadVeilig($pad))throw new RuntimeException('Aanmeld-rate-limitopslag valt buiten de veilige tenantlocatie.');
+    if(!file_exists($pad))return[];
+    if(!is_file($pad)||is_link($pad))throw new RuntimeException('Aanmeld-rate-limitopslag is geen veilig regulier bestand.');
+    $raw=@file_get_contents($pad);if($raw===false)throw new RuntimeException('Aanmeld-rate-limitopslag kon niet worden gelezen.');
+    $data=json_decode($raw,true);if(!is_array($data))throw new RuntimeException('Aanmeld-rate-limitopslag bevat ongeldige JSON.');
+    return$data;
+}
+
+function aanmeldenPogingenSchrijf(string $pad,array $pogingen): bool
+{
+    if(!aanmeldenPogingenPadVeilig($pad))return false;
+    $json=json_encode($pogingen,JSON_UNESCAPED_UNICODE|JSON_PRETTY_PRINT);if($json===false)return false;
+    try{$suffix=bin2hex(random_bytes(5));}catch(Throwable $e){return false;}
+    $tmp=$pad.'.tmp.'.$suffix;
+    if(is_link($tmp)||@file_put_contents($tmp,$json,LOCK_EX)===false)return false;
+    @chmod($tmp,0640);
+    if(!aanmeldenPogingenPadVeilig($pad)||is_link($pad)||!@rename($tmp,$pad)){@unlink($tmp);return false;}
+    @chmod($pad,0640);
+    return true;
+}
+
+/** Consumeert één poging. false betekent limiet bereikt; opslagfouten gooien. */
+function aanmeldenPogingRegistreer(string $ipSleutel,int $nu,int $drempel=5,int $venster=3600): bool
+{
+    if(preg_match('/^[0-9a-f]{64}$/D',$ipSleutel)!==1)throw new RuntimeException('Ongeldige aanmeld-rate-limitsleutel.');
+    $drempel=max(1,min(100,$drempel));$venster=max(60,min(86400,$venster));
+    $pad=aanmeldenPogingenPad();$pogingen=aanmeldenPogingenLees($pad);
+    foreach($pogingen as $k=>$tijden){
+        if(preg_match('/^[0-9a-f]{64}$/D',(string)$k)!==1){unset($pogingen[$k]);continue;}
+        $recent=array_values(array_filter((array)$tijden,static fn($t)=>is_numeric($t)&&(int)$t>$nu-$venster));
+        if($recent)$pogingen[$k]=$recent;else unset($pogingen[$k]);
+    }
+    $recent=(array)($pogingen[$ipSleutel]??[]);
+    if(count($recent)>=$drempel){
+        // Pruning ook bij blokkade duurzaam opslaan; kan dit niet, dan fail-closed.
+        if(!aanmeldenPogingenSchrijf($pad,$pogingen))throw new RuntimeException('Aanmeld-rate-limitopslag kon niet worden bijgewerkt.');
+        return false;
+    }
+    $recent[]=$nu;$pogingen[$ipSleutel]=$recent;
+    if(!aanmeldenPogingenSchrijf($pad,$pogingen))throw new RuntimeException('Aanmeld-rate-limitopslag kon niet worden bijgewerkt.');
+    return true;
+}
+
 function aanmeldingenVindIndex(array $data,string $id): ?int{foreach($data['aanmeldingen'] as $i=>$a)if(is_array($a)&&($a['id']??'')===$id)return$i;return null;}
 function aanmeldingenOpen(): array{$lijst=array_values(array_filter(aanmeldingenLees()['aanmeldingen'],static fn($a)=>is_array($a)&&($a['status']??'nieuw')==='nieuw'));usort($lijst,static fn($a,$b)=>strcmp((string)($b['aangemaakt']??''),(string)($a['aangemaakt']??'')));return$lijst;}
 function aanmeldingenPasRetentieToe(array &$data,?int $nu=null): int
