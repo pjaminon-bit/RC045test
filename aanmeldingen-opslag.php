@@ -108,6 +108,17 @@ function aanmeldingenVindIndex(array $data,string $id): ?int{foreach($data['aanm
 function aanmeldingenOpen(): array{$lijst=array_values(array_filter(aanmeldingenLees()['aanmeldingen'],static fn($a)=>is_array($a)&&($a['status']??'nieuw')==='nieuw'));usort($lijst,static fn($a,$b)=>strcmp((string)($b['aangemaakt']??''),(string)($a['aangemaakt']??'')));return$lijst;}
 function aanmeldingenPasRetentieToe(array &$data,?int $nu=null): int
 {
-    $nu=$nu??time();$grens=$nu-aanmeldingenBewaardagen()*86400;$voor=count((array)($data['aanmeldingen']??[]));$data['aanmeldingen']=array_values(array_filter((array)($data['aanmeldingen']??[]),static function($a)use($grens){if(!is_array($a))return false;$status=(string)($a['status']??'nieuw');if($status==='nieuw')return true;$moment=strtotime((string)($a['beoordeeld_op']??$a['gewijzigd']??$a['aangemaakt']??''));return$moment===false||$moment>=$grens;}));return$voor-count($data['aanmeldingen']);
+    $nu=$nu??time();$grens=$nu-aanmeldingenBewaardagen()*86400;$voor=count((array)($data['aanmeldingen']??[]));
+    $data['aanmeldingen']=array_values(array_filter((array)($data['aanmeldingen']??[]),static function($a)use($grens){
+        if(!is_array($a))return false;
+        $status=(string)($a['status']??'nieuw');
+        // Onbeoordeelde persoonsgegevens hebben eveneens een maximale termijn,
+        // gerekend vanaf ontvangst. Een latere wijziging mag die termijn niet
+        // ongemerkt verlengen. Beoordeelde records rekenen vanaf beoordeling.
+        $bron=$status==='nieuw'?($a['aangemaakt']??''):($a['beoordeeld_op']??$a['gewijzigd']??$a['aangemaakt']??'');
+        $moment=strtotime((string)$bron);
+        return $moment!==false&&$moment>=$grens;
+    }));
+    return$voor-count($data['aanmeldingen']);
 }
 function aanmeldingenOpschonenBewaartermijn(): int{$data=aanmeldingenLees();$aantal=aanmeldingenPasRetentieToe($data);if($aantal>0&&!aanmeldingenSchrijf($data))return 0;return$aantal;}
