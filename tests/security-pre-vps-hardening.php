@@ -1,0 +1,132 @@
+<?php
+$root = dirname(__DIR__);
+$ok = 0;
+$fout = 0;
+
+function spvCheck(bool $cond, string $label): void {
+    global $ok, $fout;
+    if ($cond) { $ok++; echo "OK: {$label}\n"; }
+    else { $fout++; fwrite(STDERR, "FOUT: {$label}\n"); }
+}
+function spvBron(string $pad): string {
+    $inhoud = @file_get_contents($pad);
+    if (!is_string($inhoud)) throw new RuntimeException('Testbron ontbreekt: ' . $pad);
+    return $inhoud;
+}
+
+$cap = spvBron($root . '/app/auth-capabilities.php');
+spvCheck(
+    str_contains($cap, 'authExterneTenantActief()?[]:authLegacyBredeCapabilities()'),
+    'externe tenant krijgt geen brede legacy capabilityfallback'
+);
+
+$sessionStorage = spvBron($root . '/app/auth-storage.php');
+$sessionCheck = spvBron($root . '/app/auth-session-check.php');
+$sessionTenant = spvBron($root . '/app/auth-session-tenant.php');
+spvCheck(
+    str_contains($sessionStorage, 'verenigingsplatform-sessions')
+    && str_contains($sessionStorage, "'session_binding'")
+    && str_contains($sessionStorage, 'authStorageMasterGeneratieVoorPad'),
+    'iedere installatie heeft een eigen sessienamespace en binding'
+);
+spvCheck(
+    str_contains($sessionTenant, 'installation_binding')
+    && str_contains($sessionTenant, 'authSessionTenantHerstart')
+    && str_contains($sessionCheck, '$authSessionInstallatieBinding'),
+    'sessiebewaking trekt tenant/installatiemismatch in'
+);
+spvCheck(
+    str_contains($sessionCheck, '$heeftExplicietTabprofiel')
+    && str_contains($sessionCheck, "!empty(\$authPaden['tenant_private'])"),
+    'externe tenant vereist expliciet legacy-tabprofiel tijdens autorisatiemigratie'
+);
+
+$vertaal = spvBron($root . '/vertaal.php');
+spvCheck(
+    str_contains($vertaal, "require_once __DIR__ . '/auth.php'")
+    && str_contains($vertaal, 'authHeeftCapability')
+    && !str_contains($vertaal, 'session_start('),
+    'vertaalendpoint gebruikt centrale auth en geen losse sessie'
+);
+spvCheck(
+    str_contains($vertaal, 'HTTP_SEC_FETCH_SITE')
+    && str_contains($vertaal, 'HTTP_ORIGIN')
+    && str_contains($vertaal, 'strlen($ruw) > 65536')
+    && str_contains($vertaal, '$maxAanroepen = 20'),
+    'vertaalendpoint begrenst origin, requestgrootte en frequentie'
+);
+spvCheck(
+    str_contains($vertaal, "https://(api-free|api)\\.deepl\\.com")
+    && str_contains($vertaal, 'CURLPROTO_HTTPS')
+    && str_contains($vertaal, 'CURLOPT_FOLLOWLOCATION => false'),
+    'DeepL outbound contract is HTTPS- en hostbegrensd'
+);
+
+$signupStore = spvBron($root . '/aanmeldingen-opslag.php');
+$signupEndpoint = spvBron($root . '/aanmelden-ontvangst.php');
+spvCheck(
+    str_contains($signupStore, "privateRoot.DIRECTORY_SEPARATOR.'security'")
+    && str_contains($signupStore, 'aanmeldenPogingenPadVeilig')
+    && str_contains($signupStore, 'aanmeldenPogingenSchrijf'),
+    'publieke signup limiter gebruikt tenant/private security storage'
+);
+spvCheck(
+    str_contains($signupEndpoint, 'aanmeldenPogingRegistreer')
+    && str_contains($signupEndpoint, "aanmeldenAntwoord(503"),
+    'signup limiter faalt gesloten bij opslagproblemen'
+);
+
+$siteConfig = spvBron($root . '/site-config.php');
+spvCheck(
+    str_contains($siteConfig, "default-src 'self'")
+    && str_contains($siteConfig, "script-src 'self' 'unsafe-inline'")
+    && str_contains($siteConfig, "object-src 'none'")
+    && str_contains($siteConfig, "frame-ancestors 'none'"),
+    'PHP-responses krijgen een afdwingbare basis-CSP zonder externe scriptorigin'
+);
+spvCheck(
+    str_contains($siteConfig, '$externPad !== null')
+    && str_contains($siteConfig, "https://formspree.io")
+    && str_contains($siteConfig, '$formAction'),
+    'CSP houdt standalone Formspree apart van externe tenants'
+);
+
+$workflow = spvBron($root . '/.github/workflows/full-regression.yml');
+spvCheck(
+    str_contains($workflow, 'FTP_SSH_KNOWN_HOSTS')
+    && preg_match('/(?:^|\n)\s*ssh-keyscan\b/', $workflow) !== 1
+    && str_contains($workflow, 'group: rc045test-dev-auth-fixture')
+    && str_contains($workflow, 'cancel-in-progress: false'),
+    'authenticated CI gebruikt vooraf vertrouwde hostkey en geserialiseerde fixtures'
+);
+spvCheck(substr_count($workflow, 'npm ci --ignore-scripts') >= 2, 'browserjobs gebruiken uitsluitend gelockte Node dependencies');
+
+$cp = spvBron($root . '/app/control-plane/control-plane-runtime.php');
+spvCheck(
+    str_contains($cp, "session.use_strict_mode")
+    && str_contains($cp, 'operator_identity')
+    && str_contains($cp, 'session_regenerate_id(true)'),
+    'control-plane sessie is strict en aan REMOTE_USER gebonden'
+);
+
+$package = json_decode(spvBron($root . '/package-lock.json'), true);
+spvCheck(
+    is_array($package)
+    && (($package['packages']['node_modules/@playwright/test']['version'] ?? '') === '1.62.1')
+    && str_starts_with((string)($package['packages']['node_modules/@playwright/test']['integrity'] ?? ''), 'sha512-'),
+    'Playwright is exact gelockt met integriteitshash'
+);
+
+$supply = spvBron($root . '/.github/workflows/security-supply-chain.yml');
+spvCheck(
+    str_contains($supply, 'fetch-depth: 0')
+    && str_contains($supply, "versie='8.30.1'")
+    && str_contains($supply, '551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb')
+    && str_contains($supply, 'sha256sum --check --strict')
+    && str_contains($supply, 'git --redact --verbose .')
+    && str_contains($supply, 'npm audit --audit-level=high'),
+    'CI scant volledige historie en controleert dependencykwetsbaarheden'
+);
+
+echo "Pre-VPS security hardening: {$ok} OK, {$fout} fout(en)\n";
+exit($fout === 0 ? 0 : 1);
