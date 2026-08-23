@@ -155,7 +155,7 @@ PHP);
     // 4. Contactprivacy: in HTTP-modus krijgen externe tenants een CSP die
     // de nog aanwezige standalone Formspree-action niet kan bereiken.
     $siteConfigSrc = (string)file_get_contents($root . '/site-config.php');
-    c54(str_contains($siteConfigSrc, "$externPad !== null && PHP_SAPI !== 'cli'"), 'contact-CSP is uitsluitend aan externe webtenants gebonden');
+    c54(str_contains($siteConfigSrc, '$externPad !== null && PHP_SAPI !== \'cli\''), 'contact-CSP is uitsluitend aan externe webtenants gebonden');
     c54(str_contains($siteConfigSrc, "form-action 'self'"), 'externe tenant-CSP blokkeert formulierposts naar andere origins');
     c54(str_contains($siteConfigSrc, "connect-src 'self' https://api.open-meteo.com"), 'externe tenant-CSP beperkt fetch tot eigen origin en expliciete weer-API');
     $cspRegel = "Content-Security-Policy: form-action 'self'; connect-src 'self' https://api.open-meteo.com";
