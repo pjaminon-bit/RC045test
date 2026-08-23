@@ -109,7 +109,19 @@ function rc045SeoHead($pagina, $indexeerbaar = true) {
   $url = htmlspecialchars(rc045Url($pagina, $taal), ENT_QUOTES, 'UTF-8');
   $socialAsset = siteAsset('branding.social_image');
   $afbeelding = $socialAsset !== '' ? htmlspecialchars(siteUrl() . '/' . $socialAsset, ENT_QUOTES, 'UTF-8') : '';
-  $titelMetaPrefix = tenantRuntimePrivateRoot(siteConfig()) === null ? 'rc045-title-' : 'site-title-';
+  $externeTenant = tenantRuntimePrivateRoot(siteConfig()) !== null;
+  $titelMetaPrefix = $externeTenant ? 'site-title-' : 'rc045-title-';
+
+  // Het standalone RC045-formulier gebruikt tijdelijk nog Formspree als
+  // mailtransport. Een externe tenant mag kandidaat-PII nooit naar dat gedeelde
+  // derde-partijendpoint sturen. De CSP blokkeert externe form/fetch-routes ook
+  // als JavaScript niet draait; de kleine bootstrap zet bij een normale browser
+  // vóór interactie de formulieraction op de tenant-eigen ontvangstendpoint.
+  if ($externeTenant && $pagina === 'aanmelden') {
+    echo "  <meta http-equiv=\"Content-Security-Policy\" content=\"connect-src 'self'; form-action 'self'\">\n";
+    echo "  <meta name=\"verenigingsplatform-aanmelden-same-origin\" content=\"1\">\n";
+    echo "  <script>(function(){function b(){var f=document.getElementById('aanmeld-form');if(f)f.setAttribute('action','aanmelden-ontvangst.php');}if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',b);else b();})();</script>\n";
+  }
 
   // Deze twee bestanden bevatten uitsluitend generieke responsive/browser-
   // garanties die uit de live eindacceptatie voortkomen. Ze worden via de
