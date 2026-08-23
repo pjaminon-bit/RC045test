@@ -56,6 +56,7 @@ $logBestand = $authPaden['audit'];
 $loginPogingenBestand = $authPaden['login_attempts'];
 $loginPogingenSlotBestand = $authPaden['login_lock'];
 $authBackupMap = $authPaden['backups'];
+$authTenantPrivate = !empty($authPaden['tenant_private']);
 
 // ===== Sessie: een week ingelogd blijven, niet halverwege een lang formulier uitloggen =====
 $sessieduur = 60 * 60 * 24 * 7;
@@ -356,16 +357,15 @@ $beheerGebruiktLegacyWachtwoord = false;
 if ($configOk) {
   require $configPad;
 
-  // Voorkeur: alleen een password_hash() in beheer-config.php bewaren.
-  // De oude plaintext-variabele blijft tijdelijk ondersteund zodat een
-  // deploy niemand buitensluit voordat het server-only configbestand via
-  // FTP is omgezet. Zodra een geldige hash aanwezig is, wordt het oude
-  // wachtwoord volledig genegeerd, ook als die variabele nog bestaat.
+  // Externe tenants worden uitsluitend via bootstrap-tenant-admin.php met een
+  // password_hash() geprovisioneerd. Plaintext blijft alleen een tijdelijk
+  // standalone/legacy migratiepad; tenant-private productie faalt gesloten.
   $beheerHashOk = isset($BEHEER_WACHTWOORD_HASH)
     && is_string($BEHEER_WACHTWOORD_HASH)
     && $BEHEER_WACHTWOORD_HASH !== ''
     && ((password_get_info($BEHEER_WACHTWOORD_HASH)['algoName'] ?? 'unknown') !== 'unknown');
-  $beheerLegacyOk = isset($BEHEER_WACHTWOORD)
+  $beheerLegacyOk = !$authTenantPrivate
+    && isset($BEHEER_WACHTWOORD)
     && is_string($BEHEER_WACHTWOORD)
     && $BEHEER_WACHTWOORD !== ''
     && $BEHEER_WACHTWOORD !== 'VeranderDitWachtwoord';
@@ -375,7 +375,7 @@ if ($configOk) {
 }
 
 function authMasterWachtwoordKlopt($invoer) {
-  global $BEHEER_WACHTWOORD_HASH, $BEHEER_WACHTWOORD;
+  global $BEHEER_WACHTWOORD_HASH, $BEHEER_WACHTWOORD, $authTenantPrivate;
 
   if (isset($BEHEER_WACHTWOORD_HASH)
       && is_string($BEHEER_WACHTWOORD_HASH)
@@ -384,7 +384,9 @@ function authMasterWachtwoordKlopt($invoer) {
     return password_verify((string) $invoer, $BEHEER_WACHTWOORD_HASH);
   }
 
-  // Alleen migratiepad voor bestaande installaties. Verwijder deze
+  if ($authTenantPrivate) return false;
+
+  // Alleen migratiepad voor bestaande standalone installaties. Verwijder deze
   // variabele uit beheer-config.php zodra de hash is ingesteld.
   return isset($BEHEER_WACHTWOORD)
     && is_string($BEHEER_WACHTWOORD)
@@ -479,7 +481,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['formulier'] ?? '') === 'in
         break;
       }
     }
-    if ($gevondenGebruiker && isset($gevondenGebruiker['hash']) && password_verify($wachtwoordInvoer, $gevondenGebruiker['hash'])) {
+    if ($gevondenGebruiker
+        && (bool)($gevondenGebruiker['actief'] ?? true)
+        && isset($gevondenGebruiker['hash'])
+        && password_verify($wachtwoordInvoer, $gevondenGebruiker['hash'])) {
       session_regenerate_id(true);
       $_SESSION['gebruiker'] = $gevondenGebruiker['gebruikersnaam'];
       $_SESSION['is_master'] = false;
@@ -555,10 +560,9 @@ function authMagLedenAutorisatieWijzigen() {
 //
 // Geeft terug: toegestaneTabs, isBestuurslid, eigenRol, gebruikerRecord.
 //
-// Master mag alles. Een gewone gebruiker zonder 'tabs'-veld (nog nooit
-// ingesteld via Gebruikers) mag ook alles, net als voor die functie bestond,
-// zodat bestaande gebruikers niet ineens buiten de deur staan. Pas als er via
-// Gebruikers expliciet een selectie is opgeslagen, geldt die beperking.
+// Master mag alles. Alleen standalone/legacy houdt voor oude accounts zonder
+// 'tabs'-veld de historische brede fallback. Externe tenants moeten hun
+// autorisatie expliciet dragen; een incompleet/migratierecord faalt daar dicht.
 //
 // Voor de rol-tabbladen is de bestuursfunctie leidend, niet de checkboxlijst:
 // wie in het tabblad Leden een bestuursfunctie heeft staan (voorzitter,
@@ -566,7 +570,7 @@ function authMagLedenAutorisatieWijzigen() {
 // gekoppeld, krijgt ze erbij. Wie die functie niet heeft, raakt ze ook weer
 // kwijt als ze per ongeluk via Gebruikers zijn aangevinkt.
 function authRechten(array $alleTabs, array $tabsViaRol = []) {
-  global $ingelogd, $isMaster, $huidigeGebruiker;
+  global $ingelogd, $isMaster, $huidigeGebruiker, $authTenantPrivate;
 
   $gebruikerRecord = authGebruikerRecord();
 
@@ -575,7 +579,7 @@ function authRechten(array $alleTabs, array $tabsViaRol = []) {
   } elseif ($gebruikerRecord && isset($gebruikerRecord['tabs']) && is_array($gebruikerRecord['tabs'])) {
     $toegestaneTabs = array_values(array_intersect(array_keys($alleTabs), $gebruikerRecord['tabs']));
   } else {
-    $toegestaneTabs = array_keys($alleTabs);
+    $toegestaneTabs = $authTenantPrivate ? [] : array_keys($alleTabs);
   }
 
   $eigenRol = ($ingelogd && !$isMaster)
