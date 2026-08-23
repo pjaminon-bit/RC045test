@@ -58,15 +58,6 @@ if(!$type||!lidmaatschapTypeToegestaanVoorLeeftijd($type,$leeftijd)){
 $bedrag=lidmaatschapBedragVoorMaand($type,$maand);
 $inschrijfgeld=(float)($type['inschrijfgeld']??0);
 
-[$rateState,$rateLock]=aanmeldenRateLimitPaden();
-try{
-    $toegestaan=registrationRateLimitToestaan($rateState,$rateLock,(string)($_SERVER['REMOTE_ADDR']??'onbekend'),5,3600);
-}catch(Throwable $e){
-    error_log('[aanmelden] rate-limit opslag niet beschikbaar: '.$e->getMessage());
-    aanmeldenAntwoord(503,'Aanmelden is tijdelijk niet beschikbaar. Probeer het later opnieuw.');
-}
-if(!$toegestaan)aanmeldenAntwoord(429,'Te veel aanmeldingen achter elkaar. Probeer het later opnieuw.');
-
 $slot=dataSlotOpen();
 try{
     $nu=time();
@@ -85,6 +76,16 @@ try{
     if($emailKlein!=='')foreach((array)($leden['leden']??[]) as $lid){
         if(is_array($lid)&&strtolower(trim((string)($lid['email']??'')))===$emailKlein)aanmeldenAntwoord(200,'Ontvangen.');
     }
+
+    [$rateState,$rateLock]=aanmeldenRateLimitPaden();
+    try{
+        $toegestaan=registrationRateLimitToestaan($rateState,$rateLock,(string)($_SERVER['REMOTE_ADDR']??'onbekend'),5,3600);
+    }catch(Throwable $e){
+        error_log('[aanmelden] rate-limit opslag niet beschikbaar: '.$e->getMessage());
+        aanmeldenAntwoord(503,'Aanmelden is tijdelijk niet beschikbaar. Probeer het later opnieuw.');
+    }
+    if(!$toegestaan)aanmeldenAntwoord(429,'Te veel aanmeldingen achter elkaar. Probeer het later opnieuw.');
+
     [$straat,$huisnummer]=ledenSplitsAdres($_POST['straat']??'',$_POST['huisnummer']??'');
     $aanmelding=aanmeldingNormaliseer([
         'voornaam'=>$voornaam,
