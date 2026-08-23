@@ -1,0 +1,102 @@
+name: Diagnose authenticated DEV
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PLAYWRIGHT_TEST_BASE_URL: https://rc045.nl/dev
+
+jobs:
+  live-authenticated:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: rc045test-dev-auth-fixture
+      cancel-in-progress: false
+    env:
+      FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
+      FTP_SERVER: ${{ secrets.FTP_SERVER }}
+      FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Installeer SFTP- en browsertooling
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq sshpass
+          npm ci --ignore-scripts
+          npx playwright install --with-deps chromium
+      - name: Bereid tijdelijke SFTP-hosttrust voor
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ -n "${FTP_SERVER:-}" ]] || { echo 'FTP_SERVER ontbreekt' >&2; exit 1; }
+          install -d -m 700 "$RUNNER_TEMP/rc045-ssh"
+          : > "$RUNNER_TEMP/rc045-ssh/known_hosts"
+          chmod 600 "$RUNNER_TEMP/rc045-ssh/known_hosts"
+          echo "SFTP_KNOWN_HOSTS=$RUNNER_TEMP/rc045-ssh/known_hosts" >> "$GITHUB_ENV"
+      - name: Maak eenmalige gemaskeerde E2E-identiteiten
+        shell: bash
+        run: |
+          set -euo pipefail
+          pw="$(php -r 'echo bin2hex(random_bytes(24));')"
+          admin="e2e-admin-${GITHUB_RUN_ID}"
+          member="e2e-member-${GITHUB_RUN_ID}"
+          echo "::add-mask::$pw"
+          echo "E2E_PASSWORD=$pw" >> "$GITHUB_ENV"
+          echo "E2E_ADMIN_USER=$admin" >> "$GITHUB_ENV"
+          echo "E2E_MEMBER_USER=$member" >> "$GITHUB_ENV"
+      - name: Backup en injecteer tijdelijke DEV-authaccounts en testliddata
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/e2e-auth/generated
+          chmod 700 /tmp/e2e-auth /tmp/e2e-auth/generated
+          export SSHPASS="$FTP_PASSWORD"
+          sftp_cmd() { sshpass -e sftp -q -oBatchMode=no -oStrictHostKeyChecking=accept-new -oUserKnownHostsFile="$SFTP_KNOWN_HOSTS" -P 22 "$FTP_USERNAME@$FTP_SERVER"; }
+          printf 'pwd\nls /\n' | sftp_cmd >/dev/null
+          files=(beheer-users.json leden-data.php contributies-data.php groepen-data.php vergaderingen-data.php taken-data.php)
+          for f in "${files[@]}"; do
+            if printf 'get /%s /tmp/e2e-auth/%s\n' "$f" "$f" | sftp_cmd >/dev/null 2>&1; then
+              touch "/tmp/e2e-auth/existed-$f"
+            fi
+          done
+          [[ -f /tmp/e2e-auth/beheer-users.json ]] || printf '[]\n' > /tmp/e2e-auth/beheer-users.json
+          php tests/authenticated-e2e-userfile.php /tmp/e2e-auth/beheer-users.json /tmp/e2e-auth/generated/beheer-users.json
+          php tests/authenticated-e2e-fixtures.php /tmp/e2e-auth /tmp/e2e-auth/generated
+          for f in "${files[@]}"; do
+            printf 'put /tmp/e2e-auth/generated/%s /%s\n' "$f" "$f" | sftp_cmd >/dev/null
+          done
+          rm -rf /tmp/e2e-auth/generated
+      - name: Bewijs authenticated beheer en gekoppeld ledenportaal
+        run: npx playwright test tests/live-dev-authenticated.spec.js --workers=1 --reporter=line
+      - name: Herstel originele DEV-authstore en testliddata
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ -n "${SFTP_KNOWN_HOSTS:-}" ]] || { rm -rf /tmp/e2e-auth; exit 0; }
+          export SSHPASS="$FTP_PASSWORD"
+          sftp_cmd() { sshpass -e sftp -q -oBatchMode=no -oStrictHostKeyChecking=accept-new -oUserKnownHostsFile="$SFTP_KNOWN_HOSTS" -P 22 "$FTP_USERNAME@$FTP_SERVER"; }
+          files=(beheer-users.json leden-data.php contributies-data.php groepen-data.php vergaderingen-data.php taken-data.php)
+          for f in "${files[@]}"; do
+            if [[ -f "/tmp/e2e-auth/existed-$f" && -f "/tmp/e2e-auth/$f" ]]; then
+              printf 'put /tmp/e2e-auth/%s /%s\n' "$f" "$f" | sftp_cmd >/dev/null
+            else
+              printf 'rm /%s\n' "$f" | sftp_cmd >/dev/null 2>&1 || true
+            fi
+          done
+          controle="/tmp/e2e-auth/restored-users.json"
+          if printf 'get /beheer-users.json %s\n' "$controle" | sftp_cmd >/dev/null 2>&1 && [[ -f "$controle" ]]; then
+            if grep -Eq 'e2e-(admin|member)-[0-9]+' "$controle"; then
+              echo 'FOUT: synthetische E2E-identiteit is na herstel blijven staan' >&2
+              exit 1
+            fi
+          fi
+          rm -rf /tmp/e2e-auth
