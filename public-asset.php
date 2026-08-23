@@ -26,7 +26,19 @@ if (publicAssetDefinitie($scope) === null || publicAssetRelatiefPad($scope, $rel
 
 $pad = publicAssetVeiligLeesPad($scope, $relatief);
 $mime = publicAssetMime($scope, $relatief);
-if ($pad === null || $mime === null) publicAssetHttpFout(404);
+if ($mime === null) publicAssetHttpFout(404);
+
+// Alleen de standalone/DEV-installatie mag een ontbrekend sponsorlogo vervangen
+// door de vaste templateplaceholder. Externe tenants vallen bewust niet terug
+// op gedeelde assets: daar blijft een ontbrekende upload een fail-closed 404.
+if ($pad === null && $scope === 'sponsors') {
+    $placeholder = publicAssetStandaloneSponsorPlaceholder();
+    if ($placeholder !== null) {
+        $pad = $placeholder;
+        $mime = 'image/svg+xml';
+    }
+}
+if ($pad === null) publicAssetHttpFout(404);
 
 $grootte = @filesize($pad);
 $mtime = @filemtime($pad);

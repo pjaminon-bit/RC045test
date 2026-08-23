@@ -224,6 +224,24 @@ function publicAssetVeiligLeesPad(string $scope, string $relatief): ?string
     return $padReal;
 }
 
+/**
+ * Standalone/DEV mag voor ontbrekende sponsoruploads één vaste, lokaal
+ * beheerde placeholder tonen. Externe tenants krijgen deze fallback bewust
+ * nooit: ontbrekende tenantuploads blijven daar fail-closed 404.
+ */
+function publicAssetStandaloneSponsorPlaceholder(): ?string
+{
+    if (publicAssetTenantRoot() !== null) return null;
+    $root = publicAssetLegacyRoot();
+    $pad = $root . DIRECTORY_SEPARATOR . 'template-placeholder.svg';
+    if (is_link($root) || is_link($pad) || !is_file($pad) || !is_readable($pad)) return null;
+    $rootReal = realpath($root);
+    $padReal = realpath($pad);
+    if ($rootReal === false || $padReal === false) return null;
+    if (!publicAssetPadBinnen($padReal, $rootReal)) return null;
+    return $padReal;
+}
+
 /** Eén pre-write snapshot per assetscope per POST-request, inclusief metadata. */
 function publicAssetMaakPreWriteSnapshot(string $scope): void
 {
