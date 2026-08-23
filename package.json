@@ -1,0 +1,12 @@
+{
+  "name": "rc045test-acceptance",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Gelockte browseracceptatie-tooling voor het verenigingsplatform",
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.62.1"
+  }
+}
