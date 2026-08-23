@@ -17,23 +17,26 @@ try{
 
     require_once $root.'/app/auth-storage.php';
     $cfg=require $cfgPad;
-    $contextVoor=authStorageSessieContext($cfg,$private);
+    $contextVoor=authStorageSessieContext($cfg,$root,$private);
     $masterVoor=hash_file('sha256',$private.'/auth/master.php');
     check351m(is_string($contextVoor['name']??null)&&str_starts_with($contextVoor['name'],'VST'),'eerste mastergeneratie levert tenant-cookie namespace');
+    check351m(($contextVoor['path']??'')===$private.'/sessions','tenant sessiecontext gebruikt uitsluitend private sessiepad');
+    check351m(preg_match('/^[0-9a-f]{64}$/D',(string)($contextVoor['binding']??''))===1,'tenant sessiecontext levert cryptografische installatiebinding');
 
     file_put_contents($private.'/sessions/sess_canary','oude sessie');
     [$rc,$ro]=run351m([PHP_BINARY,$root.'/bin/bootstrap-tenant-admin.php','--config='.$cfgPad,'--password-stdin','--rotate'],"Master-Generatie-Twee-2026!\n");
     check351m($rc===0&&str_contains($ro,'Ingetrokken tenant-sessies: 1'),'rotatie trekt bestaande sessiebestand in');
 
     clearstatcache(true,$private.'/auth/master.php');
-    $contextNa=authStorageSessieContext($cfg,$private);
+    $contextNa=authStorageSessieContext($cfg,$root,$private);
     $masterNa=hash_file('sha256',$private.'/auth/master.php');
     check351m(is_string($masterVoor)&&is_string($masterNa)&&!hash_equals($masterVoor,$masterNa),'masterconfig krijgt bij rotatie een nieuwe generatie');
     check351m(($contextVoor['name']??'')!==($contextNa['name']??''),'masterrotatie verandert sessiecookie-namespace en sluit loginrace met oude credential');
+    check351m(($contextVoor['binding']??'')!==($contextNa['binding']??''),'masterrotatie verandert ook de installatiebinding');
     check351m(array_values(array_diff(scandir($private.'/sessions')?:[],['.','..']))===[],'oude tenant-sessiebestanden zijn defense-in-depth verwijderd');
 
-    $contextNa2=authStorageSessieContext($cfg,$private);
-    check351m(($contextNa2['name']??'')===($contextNa['name']??''),'ongewijzigde mastergeneratie houdt sessienamespace deterministisch');
+    $contextNa2=authStorageSessieContext($cfg,$root,$private);
+    check351m(($contextNa2['name']??'')===($contextNa['name']??'')&&($contextNa2['binding']??'')===($contextNa['binding']??''),'ongewijzigde mastergeneratie houdt sessiecontext deterministisch');
 }finally{rr351m($tmp);}
 
 echo"Phase 3.5.1 master session generation: {$ok} OK, {$fout} fout(en)\n";exit($fout===0?0:1);
