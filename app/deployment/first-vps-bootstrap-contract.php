@@ -101,7 +101,7 @@ function bootstrap52Plan(array $in): array
     $tenantBase = release47VeiligAbsoluut((string)($in['tenant_base'] ?? '/srv/verenigingen'), 'Tenantbasis');
     $releasePlan = release47Plan($source, $commit, $platformRoot, $tenantBase);
     $out = bootstrap52OutputDir((string)($in['output_dir'] ?? ''), $source);
-    $php = (string)($in['php_version'] ?? '8.3');
+    $php = (string)($in['php_version'] ?? '8.5');
     if (!runtime41PhpVersie($php)) throw new RuntimeException('Ongeldige PHP-versie voor fase 5.2.');
 
     $platformHost = bootstrap52Host((string)($in['platform_host'] ?? ''));
