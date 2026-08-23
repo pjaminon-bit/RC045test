@@ -23,12 +23,13 @@ if ! grep -Eqi '^x-powered-by:' "$TMP/headers.clean"; then ok 'geen X-Powered-By
 # CSP is vanaf de pre-VPS hardening een verplicht contract, niet meer een
 # alternatief voor X-Frame-Options. Uitvoerbare remote scripts moeten geblokkeerd
 # blijven zodat een analytics-CDN nooit dezelfde originrechten krijgt als beheer.
+# OpenStreetMap is uitsluitend als read-only iframe-origin toegestaan.
 csp="$(grep -Ei '^content-security-policy:' "$TMP/headers.clean" | tail -n1 || true)"
 if [[ -n "$csp" ]]; then ok 'Content-Security-Policy actief'; else bad 'Content-Security-Policy ontbreekt'; fi
-for directive in "default-src 'self'" "base-uri 'self'" "object-src 'none'" "frame-ancestors 'none'" "form-action 'self'" "script-src 'self'"; do
+for directive in "default-src 'self'" "base-uri 'self'" "object-src 'none'" "frame-ancestors 'none'" "form-action 'self'" "script-src 'self'" "frame-src https://www.openstreetmap.org"; do
   if grep -Fqi "$directive" <<<"$csp"; then ok "CSP bevat $directive"; else bad "CSP mist $directive"; fi
 done
-if ! grep -Eqi 'script-src[^;]*(gc\.zgo\.at|goatcounter)' <<<"$csp"; then ok 'CSP staat geen GoatCounter/externe analytics-scriptorigin toe'; else bad 'CSP laat externe analytics-JS als script toe'; fi
+if ! grep -Eqi 'script-src[^;]*(gc\.zgo\.at|goatcounter|openstreetmap\.org)' <<<"$csp"; then ok 'CSP staat geen externe analytics- of kaartscriptorigin toe'; else bad 'CSP laat externe analytics/kaart-JS als script toe'; fi
 
 # Onveilige HTTP-methoden mogen geen succesvolle response opleveren.
 trace="$(curl --silent --show-error --request TRACE --output /dev/null --write-out '%{http_code}' --connect-timeout 10 --max-time 30 "$BASE/" || true)"
