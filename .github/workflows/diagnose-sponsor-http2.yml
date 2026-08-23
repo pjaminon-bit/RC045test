@@ -1,0 +1,36 @@
+name: Diagnose sponsor HTTP2
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Vergelijk directe sponsorassets met public asset gateway
+        shell: bash
+        run: |
+          set -euo pipefail
+          names=(traxxas.png kok-lexmond.png toemen.png shamrock.png rothy.png)
+          for mode in direct gateway; do
+            echo "=== $mode ==="
+            for name in "${names[@]}"; do
+              if [[ "$mode" == direct ]]; then
+                url="https://rc045.nl/dev/images/sponsors/$name"
+              else
+                url="https://rc045.nl/dev/public-asset.php?scope=sponsors&path=$name"
+              fi
+              curl --http2 --fail --silent --show-error --output "/tmp/${mode}-${name}" --write-out "$name HTTP=%{http_code} HTTP_VERSION=%{http_version} SIZE=%{size_download}\n" --connect-timeout 10 --max-time 30 "$url"
+            done
+          done
+
+          echo '=== gelijktijdig direct ==='
+          printf '%s\n' "${names[@]}" | xargs -P5 -I{} sh -c 'curl --http2 --fail --silent --show-error --output /tmp/parallel-direct-{} --write-out "{} HTTP=%{http_code} HTTP_VERSION=%{http_version} SIZE=%{size_download}\\n" --connect-timeout 10 --max-time 30 "https://rc045.nl/dev/images/sponsors/{}"'
+
+          echo '=== gelijktijdig gateway ==='
+          printf '%s\n' "${names[@]}" | xargs -P5 -I{} sh -c 'curl --http2 --fail --silent --show-error --output /tmp/parallel-gateway-{} --write-out "{} HTTP=%{http_code} HTTP_VERSION=%{http_version} SIZE=%{size_download}\\n" --connect-timeout 10 --max-time 30 "https://rc045.nl/dev/public-asset.php?scope=sponsors&path={}"'
