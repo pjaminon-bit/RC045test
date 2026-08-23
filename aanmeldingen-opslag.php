@@ -31,7 +31,15 @@ function aanmeldenPogingenPad(): string
     $config=require __DIR__.'/site-config.php';
     $privateRoot=tenantRuntimePrivateRoot(is_array($config)?$config:[]);
     if($privateRoot!==null)return $privateRoot.DIRECTORY_SEPARATOR.'security'.DIRECTORY_SEPARATOR.'aanmelden-pogingen.json';
-    return __DIR__.DIRECTORY_SEPARATOR.'data-backups'.DIRECTORY_SEPARATOR.'aanmelden-pogingen.json';
+
+    $map=__DIR__.DIRECTORY_SEPARATOR.'data-backups';
+    // Standalone installaties kunnen deze gitignored runtime-map nog niet
+    // hebben. Alleen het exacte lokale childpad wordt aangemaakt; een symlink
+    // of ander bestaand bestand wordt niet gevolgd en faalt verderop gesloten.
+    if(!is_dir($map)&&!is_link($map)&&!file_exists($map)){
+        if(@mkdir($map,0750,true))@chmod($map,0750);
+    }
+    return $map.DIRECTORY_SEPARATOR.'aanmelden-pogingen.json';
 }
 
 function aanmeldenPogingenPadVeilig(string $pad): bool
