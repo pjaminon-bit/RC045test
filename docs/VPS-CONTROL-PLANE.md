@@ -73,7 +73,7 @@ php bin/prepare-vps-control-plane.php \
   --app-root=/srv/verenigingsplatform/current \
   --tenants-root=/srv/verenigingen \
   --output=/root/control-plane \
-  --php-version=8.3 \
+  --php-version=8.5 \
   --cert-name=verenigingsplatform-beheer
 ```
 
