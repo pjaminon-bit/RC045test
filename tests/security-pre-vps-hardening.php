@@ -30,6 +30,12 @@ spvCheck(
     'iedere installatie heeft een eigen sessienamespace en binding'
 );
 spvCheck(
+    str_contains($sessionStorage, 'authStorageValideerExterneMaster')
+    && str_contains($sessionStorage, 'password_get_info')
+    && str_contains($sessionStorage, '$heeftPlaintext'),
+    'externe tenantmaster vereist hash-only configuratie'
+);
+spvCheck(
     str_contains($sessionTenant, 'installation_binding')
     && str_contains($sessionTenant, 'authSessionTenantHerstart')
     && str_contains($sessionCheck, '$authSessionInstallatieBinding'),
@@ -65,7 +71,7 @@ spvCheck(
 $signupStore = spvBron($root . '/aanmeldingen-opslag.php');
 $signupEndpoint = spvBron($root . '/aanmelden-ontvangst.php');
 spvCheck(
-    str_contains($signupStore, "privateRoot.DIRECTORY_SEPARATOR.'security'")
+    str_contains($signupStore, "DIRECTORY_SEPARATOR.'security'")
     && str_contains($signupStore, 'aanmeldenPogingenPadVeilig')
     && str_contains($signupStore, 'aanmeldenPogingenSchrijf'),
     'publieke signup limiter gebruikt tenant/private security storage'
@@ -74,6 +80,11 @@ spvCheck(
     str_contains($signupEndpoint, 'aanmeldenPogingRegistreer')
     && str_contains($signupEndpoint, "aanmeldenAntwoord(503"),
     'signup limiter faalt gesloten bij opslagproblemen'
+);
+spvCheck(
+    !str_contains($signupStore, "if(\$status==='nieuw')return true")
+    && str_contains($signupStore, 'aanmeldingenBewaardagen()*86400'),
+    'ook onbeoordeelde aanmeldingen vallen onder maximale bewaartermijn'
 );
 
 $siteConfig = spvBron($root . '/site-config.php');
@@ -87,7 +98,8 @@ spvCheck(
 spvCheck(
     str_contains($siteConfig, '$externPad !== null')
     && str_contains($siteConfig, "https://formspree.io")
-    && str_contains($siteConfig, '$formAction'),
+    && str_contains($siteConfig, '$formAction')
+    && str_contains($siteConfig, '$connectSrc'),
     'CSP houdt standalone Formspree apart van externe tenants'
 );
 
