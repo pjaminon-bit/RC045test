@@ -27,11 +27,18 @@ c522(
     'platformstate-basis is exact root:root 0711 zodat Apache alleen kan traverseren naar publieke ACME-paden'
 );
 
-$productionPreflight = strpos($apply, "if(\$mode!=='status')b52ProductionPreflight(\$p,\$bins)");
+$productionPreflight = strpos($apply, 'b52ProductionPreflight($p,$bins);');
 $stateBaseCall = strpos($apply, 'b52PlatformStateBase($p);$trustedReleasePlan=');
 c522(
     $productionPreflight !== false && $stateBaseCall !== false && $productionPreflight < $stateBaseCall,
     'platformstate-basis wordt pas na volledige production preflight gemuteerd'
+);
+
+$statusExit = strpos($apply, "if(\$mode==='status'){\$state=b52StateRead(\$p,\$ctx['sha256'],true);echo bootstrap52Json(\$state);exit(0);}");
+$bootstrapLockOpen = strpos($apply, "fopen(\$p['paths']['lock_file'],'c')");
+c522(
+    $statusExit !== false && $bootstrapLockOpen !== false && $statusExit < $productionPreflight && $statusExit < $bootstrapLockOpen && $statusExit < $stateBaseCall,
+    '--status leest bestaande state en stopt vóór production preflight, lockwrites en filesystemmutaties'
 );
 
 c522(
