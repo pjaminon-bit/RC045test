@@ -10,24 +10,26 @@ De bootstrap voert in vaste volgorde uit:
 2. brontrust controleren: root-owned, geen group/world-writable bronboom en exact manifest;
 3. Git source-binding controleren: exact repository-root, exact geplande 40-hex commit en schone working tree;
 4. volledige production preflight uitvoeren vóór de eerste mutatie;
-5. fase 4.7 immutable release-bootstrap naar `/srv/verenigingsplatform/releases/<commit>` en atomische `current`;
-6. exacte live DNS-readiness van de platformbeheer-host;
-7. neutrale HTTP/HTTPS catch-alls en neutraal reject-certificaat;
-8. tijdelijke HTTP-01-route voor platformbeheer;
-9. eerste Certbot/ACME-account indien nog niet aanwezig en exact één platformbeheer-certificaat via webroot;
-10. veilige platformoperator via bcrypt en STDIN;
-11. fase 5.1 control-plane installeren en activeren;
-12. eerste tenant provisionen met PDO/PostgreSQL-profiel;
-13. eerste tenantbeheerder via STDIN;
-14. bestaande fase 3.5 en 4.1 t/m 4.5 plannen genereren en controleren;
-15. tenant Linux/PHP-FPM runtime en inactieve Apache-artifacts installeren;
-16. PostgreSQL provisionen terwijl de tenant-runtime nog inactief is;
-17. tenant-FPM pas daarna valideren en reloaden;
-18. tenant-DNS via de bestaande fase-4.3 check aantoonbaar ready maken;
-19. tenant-TLS via fase 4.4 activeren;
-20. monitoring via fase 4.6 activeren;
-21. tenant via fase 4.8 als bestaande gezonde actieve tenant adopteren;
-22. control-plane snapshot verversen en eindhealth bewijzen.
+5. platformstate-basis veilig voorbereiden: `/var/lib/verenigingsplatform` als root-owned `0711`, zodat publieke ACME-paden traverseerbaar zijn zonder directorylisting van private state;
+6. fase 4.7 immutable release-bootstrap naar `/srv/verenigingsplatform/releases/<commit>` en atomische `current`;
+7. exacte live DNS-readiness van de platformbeheer-host;
+8. neutrale HTTP/HTTPS catch-alls en neutraal reject-certificaat;
+9. tijdelijke HTTP-01-route voor platformbeheer;
+10. eerste Certbot/ACME-account indien nog niet aanwezig en exact één platformbeheer-certificaat via webroot;
+11. veilige platformoperator via bcrypt en STDIN;
+12. lege tenantbasis veilig voorbereiden als root-owned `0750`, zodat de eerste control-plane snapshot op een schone VPS een geldige lege tenantroot ziet;
+13. fase 5.1 control-plane installeren en activeren;
+14. eerste tenant provisionen met PDO/PostgreSQL-profiel;
+15. eerste tenantbeheerder via STDIN;
+16. bestaande fase 3.5 en 4.1 t/m 4.5 plannen genereren en controleren;
+17. tenant Linux/PHP-FPM runtime en inactieve Apache-artifacts installeren;
+18. PostgreSQL provisionen terwijl de tenant-runtime nog inactief is;
+19. tenant-FPM pas daarna valideren en reloaden;
+20. tenant-DNS via de bestaande fase-4.3 check aantoonbaar ready maken;
+21. tenant-TLS via fase 4.4 activeren;
+22. monitoring via fase 4.6 activeren;
+23. tenant via fase 4.8 als bestaande gezonde actieve tenant adopteren;
+24. control-plane snapshot verversen en eindhealth bewijzen.
 
 De bootstrap herschrijft de bestaande fase-4 tools niet. De bestaande scripts blijven per stap de bron van waarheid en voeren hun eigen fail-closed validatie opnieuw uit.
 
@@ -115,6 +117,8 @@ Standaardpaden:
 - lifecycle/control-plane state: `/var/lib/verenigingsplatform`;
 - platform ACME-webroot: `/var/lib/verenigingsplatform/acme/control-plane`.
 
+De top-level statebasis `/var/lib/verenigingsplatform` is bewust `root:root 0711`: niet-root processen kunnen de map niet listen of lezen, maar Apache kan wel door het pad traverseren naar expliciet publiek gemaakte ACME challenge-directories. Private onderliggende state houdt zijn eigen strengere modes.
+
 ## Root-vrije controle
 
 ```bash
@@ -127,18 +131,37 @@ Deze controle verifieert het plan, de releasebron en alle 5.2-artifacts opnieuw 
 
 ## Eerste uitvoering en secrets
 
-Gebruik een root-only secretbron die JSON via STDIN schrijft. De exacte invoer bevat de nog benodigde wachtwoorden en wordt niet als CLI-argument gebruikt.
+`--secrets-stdin` gebruikt **JSON Lines (JSONL)**: iedere nog benodigde credential staat op een eigen regel en iedere regel bevat exact één sleutel. De bootstrap leest zo'n regel pas in de stage waarin die credential werkelijk nodig is.
 
-Voor de eerste run zijn dat de platformoperator en eerste tenantbeheerder. Voorbeeld van de vorm, **niet met echte secrets in shell history opslaan**:
+Voor een volledig nieuwe first-VPS apply zijn dit, in deze volgorde:
 
-```json
-{
-  "operator_password": "...",
-  "tenant_admin_password": "..."
-}
+```jsonl
+{"operator_password":"..."}
+{"tenant_admin_password":"..."}
 ```
 
-De apply wordt uitgevoerd met `--apply --secrets-stdin`. Iedere credential wordt pas gelezen in de stage waarin die nodig is en wordt daarna uit de PHP-runtime gewist.
+De wachtwoorden moeten 14 t/m 200 tekens lang zijn en mogen geen controletekens bevatten. Zet echte wachtwoorden niet in shell history, argv, environment-variables of Git.
+
+Maak operationeel bij voorkeur eerst een root-only tijdelijk JSONL-bestand in `/run` met mode `0600`, controleer de rechten en start daarna pas de bootstrap. Zo kunnen verborgen invoerprompts nooit vermengd raken met gelijktijdige bootstrap-output. Een volledige apply gebruikt vervolgens bijvoorbeeld:
+
+```bash
+php bin/apply-first-vps-bootstrap.php \
+  --plan=/root/verenigingsplatform-bootstrap/first-vps-bootstrap-plan.json \
+  --apply \
+  --secrets-stdin < /run/first-vps-secrets.jsonl
+```
+
+Verwijder het tijdelijke bestand direct na de run, ook als de bootstrap faalt.
+
+### Secrets bij `--resume`
+
+Lever bij resume **alleen credentials aan die na het huidige checkpoint nog ontbreken**, in de volgorde waarin de resterende stages ze lezen:
+
+- vóór `operator_ready`: eerst één regel met alleen `operator_password`, daarna — als `tenant_admin_ready` ook nog moet volgen — één regel met alleen `tenant_admin_password`;
+- vanaf `operator_ready` maar vóór `tenant_admin_ready`: alleen één regel met `tenant_admin_password`;
+- vanaf `tenant_admin_ready`: geen `--secrets-stdin` meer nodig.
+
+Een al verbruikte credential opnieuw vooraan meesturen is fout: de volgende stage verwacht exact zijn eigen sleutel en weigert een andere of gecombineerde JSON-regel fail-closed.
 
 ## Checkpoints en hervatten
 
@@ -173,6 +196,8 @@ Fase 4.4 eist terecht dat een Certbot-account vooraf bestaat. Op een werkelijk s
 ## Integriteit van lifecycle en control-plane
 
 De 5.2.1-heraudit heeft ook de onderliggende mutatieketen aangescherpt. Kritieke state-, lock-, queue-, resultaat-, audit- en exportbestanden worden na writes exact op owner/group/mode gecontroleerd. Purge en recover-purge blijven exact gebonden aan tenantroot, plansnapshot en tombstone; kritieke deletes mogen niet stil falen. Control-plane identity, bcrypt-operatorrecords en Fail2ban rate limiting worden vóór activatie fail-closed bewezen.
+
+De first-VPS orchestration maakt de lege tenantbasis vóór de eerste control-plane `--refresh-only` snapshot. De generieke executor blijft daardoor fail-closed voor een werkelijk ontbrekende of onveilige tenantroot; alleen de first-VPS bootstrap zorgt dat de contractueel geplande basis op een schone server al veilig bestaat.
 
 ## Eindbewijs
 
