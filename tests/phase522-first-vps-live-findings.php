@@ -21,7 +21,7 @@ $executor = (string) file_get_contents($root . '/bin/control-plane-executor.php'
 
 c522(
     str_contains($apply, 'function b52PlatformStateBase(array$p):void') &&
-    str_contains($apply, "$base!=='/var/lib/verenigingsplatform'") &&
+    str_contains($apply, "\$base!=='/var/lib/verenigingsplatform'") &&
     str_contains($apply, '@chmod($base,0711)') &&
     str_contains($apply, 'b52Meta($base,0711,true)'),
     'platformstate-basis is exact root:root 0711 zodat Apache alleen kan traverseren naar publieke ACME-paden'
@@ -59,7 +59,7 @@ c522(
     str_contains($docs, '**JSON Lines (JSONL)**') &&
     str_contains($docs, '{"operator_password":"..."}') &&
     str_contains($docs, '{"tenant_admin_password":"..."}') &&
-    !str_contains($docs, '"operator_password": "...",\n  "tenant_admin_password"'),
+    !str_contains($docs, "\"operator_password\": \"...\",\n  \"tenant_admin_password\""),
     'documentatie beschrijft stagegebonden JSONL in plaats van één gecombineerd secrets-object'
 );
 
