@@ -65,6 +65,23 @@ if ($data === null) {
     exit;
 }
 
+// De vaste DEV-codeacceptatie onder /dev bevat bewust geen tenantuploads uit
+// images/sponsors/. De beheerdata kan daar nog wel de namen van historische
+// RC045-sponsorbestanden bevatten. Laat die metadata op DEV niet leiden tot
+// browserrequests naar bestanden die per ontwerp niet worden gedeployd: behoud
+// de CTA/overige sponsorconfig, maar lever een lege items-lijst. De standalone
+// productiesite buiten /dev en alle externe tenants blijven volledig ongemoeid.
+$requestPad = parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH);
+if (!is_string($requestPad)) $requestPad = '';
+$isDevRequest = preg_match('#^/dev(?:/|$)#', $requestPad) === 1;
+if ($sleutel === 'sponsors'
+    && $externPad === null
+    && !$configVerplicht
+    && $isDevRequest
+    && is_array($data)) {
+    $data['items'] = [];
+}
+
 $json = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 if ($json === false) {
     error_log('[platform] publieke content kon niet als JSON worden uitgevoerd: ' . $sleutel);
