@@ -10,12 +10,12 @@ laa(is_array($pngInfo)&&($pngInfo['mime']??'')==='image/png','DEV sponsorplaceho
 $devSponsorPos=strpos($ht,'RewriteCond %{REQUEST_URI} ^/dev/images/sponsors/');
 $devFallbackPos=strpos($ht,'RewriteCond %{REQUEST_URI} ^/dev/images/');
 $genericSponsorPos=strrpos($ht,'RewriteRule ^images/sponsors/');
-laa($devSponsorPos!==false&&$devFallbackPos!==false&&$genericSponsorPos!==false&&$devSponsorPos<=$devFallbackPos&&$devFallbackPos<$genericSponsorPos,'DEV sponsorfallback en algemene fallback staan vóór generieke tenant-uploadgateway');
-laa(str_contains($ht,'RewriteRule ^images/sponsors/[A-Za-z0-9][A-Za-z0-9._-]{0,180}\\.(?:jpe?g|png|webp)$ images/template-placeholder.png [L,NC]'),'ontbrekende DEV sponsorassets vallen intern terug op statische PNG');
-laa(str_contains($ht,'RewriteCond %{REQUEST_FILENAME} !-f'),'DEV sponsorfallback activeert alleen voor fysiek ontbrekende bestanden');
+laa($devSponsorPos!==false&&$devFallbackPos!==false&&$genericSponsorPos!==false&&$devSponsorPos<=$devFallbackPos&&$devFallbackPos<$genericSponsorPos,'DEV sponsorredirect en algemene fallback staan vóór generieke tenant-uploadgateway');
+laa(str_contains($ht,'RewriteRule ^images/sponsors/[A-Za-z0-9][A-Za-z0-9._-]{0,180}\\.(?:jpe?g|png|webp)$ images/template-placeholder.png [R=302,L,NC,NE,QSD]'),'ontbrekende DEV sponsorassets redirecten cachebuster-vrij naar één statische PNG');
+laa(str_contains($ht,'RewriteCond %{REQUEST_FILENAME} !-f'),'DEV sponsorredirect activeert alleen voor fysiek ontbrekende bestanden');
 laa(str_contains($ht,'RewriteRule ^images/(?!sponsors/)(?:[A-Za-z0-9_-]+/)*[A-Za-z0-9][A-Za-z0-9._-]{0,180}\\.(?:jpe?g|png|webp|gif|svg)$ images/template-placeholder.svg [L,NC]'),'algemene ontbrekende DEV-images blijven de SVG-placeholder gebruiken');
 laa(str_contains($ht,'RewriteRule ^images/sponsors/([A-Za-z0-9][A-Za-z0-9._-]{0,180})$ public-asset.php?scope=sponsors&path=$1 [L,QSA,NE]'),'niet-DEV sponsorassets behouden tenantbewuste assetgateway');
-laa(!str_contains($ht,'dev_placeholder=1')&&!str_contains($ht,'[R=302,L,NC,NE,QSD]')&&!str_contains($ht,'/images/$1 [R=302,L,NE,NC]'),'DEV sponsorassets gebruiken geen gatewaymarker of redirectketen');
+laa(!str_contains($ht,'dev_placeholder=1')&&!str_contains($ht,'images/template-placeholder.png [L,NC]')&&!str_contains($ht,'/images/$1 [R=302,L,NE,NC]'),'DEV sponsorassets gebruiken geen gatewaymarker, interne PNG-rewrite of legacy redirect');
 laa(str_contains($ht,'RewriteRule ^images/(?!sponsors/|fotoboek/)')&&str_contains($ht,'images/template-placeholder.svg [L,NC]'),'algemene niet-DEV templatebeelden vallen lokaal terug zonder sponsor/fotoboek te maskeren');
 laa(str_contains($ht,'(?:[A-Za-z0-9_-]+/)*[A-Za-z0-9][A-Za-z0-9._-]{0,180}'),'assetrewrite gebruikt begrensde padsegmenten en geen vrije traversalcapture');
 laa(!str_contains($ht,'RewriteRule ^images/(.+)'), 'assetfallback gebruikt geen onbeperkte path-capture');
