@@ -25,8 +25,8 @@ if (str_contains($htaccess, 'dev_placeholder=1')
 $requiredContent = [
     "\$sleutel === 'sponsors'",
     "preg_match('#^/dev(?:/|$)#', \$requestPad) === 1",
-    '\$externPad === null',
-    '!\$configVerplicht',
+    '$externPad === null',
+    '!$configVerplicht',
     "\$data['items'] = [];",
 ];
 foreach ($requiredContent as $needle) {
