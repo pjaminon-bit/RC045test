@@ -129,7 +129,13 @@ function apply45HbaInstalleer(array $plan): array
         $link = runtime41SymlinkInPad($veiligPad);
         if ($link !== null) throw new RuntimeException('PostgreSQL platformconfigpad mag geen symlink bevatten: ' . $link);
     }
-    if (!is_dir('/etc/verenigingsplatform') && !@mkdir('/etc/verenigingsplatform', 0755, true)) throw new RuntimeException('/etc/verenigingsplatform kon niet worden aangemaakt.');
+    if (!is_dir('/etc/verenigingsplatform') && !@mkdir('/etc/verenigingsplatform', 0710, true)) throw new RuntimeException('/etc/verenigingsplatform kon niet worden aangemaakt.');
+    if (runtime41SymlinkInPad('/etc/verenigingsplatform') !== null
+        || !@chown('/etc/verenigingsplatform', 0)
+        || !@chgrp('/etc/verenigingsplatform', $pgGid)
+        || !@chmod('/etc/verenigingsplatform', 0710)) {
+        throw new RuntimeException('/etc/verenigingsplatform kon niet veilig root:postgres 0710 worden gemaakt voor PostgreSQL traverse.');
+    }
     if (!is_dir('/etc/verenigingsplatform/postgresql') && !@mkdir('/etc/verenigingsplatform/postgresql', 0750)) throw new RuntimeException('PostgreSQL platformconfigmap kon niet worden aangemaakt.');
     if (!is_dir($includeDir) && !@mkdir($includeDir, 0750)) throw new RuntimeException('PostgreSQL HBA include_dir kon niet worden aangemaakt.');
     foreach (['/etc/verenigingsplatform/postgresql', $includeDir] as $dir) {
