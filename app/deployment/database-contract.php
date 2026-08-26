@@ -186,7 +186,7 @@ function database45Plan(array $context): array
             'psql_binary' => 'psql',
             'runuser_binary' => 'runuser',
             'hba_include_dir' => '/etc/verenigingsplatform/postgresql/pg_hba.d',
-            'hba_include_directive' => "include_dir '/etc/verenigingsplatform/postgresql/pg_hba.d'",
+            'hba_include_directive' => 'include_dir "/etc/verenigingsplatform/postgresql/pg_hba.d"',
             'tenant_hba_filename' => $hbaNaam,
             'hba_allow_own_database_only' => true,
             'hba_reject_other_databases_for_tenant_user' => true,

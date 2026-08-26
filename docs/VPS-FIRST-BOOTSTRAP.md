@@ -9,7 +9,7 @@ De bootstrap voert in vaste volgorde uit:
 1. preflight van OS, Apache, PHP-FPM, PostgreSQL, Certbot, Fail2ban, systemd en benodigde binaries/modules;
 2. brontrust controleren: root-owned, geen group/world-writable bronboom en exact manifest;
 3. Git source-binding controleren: exact repository-root, exact geplande 40-hex commit en schone working tree;
-4. volledige production preflight uitvoeren vóór de eerste mutatie;
+4. volledige production preflight uitvoeren vóór de eerste mutatie, inclusief socket-only PostgreSQL (`listen_addresses` leeg en `/var/run/postgresql` beschikbaar);
 5. platformstate-basis veilig voorbereiden: `/var/lib/verenigingsplatform` als root-owned `0711`, zodat publieke ACME-paden traverseerbaar zijn zonder directorylisting van private state;
 6. fase 4.7 immutable release-bootstrap naar `/srv/verenigingsplatform/releases/<commit>` en atomische `current`;
 7. exacte live DNS-readiness van de platformbeheer-host;

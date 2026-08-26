@@ -88,6 +88,23 @@ sudo fail2ban-client -t
 sudo -u postgres psql -X -v ON_ERROR_STOP=1 -Atqc 'SELECT 1;'
 ```
 
+PostgreSQL moet vóór de eerste bootstrap **socket-only** zijn. Fase 4.5 staat bewust geen PostgreSQL TCP-listener toe.
+
+Voor de Ubuntu 26.04 / PostgreSQL 18-baseline:
+
+```bash
+sudo install -d -o postgres -g postgres -m 0755 /etc/postgresql/18/main/conf.d
+printf "listen_addresses = ''\n" | sudo tee /etc/postgresql/18/main/conf.d/99-verenigingsplatform.conf >/dev/null
+sudo chown root:postgres /etc/postgresql/18/main/conf.d/99-verenigingsplatform.conf
+sudo chmod 0644 /etc/postgresql/18/main/conf.d/99-verenigingsplatform.conf
+sudo systemctl restart postgresql
+test -z "$(sudo -u postgres psql -X -Atqc 'SHOW listen_addresses;')"
+sudo -u postgres psql -X -Atqc 'SHOW unix_socket_directories;'
+if ss -ltnp | grep -q ':5432'; then echo 'FOUT: PostgreSQL luistert op TCP 5432'; else echo 'OK: geen TCP-listener op 5432'; fi
+```
+
+Na de restart moet `SHOW listen_addresses` leeg zijn, moet `/var/run/postgresql` beschikbaar zijn als Unix-socketdirectory en mag PostgreSQL niet op TCP-poort 5432 luisteren. De first-VPS production preflight controleert deze voorwaarden opnieuw vóór de eerste platformmutatie.
+
 Daarnaast moeten de relevante `/etc`-configuratiedirectories root-owned en niet group/world-writable zijn.
 
 Een mislukte preflight stopt de bootstrap vóór het eerste bootstrap-lock/state-mutatiepunt.
