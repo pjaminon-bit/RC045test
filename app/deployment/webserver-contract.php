@@ -141,7 +141,7 @@ function web42Plan(array $context, string $outputDir): array
         'apache' => [
             'platform' => 'ubuntu-debian-apache-2.4',
             'minimum_version' => '2.4.49',
-            'control_binary' => 'apache2ctl',
+            'control_binary' => '/usr/sbin/apache2ctl',
             'sites_available_dir' => '/etc/apache2/sites-available',
             'sites_enabled_dir' => '/etc/apache2/sites-enabled',
             'fragment_dir' => '/etc/verenigingsplatform/apache/fragments',
