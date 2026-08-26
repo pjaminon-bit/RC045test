@@ -36,18 +36,12 @@ RewriteRule ^data/(homepage|ontstaan|baanreglement|aanmelden|bedankt|actueel|age
 
 # ===== Publieke beeldassets =====
 # DEV is een code-/templateacceptatieomgeving en bevat bewust niet alle
-# tenantuploads of historische RC045-foto's. Ontbrekende sponsorbestanden
-# worden uitsluitend op /dev met een tijdelijke redirect naar één echte
-# statische PNG-placeholder gestuurd. Daardoor hoeft mobiele Chromium op de
-# huidige hosting niet meerdere intern herschreven HTTP/2-responses voor dezelfde
-# placeholder te verwerken. QSD verwijdert de oude sponsor-cachebuster, zodat
-# alle ontbrekende logo's dezelfde cachebare PNG-resource delen. Externe tenants
-# vallen niet onder deze regel en blijven voor ontbrekende uploads fail-closed.
-RewriteCond %{REQUEST_URI} ^/dev/images/sponsors/ [NC]
-RewriteCond %{REQUEST_FILENAME} !-f
-RewriteRule ^images/sponsors/[A-Za-z0-9][A-Za-z0-9._-]{0,180}\.(?:jpe?g|png|webp)$ images/template-placeholder.png [R=302,L,NC,NE,QSD]
-
-# Overige ontbrekende DEV-beelden krijgen lokaal de neutrale SVG-placeholder.
+# tenantuploads of historische RC045-foto's. Tenant-specifieke sponsoritems
+# worden daarom al in public-content.php uit de DEV-response gefilterd; de
+# browser vraagt die ontbrekende upload-URL's dus niet aan. Directe requests
+# naar ontbrekende sponsoruploads blijven via de generieke assetgateway
+# fail-closed. Overige ontbrekende DEV-beelden krijgen lokaal de neutrale
+# SVG-placeholder.
 RewriteCond %{REQUEST_URI} ^/dev/images/ [NC]
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteRule ^images/(?!sponsors/)(?:[A-Za-z0-9_-]+/)*[A-Za-z0-9][A-Za-z0-9._-]{0,180}\.(?:jpe?g|png|webp|gif|svg)$ images/template-placeholder.svg [L,NC]
