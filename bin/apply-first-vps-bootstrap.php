@@ -23,6 +23,12 @@ function b52PlatformStateBase(array$p):void
     if(runtime41SymlinkInPad($base)!==null||!@chown($base,0)||!@chgrp($base,0)||!@chmod($base,0711))throw new RuntimeException('Platformstate-basis kon niet veilig op root:root 0711 worden gezet.');
     b52Meta($base,0711,true);
 }
+function b52PlatformAcmeDirs(array$p):void
+{
+    $webroot=(string)$p['platform']['acme']['webroot'];$challenge=(string)$p['platform']['acme']['challenge_dir'];$base=dirname($webroot);
+    if($base!=='/var/lib/verenigingsplatform/acme'||$webroot!=='/var/lib/verenigingsplatform/acme/control-plane'||$challenge!==$webroot.'/.well-known/acme-challenge')throw new RuntimeException('Onverwachte platform-ACME paden voor fase 5.2.');
+    b52SafeDir($base,0711);b52SafeDir($webroot,0755);b52SafeDir($webroot.'/.well-known',0755);b52SafeDir($challenge,0755);
+}
 function b52TenantBase(array$p):void
 {
     $base=(string)$p['paths']['tenant_base'];
@@ -74,7 +80,7 @@ function b52DefaultCertValid(array$p):bool{$crt=$p['apache']['default_cert'];$ke
 function b52DefaultCert(array$p):void{b52SafeDir($p['apache']['default_tls_dir'],0755);if(b52DefaultCertValid($p))return;$crt=$p['apache']['default_cert'];$key=$p['apache']['default_key'];if(file_exists($crt)||file_exists($key)||is_link($crt)||is_link($key))throw new RuntimeException('Bestaand neutral reject-certificaat is ongeldig; handmatige inspectie vereist.');$tc=$crt.'.tmp.'.bin2hex(random_bytes(4));$tk=$key.'.tmp.'.bin2hex(random_bytes(4));b52Ok(['/usr/bin/openssl','req','-x509','-newkey','rsa:2048','-sha256','-days','3650','-nodes','-subj','/CN=invalid.verenigingsplatform.invalid','-addext','subjectAltName=DNS:invalid.verenigingsplatform.invalid','-keyout',$tk,'-out',$tc]);if(!@chown($tc,0)||!@chgrp($tc,0)||!@chmod($tc,0644)||!@chown($tk,0)||!@chgrp($tk,0)||!@chmod($tk,0600)){@unlink($tc);@unlink($tk);throw new RuntimeException('Neutral reject-certificaat kon niet veilig worden gemetadateerd.');}if(!@rename($tc,$crt)||!@rename($tk,$key)||!b52DefaultCertValid($p))throw new RuntimeException('Neutral reject-certificaat kon niet veilig worden geplaatst.');}
 function b52PlatformHttp(array$p,array$art):void
 {
-    b52SafeDir($p['platform']['acme']['challenge_dir'],0755);b52DefaultCert($p);
+    b52PlatformAcmeDirs($p);b52DefaultCert($p);
     $targets=[[$p['bundle']['http_catchall'],$p['apache']['sites_available'].'/'.$p['apache']['http_catchall_filename'],0644],[$p['bundle']['https_catchall'],$p['apache']['sites_available'].'/'.$p['apache']['https_catchall_filename'],0644],[$p['bundle']['bootstrap_http'],$p['apache']['bootstrap_http_available'],0644],[$p['bundle']['renewal_hook'],$p['apache']['renewal_hook'],0755]];foreach($targets as[$s,$d,$m]){if(!isset($art[$s])||!is_string($art[$s]))throw new RuntimeException('Gevalideerd bootstrapartifact ontbreekt in memory: '.$s);b52ExactBytes($art[$s],$d,$m);}
     b52Link($p['apache']['sites_available'].'/'.$p['apache']['http_catchall_filename'],$p['apache']['sites_enabled'].'/'.$p['apache']['http_catchall_filename']);b52Link($p['apache']['sites_available'].'/'.$p['apache']['https_catchall_filename'],$p['apache']['sites_enabled'].'/'.$p['apache']['https_catchall_filename']);b52Link($p['apache']['bootstrap_http_available'],$p['apache']['bootstrap_http_enabled']);b52ApacheReload();
 }
