@@ -100,7 +100,7 @@ sudo chmod 0644 /etc/postgresql/18/main/conf.d/99-verenigingsplatform.conf
 sudo systemctl restart postgresql
 test -z "$(sudo -u postgres psql -X -Atqc 'SHOW listen_addresses;')"
 sudo -u postgres psql -X -Atqc 'SHOW unix_socket_directories;'
-if ss -ltnp | grep -q ':5432'; then echo 'FOUT: PostgreSQL luistert op TCP 5432'; else echo 'OK: geen TCP-listener op 5432'; fi
+ss -ltnp | grep ':5432' && exit 1 || true
 ```
 
 Na de restart moet `SHOW listen_addresses` leeg zijn, moet `/var/run/postgresql` beschikbaar zijn als Unix-socketdirectory en mag PostgreSQL niet op TCP-poort 5432 luisteren. De first-VPS production preflight controleert deze voorwaarden opnieuw vóór de eerste platformmutatie.
