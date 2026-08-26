@@ -12,7 +12,7 @@ $errors = [];
 $required = [
     'RewriteCond %{REQUEST_URI} ^/dev/images/sponsors/ [NC]',
     'RewriteCond %{REQUEST_FILENAME} !-f',
-    'RewriteRule ^images/sponsors/[A-Za-z0-9][A-Za-z0-9._-]{0,180}\\.(?:jpe?g|png|webp)$ images/template-placeholder.png [L,NC]',
+    'RewriteRule ^images/sponsors/[A-Za-z0-9][A-Za-z0-9._-]{0,180}\\.(?:jpe?g|png|webp)$ images/template-placeholder.png [R=302,L,NC,NE,QSD]',
     'RewriteRule ^images/sponsors/([A-Za-z0-9][A-Za-z0-9._-]{0,180})$ public-asset.php?scope=sponsors&path=$1 [L,QSA,NE]',
 ];
 foreach ($required as $needle) {
@@ -20,15 +20,13 @@ foreach ($required as $needle) {
 }
 
 if (str_contains($htaccess, 'dev_placeholder=1')) {
-    $errors[] = 'DEV sponsorrouting mag niet meer via een dynamische gatewaymarker lopen';
+    $errors[] = 'DEV sponsorrouting mag niet via een dynamische gatewaymarker lopen';
 }
-if (str_contains($htaccess, '[R=302,L,NC,NE,QSD]')) {
-    $errors[] = 'DEV sponsorassets mogen niet via de oude 302-placeholderroute lopen';
+if (str_contains($htaccess, 'images/template-placeholder.png [L,NC]')) {
+    $errors[] = 'DEV sponsorplaceholder mag niet meer als interne PNG-rewrite worden geserveerd';
 }
-if (str_contains($htaccess, 'images/template-placeholder.svg [L,NC]')
-    && str_contains($htaccess, 'RewriteRule ^images/sponsors/')) {
-    // De algemene DEV fallback mag SVG blijven gebruiken; alleen de specifieke
-    // sponsorregel moet naar de echte PNG wijzen. Dit wordt hierboven exact geëist.
+if (!str_contains($htaccess, '[R=302,L,NC,NE,QSD]')) {
+    $errors[] = 'DEV sponsorplaceholder moet cachebuster-vrij naar de vaste PNG-resource redirecten';
 }
 
 $pngInfo = is_file($png) ? @getimagesize($png) : false;
@@ -79,4 +77,4 @@ if ($errors) {
     exit(1);
 }
 
-echo "OK: DEV sponsorplaceholder is een echte statische PNG; gateway blijft fail-closed\n";
+echo "OK: DEV sponsorplaceholder redirect cachebuster-vrij naar één echte statische PNG; gateway blijft fail-closed\n";
