@@ -43,9 +43,9 @@ c522(
 
 c522(
     str_contains($apply, 'function b52TenantBase(array$p):void') &&
-    str_contains($apply, '@chmod($base,0750)') &&
-    str_contains($apply, 'b52Meta($base,0750,true)'),
-    'lege tenantbasis wordt fail-closed als root:root 0750 voorbereid'
+    str_contains($apply, '@chmod($base,0711)') &&
+    str_contains($apply, 'b52Meta($base,0711,true)'),
+    'lege tenantbasis wordt fail-closed als root:root 0711 voorbereid zodat tenant-runtimeusers alleen kunnen traverseren'
 );
 
 $tenantBaseCall = strpos($apply, "b52TenantBase(\$p);b52Child(\$current,'apply-vps-control-plane.php'");
@@ -85,7 +85,9 @@ c522(
 
 c522(
     str_contains($docs, '/var/lib/verenigingsplatform` is bewust `root:root 0711`') &&
-    str_contains($docs, 'lege tenantbasis vóór de eerste control-plane `--refresh-only` snapshot'),
+    str_contains($docs, '/srv/verenigingen` is eveneens bewust `root:root 0711`') &&
+    str_contains($docs, 'Iedere tenantmap daaronder blijft `root:<unieke-tenantgroep> 0750`') &&
+    str_contains($docs, 'De first-VPS orchestration maakt de gedeelde tenantbasis als `root:root 0711` vóór de eerste control-plane `--refresh-only` snapshot'),
     'live VPS filesystembevindingen zijn expliciet als productiecontract gedocumenteerd'
 );
 
