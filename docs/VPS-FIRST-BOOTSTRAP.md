@@ -17,7 +17,7 @@ De bootstrap voert in vaste volgorde uit:
 9. tijdelijke HTTP-01-route voor platformbeheer;
 10. eerste Certbot/ACME-account indien nog niet aanwezig en exact één platformbeheer-certificaat via webroot;
 11. veilige platformoperator via bcrypt en STDIN;
-12. lege tenantbasis veilig voorbereiden als root-owned `0750`, zodat de eerste control-plane snapshot op een schone VPS een geldige lege tenantroot ziet;
+12. lege tenantbasis veilig voorbereiden als `root:root 0711`, zodat de eerste control-plane snapshot een geldige lege tenantroot ziet en tenant-runtimeusers later uitsluitend naar hun eigen groepsgebonden tenantmap kunnen traverseren zonder de gedeelde basis te kunnen listen;
 13. fase 5.1 control-plane installeren en activeren;
 14. eerste tenant provisionen met PDO/PostgreSQL-profiel;
 15. eerste tenantbeheerder via STDIN;
@@ -119,6 +119,8 @@ Standaardpaden:
 
 De top-level statebasis `/var/lib/verenigingsplatform` is bewust `root:root 0711`: niet-root processen kunnen de map niet listen of lezen, maar Apache kan wel door het pad traverseren naar expliciet publiek gemaakte ACME challenge-directories. Private onderliggende state houdt zijn eigen strengere modes.
 
+De gedeelde tenantbasis `/srv/verenigingen` is eveneens bewust `root:root 0711`. Dit verleent alleen traverse-recht op de parent. De directory-inhoud kan niet worden gelist. Iedere tenantmap daaronder blijft `root:<unieke-tenantgroep> 0750` en tenantmetadata blijft `root:<unieke-tenantgroep> 0640`, zodat de PHP-FPM-user uitsluitend zijn eigen tenantconfiguratie kan bereiken en geen andere tenantboom kan traverseren.
+
 ## Root-vrije controle
 
 ```bash
@@ -197,7 +199,7 @@ Fase 4.4 eist terecht dat een Certbot-account vooraf bestaat. Op een werkelijk s
 
 De 5.2.1-heraudit heeft ook de onderliggende mutatieketen aangescherpt. Kritieke state-, lock-, queue-, resultaat-, audit- en exportbestanden worden na writes exact op owner/group/mode gecontroleerd. Purge en recover-purge blijven exact gebonden aan tenantroot, plansnapshot en tombstone; kritieke deletes mogen niet stil falen. Control-plane identity, bcrypt-operatorrecords en Fail2ban rate limiting worden vóór activatie fail-closed bewezen.
 
-De first-VPS orchestration maakt de lege tenantbasis vóór de eerste control-plane `--refresh-only` snapshot. De generieke executor blijft daardoor fail-closed voor een werkelijk ontbrekende of onveilige tenantroot; alleen de first-VPS bootstrap zorgt dat de contractueel geplande basis op een schone server al veilig bestaat.
+De first-VPS orchestration maakt de gedeelde tenantbasis als `root:root 0711` vóór de eerste control-plane `--refresh-only` snapshot. De generieke executor blijft daardoor fail-closed voor een werkelijk ontbrekende of onveilige tenantroot; alleen de first-VPS bootstrap zorgt dat de contractueel geplande basis op een schone server al veilig bestaat. Tenantdirectories zelf behouden hun unieke groepsgebonden `0750`-grens.
 
 ## Eindbewijs
 
