@@ -85,7 +85,9 @@ c522(
 
 c522(
     str_contains($docs, '/var/lib/verenigingsplatform` is bewust `root:root 0711`') &&
-    str_contains($docs, 'lege tenantbasis vóór de eerste control-plane `--refresh-only` snapshot'),
+    str_contains($docs, '/srv/verenigingen` is eveneens bewust `root:root 0711`') &&
+    str_contains($docs, 'Iedere tenantmap daaronder blijft `root:<unieke-tenantgroep> 0750`') &&
+    str_contains($docs, 'De first-VPS orchestration maakt de gedeelde tenantbasis als `root:root 0711` vóór de eerste control-plane `--refresh-only` snapshot'),
     'live VPS filesystembevindingen zijn expliciet als productiecontract gedocumenteerd'
 );
 
