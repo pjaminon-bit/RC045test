@@ -43,9 +43,9 @@ c522(
 
 c522(
     str_contains($apply, 'function b52TenantBase(array$p):void') &&
-    str_contains($apply, '@chmod($base,0750)') &&
-    str_contains($apply, 'b52Meta($base,0750,true)'),
-    'lege tenantbasis wordt fail-closed als root:root 0750 voorbereid'
+    str_contains($apply, '@chmod($base,0711)') &&
+    str_contains($apply, 'b52Meta($base,0711,true)'),
+    'lege tenantbasis wordt fail-closed als root:root 0711 voorbereid zodat tenant-runtimeusers alleen kunnen traverseren'
 );
 
 $tenantBaseCall = strpos($apply, "b52TenantBase(\$p);b52Child(\$current,'apply-vps-control-plane.php'");
