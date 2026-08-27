@@ -241,6 +241,7 @@ function web42TenantHttpConfig(array $plan): string
 function web42HttpsRoutingFragment(array $plan): string
 {
     $docroot = $plan['shared_code']['document_root'];
+    $docrootParent = dirname($docroot);
     $socket = $plan['php_fpm']['socket'];
     $backend = $plan['php_fpm']['backend'];
 
@@ -262,6 +263,12 @@ function web42HttpsRoutingFragment(array $plan): string
         '',
         '<Directory "/">',
         '    Options None',
+        '    AllowOverride None',
+        '    Require all denied',
+        '</Directory>',
+        '',
+        '<Directory ' . web42ApacheQuote($docrootParent) . '>',
+        '    Options +FollowSymLinks',
         '    AllowOverride None',
         '    Require all denied',
         '</Directory>',
