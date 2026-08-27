@@ -121,9 +121,19 @@ function authStorageActiveerSessieIsolatie(array $siteConfig, string $projectRoo
         tenantRuntimeConfiguratieFout('Session namespace moet vóór response-output worden geactiveerd.');
     }
 
-    $gezet = ini_set('session.save_path', $sessiePad);
-    if ($gezet === false || (string)ini_get('session.save_path') !== $sessiePad) {
-        tenantRuntimeConfiguratieFout('Installatie-eigen PHP session.save_path kon niet worden geactiveerd.');
+    // In de productie-FPM-pool staat session.save_path bewust als
+    // php_admin_value vastgezet. Zo'n waarde kan PHP zelf niet meer via
+    // ini_set() wijzigen. Wanneer FPM al exact het tenantpad afdwingt is dat
+    // dus juist de gewenste veilige toestand en hoeft er niets gewijzigd te
+    // worden. Alleen bij een afwijkende waarde proberen we nog te corrigeren;
+    // lukt dat niet (bijvoorbeeld door een afwijkende php_admin_value), dan
+    // blijft de runtime fail-closed.
+    $actiefPad = (string)ini_get('session.save_path');
+    if (!hash_equals($sessiePad, $actiefPad)) {
+        $gezet = ini_set('session.save_path', $sessiePad);
+        if ($gezet === false || !hash_equals($sessiePad, (string)ini_get('session.save_path'))) {
+            tenantRuntimeConfiguratieFout('Installatie-eigen PHP session.save_path kon niet worden geactiveerd.');
+        }
     }
 
     session_name($context['name']);
