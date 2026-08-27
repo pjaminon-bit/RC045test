@@ -33,9 +33,9 @@ function b52TenantBase(array$p):void
 {
     $base=(string)$p['paths']['tenant_base'];
     if($base===''||$base==='/'||runtime41SymlinkInPad($base)!==null)throw new RuntimeException('Tenantbasis ontbreekt of is onveilig: '.$base);
-    if(!is_dir($base)&&!@mkdir($base,0750,true)&&!is_dir($base))throw new RuntimeException('Tenantbasis kon niet worden gemaakt: '.$base);
-    if(runtime41SymlinkInPad($base)!==null||!@chown($base,0)||!@chgrp($base,0)||!@chmod($base,0750))throw new RuntimeException('Tenantbasis kon niet veilig op root:root 0750 worden gezet.');
-    b52Meta($base,0750,true);
+    if(!is_dir($base)&&!@mkdir($base,0711,true)&&!is_dir($base))throw new RuntimeException('Tenantbasis kon niet worden gemaakt: '.$base);
+    if(runtime41SymlinkInPad($base)!==null||!@chown($base,0)||!@chgrp($base,0)||!@chmod($base,0711))throw new RuntimeException('Tenantbasis kon niet veilig op root:root 0711 worden gezet.');
+    b52Meta($base,0711,true);
 }
 function b52Write(string$p,string$raw,int$mode=0640):void{if(runtime41SymlinkInPad($p)!==null)throw new RuntimeException('Symlink in bootstrapwritepad: '.$p);b52SafeDir(dirname($p));$tmp=dirname($p).'/.'.basename($p).'.tmp.'.bin2hex(random_bytes(6));if(@file_put_contents($tmp,$raw,LOCK_EX)===false)throw new RuntimeException('Tijdelijke bootstrapwrite faalde.');if(!@chown($tmp,0)||!@chgrp($tmp,0)||!@chmod($tmp,$mode)){@unlink($tmp);throw new RuntimeException('Tijdelijke bootstrapwrite kon niet veilig worden gemetadateerd.');}if(is_link($p)||!@rename($tmp,$p)){@unlink($tmp);throw new RuntimeException('Bootstrapwrite kon niet atomisch worden geplaatst.');}if(!@chown($p,0)||!@chgrp($p,0)||!@chmod($p,$mode))throw new RuntimeException('Bootstrapwrite-rechten konden niet worden genormaliseerd.');b52Meta($p,$mode,false);if(!hash_equals(hash('sha256',$raw),(string)hash_file('sha256',$p)))throw new RuntimeException('Bootstrapwrite wijzigde tijdens plaatsing.');}
 function b52StateNew(string$sha):array{return['schema'=>1,'phase'=>'5.2-state','plan_sha256'=>$sha,'stage'=>'start','updated_at_utc'=>gmdate('Y-m-d\TH:i:s\Z')];}
