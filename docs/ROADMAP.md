@@ -1,6 +1,6 @@
 # Roadmap verenigingsplatform
 
-Status per **22-08-2026**.
+Status per **28-08-2026**.
 
 Dit document is de centrale nummering voor het platformtraject. Detailcontracten staan in de genoemde VPS-documentatie en historische beslissingen blijven in `docs/migratie-log/` bewaard.
 
@@ -22,45 +22,45 @@ De gedeelde applicatie kan daarmee meerdere verenigingen vanuit dezelfde codebas
 
 ## Fase 4 — VPS & productie-infrastructuur
 
-**Ontwikkelstatus: 4.1 t/m 4.8 code/CI/merge afgerond en volledig pre-VPS geregressietest.** De daadwerkelijke root-toepassing en live DNS/TLS/databasehandelingen zijn nog niet als echte productie-VPS-acceptatie uitgevoerd.
+**Status: 4.1 t/m 4.8 code/CI/merge én echte VPS-validatie afgerond.** De productiecontracten zijn op 28 augustus 2026 op de eerste Ubuntu 26.04-VPS toegepast en geaccepteerd, inclusief live DNS/TLS, PostgreSQL-isolatie, monitoring, lifecycle/export+restore en release/rollback.
 
 ### 4.1 — VPS runtime & Linux-isolatie
-**Status: code en CI gereed; echte VPS-validatie volgt in fase 5.3.**
+**Status: code, CI en echte VPS-validatie afgerond op 28 augustus 2026.**
 Per tenant een unieke no-login Linux-user/group, eigen PHP-FPM pool/socket en private session/tmp-opslag. Gedeelde code blijft centraal read-only. 4.1.1 heraudit controleert UID/GID-collisions en actieve processen fail-closed.
 Zie `docs/VPS-RUNTIME-ISOLATION.md`.
 
 ### 4.2 — Apache webserver & vhosts
-**Status: code en CI gereed; echte VPS-validatie volgt in fase 5.3.**
+**Status: code, CI en echte VPS-validatie afgerond op 28 augustus 2026.**
 Exacte ServerName, neutrale default-vhost, vaste redirects zonder Host-reflectie, per-tenant FPM-routing en server-side blokkade van private/tooling/VCS-paden.
 Zie `docs/VPS-WEBSERVER.md`.
 
 ### 4.3 — DNS readiness
-**Status: code en CI gereed; live DNS-readiness volgt in fase 5.3.**
+**Status: code, CI en live DNS-validatie afgerond op 28 augustus 2026.**
 Direct A/AAAA of één CNAME-hop, exacte RRset-match en minimaal drie consistente live resolvermetingen. Geen DNS-providercredentials of automatische providerwrites in tenantbundles.
 Zie `docs/VPS-DNS.md`.
 
 ### 4.4 — TLS/HTTPS
-**Status: code en CI gereed; echte certificaatuitgifte volgt in fase 5.3.**
+**Status: code, CI en echte certificaatuitgifte/renewalvalidatie afgerond op 28 augustus 2026.**
 Certbot webroot HTTP-01, neutrale HTTPS-catchall, exacte Host+SNI-binding, certificaat/key-validatie, HSTS en Apache configtest vóór reload/activatie.
 Zie `docs/VPS-TLS.md`.
 
 ### 4.5 — PostgreSQL provisioning
-**Status: code en CI gereed; echte databaseprovisioning volgt in fase 5.3.**
+**Status: code, CI en echte PostgreSQL-provisioning/isolatievalidatie afgerond op 28 augustus 2026.**
 PostgreSQL 16+, één database per tenant, aparte NOLOGIN-owner, app-role gelijk aan de Linux/FPM-user en Unix-socket peer authentication zonder databasewachtwoord. 4.5.1 houdt de app-role NOLOGIN totdat HBA en least privilege aantoonbaar veilig zijn.
 Zie `docs/VPS-DATABASE.md`.
 
 ### 4.6 — Monitoring & logging
-**Status: code en CI gereed; echte service/timer/log-validatie volgt in fase 5.3.**
+**Status: code, CI en echte service/timer/log-validatie afgerond op 28 augustus 2026.**
 Informatie-arme healthcheck, lokale Apache/FPM/PostgreSQL/TLS/app/disk-probes, privacyarme operationele logging, 14 dagen retentie en gededupliceerde alerts.
 Zie `docs/VPS-MONITORING.md`.
 
 ### 4.7 — Release & rollback automation
-**Status: code en CI gereed; echte releasewissel/rollback volgt in fase 5.3.**
+**Status: code, CI en echte releasewissel/rollback afgerond op 28 augustus 2026.**
 Immutable releases per commit, inhoudsmanifest, atomische `current`-wissel, kandidaattenantpreflight, volledige health na activatie en automatische/handmatige rollback naar uitsluitend de vorige gevalideerde release.
 Zie `docs/VPS-RELEASES.md`.
 
 ### 4.8 — Tenant lifecycle
-**Status: code en CI gereed; echte lifecyclevalidatie volgt in fase 5.3.**
+**Status: code, CI en echte lifecycle/export/restorevalidatie afgerond op 28 augustus 2026.**
 Adopteren, uitschakelen, heractiveren, volledige export, `pending_delete`, 24 uur wachttijd, definitieve purge en crash-recovery. Lifecycle-state/audit zijn root-owned en tenantgebonden. DNS-providerrecords worden nooit automatisch verwijderd.
 Zie `docs/VPS-LIFECYCLE.md`.
 
@@ -68,7 +68,7 @@ Zie `docs/VPS-LIFECYCLE.md`.
 
 ### 5.1 — Platformbeheer / superbeheer GUI
 
-**Status: code, CI en merge gereed; echte installatie/acceptatie volgt via fase 5.3.**
+**Status: code, CI, installatie en echte VPS-acceptatie afgerond op 28 augustus 2026.**
 
 Omvat:
 
@@ -91,7 +91,7 @@ Zie `docs/VPS-CONTROL-PLANE.md`.
 
 ### 5.2 — First-VPS productiebootstrap
 
-**Status: code, CI en merge gereed; volledig gehard in 5.2.1 en pre-VPS geregressietest. Productietoepassing is nog niet uitgevoerd.**
+**Status: code, CI, merge en echte first-VPS-productietoepassing afgerond en geaccepteerd op 28 augustus 2026.**
 
 Doel: de handmatige productievoorbereiding reduceren tot één gecontroleerde, hervatbare operatorflow. De implementatie omvat:
 
@@ -145,29 +145,28 @@ Zie `docs/FULL-REGRESSION-ACCEPTANCE.md` en issue #39.
 
 ### 5.3 — Eerste echte VPS-validatie
 
-**Status: volgende en enige open platformfase; nog niet uitgevoerd.**
+**Status: afgerond en volledig groen op 28 augustus 2026.**
 
-Doel: alle reeds gebouwde productiecontracten aantoonbaar op één schone Debian/Ubuntu-VPS uitvoeren en accepteren voordat reguliere verenigingen worden onboard.
+De eerste Ubuntu 26.04-VPS is met één testtenant end-to-end geaccepteerd. Bewezen zijn:
 
-Volgorde:
+- first-VPS bootstrap, control-plane en tenantbeheer;
+- publieke tenant via HTTPS, tenantbeheerlogin en informatie-arme healthcheck;
+- Apache, PHP 8.5-FPM, PostgreSQL socket-only/peer-isolatie, Certbot, Fail2ban, monitoring en logrotate;
+- suspend → activate → export;
+- SHA-256-verificatie en daadwerkelijke restore van de tenant-export in een geïsoleerde wegwerpomgeving;
+- immutable releasewissel, handmatige rollback en terugschakeling;
+- ongewijzigde tenantconfiguratie en canoniek gelijke database-inhoud vóór/na de releasecyclus.
 
-1. VPS-readiness volgens `docs/VPS-READINESS.md`;
-2. vereiste packages/modules/services vooraf installeren en configureren;
-3. platformbeheerhost en eerste testtenanthost kiezen;
-4. DNS-records handmatig bij de provider zetten;
-5. exacte schone Git-checkout van de bevroren VPS-kandidaat op de VPS plaatsen;
-6. fase-5.2 bundle genereren en root-vrij `--check` uitvoeren;
-7. first-VPS bootstrap uitvoeren;
-8. platformbeheer en eerste testtenant functioneel controleren;
-9. monitoring/timers/logrotate over echte runtime controleren;
-10. suspend → activate en volledige export op de testtenant beproeven;
-11. export niet alleen op SHA-256 controleren maar ook daadwerkelijk naar een wegwerp-herstelomgeving restoren;
-12. releasewissel + rollback op de productieachtige VPS beproeven;
-13. resultaten vastleggen en fase 4.1 t/m 5.2 pas daarna als **op echte VPS gevalideerd** markeren.
+Finale release-state:
 
-Een destructieve purge wordt alleen op een expliciete wegwerp-testtenant getest.
+- actief: `d819446b9516bb98a580a88da448487c16383f2e`;
+- previous: `7bab3d1f7e87b7d01311b41bb53e4c66dfcbb39b`;
+- transition: `null`;
+- gevalideerde tenants: `1`.
 
-Zie `docs/VPS-READINESS.md` en `docs/VPS-FIRST-BOOTSTRAP.md`.
+De optionele destructieve purge op een extra wegwerptenant is bewust niet uitgevoerd en was geen acceptatievoorwaarde. De eerste VPS is productiegeschikt verklaard voor gecontroleerde onboarding van verenigingen.
+
+Zie `docs/migratie-log/2026-08-28-fase-5-3-vps-acceptatie.md` en issue #39.
 
 ## Niet-blokkerende technische schuld
 
@@ -184,6 +183,6 @@ Deze resterende punten horen bij een latere mechanische opschoningsfase en mogen
 
 ## Volgorde vanaf nu
 
-**VPS-kandidaat bevroren → fase 5.3 VPS-readiness → echte first-VPS bootstrap → acceptatie van control-plane/tenant/monitoring/lifecycle/export+restore/release-rollback → productiegeschikt verklaren → reguliere verenigingen onboarden.**
+**Fase 5.3 geaccepteerd → eerste VPS productiegeschikt → gecontroleerde onboarding van verenigingen → operationeel monitoren, onderhouden en vervolgverbeteringen via afzonderlijke issues/PR's.**
 
 Een fase kan code/automation al gereed hebben voordat de daadwerkelijke productiehandeling op de VPS is uitgevoerd. Dat verschil blijft per fase expliciet vermeld; **“code gereed” is nooit hetzelfde als “op productie toegepast/gevalideerd”.**

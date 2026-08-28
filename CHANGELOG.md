@@ -2,6 +2,30 @@
 
 Belangrijke platformwijzigingen en acceptatiemijlpalen worden hier chronologisch vastgelegd. Historische technische details blijven daarnaast beschikbaar in `docs/migratie-log/` en de fasegerichte documentatie.
 
+## 2026-08-28 — Fase 5.3 echte VPS-validatie afgerond
+
+### Acceptatie
+
+- first-VPS bootstrap op Ubuntu 26.04 volledig uitgevoerd en geaccepteerd;
+- platformbeheer, publieke testtenant, tenantbeheerlogin en healthcheck live groen;
+- Apache, PHP 8.5-FPM, PostgreSQL socket-only/peer-isolatie, Certbot, Fail2ban, monitoringtimer en logrotate gevalideerd;
+- tenant suspend/activate en volledige export succesvol uitgevoerd;
+- export `20260827_145236-f2d850d7-tenant-export.tar.gz` geverifieerd met SHA-256 `f00de946cb8fa55ef36c0e557101425d48cd4ee1c9878d118eb2f4f9fbd0688e`;
+- export daadwerkelijk naar een geïsoleerde wegwerp-herstelomgeving teruggezet, inhoudelijk gecontroleerd en daarna opgeruimd;
+- release `d819446b9516bb98a580a88da448487c16383f2e` teruggerold naar `7bab3d1f7e87b7d01311b41bb53e4c66dfcbb39b` en daarna opnieuw succesvol geactiveerd;
+- tenantconfiguratie bleef bytegelijk en de canonieke live database-inhoud was gelijk aan de gevalideerde export;
+- finale release-state: active `d819446b...`, previous `7bab3d1f...`, transition `null`, één gevalideerde tenant;
+- officiële healthprobe eindigde `UP` met 10 checks en Apache `Syntax OK`;
+- eerste VPS productiegeschikt verklaard voor gecontroleerde onboarding.
+
+### Live gevonden en structureel opgeloste blokkades
+
+- PR #91 herstelde veilige traverse-rechten op de gedeelde `/etc/verenigingsplatform`-parent;
+- PR #92 corrigeerde de FPM-only `session.save_path`-acceptatie zonder de tenantisolatie te verzwakken;
+- beide fixes zijn in release `d819446b...` live bewezen.
+
+De optionele destructieve purge op een extra wegwerptenant is bewust niet uitgevoerd en blokkeert de productieacceptatie niet.
+
 ## 2026-08-22 — Pre-VPS eindacceptatie afgerond
 
 ### Acceptatie
