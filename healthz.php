@@ -11,6 +11,8 @@ try {
         http_response_code(404);
         exit;
     }
+    require_once __DIR__ . '/app/deployment/php-runtime-requirements.php';
+    platformPhpAssertRequiredExtensions();
     require_once __DIR__ . '/app/operational-log.php';
     require_once __DIR__ . '/app/storage/private-store.php';
 

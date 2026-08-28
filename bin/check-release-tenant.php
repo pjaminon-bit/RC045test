@@ -9,6 +9,9 @@ if (isset($opt['help'])) { echo "Gebruik onder tenant-runtimeuser: php bin/check
 $verwacht = trim((string)($opt['expected-tenant'] ?? ''));
 if ($verwacht === '' || preg_match('/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/D', $verwacht) !== 1) { fwrite(STDERR, "FOUT: geldige --expected-tenant is verplicht.\n"); exit(1); }
 try {
+    require_once dirname(__DIR__) . '/app/deployment/php-runtime-requirements.php';
+    platformPhpAssertRequiredExtensions();
+
     $config = require dirname(__DIR__) . '/site-config.php';
     if (!is_array($config)) throw new RuntimeException('site-config levert geen array.');
     $tenant = (string)($config['vereniging']['sleutel'] ?? '');
