@@ -192,6 +192,10 @@ function tenantHomepagePasTemplateToe(string $html): string
         if ($email !== '') $json['email'] = $email;
         $structured->textContent = json_encode($json, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG) ?: '{}';
     }
+    foreach ($xpath->query('//meta[starts-with(@name,"rc045-title-")]') ?: [] as $meta) {
+        if (!$meta instanceof DOMElement) continue;
+        $meta->setAttribute('name', 'site-title-' . substr($meta->getAttribute('name'), strlen('rc045-title-')));
+    }
     foreach ($xpath->query('//script[@data-goatcounter or contains(@src,"goatcounter") or contains(@src,"gc.zgo.at")]') ?: [] as $script) {
         $script->parentNode?->removeChild($script);
     }
