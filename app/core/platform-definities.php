@@ -27,6 +27,7 @@ return [
         'nieuws'=>['label'=>'Nieuws','categorie'=>'Content','route'=>'nieuws.php','capability'=>'content.nieuws.manage','feature'=>'website'],
         'agenda'=>['label'=>'Agenda','categorie'=>'Content','route'=>'agenda.php','capability'=>'events.agenda.manage','feature'=>'evenementen'],
         'contact'=>['label'=>'Contact','categorie'=>'Content','route'=>'contact.php','capability'=>'content.contact.manage','feature'=>'website'],
+        'websitebeelden'=>['label'=>'Websitebeelden','categorie'=>'Content','route'=>'websitebeelden.php','capability'=>'system.settings.manage','feature'=>'website'],
         'sponsors'=>['label'=>'Sponsors','categorie'=>'Content','route'=>'sponsors.php','capability'=>'content.sponsors.manage','feature'=>'sponsors'],
         'faq'=>['label'=>'Vragen','categorie'=>'Content','route'=>'faq.php','capability'=>'content.faq.manage','feature'=>'aanmelden'],
         'media'=>['label'=>'Media','categorie'=>'Content','route'=>'media.php','capability'=>'content.media.manage','feature'=>'media'],
