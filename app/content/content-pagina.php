@@ -4,6 +4,7 @@
 // ============================================================
 
 require_once __DIR__ . '/public-content-store.php';
+require_once __DIR__ . '/tenant-content-policy.php';
 
 function contentPaginaDefinities(): array
 {
@@ -24,6 +25,11 @@ function contentPaginaDefinitie(string $sleutel): array
 function contentPaginaBestaat(string $sleutel): bool
 {
     return contentPaginaDefinitie($sleutel) !== [];
+}
+
+function contentPaginaRuntimeDefinitie(string $sleutel): array
+{
+    return tenantContentDefinitieVoorRuntime($sleutel, contentPaginaDefinitie($sleutel), siteNaam());
 }
 
 function contentPaginaDataPad(string $sleutel): ?string
@@ -122,10 +128,14 @@ function contentPaginaHomepageStandaard(): array
 
 function contentPaginaStandaard(string $sleutel): array
 {
+    if ($sleutel === 'homepage' && tenantContentIsExtern()) {
+        return tenantContentNeutraleHomepage(siteNaam());
+    }
     if ($sleutel === 'homepage') return contentPaginaHomepageStandaard();
     $def = contentPaginaDefinitie($sleutel);
     $standaard = $def['standaard'] ?? [];
-    return is_array($standaard) ? $standaard : [];
+    $standaard = is_array($standaard) ? $standaard : [];
+    return tenantContentStandaardVoorRuntime($sleutel, $standaard, siteNaam());
 }
 
 function contentPaginaMengStandaard(array $standaard, array $opgeslagen): array
@@ -156,6 +166,10 @@ function contentPaginaLees(string $sleutel): array
     if ($json === false) return $standaard;
     $data = json_decode($json, true);
     if (!is_array($data)) return $standaard;
+    if (tenantContentIsExtern() && tenantContentBevatLegacy($data)) {
+        error_log('[platform] legacy contentpagina-data geweigerd voor externe tenant: ' . $sleutel);
+        return $standaard;
+    }
 
     return $standaard ? contentPaginaMengStandaard($standaard, $data) : $data;
 }
@@ -174,7 +188,7 @@ function contentPaginaWaarde(array $data, string $veld, string $taal = 'nl', str
 
 function contentPaginaHero(string $sleutel): array
 {
-    $def = contentPaginaDefinitie($sleutel);
+    $def = contentPaginaRuntimeDefinitie($sleutel);
     $hero = $def['hero'] ?? [];
     return is_array($hero) ? $hero : [];
 }
@@ -229,7 +243,7 @@ function contentPaginaBootstrap(?string $sleutel = null): array
     if ($sleutel === null || !contentPaginaBestaat($sleutel)) return [];
     return [
         'sleutel' => $sleutel,
-        'definitie' => contentPaginaDefinitie($sleutel),
+        'definitie' => contentPaginaRuntimeDefinitie($sleutel),
         'data' => contentPaginaLees($sleutel),
         'hero' => contentPaginaHero($sleutel),
         'seo_sleutel' => contentPaginaSeoSleutel($sleutel),
