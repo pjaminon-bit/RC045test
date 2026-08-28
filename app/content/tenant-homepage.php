@@ -1,6 +1,10 @@
 <?php
 // ============================================================
-// Server-side publieke homepage voor externe tenants
+// Tenantlaag bovenop de bestaande RC045-homepagestructuur
+// ============================================================
+// Externe tenants gebruiken exact dezelfde index.php, CSS-klassen, navigatie,
+// sectievolgorde en responsive breakpoints als RC045. Alleen identiteit,
+// inhoud, links en media worden vóór verzending tenantveilig ingevuld.
 // ============================================================
 
 require_once dirname(__DIR__) . '/core/site.php';
@@ -10,11 +14,6 @@ require_once __DIR__ . '/tenant-content-policy.php';
 function tenantHomepageActief(): bool
 {
     return tenantContentIsExtern();
-}
-
-function tenantHomepageEsc($waarde): string
-{
-    return htmlspecialchars((string) $waarde, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 }
 
 function tenantHomepageDataset(string $sleutel): array
@@ -33,176 +32,209 @@ function tenantHomepageDataset(string $sleutel): array
     return $data;
 }
 
-function tenantHomepageTekst(array $data, string $veld, string $taal, string $standaard = ''): string
+function tenantHomepageTaalWaarde($waarde, string $taal = 'nl'): string
 {
-    if (!array_key_exists($veld, $data)) return $standaard;
-    $waarde = $data[$veld];
     if (is_array($waarde)) {
-        $kandidaat = $waarde[$taal] ?? $waarde['nl'] ?? '';
-        return is_scalar($kandidaat) && trim((string) $kandidaat) !== '' ? trim((string) $kandidaat) : $standaard;
+        $waarde = $waarde[$taal] ?? $waarde['nl'] ?? '';
     }
-    return is_scalar($waarde) && trim((string) $waarde) !== '' ? trim((string) $waarde) : $standaard;
+    return is_scalar($waarde) ? trim((string) $waarde) : '';
+}
+
+function tenantHomepageDomTekst(DOMDocument $dom, string $id, string $tekst): void
+{
+    $node = $dom->getElementById($id);
+    if (!$node instanceof DOMElement || $tekst === '') return;
+    while ($node->firstChild !== null) $node->removeChild($node->firstChild);
+    $node->appendChild($dom->createTextNode($tekst));
+}
+
+function tenantHomepageDomHref(DOMDocument $dom, string $id, string $href): void
+{
+    $node = $dom->getElementById($id);
+    if ($node instanceof DOMElement) $node->setAttribute('href', $href);
 }
 
 function tenantHomepageVeiligeUrl($waarde): string
 {
     $url = trim((string) $waarde);
     if ($url === '' || filter_var($url, FILTER_VALIDATE_URL) === false) return '';
-    $schema = strtolower((string) parse_url($url, PHP_URL_SCHEME));
-    return in_array($schema, ['http', 'https'], true) ? $url : '';
+    return in_array(strtolower((string) parse_url($url, PHP_URL_SCHEME)), ['http', 'https'], true) ? $url : '';
 }
 
-function tenantHomepageInitialen(string $naam): string
+function tenantHomepagePasTemplateToe(string $html): string
 {
-    $woorden = preg_split('/\s+/u', trim($naam)) ?: [];
-    $letters = '';
-    foreach ($woorden as $woord) {
-        if ($woord === '') continue;
-        $letters .= strtoupper(substr($woord, 0, 1));
-        if (strlen($letters) >= 2) break;
+    if (!tenantHomepageActief() || trim($html) === '') return $html;
+    if (!class_exists(DOMDocument::class)) {
+        throw new RuntimeException('DOM-extensie ontbreekt; tenanthomepage kan niet veilig worden gerenderd.');
     }
-    return $letters !== '' ? $letters : 'V';
-}
 
-function tenantHomepageRender(): void
-{
     $naam = trim(siteNaam()) ?: 'Vereniging';
-    $volledigeNaam = trim(siteVolledigeNaam()) ?: $naam;
     $slogan = trim(siteSlogan());
-    $taal = rc045Taal();
-    $logo = trim(siteAsset('branding.logo'));
-    $standaard = tenantContentNeutraleHomepage($naam);
-    $opgeslagen = tenantHomepageDataset('homepage');
-    $homepage = array_replace_recursive($standaard, $opgeslagen);
-    $contact = tenantHomepageDataset('contact');
-
-    $email = trim((string) ($contact['email'] ?? ''));
-    if (filter_var($email, FILTER_VALIDATE_EMAIL) === false) $email = '';
+    $taal = function_exists('rc045Taal') ? rc045Taal() : siteStandaardTaal();
+    $homepage = array_replace_recursive(tenantContentNeutraleHomepage($naam), tenantHomepageDataset('homepage'));
+    $contact = array_replace_recursive(tenantContentNeutraalContact(), tenantHomepageDataset('contact'));
+    $logo = trim(siteAsset('branding.logo')) ?: 'images/template-placeholder.svg';
+    $email = filter_var((string) ($contact['email'] ?? ''), FILTER_VALIDATE_EMAIL) ? (string) $contact['email'] : '';
     $facebook = tenantHomepageVeiligeUrl($contact['facebook'] ?? '');
     $instagram = tenantHomepageVeiligeUrl($contact['instagram'] ?? '');
-    $straat = trim((string) ($contact['adres_straat'] ?? ''));
-    $plaats = trim((string) ($contact['adres_postcode_plaats'] ?? ''));
+    $siteUrl = siteUrl();
 
-    $ui = [
-        'nl' => ['skip'=>'Ga naar de inhoud','nav'=>'Hoofdnavigatie','home'=>'Home','about'=>'Over ons','participate'=>'Meedoen','contact'=>'Contact','eyebrow'=>'Welkom bij','about_eyebrow'=>'Onze vereniging','participate_eyebrow'=>'Doe mee','contact_eyebrow'=>'Contact','contact_empty'=>'Contactgegevens kunnen door het verenigingsbeheer worden ingevuld.','official'=>'Officiële verenigingswebsite','more'=>'Meer informatie','member'=>'Lid worden','manage'=>'Beheer','language'=>'Taal'],
-        'en' => ['skip'=>'Skip to content','nav'=>'Main navigation','home'=>'Home','about'=>'About us','participate'=>'Join us','contact'=>'Contact','eyebrow'=>'Welcome to','about_eyebrow'=>'Our association','participate_eyebrow'=>'Get involved','contact_eyebrow'=>'Contact','contact_empty'=>'Contact details can be added by the association administrator.','official'=>'Official association website','more'=>'More information','member'=>'Become a member','manage'=>'Admin','language'=>'Language'],
-        'de' => ['skip'=>'Zum Inhalt','nav'=>'Hauptnavigation','home'=>'Start','about'=>'Über uns','participate'=>'Mitmachen','contact'=>'Kontakt','eyebrow'=>'Willkommen bei','about_eyebrow'=>'Unser Verein','participate_eyebrow'=>'Mitmachen','contact_eyebrow'=>'Kontakt','contact_empty'=>'Kontaktdaten können von der Vereinsverwaltung ergänzt werden.','official'=>'Offizielle Vereinswebsite','more'=>'Mehr erfahren','member'=>'Mitglied werden','manage'=>'Verwaltung','language'=>'Sprache'],
-    ][$taal] ?? null;
-    if (!is_array($ui)) $ui = ['skip'=>'Ga naar de inhoud','nav'=>'Hoofdnavigatie','home'=>'Home','about'=>'Over ons','participate'=>'Meedoen','contact'=>'Contact','eyebrow'=>'Welkom bij','about_eyebrow'=>'Onze vereniging','participate_eyebrow'=>'Doe mee','contact_eyebrow'=>'Contact','contact_empty'=>'Contactgegevens kunnen door het verenigingsbeheer worden ingevuld.','official'=>'Officiële verenigingswebsite','more'=>'Meer informatie','member'=>'Lid worden','manage'=>'Beheer','language'=>'Taal'];
+    $vorige = libxml_use_internal_errors(true);
+    $dom = new DOMDocument('1.0', 'UTF-8');
+    $geladen = $dom->loadHTML('<?xml encoding="UTF-8">' . $html, LIBXML_NOWARNING | LIBXML_NOERROR);
+    libxml_clear_errors();
+    libxml_use_internal_errors($vorige);
+    if (!$geladen) throw new RuntimeException('Tenanthomepage-HTML kon niet veilig worden verwerkt.');
 
-    $intro = tenantHomepageTekst($homepage, 'hero_intro', $taal, $standaard['hero_intro'][$taal] ?? $standaard['hero_intro']['nl']);
-    $aboutTitel = tenantHomepageTekst($homepage, 'about_title', $taal, $standaard['about_title'][$taal] ?? $standaard['about_title']['nl']);
-    $aboutP1 = tenantHomepageTekst($homepage, 'about_p1', $taal, $standaard['about_p1'][$taal] ?? $standaard['about_p1']['nl']);
-    $aboutP2 = tenantHomepageTekst($homepage, 'about_p2', $taal, $standaard['about_p2'][$taal] ?? $standaard['about_p2']['nl']);
-    $participateTitel = tenantHomepageTekst($homepage, 'pricing_title', $taal, $standaard['pricing_title'][$taal] ?? $standaard['pricing_title']['nl']);
-    $participateTekst = tenantHomepageTekst($homepage, 'pricing_sub', $taal, $standaard['pricing_sub'][$taal] ?? $standaard['pricing_sub']['nl']);
-    $contactTitel = tenantHomepageTekst($homepage, 'contact_title', $taal, $standaard['contact_title'][$taal] ?? $standaard['contact_title']['nl']);
-    $contactTekst = tenantHomepageTekst($homepage, 'contact_text', $taal, $standaard['contact_text'][$taal] ?? $standaard['contact_text']['nl']);
-    $features = [];
-    foreach ([1, 2, 3, 4] as $nummer) {
-        $titel = tenantHomepageTekst($homepage, 'feat' . $nummer . '_title', $taal, $standaard['feat' . $nummer . '_title'][$taal] ?? $standaard['feat' . $nummer . '_title']['nl']);
-        $tekst = tenantHomepageTekst($homepage, 'feat' . $nummer . '_text', $taal, $standaard['feat' . $nummer . '_text'][$taal] ?? $standaard['feat' . $nummer . '_text']['nl']);
-        if ($titel !== '' || $tekst !== '') $features[] = ['titel' => $titel, 'tekst' => $tekst];
+    foreach ($dom->childNodes as $kind) {
+        if ($kind->nodeType === XML_PI_NODE) { $dom->removeChild($kind); break; }
+    }
+    $body = $dom->getElementsByTagName('body')->item(0);
+    if ($body instanceof DOMElement) {
+        $body->setAttribute('data-template', 'tenant-shared-v1');
+        $body->setAttribute('class', trim($body->getAttribute('class') . ' tenant-shared-template'));
     }
 
-    $structured = ['@context' => 'https://schema.org', '@type' => 'Organization', 'name' => $volledigeNaam, 'url' => siteUrl()];
-    if ($email !== '') $structured['email'] = $email;
-    $structuredJson = json_encode($structured, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
-    $jaar = date('Y');
-    ?><!DOCTYPE html>
-<html lang="<?= tenantHomepageEsc($taal) ?>">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<?php rc045SeoHead('index'); ?>
-<?php siteHeadBranding(); ?>
-<?= siteThemeMarkup() ?>
-  <link rel="stylesheet" href="tenant-homepage.css">
-  <script id="tenant-structured-data" type="application/ld+json"><?= $structuredJson ?: '{}' ?></script>
-</head>
-<body class="tenant-homepage" data-template="tenant-neutral-v1">
-  <a class="tp-skip" href="#inhoud"><?= tenantHomepageEsc($ui['skip']) ?></a>
-  <header class="tp-header">
-    <div class="tp-header-inner">
-      <a class="tp-brand" href="index.html" aria-label="<?= tenantHomepageEsc($naam) ?>">
-        <?php if ($logo !== ''): ?>
-          <img class="tp-logo" src="<?= tenantHomepageEsc($logo) ?>" alt="<?= tenantHomepageEsc($naam) ?> logo">
-        <?php else: ?>
-          <span class="tp-monogram" aria-hidden="true"><?= tenantHomepageEsc(tenantHomepageInitialen($naam)) ?></span>
-        <?php endif; ?>
-        <span><strong><?= tenantHomepageEsc($naam) ?></strong><?php if ($slogan !== ''): ?><small><?= tenantHomepageEsc($slogan) ?></small><?php endif; ?></span>
-      </a>
-      <nav class="tp-nav" aria-label="<?= tenantHomepageEsc($ui['nav']) ?>">
-        <a href="#over-ons"><?= tenantHomepageEsc($ui['about']) ?></a>
-        <a href="#meedoen"><?= tenantHomepageEsc($ui['participate']) ?></a>
-        <a href="#contact"><?= tenantHomepageEsc($ui['contact']) ?></a>
-        <a href="beheer/" rel="nofollow"><?= tenantHomepageEsc($ui['manage']) ?></a>
-      </nav>
-    </div>
-  </header>
+    $veldIds = [];
+    foreach (array_keys($homepage) as $veld) $veldIds[(string) $veld] = 'hp-' . str_replace('_', '-', (string) $veld);
+    $veldIds['form_send'] = 'form-btn';
+    $veldIds += [
+        'nav_about'=>'nav-about', 'nav_membership'=>'nav-membership', 'nav_track'=>'nav-track',
+        'nav_location'=>'nav-location', 'nav_photobook'=>'nav-photobook', 'nav_contact'=>'nav-contact', 'nav_join'=>'nav-join',
+        'footer_brand'=>'footer-brand-text', 'footer_nav'=>'footer-nav-title', 'footer_origin'=>'footer-link-origin',
+        'footer_media'=>'footer-link-media', 'footer_photobook'=>'footer-link-photobook', 'footer_calendar'=>'footer-link-calendar',
+        'footer_join'=>'footer-join-title', 'footer_become'=>'footer-link-become', 'footer_rules'=>'footer-link-rules',
+        'footer_sponsor'=>'footer-link-sponsor', 'footer_sponsors_title'=>'footer-sponsors-title', 'footer_credit'=>'footer-credit-text',
+    ];
+    foreach ($veldIds as $veld => $id) {
+        $tekst = tenantHomepageTaalWaarde($homepage[$veld] ?? '', $taal);
+        if ($tekst !== '') tenantHomepageDomTekst($dom, $id, $tekst);
+    }
 
-  <main id="inhoud">
-    <section class="tp-hero" aria-labelledby="tp-title">
-      <div class="tp-shell tp-hero-inner">
-        <div class="tp-hero-copy">
-          <p class="tp-eyebrow"><?= tenantHomepageEsc($ui['eyebrow']) ?></p>
-          <h1 id="tp-title"><?= tenantHomepageEsc($volledigeNaam) ?></h1>
-          <p class="tp-lead"><?= tenantHomepageEsc($intro) ?></p>
-          <div class="tp-actions">
-            <a class="tp-button tp-button-primary" href="#over-ons"><?= tenantHomepageEsc($ui['more']) ?></a>
-            <a class="tp-button tp-button-secondary" href="#contact"><?= tenantHomepageEsc($ui['contact']) ?></a>
-          </div>
-        </div>
-        <div class="tp-hero-mark" aria-hidden="true"><?= tenantHomepageEsc(tenantHomepageInitialen($naam)) ?></div>
-      </div>
-    </section>
+    $xpath = new DOMXPath($dom);
+    foreach ($xpath->query("//*[contains(concat(' ', normalize-space(@class), ' '), ' nav-logo-text ')]") ?: [] as $node) {
+        if ($node instanceof DOMElement) $node->textContent = $naam;
+    }
+    foreach ($xpath->query("//*[contains(concat(' ', normalize-space(@class), ' '), ' nav-logo-sub ')]") ?: [] as $node) {
+        if ($node instanceof DOMElement) $node->textContent = $slogan;
+    }
 
-    <div class="tp-shell tp-flow">
-      <section class="tp-section" id="over-ons" aria-labelledby="tp-about-title">
-        <p class="tp-eyebrow"><?= tenantHomepageEsc($ui['about_eyebrow']) ?></p>
-        <h2 id="tp-about-title"><?= tenantHomepageEsc($aboutTitel) ?></h2>
-        <div class="tp-copy"><p><?= nl2br(tenantHomepageEsc($aboutP1)) ?></p><p><?= nl2br(tenantHomepageEsc($aboutP2)) ?></p></div>
-        <div class="tp-feature-list">
-          <?php foreach ($features as $feature): ?>
-            <article class="tp-card"><h3><?= tenantHomepageEsc($feature['titel']) ?></h3><p><?= nl2br(tenantHomepageEsc($feature['tekst'])) ?></p></article>
-          <?php endforeach; ?>
-        </div>
-      </section>
+    $heroH1 = $xpath->query("//section[contains(concat(' ', normalize-space(@class), ' '), ' hero ')]//h1")->item(0);
+    if ($heroH1 instanceof DOMElement) {
+        while ($heroH1->firstChild !== null) $heroH1->removeChild($heroH1->firstChild);
+        $heroH1->appendChild($dom->createTextNode($naam));
+        if ($slogan !== '') {
+            $heroH1->appendChild($dom->createElement('br'));
+            $span = $dom->createElement('span');
+            $span->appendChild($dom->createTextNode($slogan));
+            $heroH1->appendChild($span);
+        }
+    }
 
-      <section class="tp-section tp-section-accent" id="meedoen" aria-labelledby="tp-participate-title">
-        <p class="tp-eyebrow"><?= tenantHomepageEsc($ui['participate_eyebrow']) ?></p>
-        <h2 id="tp-participate-title"><?= tenantHomepageEsc($participateTitel) ?></h2>
-        <p class="tp-lead tp-lead-small"><?= nl2br(tenantHomepageEsc($participateTekst)) ?></p>
-        <?php if (siteModuleActief('aanmelden')): ?><a class="tp-button tp-button-primary" href="aanmelden.html"><?= tenantHomepageEsc($ui['member']) ?></a><?php endif; ?>
-      </section>
+    foreach ($dom->getElementsByTagName('img') as $img) {
+        if (!$img instanceof DOMElement) continue;
+        foreach (['src', 'data-src'] as $attribuut) {
+            $bron = $img->getAttribute($attribuut);
+            if ($bron === '') continue;
+            if (preg_match('~(?:rc045-logo|images/(?:crawler|basher|rc045))~i', $bron)) {
+                $img->setAttribute($attribuut, str_contains(strtolower($bron), 'logo') ? $logo : 'images/template-placeholder.svg');
+            }
+        }
+        if (preg_match('~rc045|crawler|basher~i', $img->getAttribute('alt'))) $img->setAttribute('alt', $naam);
+    }
+    foreach ($xpath->query('//*[@data-bg]') ?: [] as $node) {
+        if ($node instanceof DOMElement) $node->setAttribute('data-bg', 'images/template-placeholder.svg');
+    }
+    $heroBg = $dom->getElementById('hero-bg');
+    if ($heroBg instanceof DOMElement) {
+        $heroBg->removeAttribute('style');
+        $heroBg->setAttribute('data-bg', 'images/template-placeholder.svg');
+    }
 
-      <section class="tp-section" id="contact" aria-labelledby="tp-contact-title">
-        <p class="tp-eyebrow"><?= tenantHomepageEsc($ui['contact_eyebrow']) ?></p>
-        <h2 id="tp-contact-title"><?= tenantHomepageEsc($contactTitel) ?></h2>
-        <p class="tp-lead tp-lead-small"><?= nl2br(tenantHomepageEsc($contactTekst)) ?></p>
-        <?php if ($email !== '' || $straat !== '' || $plaats !== '' || $facebook !== '' || $instagram !== ''): ?>
-          <address class="tp-contact-list">
-            <?php if ($email !== ''): ?><a class="tp-card" href="mailto:<?= tenantHomepageEsc($email) ?>"><strong>E-mail</strong><span><?= tenantHomepageEsc($email) ?></span></a><?php endif; ?>
-            <?php if ($straat !== '' || $plaats !== ''): ?><div class="tp-card"><strong>Adres</strong><span><?= tenantHomepageEsc($straat) ?><?php if ($straat !== '' && $plaats !== ''): ?><br><?php endif; ?><?= tenantHomepageEsc($plaats) ?></span></div><?php endif; ?>
-            <?php if ($facebook !== ''): ?><a class="tp-card" href="<?= tenantHomepageEsc($facebook) ?>" rel="noopener noreferrer" target="_blank"><strong>Facebook</strong><span><?= tenantHomepageEsc($facebook) ?></span></a><?php endif; ?>
-            <?php if ($instagram !== ''): ?><a class="tp-card" href="<?= tenantHomepageEsc($instagram) ?>" rel="noopener noreferrer" target="_blank"><strong>Instagram</strong><span><?= tenantHomepageEsc($instagram) ?></span></a><?php endif; ?>
-          </address>
-        <?php else: ?>
-          <p class="tp-empty"><?= tenantHomepageEsc($ui['contact_empty']) ?></p>
-        <?php endif; ?>
-      </section>
-    </div>
-  </main>
+    $straat = trim((string) ($contact['adres_straat'] ?? ''));
+    $plaats = trim((string) ($contact['adres_postcode_plaats'] ?? ''));
+    $adresTekst = $straat !== '' ? $straat : 'Nog niet ingevuld';
+    $plaatsTekst = $plaats !== '' ? $plaats : 'Nog niet ingevuld';
+    foreach (['info-adres-straat', 'addr-straat'] as $id) tenantHomepageDomTekst($dom, $id, $adresTekst);
+    foreach (['info-adres-plaats', 'addr-postcode-plaats'] as $id) tenantHomepageDomTekst($dom, $id, $plaatsTekst);
+    tenantHomepageDomTekst($dom, 'contact-email-value', $email !== '' ? $email : 'Nog niet ingevuld');
+    tenantHomepageDomHref($dom, 'contact-email-link', $email !== '' ? 'mailto:' . $email : '#contact');
+    tenantHomepageDomTekst($dom, 'contact-facebook-value', $facebook !== '' ? preg_replace('~^https?://~i', '', $facebook) : 'Nog niet ingevuld');
+    tenantHomepageDomHref($dom, 'contact-facebook-link', $facebook !== '' ? $facebook : '#contact');
+    tenantHomepageDomHref($dom, 'footer-facebook-link', $facebook !== '' ? $facebook : '#contact');
+    tenantHomepageDomHref($dom, 'contact-instagram-link', $instagram !== '' ? $instagram : '#contact');
+    foreach (['prijs-gast-volwassen','prijs-gast-jeugd','prijs-jeugd','prijs-senior','prijs-inschrijf','info-membership-value'] as $id) {
+        tenantHomepageDomTekst($dom, $id, '—');
+    }
 
-  <footer class="tp-footer">
-    <div class="tp-shell tp-footer-inner">
-      <div><strong><?= tenantHomepageEsc($naam) ?></strong><span><?= tenantHomepageEsc($ui['official']) ?></span></div>
-      <div class="tp-languages" aria-label="<?= tenantHomepageEsc($ui['language']) ?>">
-        <?php foreach (siteTalen() as $code => $_locale): ?><a<?= $code === $taal ? ' aria-current="page"' : '' ?> href="<?= $code === siteStandaardTaal() ? 'index.html' : 'index.html?lang=' . rawurlencode((string) $code) ?>"><?= strtoupper(tenantHomepageEsc((string) $code)) ?></a><?php endforeach; ?>
-      </div>
-      <span>© <?= tenantHomepageEsc($jaar) ?></span>
-    </div>
-  </footer>
-</body>
-</html><?php
+    foreach ($dom->getElementsByTagName('iframe') as $iframe) {
+        if (!$iframe instanceof DOMElement) continue;
+        $iframe->removeAttribute('src');
+        $iframe->setAttribute('srcdoc', '<!doctype html><html lang="nl"><body style="margin:0;display:grid;place-items:center;height:100%;font-family:sans-serif;background:#eef3ef;color:#526258">Locatiekaart nog niet ingesteld</body></html>');
+        $iframe->setAttribute('title', 'Locatie van ' . $naam);
+    }
+
+    $form = $dom->getElementById('contact-form');
+    $formActie = tenantHomepageVeiligeUrl(siteConfigGet('contact.form_action', ''));
+    if ($form instanceof DOMElement && $formActie === '') {
+        $form->setAttribute('action', '#contact');
+        $form->setAttribute('data-tenant-disabled', '1');
+        foreach ($xpath->query('.//button[@type="submit"]', $form) ?: [] as $knop) {
+            if ($knop instanceof DOMElement) $knop->setAttribute('disabled', 'disabled');
+        }
+    } elseif ($form instanceof DOMElement) {
+        $form->setAttribute('action', $formActie);
+    }
+
+    $structured = $dom->getElementById('structured-data');
+    if ($structured instanceof DOMElement) {
+        $json = ['@context'=>'https://schema.org','@type'=>'Organization','name'=>siteVolledigeNaam(),'url'=>$siteUrl];
+        if ($email !== '') $json['email'] = $email;
+        $structured->textContent = json_encode($json, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG) ?: '{}';
+    }
+    foreach ($xpath->query('//script[@data-goatcounter or contains(@src,"goatcounter") or contains(@src,"gc.zgo.at")]') ?: [] as $script) {
+        $script->parentNode?->removeChild($script);
+    }
+
+    $context = [
+        'external'=>true,
+        'tenantKey'=>(string) siteConfigGet('vereniging.sleutel', 'tenant'),
+        'name'=>$naam,
+        'siteUrl'=>$siteUrl,
+        'homepage'=>$homepage,
+        'contact'=>$contact,
+    ];
+    $contextScript = $dom->createElement('script');
+    $contextScript->setAttribute('id', 'vereniging-site-context');
+    $contextScript->textContent = 'window.verenigingSiteContext=' . (json_encode($context, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?: '{}') . ';';
+    $head = $dom->getElementsByTagName('head')->item(0);
+    if ($head instanceof DOMElement) $head->appendChild($contextScript);
+
+    $vervangingen = [
+        'RC045 – Bashers of the South'=>$naam . ($slogan !== '' ? ' – ' . $slogan : ''),
+        'RC045 · Bashers of the South'=>$naam . ($slogan !== '' ? ' · ' . $slogan : ''),
+        'Bashers of the South'=>$slogan,
+        'bestuur@rc045.nl'=>$email !== '' ? $email : 'contactgegevens volgen',
+        'facebook.com/rc045'=>$facebook !== '' ? preg_replace('~^https?://~i', '', $facebook) : 'sociale media volgen',
+        'RC045'=>$naam,
+        'Wijngaardsberg 26'=>$adresTekst,
+        '6464 EZ Eygelshoven'=>$plaatsTekst,
+        'Kerkrade (Eygelshoven)'=>$plaatsTekst,
+        'Eygelshoven'=>$plaatsTekst,
+        'Kok Lexmond'=>'de locatiebeheerder',
+    ];
+    $uit = $dom->saveHTML() ?: '';
+    $uit = str_ireplace(array_keys($vervangingen), array_values($vervangingen), $uit);
+    if (tenantContentBevatLegacy($uit)) {
+        throw new RuntimeException('Legacy-identiteit bleef achter in tenanthomepage-output.');
+    }
+    return $uit;
+}
+
+function tenantHomepageStartOutputFilter(): void
+{
+    static $actief = false;
+    if ($actief || !tenantHomepageActief()) return;
+    $actief = true;
+    ob_start(static fn(string $html): string => tenantHomepagePasTemplateToe($html));
 }
