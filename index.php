@@ -1,10 +1,7 @@
 <?php
 require_once __DIR__ . '/app/content/seo-head.php';
 require_once __DIR__ . '/app/content/tenant-homepage.php';
-if (tenantHomepageActief()) {
-    tenantHomepageRender();
-    return;
-}
+tenantHomepageStartOutputFilter();
 ?><!DOCTYPE html>
 <html lang="<?php echo rc045Taal(); ?>">
 <head>

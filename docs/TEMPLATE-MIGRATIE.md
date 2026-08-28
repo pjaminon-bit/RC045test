@@ -226,18 +226,12 @@ De applicatie en deploymentmetadata zijn nu voorbereid voor een echte multi-tena
 
 Deze vervolgstappen kunnen nu op het vaste `deployment.json`-contract bouwen zonder per vereniging applicatiecode te kopiëren.
 
-# Fase 5.4 — publieke tenanttemplate
+# Fase 5.4.1 — RC045-templatepariteit
 
-Status: **GEÏMPLEMENTEERD op 28-08-2026**
+Status: **GECORRIGEERD op 28-08-2026**
 
-De infrastructuuracceptatie van fase 5.3 maakte zichtbaar dat externe tenants technisch geïsoleerd waren, maar de historische RC045-homepage nog als browserfallback gebruikten. Fase 5.4 scheidt daarom ook de publieke rendering:
+RC045 blijft de visuele en structurele template voor iedere vereniging. Externe tenants gebruiken daarom dezelfde homepagebron, styles, scripts, zeven menu-items, tien secties en responsive breakpoints. Alleen tenantidentiteit, teksten, links, contactgegevens en media worden server-side tenantveilig ingevuld.
 
-- standalone RC045 behoudt de bestaande homepage;
-- externe tenants krijgen een server-side neutrale homepage;
-- nieuwe tenants krijgen neutrale homepage- en contactdata;
-- legacy RC045-data wordt bij externe tenants fail-closed geweigerd;
-- bestaande tenants hebben een controleerbare, geback-upte contentmigratie;
-- primaire secties staan onder elkaar en mobiel worden ook navigatie, hero en acties gestapeld;
-- regressietests bewijzen identiteit, assets, datafiltering en overflowgrenzen.
+De eerdere vereenvoudigde vier-secties-homepage is verwijderd. Legacy RC045-content en -assets worden voor externe tenants fail-closed geweigerd; bestaande veilige tenantdata wordt bij migratie behouden en met ontbrekende templatevelden aangevuld.
 
 Zie `docs/migratie-log/2026-08-28-fase-5-4-publieke-template.md`.

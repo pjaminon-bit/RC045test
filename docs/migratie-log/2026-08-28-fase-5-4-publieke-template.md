@@ -1,20 +1,20 @@
-# Fase 5.4 — publieke tenanttemplate en responsive acceptatie
+# Fase 5.4.1 — RC045-templatepariteit voor publieke tenants
 
 ## Aanleiding
 
-De VPS-acceptatie bewees de release-, rollback- en tenantisolatie, maar de publieke testtenant renderde nog de historische RC045-homepage. De tenanttitel kwam uit de externe configuratie, terwijl vaste HTML, JavaScript-fallbacks en gedeelde afbeeldingen nog RC045-inhoud toonden.
+De eerste uitwerking van fase 5.4 maakte ten onrechte een nieuwe, vereenvoudigde homepage met vier menu-items en vier secties. Dat was niet het afgesproken templatemodel. RC045 is de gedeelde visuele en structurele basis; alleen tenantidentiteit, inhoud, links en media mogen verschillen.
 
 ## Oplossing
 
-- externe tenants gebruiken een afzonderlijke server-side homepage;
-- de standalone RC045-installatie behoudt de bestaande RC045-homepage;
-- naam, slogan, thema, logo en taal komen uit de actieve tenantconfiguratie;
+- standalone RC045 en externe tenants lopen door dezelfde `index.php`, `styles.css`, `site-i18n.js` en `homepage.js`;
+- externe tenants behouden dezelfde zeven menu-items, tien homepageonderdelen, sectievolgorde, grids en responsive breakpoints;
+- een server-side tenantfilter vult naam, slogan, thema, logo, tekst, contactgegevens, links en media veilig in;
 - homepage- en contactdata worden alleen gebruikt wanneer ze geen historische RC045-fingerprints bevatten;
 - onveilige legacydata valt terug op neutrale tekst en wordt gelogd zonder inhoud te loggen;
 - nieuwe tenants krijgen neutrale `homepage.json` en `contact.json` bij provisioning;
-- bestaande tenants kunnen gecontroleerd en met tenantlokale back-up worden gemigreerd;
-- de publieke contentflow is één kolom; onder 760 px worden ook navigatie, hero en acties volledig gestapeld;
-- de template gebruikt geen `100vw` en begrenst alle containers en gridkinderen tegen horizontale overflow.
+- bestaande tenants kunnen gecontroleerd en met tenantlokale back-up worden aangevuld;
+- tenant-eigen waarden blijven behouden, terwijl nieuw vereiste templatevelden neutrale defaults krijgen;
+- RC045-afbeeldingen, favicons, kaartlocatie en analytics worden niet aan een externe tenant doorgegeven.
 
 ## Bestaande tenant controleren en migreren
 
@@ -28,16 +28,16 @@ php bin/migrate-tenant-public-template.php \
   --apply
 ```
 
-Veilige tenant-eigen datasets blijven bij de standaardmigratie behouden. `--force` is alleen bedoeld voor een bewust gekozen volledige reset naar neutrale startinhoud.
+Veilige tenant-eigen waarden blijven bij de standaardmigratie behouden. Ontbrekende velden worden aangevuld. `--force` is alleen bedoeld voor een bewust gekozen volledige reset naar neutrale startinhoud.
 
 ## Acceptatie
 
 `tests/phase54-tenant-public-template.php` bewijst dat:
 
 1. provisioning neutrale startdata schrijft;
-2. een externe tenant server-side met de eigen naam rendert;
-3. RC045-tekst en -afbeeldingen niet in de tenant-HTML voorkomen;
-4. veilige tenantcontent wordt gebruikt;
-5. legacy tenantdata fail-closed wordt geweigerd;
-6. de migratie legacy datasets vervangt;
-7. de responsive CSS éénkoloms content en overflowbegrenzing afdwingt.
+2. een externe tenant dezelfde CSS en JavaScript als RC045 gebruikt;
+3. menu-items en homepageonderdelen exact dezelfde volgorde behouden;
+4. RC045-tekst en -afbeeldingen niet in de tenant-HTML voorkomen;
+5. veilige tenantcontent wordt gebruikt en bij migratie behouden;
+6. legacy tenantdata fail-closed wordt geweigerd;
+7. de bestaande tablet- en mobiele breakpoints brede grids onder elkaar zetten.

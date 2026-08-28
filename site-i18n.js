@@ -7,13 +7,16 @@ function getInitialLang(translations) {
     var bron = translations || (typeof i18n !== 'undefined' ? i18n : null) || {};
     const urlLang = new URLSearchParams(window.location.search).get('lang');
     if (urlLang && bron[urlLang]) return urlLang;
-    const storedLang = localStorage.getItem('rc045_lang');
+    const taalSleutel = window.verenigingSiteContext && window.verenigingSiteContext.external
+      ? window.verenigingSiteContext.tenantKey + '_lang'
+      : 'rc045_lang';
+    const storedLang = localStorage.getItem(taalSleutel);
     if (storedLang && bron[storedLang]) return storedLang;
     return 'nl';
   }
 
 function updateLiveDocumentTitle(lang) {
-  var meta = document.querySelector('meta[name="rc045-title-' + lang + '"]');
+  var meta = document.querySelector('meta[name="site-title-' + lang + '"], meta[name="rc045-title-' + lang + '"]');
   if (meta && meta.getAttribute('content')) document.title = meta.getAttribute('content');
 }
 
@@ -341,7 +344,9 @@ function renderSponsorCta() {
 // hier uit een centrale plek, zodat je ze maar op één plek hoeft aan te
 // passen in plaats van in alle zeven bestanden. Leeg gelaten EN/DE valt
 // terug op de Nederlandse tekst, net als bij de rest van het CMS.
-var navFooterData = null;
+var navFooterData = window.verenigingSiteContext && window.verenigingSiteContext.external
+  ? (window.verenigingSiteContext.homepage || null)
+  : null;
 var navFooterVelden = {
   'nav-about': 'nav_about', 'footer-link-about': 'nav_about',
   'nav-membership': 'nav_membership',
@@ -377,11 +382,12 @@ function renderNavFooterTeksten() {
   });
 }
 (function () {
+  if (navFooterData) renderNavFooterTeksten();
   fetch('data/homepage.json', { cache: 'no-store' })
     .then(function (r) { return r.ok ? r.json() : null; })
     .then(function (d) {
       if (!d) return;
-      navFooterData = d;
+      navFooterData = Object.assign({}, navFooterData || {}, d);
       renderNavFooterTeksten();
     })
     .catch(function () {});

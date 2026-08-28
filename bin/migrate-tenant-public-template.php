@@ -42,12 +42,28 @@ $targets = [
     'contact' => tenantContentNeutraalContact(),
 ];
 $acties = [];
+$schrijfdata = [];
 
 foreach ($targets as $sleutel => $nieuw) {
     $huidig = publicContentLees($sleutel);
-    $status = $huidig === null ? 'ontbreekt' : (tenantContentBevatLegacy($huidig) ? 'legacy' : 'tenant-eigen');
-    $moetSchrijven = $force || $huidig === null || tenantContentBevatLegacy($huidig);
-    $acties[$sleutel] = $moetSchrijven ? 'vervangen-' . $status : 'behouden-tenant-eigen';
+    $legacy = $huidig !== null && tenantContentBevatLegacy($huidig);
+    $status = $huidig === null ? 'ontbreekt' : ($legacy ? 'legacy' : 'tenant-eigen');
+
+    if ($force || $huidig === null || $legacy) {
+        $acties[$sleutel] = 'vervangen-' . $status;
+        $schrijfdata[$sleutel] = $nieuw;
+    } else {
+        // Fase 5.4.1 breidt de neutrale dataset uit tot alle velden van de
+        // gedeelde RC045-template. Tenant-eigen waarden winnen altijd; alleen
+        // ontbrekende velden worden met veilige standaardinhoud aangevuld.
+        $aangevuld = array_replace_recursive($nieuw, $huidig);
+        if ($aangevuld !== $huidig) {
+            $acties[$sleutel] = 'aanvullen-tenant-eigen';
+            $schrijfdata[$sleutel] = $aangevuld;
+        } else {
+            $acties[$sleutel] = 'behouden-tenant-eigen';
+        }
+    }
     echo strtoupper($check ? 'check' : 'plan') . "  {$sleutel}  {$acties[$sleutel]}\n";
 }
 
@@ -58,8 +74,8 @@ if ($check) {
 
 $geschreven = 0;
 foreach ($targets as $sleutel => $nieuw) {
-    if (!str_starts_with($acties[$sleutel], 'vervangen-')) continue;
-    if (!publicContentSchrijfTenant($sleutel, $nieuw, true)) {
+    if (!isset($schrijfdata[$sleutel])) continue;
+    if (!publicContentSchrijfTenant($sleutel, $schrijfdata[$sleutel], true)) {
         fwrite(STDERR, "FOUT: dataset {$sleutel} kon niet tenantveilig worden geschreven.\n");
         exit(1);
     }

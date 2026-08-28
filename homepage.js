@@ -238,6 +238,9 @@
 
   
 
+    const tenantSiteContext = (window.verenigingSiteContext && window.verenigingSiteContext.external)
+      ? window.verenigingSiteContext
+      : null;
     let currentLang = getInitialLang(i18n);
 
     function setLang(lang) {
@@ -261,8 +264,11 @@
       var metaDesc = document.getElementById('meta-description');
       if (metaDesc && t['meta.description']) metaDesc.setAttribute('content', t['meta.description']);
       var canonical = document.getElementById('canonical-link');
-      if (canonical) canonical.setAttribute('href', lang === 'nl' ? 'https://rc045.nl/' : 'https://rc045.nl/?lang=' + lang);
-      localStorage.setItem('rc045_lang', lang);
+      var basisUrl = tenantSiteContext && tenantSiteContext.siteUrl
+        ? tenantSiteContext.siteUrl.replace(/\/$/, '')
+        : 'https://rc045.nl';
+      if (canonical) canonical.setAttribute('href', lang === 'nl' ? basisUrl + '/' : basisUrl + '/?lang=' + lang);
+      localStorage.setItem((tenantSiteContext ? tenantSiteContext.tenantKey : 'rc045') + '_lang', lang);
       const currentUrl = new URL(window.location.href);
       if (lang === 'nl') currentUrl.searchParams.delete('lang');
       else currentUrl.searchParams.set('lang', lang);
@@ -286,6 +292,7 @@
     if (form) {
       form.addEventListener('submit', async function(e) {
         e.preventDefault();
+        if (form.dataset.tenantDisabled === '1') return;
 
         // Honeypot: als dit verborgen veld is ingevuld, is het een bot. Stilletjes niets doen.
         if (document.getElementById('website').value.trim() !== '') {
@@ -375,6 +382,11 @@
     };
     let weatherData = null;
     async function fetchWeather() {
+      if (tenantSiteContext) {
+        var tenantWeather = document.getElementById('weather-desc');
+        if (tenantWeather) tenantWeather.textContent = '—';
+        return;
+      }
       try {
         const res = await fetch('https://api.open-meteo.com/v1/forecast?latitude=50.889&longitude=6.072&current=temperature_2m,weathercode,windspeed_10m,relativehumidity_2m&wind_speed_unit=kmh&timezone=Europe/Amsterdam');
         const data = await res.json();
@@ -416,6 +428,15 @@
     }
     function updateStatus() {
       const t = i18n[currentLang];
+      const el = document.getElementById('status-indicator');
+      const openingstijden = contactData && contactData.openingstijden;
+      if (tenantSiteContext && (!openingstijden || Object.keys(openingstijden).length === 0)) {
+        if (el) {
+          el.className = 'status-closed';
+          el.textContent = currentLang === 'en' ? 'Hours to follow' : currentLang === 'de' ? 'Öffnungszeiten folgen' : 'Openingstijden volgen';
+        }
+        return;
+      }
       const now = new Date();
       const day = now.getDay();
       const hour = now.getHours();
@@ -440,7 +461,7 @@
       // "Nu open" te stellig, dus die dagen krijgen hun eigen tekst.
       const standVandaag = day === 3 ? woensdagStand : day === 6 ? zaterdagStand : day === 0 ? zondagStand : 'open';
       const voorbehoud = isOpen && (standVandaag === 'leden' || isAnimo(standVandaag));
-      const el = document.getElementById('status-indicator');
+      if (!el) return;
       if (voorbehoud) {
         el.className = isAnimo(standVandaag) ? 'status-animo' : 'status-members';
         el.textContent = standVandaag === 'animo_leden' ? t['status.animo.members'] : standVandaag === 'animo' ? t['status.animo'] : t['status.members'];
@@ -598,7 +619,7 @@
     // zolang het JSON-bestand leeg is of niet laadt), maar overschrijft
     // data/homepage.json 'm zodra dat er is. Net als bij sponsors/agenda/
     // nieuws: leeg gelaten EN/DE valt terug op de Nederlandse tekst.
-    var homepageData = null;
+    var homepageData = tenantSiteContext && tenantSiteContext.homepage ? tenantSiteContext.homepage : null;
     var homepageVelden = [
       'hero_intro', 'hero_btn_member', 'hero_btn_more',
       'update_label', 'info_hours', 'info_location', 'info_membership', 'info_weather',
@@ -696,7 +717,7 @@
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (d) {
         if (!d) return;
-        homepageData = d;
+        homepageData = Object.assign({}, homepageData || {}, d);
         renderHomepageTeksten();
       })
       .catch(function () {});
@@ -932,7 +953,7 @@
     // zet daarbij ook de Facebook-link in de footer. Deze vlag zorgt dat
     // site-i18n.js dat bestand niet nog een keer ophaalt.
     window.rc045EigenContact = true;
-    var contactData = null;
+    var contactData = tenantSiteContext && tenantSiteContext.contact ? tenantSiteContext.contact : null;
     function vanTotTekst(vanTot) {
       if (!vanTot || !vanTot.van || !vanTot.tot) return '';
       return vanTot.van + ' – ' + vanTot.tot;
@@ -1120,7 +1141,7 @@
       .then(function(r) { return r.ok ? r.json() : null; })
       .then(function(d) {
         if (!d) return;
-        contactData = d;
+        contactData = Object.assign({}, contactData || {}, d);
         renderContact();
         updateStatus();
       })
@@ -1132,7 +1153,12 @@
     // aan voordat o.a. CONTACT_WOORD was geïnitialiseerd; die JavaScript-fout
     // voorkwam vervolgens dat de reveal/observer-code verderop werd uitgevoerd.
     if (currentLang !== 'nl') setLang(currentLang);
-    else updateInternalLinks('nl');
+    else {
+      updateInternalLinks('nl');
+      renderHomepageTeksten();
+      renderContact();
+      updateStatus();
+    }
   }
 
   if (document.readyState === 'loading') {
