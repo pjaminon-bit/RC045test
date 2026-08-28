@@ -1,4 +1,11 @@
-<?php require_once __DIR__ . '/app/content/seo-head.php'; ?><!DOCTYPE html>
+<?php
+require_once __DIR__ . '/app/content/seo-head.php';
+require_once __DIR__ . '/app/content/tenant-homepage.php';
+if (tenantHomepageActief()) {
+    tenantHomepageRender();
+    return;
+}
+?><!DOCTYPE html>
 <html lang="<?php echo rc045Taal(); ?>">
 <head>
   <meta charset="UTF-8">
