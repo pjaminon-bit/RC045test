@@ -7,6 +7,7 @@ if (PHP_SAPI !== 'cli') {
     exit('Alleen via CLI beschikbaar.');
 }
 require_once dirname(__DIR__) . '/app/core/tenant-runtime.php';
+require_once dirname(__DIR__) . '/app/content/tenant-content-policy.php';
 
 function provisionStop(string $melding, int $code = 1): void
 {
@@ -375,6 +376,14 @@ $manifest = json_encode([
     'private_root' => $privateRoot,
     'require_tenant_config' => true,
 ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n";
+$homepageStart = json_encode(
+    tenantContentNeutraleHomepage($naam),
+    JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES
+) . "\n";
+$contactStart = json_encode(
+    tenantContentNeutraalContact(),
+    JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES
+) . "\n";
 
 if (!$dryRun && !is_dir($baseRoot)) {
     if (!@mkdir($baseRoot, 0750, true) && !is_dir($baseRoot)) provisionStop("basisroot {$baseRoot} kon niet worden aangemaakt.");
@@ -406,6 +415,20 @@ $resultaten = [
     $configPad => provisionSchrijf($configPad, provisionPhpArray($config), $force, $dryRun, $tenantRoot),
     $envPad => provisionSchrijf($envPad, $env, $force, $dryRun, $tenantRoot),
     $manifestPad => provisionSchrijf($manifestPad, $manifest, $force, $dryRun, $tenantRoot),
+    $privateRoot . '/public-content/homepage.json' => provisionSchrijf(
+        $privateRoot . '/public-content/homepage.json',
+        $homepageStart,
+        $force,
+        $dryRun,
+        $tenantRoot
+    ),
+    $privateRoot . '/public-content/contact.json' => provisionSchrijf(
+        $privateRoot . '/public-content/contact.json',
+        $contactStart,
+        $force,
+        $dryRun,
+        $tenantRoot
+    ),
 ];
 
 foreach ($resultaten as $pad => $status) echo strtoupper($status) . "  {$pad}\n";
