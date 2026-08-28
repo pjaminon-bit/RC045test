@@ -91,7 +91,11 @@ try {
 
     $bron = (string) file_get_contents($root . '/index.php');
     check54(str_contains($bron, '@media (max-width: 900px)') && str_contains($bron, '@media (max-width: 700px)'), 'bestaande responsive templatebreakpoints blijven actief');
-    check54(str_contains($bron, '.rules-grid { grid-template-columns: 1fr; }') && str_contains($bron, '.track-layout { grid-template-columns: 1fr; }'), 'brede grids stapelen op kleine schermen');
+    check54(
+        preg_match('~\\.rules-grid\\s*\\{[^}]*grid-template-columns:\\s*1fr~s', $bron) === 1
+        && preg_match('~\\.track-layout\\s*\\{[^}]*grid-template-columns:\\s*1fr~s', $bron) === 1,
+        'brede grids stapelen op kleine schermen'
+    );
 
     $veilig = ['about_title' => ['nl' => 'Onze eigen roeivereniging']];
     file_put_contents($homepagePad, json_encode($veilig, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n");
