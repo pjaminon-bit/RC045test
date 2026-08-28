@@ -2,15 +2,15 @@
 
 Belangrijke platformwijzigingen en acceptatiemijlpalen worden hier chronologisch vastgelegd. Historische technische details blijven daarnaast beschikbaar in `docs/migratie-log/` en de fasegerichte documentatie.
 
-## 2026-08-28 — Fase 5.4 publieke tenanttemplate
+## 2026-08-28 — Fase 5.4.1 RC045-templatepariteit
 
-- externe tenants losgekoppeld van de historische RC045-homepage, JavaScript-fallbacks en gedeelde RC045-afbeeldingen;
-- nieuwe server-side, tenant-neutrale homepage met configuratiegestuurde identiteit, branding en talen;
-- fail-closed legacycontrole voor publieke homepage-, contact- en contentpagedata;
-- neutrale homepage- en contactseed toegevoegd aan provisioning;
-- geback-upte migratieopdracht voor bestaande tenants toegevoegd;
-- primaire publieke contentflow op één kolom vastgelegd en mobiele navigatie, hero, acties en footer gestapeld;
-- regressietest toegevoegd voor tenantidentiteit, legacydata, assets, migratie en overflowgrenzen.
+- foutieve vereenvoudigde tenanthomepage met afwijkend menu en secties verwijderd;
+- externe tenants teruggebracht naar dezelfde `index.php`, `styles.css`, `site-i18n.js` en `homepage.js` als RC045;
+- zeven menu-items, tien homepageonderdelen, sectievolgorde en responsive breakpoints als vast templatecontract vastgelegd;
+- server-side tenantfilter toegevoegd voor veilige identiteit, inhoud, links, contactgegevens en media;
+- RC045-inhoud, afbeeldingen, favicons, locatiekaart en analytics voor externe tenants fail-closed geneutraliseerd;
+- migratie vult ontbrekende templatevelden aan zonder tenant-eigen waarden te overschrijven;
+- regressietest uitgebreid met structurele templatepariteit en mobiele gridstapeling.
 
 ## 2026-08-28 — Fase 5.3 echte VPS-validatie afgerond
 
