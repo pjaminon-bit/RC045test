@@ -48,7 +48,7 @@ function tenantSettingsAsset($waarde): string
 {
     $asset = tenantSettingsTekst($waarde, 300);
     if ($asset === '') return '';
-    if (preg_match('~^public-asset\.php\?scope=branding&path=[A-Za-z0-9._-]+$~D', $asset) === 1) return $asset;
+    if (preg_match('~^(?:public-asset\.php\?scope=branding&path=|branding-asset\.php\?name=)[A-Za-z0-9._-]+$~D', $asset) === 1) return $asset;
     if (filter_var($asset, FILTER_VALIDATE_URL) !== false && in_array(strtolower((string)parse_url($asset, PHP_URL_SCHEME)), ['http','https'], true)) return $asset;
     return '';
 }
@@ -69,13 +69,16 @@ function tenantSettingsNormaliseer(array $input, array $huidig = []): array
         'text'=>'#2A3818','muted'=>'#6A7560','background'=>'#FAF6EC',
         'nav_background'=>'#FFFFFF','nav_text'=>'#2A3818',
     ];
+    $beeldSleutels = ['hero','about','activity','gallery'];
 
     $verenigingIn = is_array($input['vereniging'] ?? null) ? $input['vereniging'] : [];
     $brandingIn = is_array($input['branding'] ?? null) ? $input['branding'] : [];
     $kleurenIn = is_array($brandingIn['kleuren'] ?? null) ? $brandingIn['kleuren'] : [];
+    $beeldenIn = is_array($brandingIn['afbeeldingen'] ?? null) ? $brandingIn['afbeeldingen'] : [];
     $betalingIn = is_array($input['betaling'] ?? null) ? $input['betaling'] : [];
 
     $huidigBranding = is_array($huidig['branding'] ?? null) ? $huidig['branding'] : [];
+    $huidigBeelden = is_array($huidigBranding['afbeeldingen'] ?? null) ? $huidigBranding['afbeeldingen'] : [];
     $logo = array_key_exists('logo', $brandingIn) ? tenantSettingsAsset($brandingIn['logo']) : tenantSettingsAsset($huidigBranding['logo'] ?? '');
     $favicon = array_key_exists('favicon', $brandingIn) ? tenantSettingsAsset($brandingIn['favicon']) : tenantSettingsAsset($huidigBranding['favicon'] ?? '');
 
@@ -91,6 +94,7 @@ function tenantSettingsNormaliseer(array $input, array $huidig = []): array
             'favicon' => $favicon,
             'theme_color' => tenantSettingsKleur($brandingIn['theme_color'] ?? ($kleurenIn['dark'] ?? ''), $standaardKleuren['dark']),
             'kleuren' => [],
+            'afbeeldingen' => [],
         ],
         'betaling' => [
             'iban' => tenantSettingsIban($betalingIn['iban'] ?? ''),
@@ -102,6 +106,11 @@ function tenantSettingsNormaliseer(array $input, array $huidig = []): array
 
     foreach ($standaardKleuren as $sleutel => $fallback) {
         $resultaat['branding']['kleuren'][$sleutel] = tenantSettingsKleur($kleurenIn[$sleutel] ?? '', $fallback);
+    }
+    foreach ($beeldSleutels as $sleutel) {
+        $resultaat['branding']['afbeeldingen'][$sleutel] = array_key_exists($sleutel, $beeldenIn)
+            ? tenantSettingsAsset($beeldenIn[$sleutel])
+            : tenantSettingsAsset($huidigBeelden[$sleutel] ?? '');
     }
 
     if ($resultaat['vereniging']['naam'] === '') $resultaat['vereniging']['naam'] = 'Vereniging';
