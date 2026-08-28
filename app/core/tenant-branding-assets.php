@@ -1,0 +1,112 @@
+<?php
+// ============================================================
+// Veilige tenantbranding-assets
+// ============================================================
+require_once __DIR__ . '/tenant-runtime.php';
+
+function tenantBrandingAssetRoot(array $config): ?string
+{
+    $privateRoot = tenantRuntimePrivateRoot($config);
+    if ($privateRoot === null) return null;
+    return rtrim($privateRoot, '/\\') . DIRECTORY_SEPARATOR . 'public-assets' . DIRECTORY_SEPARATOR . 'branding';
+}
+
+function tenantBrandingAssetNaamGeldig(string $naam): bool
+{
+    return preg_match('/^(logo|favicon)\.(png|jpe?g|webp)$/D', $naam) === 1;
+}
+
+function tenantBrandingAssetMimeVoorExt(string $ext): ?string
+{
+    return match (strtolower($ext)) {
+        'png' => 'image/png',
+        'jpg', 'jpeg' => 'image/jpeg',
+        'webp' => 'image/webp',
+        default => null,
+    };
+}
+
+function tenantBrandingAssetPad(array $config, string $naam): ?string
+{
+    if (!tenantBrandingAssetNaamGeldig($naam)) return null;
+    $root = tenantBrandingAssetRoot($config);
+    if ($root === null) return null;
+    return $root . DIRECTORY_SEPARATOR . $naam;
+}
+
+function tenantBrandingAssetUrl(array $config, string $naam): string
+{
+    if (!tenantBrandingAssetNaamGeldig($naam)) return '';
+    $site = rtrim((string)($config['vereniging']['site_url'] ?? ''), '/');
+    $relatief = 'branding-asset.php?name=' . rawurlencode($naam);
+    return $site !== '' ? $site . '/' . $relatief : '/' . $relatief;
+}
+
+function tenantBrandingAssetVerwijderVarianten(array $config, string $type, string $behoud): void
+{
+    $root = tenantBrandingAssetRoot($config);
+    if ($root === null) return;
+    foreach (['png','jpg','jpeg','webp'] as $ext) {
+        $naam = $type . '.' . $ext;
+        if ($naam === $behoud) continue;
+        $pad = $root . DIRECTORY_SEPARATOR . $naam;
+        if (is_file($pad) && !is_link($pad)) @unlink($pad);
+    }
+}
+
+function tenantBrandingAssetUpload(array $config, array $upload, string $type): string
+{
+    if (!in_array($type, ['logo','favicon'], true)) throw new InvalidArgumentException('Onbekend brandingtype.');
+    $fout = (int)($upload['error'] ?? UPLOAD_ERR_NO_FILE);
+    if ($fout === UPLOAD_ERR_NO_FILE) return '';
+    if ($fout !== UPLOAD_ERR_OK) throw new RuntimeException('Upload is niet volledig ontvangen.');
+
+    $tmp = (string)($upload['tmp_name'] ?? '');
+    $grootte = (int)($upload['size'] ?? 0);
+    $limiet = $type === 'logo' ? 5 * 1024 * 1024 : 1024 * 1024;
+    if ($tmp === '' || !is_uploaded_file($tmp) || $grootte < 1 || $grootte > $limiet) {
+        throw new RuntimeException($type === 'logo' ? 'Logo moet een afbeelding van maximaal 5 MB zijn.' : 'Favicon moet een afbeelding van maximaal 1 MB zijn.');
+    }
+
+    $finfo = new finfo(FILEINFO_MIME_TYPE);
+    $mime = (string)$finfo->file($tmp);
+    $ext = match ($mime) {
+        'image/png' => 'png',
+        'image/jpeg' => 'jpg',
+        'image/webp' => 'webp',
+        default => '',
+    };
+    if ($ext === '') throw new RuntimeException('Gebruik PNG, JPG of WebP voor brandingafbeeldingen.');
+
+    $root = tenantBrandingAssetRoot($config);
+    if ($root === null) throw new RuntimeException('Brandinguploads zijn alleen beschikbaar voor tenants met private opslag.');
+    if (is_link($root)) throw new RuntimeException('Brandingopslag is onveilig geconfigureerd.');
+    if (!is_dir($root) && !@mkdir($root, 0750, true)) throw new RuntimeException('Brandingmap kon niet worden aangemaakt.');
+    clearstatcache(true, $root);
+    if (!is_dir($root) || is_link($root)) throw new RuntimeException('Brandingmap is niet veilig beschikbaar.');
+    @chmod($root, 0750);
+
+    $naam = $type . '.' . $ext;
+    $doel = $root . DIRECTORY_SEPARATOR . $naam;
+    if (is_link($doel)) throw new RuntimeException('Brandingdoel mag geen symlink zijn.');
+    $tijdelijk = $doel . '.tmp.' . bin2hex(random_bytes(5));
+    if (!@move_uploaded_file($tmp, $tijdelijk)) throw new RuntimeException('Upload kon niet veilig worden opgeslagen.');
+    @chmod($tijdelijk, 0640);
+    if (!@rename($tijdelijk, $doel)) { @unlink($tijdelijk); throw new RuntimeException('Upload kon niet worden geactiveerd.'); }
+    @chmod($doel, 0640);
+    tenantBrandingAssetVerwijderVarianten($config, $type, $naam);
+    return tenantBrandingAssetUrl($config, $naam);
+}
+
+function tenantBrandingAssetLeesPad(array $config, string $naam): ?string
+{
+    $pad = tenantBrandingAssetPad($config, $naam);
+    $root = tenantBrandingAssetRoot($config);
+    if ($pad === null || $root === null || !is_dir($root) || is_link($root) || !is_file($pad) || is_link($pad) || !is_readable($pad)) return null;
+    $rootReal = realpath($root);
+    $padReal = realpath($pad);
+    if ($rootReal === false || $padReal === false) return null;
+    $rootPrefix = rtrim(str_replace('\\','/',$rootReal), '/') . '/';
+    $normPad = str_replace('\\','/',$padReal);
+    return str_starts_with($normPad, $rootPrefix) ? $padReal : null;
+}
