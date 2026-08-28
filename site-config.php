@@ -40,6 +40,7 @@ $config = [
             'text'=>'#2A3818','muted'=>'#6A7560','background'=>'#FAF6EC',
             'nav_background'=>'#FFFFFF','nav_text'=>'#2A3818',
         ],
+        'afbeeldingen' => ['hero'=>'','about'=>'','activity'=>'','gallery'=>''],
     ],
     'betaling' => [
         'iban' => '',
@@ -100,9 +101,12 @@ if (PHP_SAPI !== 'cli' && !headers_sent()) {
 require_once __DIR__ . '/app/operational-log.php';
 vpOps46RegisterFatalLogger($config);
 
-// Laatste HTML-uitvoerlaag voor externe tenants: huisstijl injecteren en iedere
-// achtergebleven voorbeeldidentiteit fail-closed neutraliseren/blokkeren.
+// De algemene neutralisatielaag is buitenste buffer. De mediabuffer start
+// daarna en vult eerst tenant-eigen beelden in; absolute tenant-URLs worden
+// vervolgens door de neutralisatielaag behouden.
 require_once __DIR__ . '/app/core/tenant-public-runtime.php';
 tenantPublicRuntimeStart($config, $externPad);
+require_once __DIR__ . '/app/core/tenant-public-media.php';
+tenantPublicMediaStart($config, $externPad);
 
 return $config;
