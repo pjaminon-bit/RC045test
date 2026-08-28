@@ -141,6 +141,17 @@ Onder meer homepage, ontstaan, reglement, aanmelden/bedankt, actueel, agenda, FA
 
 Een ontbrekend tenantbestand valt niet terug op RC045 `/data`. Legacy browser-URL's `/data/<dataset>.json` worden via de expliciete whitelist in `public-content.php` naar de actieve tenant gerouteerd.
 
+Nieuwe tenants krijgen direct neutrale `homepage.json` en `contact.json`. De publieke homepage wordt voor externe tenants server-side gerenderd en gebruikt nooit de historische RC045-HTML of gedeelde RC045-afbeeldingen. Een bestaande dataset met herkenbare RC045-inhoud wordt fail-closed genegeerd.
+
+Bestaande tenants controleer en migreer je met:
+
+```bash
+php bin/migrate-tenant-public-template.php --config=/srv/verenigingen/<tenant>/config.php --check
+php bin/migrate-tenant-public-template.php --config=/srv/verenigingen/<tenant>/config.php --apply
+```
+
+De apply-stap gebruikt de tenantgebonden publieke contentwriter en maakt vóór vervanging een tenantlokale back-up. Veilige tenant-eigen content blijft standaard behouden; `--force` reset bewust naar neutrale startinhoud.
+
 Bij Nginx moet dezelfde exacte whitelist-routing worden ingericht; geef nooit vrij filesystemtoegang tot de private root.
 
 ## 8. Publieke uploads
