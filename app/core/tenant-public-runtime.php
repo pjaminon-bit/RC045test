@@ -62,16 +62,8 @@ function tenantPublicRuntimeThemeMarkup(array $config): string
         . '</style>';
 }
 
-function tenantPublicRuntimeHeadMarkup(array $config): string
+function tenantPublicRuntimeContextMarkup(array $config): string
 {
-    $regels = [tenantPublicRuntimeThemeMarkup($config)];
-    $favicon = tenantPublicRuntimeAssetUrl($config, 'favicon');
-    $logo = tenantPublicRuntimeAssetUrl($config, 'logo', 'images/template-placeholder.svg');
-    $theme = tenantPublicRuntimeKleur($config, 'dark', '#1E2C13');
-    if ($favicon !== '') $regels[] = '<link rel="icon" href="' . htmlspecialchars($favicon, ENT_QUOTES, 'UTF-8') . '">';
-    elseif ($logo !== '') $regels[] = '<link rel="icon" href="' . htmlspecialchars($logo, ENT_QUOTES, 'UTF-8') . '">';
-    $regels[] = '<meta name="theme-color" content="' . $theme . '">';
-
     $naam = trim((string)($config['vereniging']['naam'] ?? 'Vereniging')) ?: 'Vereniging';
     $context = [
         'external' => true,
@@ -80,7 +72,19 @@ function tenantPublicRuntimeHeadMarkup(array $config): string
         'siteUrl' => (string)($config['vereniging']['site_url'] ?? ''),
     ];
     $json = json_encode($context, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?: '{}';
-    $regels[] = '<script id="vereniging-site-context">window.verenigingSiteContext=' . $json . ';</script>';
+    return '<script id="vereniging-site-context">window.verenigingSiteContext=' . $json . ';</script>';
+}
+
+function tenantPublicRuntimeHeadMarkup(array $config, bool $contextOpnemen = true): string
+{
+    $regels = [tenantPublicRuntimeThemeMarkup($config)];
+    $favicon = tenantPublicRuntimeAssetUrl($config, 'favicon');
+    $logo = tenantPublicRuntimeAssetUrl($config, 'logo', 'images/template-placeholder.svg');
+    $theme = tenantPublicRuntimeKleur($config, 'dark', '#1E2C13');
+    if ($favicon !== '') $regels[] = '<link rel="icon" href="' . htmlspecialchars($favicon, ENT_QUOTES, 'UTF-8') . '">';
+    elseif ($logo !== '') $regels[] = '<link rel="icon" href="' . htmlspecialchars($logo, ENT_QUOTES, 'UTF-8') . '">';
+    $regels[] = '<meta name="theme-color" content="' . $theme . '">';
+    if ($contextOpnemen) $regels[] = tenantPublicRuntimeContextMarkup($config);
     return implode("\n", $regels);
 }
 
@@ -93,7 +97,7 @@ function tenantPublicRuntimePlaceholderLokaleMedia(string $html, string $logoUrl
             $src = $m[2];
             $lower = strtolower($src);
             if (str_contains($lower, 'rc045-logo')) return $m[1] . htmlspecialchars($logoUrl, ENT_QUOTES, 'UTF-8') . $m[3];
-            if (preg_match('~^(?:https?:|data:|blob:|/public-asset\.php|public-asset\.php)~i', $src) === 1) return $m[0];
+            if (preg_match('~^(?:https?:|data:|blob:|/public-asset\.php|public-asset\.php|/branding-asset\.php|branding-asset\.php)~i', $src) === 1) return $m[0];
             if (str_starts_with($lower, 'images/') && !str_contains($lower, 'template-placeholder')) return $m[1] . $placeholder . $m[3];
             return $m[0];
         },
@@ -104,7 +108,7 @@ function tenantPublicRuntimePlaceholderLokaleMedia(string $html, string $logoUrl
         '~(\bdata-bg=["\'])([^"\']+)(["\'])~i',
         static function (array $m) use ($placeholder): string {
             $src = $m[2];
-            if (preg_match('~^(?:https?:|data:|blob:|/public-asset\.php|public-asset\.php)~i', $src) === 1) return $m[0];
+            if (preg_match('~^(?:https?:|data:|blob:|/public-asset\.php|public-asset\.php|/branding-asset\.php|branding-asset\.php)~i', $src) === 1) return $m[0];
             return $m[1] . $placeholder . $m[3];
         },
         $html
@@ -138,11 +142,10 @@ function tenantPublicRuntimeTransform(string $html, array $config): string
     $html = preg_replace('~<link\b[^>]+href=["\'][^"\']*(?:favicon|apple-touch-icon|site\.webmanifest)[^"\']*["\'][^>]*>~i', '', $html) ?? $html;
     $html = preg_replace('~<script\b[^>]*(?:data-goatcounter|src=["\'][^"\']*(?:goatcounter|gc\.zgo\.at)[^"\']*["\'])[^>]*>.*?</script>~is', '', $html) ?? $html;
 
-    if (stripos($html, '</head>') !== false) {
-        $head = tenantPublicRuntimeHeadMarkup($config);
-        if (strpos($html, 'id="tenant-product-theme"') === false) {
-            $html = preg_replace('~</head>~i', $head . "\n</head>", $html, 1) ?? $html;
-        }
+    if (stripos($html, '</head>') !== false && strpos($html, 'id="tenant-product-theme"') === false) {
+        $heeftContext = strpos($html, 'id="vereniging-site-context"') !== false;
+        $head = tenantPublicRuntimeHeadMarkup($config, !$heeftContext);
+        $html = preg_replace('~</head>~i', $head . "\n</head>", $html, 1) ?? $html;
     }
 
     // Het publieke aanmeldformulier gebruikt voor tenants uitsluitend de eigen
@@ -181,8 +184,7 @@ function tenantPublicRuntimeTransform(string $html, array $config): string
     $html = str_ireplace(array_keys($vervangingen), array_values($vervangingen), $html);
     $html = tenantPublicRuntimePlaceholderLokaleMedia($html, $logo);
 
-    // Logo-alt en historische mailto-credit neutraliseren zonder een hardcoded
-    // productmerk te introduceren.
+    // Historische mailto-credit neutraliseren zonder een hardcoded productmerk.
     $html = preg_replace('~mailto:\?subject=Website%20[^"\']+~i', '#', $html) ?? $html;
     $html = preg_replace('~mailto:[^"\']*pjaminon[^"\']*~i', '#', $html) ?? $html;
 
