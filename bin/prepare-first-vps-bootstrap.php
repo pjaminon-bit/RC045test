@@ -31,6 +31,13 @@ foreach($_SERVER['argv']??[]as$a){if(preg_match('/^--(?:password|pass|secret|tok
 $o=getopt('',['source:','commit:','output:','platform-root::','tenant-base::','php-version::','platform-host:','platform-strategy:','platform-ipv4::','platform-ipv6::','platform-cname::','tenant-key:','tenant-name:','tenant-host:','tenant-strategy:','tenant-ipv4::','tenant-ipv6::','tenant-cname::','operator-user:','modules::','cert-name::','force','dry-run','help']);
 if(isset($o['help'])){prep52Help();exit(0);}foreach(['source','commit','output','platform-host','platform-strategy','tenant-key','tenant-name','tenant-host','tenant-strategy','operator-user']as$k)if(trim((string)($o[$k]??''))==='')prep52Stop('--'.$k.' is verplicht.');
 try{
+    // DOM is nodig voor de neutrale publieke tenantrenderer. Controleer dit al
+    // bij het maken van de first-VPS bundle, zonder het deterministische 5.2-
+    // planschema te muteren. De overige servermodules blijven in het bestaande
+    // preflightcontract en worden bij root-apply opnieuw bewezen.
+    if (!extension_loaded('dom') || !class_exists(DOMDocument::class) || !class_exists(DOMXPath::class)) {
+        throw new RuntimeException('Vereiste PHP DOM-runtime ontbreekt; installeer de XML/DOM-extensie vóór first-VPS bootstrap.');
+    }
     $defs=require dirname(__DIR__).'/app/core/platform-definities.php';$alleModules=array_keys((array)($defs['features']??[]));
     $modules=array_key_exists('modules',$o)?(string)$o['modules']:implode(',',$alleModules);
     $in=[
@@ -43,10 +50,6 @@ try{
         'tenant_dns_strategy'=>(string)$o['tenant-strategy'],'tenant_ipv4'=>(string)($o['tenant-ipv4']??''),'tenant_ipv6'=>(string)($o['tenant-ipv6']??''),'tenant_cname'=>(string)($o['tenant-cname']??''),
     ];
     $plan=bootstrap52Plan($in);
-    // De eerste serverbootstrap en gewone releases gebruiken exact dezelfde
-    // runtimecontractbron. Zo kan een nieuwe VPS niet opnieuw zonder DOM (of
-    // een later vereiste extensie) door de eerste preflight heen komen.
-    $plan['preflight']['required_php_modules']=platformPhpRequiredExtensions();
     $json=bootstrap52Json($plan);$art=bootstrap52Artifacts($plan);
 }catch(Throwable$e){prep52Stop($e->getMessage());}
 if(isset($o['dry-run'])){echo$json;exit(0);} $force=isset($o['force']);
