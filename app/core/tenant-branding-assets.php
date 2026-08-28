@@ -1,8 +1,13 @@
 <?php
 // ============================================================
-// Veilige tenantbranding-assets
+// Veilige tenantbranding- en website-assets
 // ============================================================
 require_once __DIR__ . '/tenant-runtime.php';
+
+function tenantBrandingAssetTypes(): array
+{
+    return ['logo','favicon','hero','about','activity','gallery'];
+}
 
 function tenantBrandingAssetRoot(array $config): ?string
 {
@@ -13,7 +18,7 @@ function tenantBrandingAssetRoot(array $config): ?string
 
 function tenantBrandingAssetNaamGeldig(string $naam): bool
 {
-    return preg_match('/^(logo|favicon)\.(png|jpe?g|webp)$/D', $naam) === 1;
+    return preg_match('/^(logo|favicon|hero|about|activity|gallery)\.(png|jpe?g|webp)$/D', $naam) === 1;
 }
 
 function tenantBrandingAssetMimeVoorExt(string $ext): ?string
@@ -44,6 +49,7 @@ function tenantBrandingAssetUrl(array $config, string $naam): string
 
 function tenantBrandingAssetVerwijderVarianten(array $config, string $type, string $behoud): void
 {
+    if (!in_array($type, tenantBrandingAssetTypes(), true)) return;
     $root = tenantBrandingAssetRoot($config);
     if ($root === null) return;
     foreach (['png','jpg','jpeg','webp'] as $ext) {
@@ -56,16 +62,22 @@ function tenantBrandingAssetVerwijderVarianten(array $config, string $type, stri
 
 function tenantBrandingAssetUpload(array $config, array $upload, string $type): string
 {
-    if (!in_array($type, ['logo','favicon'], true)) throw new InvalidArgumentException('Onbekend brandingtype.');
+    if (!in_array($type, tenantBrandingAssetTypes(), true)) throw new InvalidArgumentException('Onbekend brandingtype.');
     $fout = (int)($upload['error'] ?? UPLOAD_ERR_NO_FILE);
     if ($fout === UPLOAD_ERR_NO_FILE) return '';
     if ($fout !== UPLOAD_ERR_OK) throw new RuntimeException('Upload is niet volledig ontvangen.');
 
     $tmp = (string)($upload['tmp_name'] ?? '');
     $grootte = (int)($upload['size'] ?? 0);
-    $limiet = $type === 'logo' ? 5 * 1024 * 1024 : 1024 * 1024;
+    $limiet = match ($type) {
+        'favicon' => 1024 * 1024,
+        'logo' => 5 * 1024 * 1024,
+        default => 8 * 1024 * 1024,
+    };
     if ($tmp === '' || !is_uploaded_file($tmp) || $grootte < 1 || $grootte > $limiet) {
-        throw new RuntimeException($type === 'logo' ? 'Logo moet een afbeelding van maximaal 5 MB zijn.' : 'Favicon moet een afbeelding van maximaal 1 MB zijn.');
+        throw new RuntimeException($type === 'favicon'
+            ? 'Favicon moet een afbeelding van maximaal 1 MB zijn.'
+            : ($type === 'logo' ? 'Logo moet een afbeelding van maximaal 5 MB zijn.' : 'Websitebeeld moet een afbeelding van maximaal 8 MB zijn.'));
     }
 
     $finfo = new finfo(FILEINFO_MIME_TYPE);
@@ -76,7 +88,7 @@ function tenantBrandingAssetUpload(array $config, array $upload, string $type): 
         'image/webp' => 'webp',
         default => '',
     };
-    if ($ext === '') throw new RuntimeException('Gebruik PNG, JPG of WebP voor brandingafbeeldingen.');
+    if ($ext === '') throw new RuntimeException('Gebruik PNG, JPG of WebP voor afbeeldingen.');
 
     $root = tenantBrandingAssetRoot($config);
     if ($root === null) throw new RuntimeException('Brandinguploads zijn alleen beschikbaar voor tenants met private opslag.');
