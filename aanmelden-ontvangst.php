@@ -10,10 +10,23 @@ require_once __DIR__.'/app/storage/domein-repositories.php';
 require_once __DIR__.'/aanmeldingen-opslag.php';
 require_once __DIR__.'/app/leden/lidmaatschap.php';
 function aanmeldenAntwoord(int $status,string $tekst): void{http_response_code($status);echo json_encode(['ok'=>$status<400,'melding'=>$tekst],JSON_UNESCAPED_UNICODE);exit;}
-if(!siteModuleActief('aanmelden'))aanmeldenAntwoord(404,'Aanmelden is niet beschikbaar.');if(($_SERVER['REQUEST_METHOD']??'')!=='POST')aanmeldenAntwoord(405,'Alleen POST.');if(trim((string)($_POST['website']??''))!=='')aanmeldenAntwoord(200,'Ontvangen.');
+if(!siteModuleActief('aanmelden'))aanmeldenAntwoord(404,'Aanmelden is niet beschikbaar.');
+if(($_SERVER['REQUEST_METHOD']??'')!=='POST')aanmeldenAntwoord(405,'Alleen POST.');
+if(trim((string)($_POST['website']??''))!=='')aanmeldenAntwoord(200,'Ontvangen.');
+
 $voornaam=trim((string)($_POST['voornaam']??''));$achternaam=trim((string)($_POST['achternaam']??''));$email=trim((string)($_POST['email']??''));$telefoon=trim((string)($_POST['mobiel']??''));
-if($voornaam===''||$achternaam==='')aanmeldenAntwoord(400,'Voornaam en achternaam zijn verplicht.');if($email===''&&$telefoon==='')aanmeldenAntwoord(400,'Vul een mailadres of telefoonnummer in.');if($email!==''&&!filter_var($email,FILTER_VALIDATE_EMAIL))aanmeldenAntwoord(400,'Dat mailadres ziet er niet geldig uit.');
-$geb=ledenParseDatum($_POST['geboortedatum']??'');if($geb==='')aanmeldenAntwoord(400,'Vul een geldige geboortedatum in.');$jaar=(int)date('Y');$maand=(int)date('n');$leeftijd=ledenLeeftijd($geb,$jaar.'-01-01');$typeId=trim((string)($_POST['lidmaatschap_type']??''));$type=$typeId===''?null:lidmaatschapTypeOpId($typeId);if(!$type||!lidmaatschapTypeToegestaanVoorLeeftijd($type,$leeftijd))aanmeldenAntwoord(400,'Kies een geldig lidmaatschapstype.');$bedrag=lidmaatschapBedragVoorMaand($type,$maand);$inschrijfgeld=(float)($type['inschrijfgeld']??0);
+if($voornaam===''||$achternaam==='')aanmeldenAntwoord(400,'Voornaam en achternaam zijn verplicht.');
+if($email===''&&$telefoon==='')aanmeldenAntwoord(400,'Vul een mailadres of telefoonnummer in.');
+if($email!==''&&!filter_var($email,FILTER_VALIDATE_EMAIL))aanmeldenAntwoord(400,'Dat mailadres ziet er niet geldig uit.');
+
+$geb=ledenParseDatum($_POST['geboortedatum']??'');
+if($geb==='')aanmeldenAntwoord(400,'Vul een geldige geboortedatum in.');
+$jaar=(int)date('Y');$maand=(int)date('n');$leeftijd=ledenLeeftijd($geb,$jaar.'-01-01');
+$typeId=trim((string)($_POST['lidmaatschap_type']??''));
+$type=$typeId===''?lidmaatschapTypeVoorLeeftijd($leeftijd):lidmaatschapTypeOpId($typeId);
+if(!$type||!lidmaatschapTypeToegestaanVoorLeeftijd($type,$leeftijd))aanmeldenAntwoord(400,'Voor deze leeftijd is nog geen geldig lidmaatschapstype ingesteld.');
+$bedrag=lidmaatschapBedragVoorMaand($type,$maand);$inschrijfgeld=(float)($type['inschrijfgeld']??0);
+
 $slot=dataSlotOpen();
 try{
     $nu=time();$ipSleutel=hash('sha256',(string)($_SERVER['REMOTE_ADDR']??'onbekend'));
@@ -29,4 +42,5 @@ try{
     [$straat,$huisnummer]=ledenSplitsAdres($_POST['straat']??'',$_POST['huisnummer']??'');
     $aanmelding=aanmeldingNormaliseer(['voornaam'=>$voornaam,'tussenvoegsel'=>$_POST['tussenvoegsel']??'','achternaam'=>$achternaam,'geboortedatum'=>$geb,'straat'=>$straat,'huisnummer'=>$huisnummer,'postcode'=>$_POST['postcode']??'','gemeente'=>$_POST['stad']??'','land'=>$_POST['land']??'','telefoon'=>$telefoon,'email'=>$email,'lidmaatschap_type'=>$type['id'],'contributie_jaar'=>$jaar,'contributie_maand'=>$maand,'berekend_bedrag'=>$bedrag,'berekend_inschrijfgeld'=>$inschrijfgeld,'bron'=>'aanmeldformulier']);
     $inbox['aanmeldingen'][]=$aanmelding;if(!aanmeldingenSchrijf($inbox))aanmeldenAntwoord(500,'Opslaan mislukt.');
-}finally{dataSlotDicht($slot);}aanmeldenAntwoord(200,'Ontvangen.');
+}finally{dataSlotDicht($slot);}
+aanmeldenAntwoord(200,'Ontvangen.');
