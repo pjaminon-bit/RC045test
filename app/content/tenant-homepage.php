@@ -133,14 +133,14 @@ function tenantHomepagePasTemplateToe(string $html): string
 
     foreach ($dom->getElementsByTagName('img') as $img) {
         if (!$img instanceof DOMElement) continue;
+        $isLogo = false;
         foreach (['src', 'data-src'] as $attribuut) {
             $bron = $img->getAttribute($attribuut);
             if ($bron === '') continue;
-            if (preg_match('~(?:rc045-logo|images/(?:crawler|basher|rc045))~i', $bron)) {
-                $img->setAttribute($attribuut, str_contains(strtolower($bron), 'logo') ? $logo : 'images/template-placeholder.svg');
-            }
+            if (str_contains(strtolower($bron), 'logo')) $isLogo = true;
+            $img->setAttribute($attribuut, $isLogo ? $logo : 'images/template-placeholder.svg');
         }
-        if (preg_match('~rc045|crawler|basher~i', $img->getAttribute('alt'))) $img->setAttribute('alt', $naam);
+        $img->setAttribute('alt', $isLogo ? $naam . ' logo' : 'Afbeelding van ' . $naam);
     }
     foreach ($xpath->query('//*[@data-bg]') ?: [] as $node) {
         if ($node instanceof DOMElement) $node->setAttribute('data-bg', 'images/template-placeholder.svg');
@@ -195,6 +195,9 @@ function tenantHomepagePasTemplateToe(string $html): string
     foreach ($xpath->query('//meta[starts-with(@name,"rc045-title-")]') ?: [] as $meta) {
         if (!$meta instanceof DOMElement) continue;
         $meta->setAttribute('name', 'site-title-' . substr($meta->getAttribute('name'), strlen('rc045-title-')));
+    }
+    foreach ($xpath->query('//link[@href="favicon.ico" or starts-with(@href,"favicon-") or @href="apple-touch-icon.png" or @href="site.webmanifest"]') ?: [] as $link) {
+        $link->parentNode?->removeChild($link);
     }
     foreach ($xpath->query('//script[@data-goatcounter or contains(@src,"goatcounter") or contains(@src,"gc.zgo.at")]') ?: [] as $script) {
         $script->parentNode?->removeChild($script);
