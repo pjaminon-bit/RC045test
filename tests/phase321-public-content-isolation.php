@@ -125,7 +125,10 @@ register_shutdown_function(static function(){echo "STATUS=".http_response_code()
 include $ROOT.'/public-content.php';
 PHP;
     [$codeMissing,$outMissing] = runTenant321content($root,$tmp,$configA,$privateA,$missingBody);
-    check321content($codeMissing===0 && trim($outMissing)==='STATUS=404', 'publiek endpoint geeft 404 voor ontbrekende tenantdataset zonder legacy fallback');
+    check321content(
+        $codeMissing===0 && trim($outMissing)==='[]STATUS=200',
+        'publiek endpoint geeft lege 200-dataset voor ontbrekende tenantcontent zonder legacy fallback'
+    );
 
     $traversalBody = <<<'PHP'
 $_SERVER['REQUEST_METHOD']='GET';
