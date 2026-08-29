@@ -56,7 +56,8 @@ function cpeProvisionManifestRow(string$tenant,string$key):array
     $url=(string)($m['site_url']??'');$parts=parse_url($url);$host=strtolower((string)($parts['host']??''));
     if(!is_array($parts)||strtolower((string)($parts['scheme']??''))!=='https'||isset($parts['user'])||isset($parts['pass'])||isset($parts['port'])||isset($parts['query'])||isset($parts['fragment'])||!web42CanoniekeHost($host))throw new RuntimeException('Tenantmanifest bevat geen geldige productiehost.');
     $path=(string)($parts['path']??'');if($path!==''&&$path!=='/')throw new RuntimeException('Tenantmanifest bevat een URL-subpad.');
-    return['tenant_key'=>$key,'canonical_host'=>$host,'status'=>'setup_required','transition'=>null,'healthy'=>false,'updated_at_utc'=>@gmdate('Y-m-d\TH:i:s\Z',(int)filemtime($manifestPad))?:null,'last_export'=>null,'delete_export'=>null,'purge_not_before_utc'=>null];
+    $mtime=@filemtime($manifestPad);$updated=is_int($mtime)&&$mtime>0?gmdate('Y-m-d\TH:i:s\Z',$mtime):null;
+    return['tenant_key'=>$key,'canonical_host'=>$host,'status'=>'setup_required','transition'=>null,'healthy'=>false,'updated_at_utc'=>$updated,'last_export'=>null,'delete_export'=>null,'purge_not_before_utc'=>null];
 }
 function cpeSnapshot(array$c):array
 {
@@ -72,9 +73,13 @@ function cpeSnapshot(array$c):array
     usort($rows,fn($a,$b)=>strcmp($a['tenant_key'],$b['tenant_key']));return['schema'=>1,'phase'=>'5.1-snapshot','generated_at_utc'=>gmdate('Y-m-d\TH:i:s\Z'),'tenants'=>$rows];
 }
 function cpeProvisionModules():array{return['website','ledenadministratie','werkgroepen','evenementen','vergaderingen','taken','operationele_taken','fotoboek','sponsors','media','aanmelden'];}
+function cpeProvisionTenantKey(string$key):string
+{
+    if(strlen($key)<3||strlen($key)>63||$key==='default'||str_contains($key,'--')||preg_match('/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/D',$key)!==1||!runtime41CanoniekeTenantKey($key))throw new RuntimeException('Provisioning tenant-key is niet canoniek.');return$key;
+}
 function cpeProvisionPayload(array$r):array
 {
-    $p=$r['provision']??null;if(!is_array($p))throw new RuntimeException('Provisioningpayload ontbreekt.');$keys=array_keys($p);sort($keys,SORT_STRING);if($keys!==['host','modules','name'])throw new RuntimeException('Provisioningpayload bevat onbekende velden.');
+    cpeProvisionTenantKey((string)($r['tenant_key']??''));$p=$r['provision']??null;if(!is_array($p))throw new RuntimeException('Provisioningpayload ontbreekt.');$keys=array_keys($p);sort($keys,SORT_STRING);if($keys!==['host','modules','name'])throw new RuntimeException('Provisioningpayload bevat onbekende velden.');
     $name=trim((string)($p['name']??''));if($name===''||mb_strlen($name)>120||preg_match('/[\x00-\x1F\x7F]/u',$name)===1)throw new RuntimeException('Provisioningnaam is ongeldig.');
     $host=(string)($p['host']??'');if($host!==strtolower(trim($host))||!web42CanoniekeHost($host))throw new RuntimeException('Provisioninghost is niet canoniek.');
     $mods=$p['modules']??null;if(!is_array($mods)||!array_is_list($mods)||$mods===[])throw new RuntimeException('Provisioningmodules ontbreken.');$seen=[];foreach($mods as$m){if(!is_string($m)||!in_array($m,cpeProvisionModules(),true)||isset($seen[$m]))throw new RuntimeException('Provisioningmodules zijn ongeldig.');$seen[$m]=true;}if(!isset($seen['website']))throw new RuntimeException('Provisioning mist kernmodule website.');$canon=[];foreach(cpeProvisionModules()as$m)if(isset($seen[$m]))$canon[]=$m;
@@ -85,7 +90,7 @@ function cpeRequest(string$f):array
     if(is_link($f)||!is_file($f))throw new RuntimeException('Queue-item is geen veilig regulier bestand.');$base=basename($f);if(preg_match('/^([0-9a-f]{32})\.json$/D',$base,$m)!==1)throw new RuntimeException('Queue-bestandsnaam is ongeldig.');$raw=@file_get_contents($f);try{$r=is_string($raw)?json_decode($raw,true,64,JSON_THROW_ON_ERROR):null;}catch(Throwable$e){$r=null;}
     if(!is_array($r)||(int)($r['schema']??0)!==1||($r['phase']??'')!=='5.1-request'||!hash_equals($m[1],(string)($r['request_id']??'')))throw new RuntimeException('Queue-schema of request-id is ongeldig.');
     if(!runtime41CanoniekeTenantKey((string)($r['tenant_key']??'')))throw new RuntimeException('Queue bevat ongeldige tenant-key.');if(preg_match('/^[A-Za-z0-9][A-Za-z0-9._@-]{1,63}$/D',(string)($r['operator']??''))!==1)throw new RuntimeException('Queue bevat ongeldige operator.');
-    $actions=['provision','adopt-active','suspend','activate','recover','export','delete','cancel-delete','purge'];$action=(string)($r['action']??'');if(!in_array($action,$actions,true))throw new RuntimeException('Queue bevat niet-toegestane actie.');$ts=strtotime((string)($r['requested_at_utc']??''));if($ts===false||abs(time()-$ts)>900)throw new RuntimeException('Queue-aanvraag is verlopen.');if(!is_array($r['confirm']??null))throw new RuntimeException('Queue-confirmatieschema ontbreekt.');
+    $lifecycleActions=['adopt-active','suspend','activate','recover','export','delete','cancel-delete','purge'];$actions=array_merge(['provision'],$lifecycleActions);$action=(string)($r['action']??'');if(!in_array($action,$actions,true))throw new RuntimeException('Queue bevat niet-toegestane actie.');$ts=strtotime((string)($r['requested_at_utc']??''));if($ts===false||abs(time()-$ts)>900)throw new RuntimeException('Queue-aanvraag is verlopen.');if(!is_array($r['confirm']??null))throw new RuntimeException('Queue-confirmatieschema ontbreekt.');
     $verwacht=['action','confirm','operator','phase','request_id','requested_at_utc','schema','tenant_key'];if($action==='provision')$verwacht[]='provision';sort($verwacht,SORT_STRING);$werkelijk=array_keys($r);sort($werkelijk,SORT_STRING);if($werkelijk!==$verwacht)throw new RuntimeException('Queue bevat onbekende top-level velden.');
     if($action==='provision'){if(($r['confirm']??[])!==[])throw new RuntimeException('Provisioning accepteert geen confirmatievelden.');cpeProvisionPayload($r);}elseif(isset($r['provision']))throw new RuntimeException('Lifecycle-aanvraag bevat onverwachte provisioningdata.');
     return$r;
