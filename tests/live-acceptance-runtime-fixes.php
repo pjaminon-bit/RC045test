@@ -18,6 +18,11 @@ $leden=(string)file_get_contents($root.'/leden/index.php');
 laf3(str_contains($leden,'.wrap button{min-height:44px!important')&&str_contains($leden,'padding:10px 16px'),'leden-loginbutton heeft minimaal 44px hoogte en bruikbare padding');
 
 $isolatie=(string)file_get_contents($root.'/tests/phase321-public-content-isolation.php');
-laf3(str_contains($isolatie,"trim(\$outMissing)==='STATUS=404'"),'externe tenant zonder dataset blijft regressiematig 404/fail-closed');
+laf3(
+    str_contains($isolatie,"trim(\$outMissing)==='[]STATUS=200'")
+    && str_contains($isolatie,'zonder legacy fallback')
+    && str_contains($isolatie,"trim(\$outTraversal)==='STATUS=404'"),
+    'externe tenant zonder whitelisted dataset blijft leeg en geïsoleerd; ongeldige key blijft 404'
+);
 
 echo"Live acceptance runtime fixes: {$ok} OK, {$fout} fout(en)\n";exit($fout===0?0:1);
