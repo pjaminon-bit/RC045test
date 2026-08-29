@@ -53,13 +53,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          bash tests/run-all.sh 2>&1 | tee regression-output.log
+          bash tests/run-all.sh 2>&1 | tee "$RUNNER_TEMP/regression-output.log"
       - name: Bewaar regressiediagnose
         if: ${{ always() }}
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: source-regression-${{ github.run_id }}
-          path: regression-output.log
+          path: ${{ runner.temp }}/regression-output.log
           if-no-files-found: warn
           retention-days: 14
 
