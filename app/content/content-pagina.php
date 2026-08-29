@@ -244,7 +244,7 @@ function contentPaginaHeroCss(string $sleutel): string
     if ($achtergrond === '') return '';
     $positie = trim((string) ($hero['positie'] ?? 'center')) ?: 'center';
     $opacity = $hero['opacity'] ?? 0.35;
-    $opacity = is_numeric($opacity) ? max(0, min(1, (float) $opacity) : 0.35;
+    $opacity = is_numeric($opacity) ? max(0, min(1, (float) $opacity)) : 0.35;
     if (preg_match('~^(?:https?:)?//~i', $achtergrond) || str_contains($achtergrond, '..')) return '';
     $url = htmlspecialchars($achtergrond, ENT_QUOTES, 'UTF-8');
     $pos = htmlspecialchars($positie, ENT_QUOTES, 'UTF-8');
