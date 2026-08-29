@@ -126,10 +126,54 @@ function contentPaginaHomepageStandaard(): array
     return $standaard;
 }
 
+function contentPaginaTenantNeutraalOntstaan(string $naam): array
+{
+    return [
+        'hero_sub' => [
+            'nl' => 'De geschiedenis van ' . $naam . ' krijgt hier een eigen plek.',
+            'en' => 'The history of ' . $naam . ' will have its own place here.',
+            'de' => 'Die Geschichte von ' . $naam . ' erhält hier ihren eigenen Platz.',
+        ],
+        'story_p1' => [
+            'nl' => 'Onze vereniging bouwt aan een eigen verhaal. Deze pagina wordt door het bestuur aangevuld met de oorsprong, belangrijke mijlpalen en herinneringen die bij ' . $naam . ' horen.',
+            'en' => 'Our association is building its own story. The board will add the origins, important milestones and memories that belong to ' . $naam . ' to this page.',
+            'de' => 'Unser Verein schreibt seine eigene Geschichte. Der Vorstand ergänzt diese Seite mit Ursprung, wichtigen Meilensteinen und Erinnerungen rund um ' . $naam . '.',
+        ],
+        'story_p2' => [
+            'nl' => 'Tot die tijd is dit een neutrale startpagina zonder overgenomen geschiedenis van een andere vereniging. Heb je materiaal of foto’s voor het archief, neem dan contact op met het bestuur.',
+            'en' => 'Until then, this is a neutral starting page without history copied from another association. If you have material or photos for the archive, please contact the board.',
+            'de' => 'Bis dahin ist dies eine neutrale Startseite ohne übernommene Geschichte eines anderen Vereins. Wer Material oder Fotos für das Archiv hat, kann sich an den Vorstand wenden.',
+        ],
+    ];
+}
+
+function contentPaginaTenantNeutraalBaanreglement(string $naam): array
+{
+    return [
+        'hero_sub' => [
+            'nl' => 'Regels en afspraken voor een veilige en prettige verenigingsomgeving.',
+            'en' => 'Rules and agreements for a safe and pleasant association environment.',
+            'de' => 'Regeln und Vereinbarungen für ein sicheres und angenehmes Vereinsumfeld.',
+        ],
+        'intro_bold' => [
+            'nl' => 'Reglement wordt ingericht.',
+            'en' => 'Rules are being prepared.',
+            'de' => 'Die Regeln werden vorbereitet.',
+        ],
+        'intro_text' => [
+            'nl' => 'Het definitieve reglement van ' . $naam . ' is nog niet gepubliceerd. Het bestuur kan de eigen regels via Beheer vastleggen. Neem bij twijfel over gebruik, veiligheid of toegang altijd contact op met de vereniging.',
+            'en' => 'The final rules for ' . $naam . ' have not yet been published. The board can maintain its own rules through the administration area. If in doubt about use, safety or access, always contact the association.',
+            'de' => 'Die endgültige Ordnung von ' . $naam . ' ist noch nicht veröffentlicht. Der Vorstand kann die eigenen Regeln im Verwaltungsbereich pflegen. Bei Fragen zu Nutzung, Sicherheit oder Zugang bitte immer den Verein kontaktieren.',
+        ],
+    ];
+}
+
 function contentPaginaStandaard(string $sleutel): array
 {
-    if ($sleutel === 'homepage' && tenantContentIsExtern()) {
-        return tenantContentNeutraleHomepage(siteNaam());
+    if (tenantContentIsExtern()) {
+        if ($sleutel === 'homepage') return tenantContentNeutraleHomepage(siteNaam());
+        if ($sleutel === 'ontstaan') return contentPaginaTenantNeutraalOntstaan(siteNaam());
+        if ($sleutel === 'baanreglement') return contentPaginaTenantNeutraalBaanreglement(siteNaam());
     }
     if ($sleutel === 'homepage') return contentPaginaHomepageStandaard();
     $def = contentPaginaDefinitie($sleutel);
@@ -200,7 +244,7 @@ function contentPaginaHeroCss(string $sleutel): string
     if ($achtergrond === '') return '';
     $positie = trim((string) ($hero['positie'] ?? 'center')) ?: 'center';
     $opacity = $hero['opacity'] ?? 0.35;
-    $opacity = is_numeric($opacity) ? max(0, min(1, (float) $opacity)) : 0.35;
+    $opacity = is_numeric($opacity) ? max(0, min(1, (float) $opacity) : 0.35;
     if (preg_match('~^(?:https?:)?//~i', $achtergrond) || str_contains($achtergrond, '..')) return '';
     $url = htmlspecialchars($achtergrond, ENT_QUOTES, 'UTF-8');
     $pos = htmlspecialchars($positie, ENT_QUOTES, 'UTF-8');
