@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
+  echo 'Deze deploywrapper moet als root draaien.' >&2
+  exit 77
+fi
+if [[ "$#" -ne 1 || ! "$1" =~ ^[0-9a-f]{40}$ ]]; then
+  echo 'Gebruik: verenigingsplatform-github-deploy <40-hex-commit>' >&2
+  exit 64
+fi
+
+commit="$1"
+repo='https://github.com/pjaminon-bit/RC045test.git'
+platform_root='/srv/verenigingsplatform'
+tenant_base='/srv/verenigingen'
+staging_base='/var/lib/verenigingsplatform/github-staging'
+php='/usr/bin/php8.5'
+git='/usr/bin/git'
+install='/usr/bin/install'
+mktemp='/usr/bin/mktemp'
+rm='/usr/bin/rm'
+readlink_bin='/usr/bin/readlink'
+
+for exe in "$php" "$git" "$install" "$mktemp" "$rm" "$readlink_bin"; do
+  [[ -x "$exe" ]] || { echo "Vereiste executable ontbreekt: $exe" >&2; exit 69; }
+done
+[[ -d "$platform_root" && -L "$platform_root/current" ]] || { echo 'Actieve immutable platformrelease ontbreekt.' >&2; exit 69; }
+[[ -d "$tenant_base" ]] || { echo 'Tenantbasis ontbreekt.' >&2; exit 69; }
+
+"$install" -d -m 0700 -o root -g root "$staging_base"
+stage="$("$mktemp" -d --tmpdir="$staging_base" "release-${commit:0:12}.XXXXXX")"
+source_root="$stage/source"
+plan="$stage/release-plan.json"
+
+cleanup() {
+  if [[ -n "${stage:-}" && "$stage" == "$staging_base"/release-* && -d "$stage" ]]; then
+    "$rm" -rf --one-file-system -- "$stage"
+  fi
+}
+trap cleanup EXIT INT TERM
+
+"$git" clone --quiet --no-checkout --filter=blob:none "$repo" "$source_root"
+"$git" -C "$source_root" fetch --quiet --depth=1 origin "$commit"
+"$git" -C "$source_root" checkout --quiet --detach "$commit"
+
+actual="$("$git" -C "$source_root" rev-parse HEAD)"
+[[ "$actual" == "$commit" ]] || { echo 'Git checkout wijkt af van gevraagde commit.' >&2; exit 65; }
+[[ -z "$("$git" -C "$source_root" status --porcelain=v1 --untracked-files=all)" ]] || { echo 'Stagingcheckout is niet schoon.' >&2; exit 65; }
+
+trusted_prepare="$platform_root/current/bin/prepare-vps-release.php"
+trusted_apply="$platform_root/current/bin/apply-vps-release.php"
+[[ -f "$trusted_prepare" && -f "$trusted_apply" ]] || { echo 'Vertrouwde actieve release-tooling ontbreekt.' >&2; exit 69; }
+
+"$php" "$trusted_prepare" \
+  --source="$source_root" \
+  --commit="$commit" \
+  --platform-root="$platform_root" \
+  --tenant-base="$tenant_base" \
+  --output="$plan"
+
+"$php" "$trusted_apply" --plan="$plan" --check
+"$php" "$trusted_apply" --plan="$plan" --deploy
+
+active="$("$readlink_bin" -f "$platform_root/current")"
+[[ "$active" == "$platform_root/releases/$commit" ]] || {
+  echo "Actieve release wijkt na deploy af: $active" >&2
+  exit 70
+}
+
+state_commit="$("$php" -r '$p="/srv/verenigingsplatform/release-state.json";$r=@file_get_contents($p);$d=is_string($r)?json_decode($r,true):null;echo is_array($d)?(string)($d["active"]["commit"]??""):"";')"
+[[ "$state_commit" == "$commit" ]] || { echo 'release-state.json bevestigt de nieuwe commit niet.' >&2; exit 70; }
+
+echo "DEPLOYED $commit"
