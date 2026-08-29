@@ -1,6 +1,6 @@
 const { test, expect } = require('@playwright/test');
 
-const BASE = process.env.PLAYWRIGHT_TEST_BASE_URL || 'https://rc045.nl/dev';
+const BASE = process.env.PLAYWRIGHT_TEST_BASE_URL || 'https://test.vps.holox.nl';
 const baseUrl = new URL(BASE.endsWith('/') ? BASE : BASE + '/');
 const basePath = baseUrl.pathname.replace(/\/$/, '');
 const outputDir = 'test-results/screenshots';

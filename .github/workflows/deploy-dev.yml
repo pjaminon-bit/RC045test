@@ -1,4 +1,4 @@
-name: Validate and deploy RC045test
+name: Validate RC045test
 
 on:
   push:
@@ -79,61 +79,28 @@ jobs:
           php tests/phase513-control-plane-rate-limit.php
           php tests/phase514-executor-mutation-results.php
           php tests/phase52-first-vps-bootstrap.php
+          php tests/phase54-tenant-public-template.php
+          php tests/phase54-security-hardening.php
+          php tests/phase541-security-edgecases.php
+          php tests/phase55-php-runtime-guard.php
+          php tests/phase56-product-branding.php
+          php tests/phase57-control-plane-provisioning.php
+          if [[ -f tests/phase58-vps-test-actions.php ]]; then php tests/phase58-vps-test-actions.php; fi
           php tests/private-store-pdo-sqlite.php
           php tests/phase321-pdo-isolation.php
           php tests/private-store-pdo-failclosed.php
           test ! -e site-config.local.php
 
-  deploy-dev:
+  verify-vps-current:
     if: github.event_name != 'pull_request'
     needs: validate
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout testcode
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-
-      - name: Schrijf DEV buildinformatie
-        shell: bash
-        run: |
-          cat > dev-build.json <<EOF
-          {
-            "environment": "dev",
-            "branch": "${GITHUB_REF_NAME}",
-            "commit": "${GITHUB_SHA}",
-            "commit_short": "${GITHUB_SHA::8}",
-            "deployed_at_utc": "$(date -u +'%Y-%m-%dT%H:%M:%SZ')",
-            "run_id": "${GITHUB_RUN_ID}",
-            "run_number": "${GITHUB_RUN_NUMBER}"
-          }
-          EOF
-
-      - name: Upload testsite via SFTP naar gekoppelde dev-root
-        uses: wlixcc/SFTP-Deploy-Action@a5ccb9c6211a94cc59404f0fdb2a9936a6dfee64 # v1.2.6
-        with:
-          username: ${{ secrets.FTP_USERNAME }}
-          server: ${{ secrets.FTP_SERVER }}
-          password: ${{ secrets.FTP_PASSWORD }}
-          port: 22
-          sftp_only: true
-          local_path: './*'
-          remote_path: '/'
-
-      - name: Upload .htaccess expliciet naar DEV
-        uses: wlixcc/SFTP-Deploy-Action@a5ccb9c6211a94cc59404f0fdb2a9936a6dfee64 # v1.2.6
-        with:
-          username: ${{ secrets.FTP_USERNAME }}
-          server: ${{ secrets.FTP_SERVER }}
-          password: ${{ secrets.FTP_PASSWORD }}
-          port: 22
-          sftp_only: true
-          local_path: './.htaccess'
-          remote_path: '/'
-
-      - name: Smoke test gedeployde DEV-site
+      - name: Controleer huidige VPS-testtenant
         shell: bash
         run: |
           set -euo pipefail
-          basis='https://rc045.nl/dev'
+          basis='https://test.vps.holox.nl'
           wacht_op_status() {
             local url="$1"
             local verwacht="$2"
@@ -148,98 +115,93 @@ jobs:
               if [[ "$status" == "$verwacht" ]]; then echo "OK: $url -> HTTP $status"; return 0; fi
               echo "Poging $poging: $url gaf HTTP ${status:-geen}, verwacht $verwacht"; sleep 5
             done
-            echo "FOUT: $url gaf na meerdere pogingen niet HTTP $verwacht" >&2; return 1
+            echo "FOUT: $url gaf na meerdere pogingen niet HTTP $verwacht" >&2
+            return 1
           }
 
           wacht_op_status "$basis/" 200 ja
           wacht_op_status "$basis/beheer/" 200 ja
-          wacht_op_status "$basis/beheer/ui-2026.css" 200 nee
           wacht_op_status "$basis/leden/" 200 ja
-          wacht_op_status "$basis/aanmelden.html" 200 ja
-          wacht_op_status "$basis/healthz.php" 404 nee
+          wacht_op_status "$basis/healthz.php" 204 nee
 
-          for route in leden.php leden-import.php ledenlabels.php commissies.php werkgroepen.php groepsrollen.php groep-relaties.php vergaderingen.php taken.php operationele-taken.php evenementen.php aanmeldingen.php lidmaatschap.php contributies.php gebruikers.php logboek.php backups.php; do
-            wacht_op_status "$basis/beheer/$route" 302 nee
+          protected_routes=(
+            '/app/paneel-hulp.php'
+            '/app/operational-log.php'
+            '/app/deployment/monitoring-contract.php'
+            '/app/deployment/release-contract.php'
+            '/app/deployment/lifecycle-contract.php'
+            '/app/deployment/lifecycle-purge-hardening.php'
+            '/app/deployment/control-plane-contract.php'
+            '/app/deployment/control-plane-identity.php'
+            '/app/deployment/control-plane-auth-hardening.php'
+            '/app/deployment/first-vps-bootstrap-contract.php'
+            '/app/control-plane/control-plane-runtime.php'
+            '/app/control-plane-web/index.php'
+            '/aanmeldingen-opslag.php'
+            '/groepen-opslag.php'
+            '/ledenlabels-opslag.php'
+            '/beheer/backup-registry.php'
+            '/bin/provision-tenant.php'
+            '/bin/bootstrap-tenant-admin.php'
+            '/bin/prepare-vps-deployment.php'
+            '/bin/prepare-vps-runtime.php'
+            '/bin/apply-vps-runtime.php'
+            '/bin/prepare-vps-webserver.php'
+            '/bin/apply-vps-webserver.php'
+            '/bin/prepare-vps-dns.php'
+            '/bin/check-vps-dns.php'
+            '/bin/prepare-vps-tls.php'
+            '/bin/apply-vps-tls.php'
+            '/bin/prepare-vps-database.php'
+            '/bin/apply-vps-database.php'
+            '/bin/check-vps-database.php'
+            '/bin/prepare-vps-monitoring.php'
+            '/bin/apply-vps-monitoring.php'
+            '/bin/check-vps-health.php'
+            '/bin/prepare-vps-release.php'
+            '/bin/apply-vps-release.php'
+            '/bin/check-release-tenant.php'
+            '/bin/prepare-vps-lifecycle.php'
+            '/bin/apply-vps-lifecycle.php'
+            '/bin/prepare-vps-control-plane.php'
+            '/bin/apply-vps-control-plane.php'
+            '/bin/control-plane-executor.php'
+            '/bin/bootstrap-control-plane-operator.php'
+            '/bin/prepare-first-vps-bootstrap.php'
+            '/bin/apply-first-vps-bootstrap.php'
+            '/tests/phase35-vps-deployment.php'
+            '/tests/phase351-security-reaudit.php'
+            '/tests/phase41-vps-runtime-isolation.php'
+            '/tests/phase411-runtime-reaudit.php'
+            '/tests/phase42-apache-vhosts.php'
+            '/tests/phase43-dns-readiness.php'
+            '/tests/phase44-tls-https.php'
+            '/tests/phase45-database-provisioning.php'
+            '/tests/phase451-database-reaudit.php'
+            '/tests/phase46-monitoring-logging.php'
+            '/tests/phase47-release-rollback.php'
+            '/tests/phase48-tenant-lifecycle.php'
+            '/tests/phase481-purge-recovery-hardening.php'
+            '/tests/phase482-lifecycle-mutation-results.php'
+            '/tests/phase51-control-plane.php'
+            '/tests/phase511-control-plane-identity.php'
+            '/tests/phase512-control-plane-auth.php'
+            '/tests/phase513-control-plane-rate-limit.php'
+            '/tests/phase514-executor-mutation-results.php'
+            '/tests/phase52-first-vps-bootstrap.php'
+            '/docs/VPS-DEPLOYMENT.md'
+            '/docs/VPS-WEBSERVER.md'
+            '/docs/VPS-DNS.md'
+            '/docs/VPS-TLS.md'
+            '/docs/VPS-DATABASE.md'
+            '/docs/VPS-MONITORING.md'
+            '/docs/VPS-RELEASES.md'
+            '/docs/VPS-LIFECYCLE.md'
+            '/docs/VPS-CONTROL-PLANE.md'
+            '/docs/VPS-FIRST-BOOTSTRAP.md'
+            '/dev-build.json'
+            '/.git/config'
+          )
+          for route in "${protected_routes[@]}"; do
+            wacht_op_status "$basis$route" 403 nee
           done
-          wacht_op_status "$basis/beheer/lid-groepen.php?id=test" 308 nee
-
-          wacht_op_status "$basis/data/lidmaatschapstypen.json" 200 nee
-          wacht_op_status "$basis/public-content.php?key=lidmaatschapstypen" 200 nee
-          wacht_op_status "$basis/public-content.php?key=../auth/users" 404 nee
-          wacht_op_status "$basis/public-asset.php?scope=sponsors&path=missing.jpg" 404 nee
-          wacht_op_status "$basis/public-asset.php?scope=sponsors&path=shell.php" 404 nee
-          wacht_op_status "$basis/app/paneel-hulp.php" 403 nee
-          wacht_op_status "$basis/app/operational-log.php" 403 nee
-          wacht_op_status "$basis/app/deployment/monitoring-contract.php" 403 nee
-          wacht_op_status "$basis/app/deployment/release-contract.php" 403 nee
-          wacht_op_status "$basis/app/deployment/lifecycle-contract.php" 403 nee
-          wacht_op_status "$basis/app/deployment/lifecycle-purge-hardening.php" 403 nee
-          wacht_op_status "$basis/app/deployment/control-plane-contract.php" 403 nee
-          wacht_op_status "$basis/app/deployment/control-plane-identity.php" 403 nee
-          wacht_op_status "$basis/app/deployment/control-plane-auth-hardening.php" 403 nee
-          wacht_op_status "$basis/app/deployment/first-vps-bootstrap-contract.php" 403 nee
-          wacht_op_status "$basis/app/control-plane/control-plane-runtime.php" 403 nee
-          wacht_op_status "$basis/app/control-plane-web/index.php" 403 nee
-          wacht_op_status "$basis/aanmeldingen-opslag.php" 403 nee
-          wacht_op_status "$basis/groepen-opslag.php" 403 nee
-          wacht_op_status "$basis/ledenlabels-opslag.php" 403 nee
-          wacht_op_status "$basis/beheer/backup-registry.php" 403 nee
-          wacht_op_status "$basis/bin/provision-tenant.php" 403 nee
-          wacht_op_status "$basis/bin/bootstrap-tenant-admin.php" 403 nee
-          wacht_op_status "$basis/bin/prepare-vps-deployment.php" 403 nee
-          wacht_op_status "$basis/bin/prepare-vps-runtime.php" 403 nee
-          wacht_op_status "$basis/bin/apply-vps-runtime.php" 403 nee
-          wacht_op_status "$basis/bin/prepare-vps-webserver.php" 403 nee
-          wacht_op_status "$basis/bin/apply-vps-webserver.php" 403 nee
-          wacht_op_status "$basis/bin/prepare-vps-dns.php" 403 nee
-          wacht_op_status "$basis/bin/check-vps-dns.php" 403 nee
-          wacht_op_status "$basis/bin/prepare-vps-tls.php" 403 nee
-          wacht_op_status "$basis/bin/apply-vps-tls.php" 403 nee
-          wacht_op_status "$basis/bin/prepare-vps-database.php" 403 nee
-          wacht_op_status "$basis/bin/apply-vps-database.php" 403 nee
-          wacht_op_status "$basis/bin/check-vps-database.php" 403 nee
-          wacht_op_status "$basis/bin/prepare-vps-monitoring.php" 403 nee
-          wacht_op_status "$basis/bin/apply-vps-monitoring.php" 403 nee
-          wacht_op_status "$basis/bin/check-vps-health.php" 403 nee
-          wacht_op_status "$basis/bin/prepare-vps-release.php" 403 nee
-          wacht_op_status "$basis/bin/apply-vps-release.php" 403 nee
-          wacht_op_status "$basis/bin/check-release-tenant.php" 403 nee
-          wacht_op_status "$basis/bin/prepare-vps-lifecycle.php" 403 nee
-          wacht_op_status "$basis/bin/apply-vps-lifecycle.php" 403 nee
-          wacht_op_status "$basis/bin/prepare-vps-control-plane.php" 403 nee
-          wacht_op_status "$basis/bin/apply-vps-control-plane.php" 403 nee
-          wacht_op_status "$basis/bin/control-plane-executor.php" 403 nee
-          wacht_op_status "$basis/bin/bootstrap-control-plane-operator.php" 403 nee
-          wacht_op_status "$basis/bin/prepare-first-vps-bootstrap.php" 403 nee
-          wacht_op_status "$basis/bin/apply-first-vps-bootstrap.php" 403 nee
-          wacht_op_status "$basis/tests/phase35-vps-deployment.php" 403 nee
-          wacht_op_status "$basis/tests/phase351-security-reaudit.php" 403 nee
-          wacht_op_status "$basis/tests/phase41-vps-runtime-isolation.php" 403 nee
-          wacht_op_status "$basis/tests/phase411-runtime-reaudit.php" 403 nee
-          wacht_op_status "$basis/tests/phase42-apache-vhosts.php" 403 nee
-          wacht_op_status "$basis/tests/phase43-dns-readiness.php" 403 nee
-          wacht_op_status "$basis/tests/phase44-tls-https.php" 403 nee
-          wacht_op_status "$basis/tests/phase45-database-provisioning.php" 403 nee
-          wacht_op_status "$basis/tests/phase451-database-reaudit.php" 403 nee
-          wacht_op_status "$basis/tests/phase46-monitoring-logging.php" 403 nee
-          wacht_op_status "$basis/tests/phase47-release-rollback.php" 403 nee
-          wacht_op_status "$basis/tests/phase48-tenant-lifecycle.php" 403 nee
-          wacht_op_status "$basis/tests/phase481-purge-recovery-hardening.php" 403 nee
-          wacht_op_status "$basis/tests/phase482-lifecycle-mutation-results.php" 403 nee
-          wacht_op_status "$basis/tests/phase51-control-plane.php" 403 nee
-          wacht_op_status "$basis/tests/phase511-control-plane-identity.php" 403 nee
-          wacht_op_status "$basis/tests/phase512-control-plane-auth.php" 403 nee
-          wacht_op_status "$basis/tests/phase513-control-plane-rate-limit.php" 403 nee
-          wacht_op_status "$basis/tests/phase514-executor-mutation-results.php" 403 nee
-          wacht_op_status "$basis/tests/phase52-first-vps-bootstrap.php" 403 nee
-          wacht_op_status "$basis/docs/VPS-DEPLOYMENT.md" 403 nee
-          wacht_op_status "$basis/docs/VPS-WEBSERVER.md" 403 nee
-          wacht_op_status "$basis/docs/VPS-DNS.md" 403 nee
-          wacht_op_status "$basis/docs/VPS-TLS.md" 403 nee
-          wacht_op_status "$basis/docs/VPS-DATABASE.md" 403 nee
-          wacht_op_status "$basis/docs/VPS-MONITORING.md" 403 nee
-          wacht_op_status "$basis/docs/VPS-RELEASES.md" 403 nee
-          wacht_op_status "$basis/docs/VPS-LIFECYCLE.md" 403 nee
-          wacht_op_status "$basis/docs/VPS-CONTROL-PLANE.md" 403 nee
-          wacht_op_status "$basis/docs/VPS-FIRST-BOOTSTRAP.md" 403 nee
-          wacht_op_status "$basis/dev-build.json" 403 nee

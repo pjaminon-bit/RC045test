@@ -109,13 +109,30 @@ spvCheck(
 );
 
 $workflow = spvBron($root . '/.github/workflows/full-regression.yml');
+$deployWorkflow = spvBron($root . '/.github/workflows/deploy-vps-test.yml');
+$deployEntry = spvBron($root . '/ops/vps-test-deploy/verenigingsplatform-github-entry');
 spvCheck(
-    !str_contains($workflow, 'FTP_SSH_KNOWN_HOSTS')
-    && str_contains($workflow, 'StrictHostKeyChecking=accept-new')
-    && str_contains($workflow, '$RUNNER_TEMP/rc045-ssh/known_hosts')
-    && str_contains($workflow, 'group: rc045test-dev-auth-fixture')
+    !str_contains($workflow, 'sshpass')
+    && !str_contains($workflow, 'StrictHostKeyChecking=accept-new')
+    && !str_contains($workflow, 'FTP_USERNAME')
+    && !str_contains($workflow, 'FTP_PASSWORD')
+    && str_contains($workflow, 'group: rc045test-vps-auth-fixture')
     && str_contains($workflow, 'cancel-in-progress: false'),
-    'authenticated CI heeft geen handmatig known-hosts secret nodig en is per run geïsoleerd'
+    'authenticated CI muteert geen VPS-data via legacy SFTP/TOFU en blijft per run geserialiseerd'
+);
+spvCheck(
+    str_contains($deployWorkflow, 'StrictHostKeyChecking=yes')
+    && str_contains($deployWorkflow, 'VPS_TEST_SSH_KNOWN_HOSTS')
+    && !str_contains($deployWorkflow, 'ssh-keyscan')
+    && str_contains($deployWorkflow, "vars.VPS_TEST_DEPLOY_ENABLED == 'true'")
+    && str_contains($deployWorkflow, 'environment: vps-test'),
+    'VPS-testdeploy vereist gepinde hosttrust, expliciete enable-gate en aparte environment'
+);
+spvCheck(
+    str_contains($deployEntry, 'SSH_ORIGINAL_COMMAND')
+    && str_contains($deployEntry, '^deploy[[:space:]]+([0-9a-f]{40})$')
+    && str_contains($deployEntry, '/usr/local/sbin/verenigingsplatform-github-deploy'),
+    'GitHub SSH-key kan uitsluitend een exact 40-hex releaseverzoek aan de vaste deploywrapper doorgeven'
 );
 spvCheck(substr_count($workflow, 'npm ci --ignore-scripts') >= 2, 'browserjobs gebruiken uitsluitend gelockte Node dependencies');
 
