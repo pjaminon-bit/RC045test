@@ -11,9 +11,13 @@ $fout = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
         cp51CsrfControle((string)($_POST['csrf'] ?? ''));
-        $tenant = trim((string)($_POST['tenant'] ?? ''));
         $actie = trim((string)($_POST['action'] ?? ''));
-        $id = cp51Request($tenant, $actie, $_POST);
+        if ($actie === 'provision') {
+            $id = cp57ProvisionRequest($_POST);
+        } else {
+            $tenant = trim((string)($_POST['tenant'] ?? ''));
+            $id = cp51Request($tenant, $actie, $_POST);
+        }
         header('Location: /?queued=' . rawurlencode($id), true, 303);
         exit;
     } catch (Throwable $e) {
@@ -45,10 +49,12 @@ function tijd51(?string $utc): string {
 }
 function label51(string $status): string {
     return match($status) {
+        'setup_required' => 'Installatie afronden',
         'unmanaged' => 'Nog niet geadopteerd',
         'active' => 'Actief',
         'suspended' => 'Uitgeschakeld',
         'pending_delete' => 'Verwijdering aangevraagd',
+        'invalid' => 'Controle nodig',
         default => $status !== '' ? $status : 'Onbekend',
     };
 }
@@ -65,37 +71,70 @@ function action51(string $actie): string {
         default => $actie,
     };
 }
+$moduleLabels = [
+    'website' => 'Website',
+    'ledenadministratie' => 'Ledenadministratie',
+    'werkgroepen' => 'Werkgroepen',
+    'evenementen' => 'Evenementen',
+    'vergaderingen' => 'Vergaderingen',
+    'taken' => 'Taken',
+    'operationele_taken' => 'Operationele taken',
+    'fotoboek' => 'Fotoboek',
+    'sponsors' => 'Sponsors',
+    'media' => 'Media',
+    'aanmelden' => 'Aanmelden',
+];
 ?><!doctype html>
 <html lang="nl">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Verenigingsplatform beheer</title>
+<title>Verenigingsplatform · Platformbeheer</title>
 <style>
-:root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#17211b;background:#f5f7f5}*{box-sizing:border-box}body{margin:0}.wrap{max-width:1180px;margin:0 auto;padding:32px 20px 56px}.top{display:flex;justify-content:space-between;gap:20px;align-items:flex-start;margin-bottom:24px}.eyebrow{font-size:.78rem;text-transform:uppercase;letter-spacing:.08em;color:#607067;font-weight:700}h1{margin:.25rem 0 .35rem;font-size:clamp(1.65rem,3vw,2.35rem)}.sub{color:#66736b;margin:0}.operator{background:#fff;border:1px solid #dce3de;border-radius:12px;padding:10px 13px;font-size:.9rem}.notice{padding:12px 14px;border-radius:10px;margin:0 0 18px}.ok{background:#eaf7ee;border:1px solid #b9dfc2}.err{background:#fff0f0;border:1px solid #efc1c1}.summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:20px}.stat{background:#fff;border:1px solid #dce3de;border-radius:14px;padding:16px}.stat strong{display:block;font-size:1.45rem}.grid{display:grid;gap:16px}.card{background:#fff;border:1px solid #dce3de;border-radius:16px;padding:18px;box-shadow:0 2px 12px rgba(22,40,29,.04)}.head{display:flex;justify-content:space-between;gap:14px;align-items:flex-start}.tenant{font-size:1.18rem;font-weight:750}.host{color:#66736b;font-size:.9rem;margin-top:3px}.badge{font-size:.8rem;font-weight:700;padding:6px 9px;border-radius:999px;background:#edf1ee;white-space:nowrap}.badge.active{background:#e8f6eb;color:#1f6a37}.badge.suspended{background:#fff4d8;color:#735b16}.badge.pending_delete{background:#ffe6e6;color:#8a2b2b}.meta{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:16px 0}.meta div{background:#f7f9f7;border-radius:10px;padding:10px;min-width:0}.meta span{display:block;color:#738078;font-size:.76rem;margin-bottom:4px}.meta strong{font-size:.88rem;word-break:break-word}.actions{display:flex;flex-wrap:wrap;gap:8px}.actions form{display:inline-flex;gap:7px;align-items:center;flex-wrap:wrap}.btn{border:1px solid #bec9c1;background:#fff;color:#1d2b22;border-radius:9px;padding:9px 11px;font-weight:650;cursor:pointer}.btn:hover{background:#f3f6f4}.danger{border-color:#d9a4a4;color:#8b2020}.warning{border-color:#d9c27e;color:#6c5511}input[type=text]{border:1px solid #cbd4ce;border-radius:8px;padding:8px 9px;min-width:170px}.empty{background:#fff;border:1px dashed #cbd4ce;border-radius:14px;padding:30px;text-align:center;color:#66736b}.foot{margin-top:22px;color:#77817b;font-size:.8rem}@media(max-width:760px){.top{display:block}.operator{margin-top:12px}.summary,.meta{grid-template-columns:1fr 1fr}}@media(max-width:520px){.summary,.meta{grid-template-columns:1fr}.card{padding:14px}}
+:root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#17211b;background:#f5f7f5}*{box-sizing:border-box}body{margin:0}.wrap{max-width:1180px;margin:0 auto;padding:32px 20px 56px}.top{display:flex;justify-content:space-between;gap:20px;align-items:flex-start;margin-bottom:24px}.top-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:flex-end}.eyebrow{font-size:.78rem;text-transform:uppercase;letter-spacing:.08em;color:#607067;font-weight:700}h1{margin:.25rem 0 .35rem;font-size:clamp(1.65rem,3vw,2.35rem)}h2{margin:0;font-size:1.15rem}.sub{color:#66736b;margin:0}.operator{background:#fff;border:1px solid #dce3de;border-radius:12px;padding:10px 13px;font-size:.9rem}.notice{padding:12px 14px;border-radius:10px;margin:0 0 18px}.ok{background:#eaf7ee;border:1px solid #b9dfc2}.err{background:#fff0f0;border:1px solid #efc1c1}.summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:20px}.stat{background:#fff;border:1px solid #dce3de;border-radius:14px;padding:16px}.stat strong{display:block;font-size:1.45rem}.grid{display:grid;gap:16px}.card{background:#fff;border:1px solid #dce3de;border-radius:16px;padding:18px;box-shadow:0 2px 12px rgba(22,40,29,.04)}.head{display:flex;justify-content:space-between;gap:14px;align-items:flex-start}.tenant{font-size:1.18rem;font-weight:750}.host{color:#66736b;font-size:.9rem;margin-top:3px}.badge{font-size:.8rem;font-weight:700;padding:6px 9px;border-radius:999px;background:#edf1ee;white-space:nowrap}.badge.active{background:#e8f6eb;color:#1f6a37}.badge.suspended{background:#fff4d8;color:#735b16}.badge.pending_delete,.badge.invalid{background:#ffe6e6;color:#8a2b2b}.badge.setup_required,.badge.unmanaged{background:#eef0ff;color:#4d4b91}.meta{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:16px 0}.meta div{background:#f7f9f7;border-radius:10px;padding:10px;min-width:0}.meta span{display:block;color:#738078;font-size:.76rem;margin-bottom:4px}.meta strong{font-size:.88rem;word-break:break-word}.actions{display:flex;flex-wrap:wrap;gap:8px}.actions form{display:inline-flex;gap:7px;align-items:center;flex-wrap:wrap}.btn{display:inline-flex;align-items:center;justify-content:center;text-decoration:none;border:1px solid #bec9c1;background:#fff;color:#1d2b22;border-radius:9px;padding:9px 11px;font-weight:650;cursor:pointer;font:inherit}.btn:hover{background:#f3f6f4}.primary{background:#1f5f3a;color:#fff;border-color:#1f5f3a}.primary:hover{background:#174d2f}.danger{border-color:#d9a4a4;color:#8b2020}.warning{border-color:#d9c27e;color:#6c5511}input[type=text]{border:1px solid #cbd4ce;border-radius:8px;padding:9px 10px;min-width:170px;font:inherit}.empty{background:#fff;border:1px dashed #cbd4ce;border-radius:14px;padding:30px;text-align:center;color:#66736b}.foot{margin-top:22px;color:#77817b;font-size:.8rem}.create-card{margin-bottom:20px;scroll-margin-top:18px}.create-card:target{outline:3px solid rgba(31,95,58,.14)}.create-head{display:flex;justify-content:space-between;gap:18px;align-items:flex-start;margin-bottom:16px}.create-head p{margin:.35rem 0 0;color:#66736b;max-width:760px}.form-grid{display:grid;grid-template-columns:1.1fr 1fr 1.2fr;gap:12px}.field label,.modules-title{display:block;font-size:.82rem;font-weight:700;margin-bottom:6px}.field input{width:100%;min-width:0}.hint{display:block;color:#748078;font-size:.76rem;margin-top:5px}.modules{margin-top:16px}.module-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}.module-option{display:flex;gap:8px;align-items:center;background:#f7f9f7;border:1px solid #e2e7e3;border-radius:9px;padding:9px 10px;font-size:.85rem}.module-option input{margin:0}.create-foot{display:flex;justify-content:space-between;gap:16px;align-items:center;margin-top:16px;padding-top:14px;border-top:1px solid #edf0ed}.security-note{font-size:.8rem;color:#68766e;max-width:760px}.setup-note{margin-top:12px;padding:10px 12px;border-radius:9px;background:#f7f8ff;color:#4d4b72;font-size:.84rem}.invalid-note{margin-top:12px;padding:10px 12px;border-radius:9px;background:#fff0f0;color:#7c2929;font-size:.84rem}@media(max-width:900px){.module-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.form-grid{grid-template-columns:1fr 1fr}.field:last-child{grid-column:1/-1}}@media(max-width:760px){.top{display:block}.top-actions{justify-content:flex-start;margin-top:12px}.summary,.meta{grid-template-columns:1fr 1fr}.module-grid{grid-template-columns:1fr 1fr}.create-foot{align-items:flex-start;flex-direction:column}}@media(max-width:520px){.summary,.meta,.form-grid,.module-grid{grid-template-columns:1fr}.field:last-child{grid-column:auto}.card{padding:14px}}
 </style>
 </head>
 <body><main class="wrap">
-<div class="top"><div><div class="eyebrow">Control-plane · fase 5.1</div><h1>Verenigingsplatform beheer</h1><p class="sub">Tenantstatus en veilige lifecycle-aanvragen. Rootuitvoering gebeurt buiten de webapp.</p></div><div class="operator">Ingelogd als <strong><?=h51($operator)?></strong></div></div>
+<div class="top"><div><div class="eyebrow">Verenigingsplatform</div><h1>Platformbeheer</h1><p class="sub">Verenigingen aanmaken, status volgen en veilige lifecycle-acties uitvoeren.</p></div><div class="top-actions"><a class="btn primary" href="#nieuwe-vereniging">+ Nieuwe vereniging</a><div class="operator">Ingelogd als <strong><?=h51($operator)?></strong></div></div></div>
 <?php if($melding!==''):?><div class="notice ok"><?=h51($melding)?></div><?php endif;?>
 <?php if($fout!==''):?><div class="notice err"><?=h51($fout)?></div><?php endif;?>
 <?php
-$actief=0;$uit=0;$pending=0;foreach($tenants as $t){$s=(string)($t['status']??'');if($s==='active')$actief++;elseif($s==='suspended')$uit++;elseif($s==='pending_delete')$pending++;}
+$actief=0;$uit=0;$pending=0;$setup=0;foreach($tenants as $t){$s=(string)($t['status']??'');if($s==='active')$actief++;elseif($s==='suspended')$uit++;elseif($s==='pending_delete')$pending++;elseif(in_array($s,['setup_required','unmanaged'],true))$setup++;}
 ?>
-<div class="summary"><div class="stat"><span>Verenigingen</span><strong><?=count($tenants)?></strong></div><div class="stat"><span>Actief</span><strong><?=$actief?></strong></div><div class="stat"><span>Uit / pending delete</span><strong><?=$uit+$pending?></strong></div></div>
+<div class="summary"><div class="stat"><span>Verenigingen</span><strong><?=count($tenants)?></strong></div><div class="stat"><span>Actief</span><strong><?=$actief?></strong></div><div class="stat"><span>Installatie afronden</span><strong><?=$setup?></strong></div><div class="stat"><span>Uit / pending delete</span><strong><?=$uit+$pending?></strong></div></div>
+<section class="card create-card" id="nieuwe-vereniging">
+<div class="create-head"><div><h2>Nieuwe vereniging</h2><p>Maak de tenant veilig aan met een eigen technische identiteit, productiehost, PDO-opslagprofiel en modulekeuze.</p></div><span class="badge setup_required">Basisprovisioning</span></div>
+<form method="post" autocomplete="off">
+<input type="hidden" name="csrf" value="<?=h51($csrf)?>"><input type="hidden" name="action" value="provision">
+<div class="form-grid">
+<div class="field"><label for="name">Verenigingsnaam</label><input id="name" type="text" name="name" maxlength="120" required placeholder="Voorbeeldvereniging"><span class="hint">De publieke naam; later aanpasbaar via het tenantbeheer.</span></div>
+<div class="field"><label for="tenant_key">Technische tenant-key</label><input id="tenant_key" type="text" name="tenant_key" minlength="3" maxlength="63" required pattern="[a-z0-9](?:[a-z0-9-]*[a-z0-9])?" placeholder="voorbeeldvereniging"><span class="hint">Permanent, lowercase, geen spaties of dubbele koppeltekens.</span></div>
+<div class="field"><label for="host">Domeinnaam</label><input id="host" type="text" name="host" maxlength="253" required inputmode="url" placeholder="vereniging.example.nl"><span class="hint">Alleen de hostnaam; HTTPS wordt als productiecontract gebruikt.</span></div>
+</div>
+<div class="modules"><span class="modules-title">Modules</span><div class="module-grid">
+<?php foreach($moduleLabels as $module=>$label):?>
+<label class="module-option"><input type="checkbox" name="modules[]" value="<?=h51($module)?>" <?=$module==='website'?'checked disabled':'checked'?>> <?=h51($label)?><?=$module==='website'?' (verplicht)':''?></label>
+<?php endforeach;?>
+<input type="hidden" name="modules[]" value="website">
+</div></div>
+<div class="create-foot"><div class="security-note">De webinterface voert geen rootcommando's uit. De aanvraag gaat naar de bestaande root-executor, die alle waarden opnieuw valideert. Een beheerderswachtwoord wordt bewust niet via deze queue verwerkt.</div><button class="btn primary" type="submit">Vereniging aanmaken</button></div>
+</form>
+</section>
 <div class="grid">
-<?php if(!$tenants):?><div class="empty">Nog geen lifecycle-tenants gevonden. Na installatie ververst de root-executor deze status automatisch.</div><?php endif;?>
+<?php if(!$tenants):?><div class="empty">Nog geen verenigingen gevonden. Gebruik <strong>Nieuwe vereniging</strong> om de eerste tenant aan te maken.</div><?php endif;?>
 <?php foreach($tenants as $t): $key=(string)$t['tenant_key'];$status=(string)$t['status'];$acties=cp51ToegestaneActies($t); ?>
 <section class="card"><div class="head"><div><div class="tenant"><?=h51($key)?></div><div class="host"><?=h51((string)($t['canonical_host']??''))?></div></div><span class="badge <?=h51($status)?>"><?=h51(label51($status))?></span></div>
-<div class="meta"><div><span>Health</span><strong><?=($t['healthy']??false)?'Gezond':'Niet gezond / n.v.t.'?></strong></div><div><span>Laatste status</span><strong><?=h51(tijd51($t['updated_at_utc']??null))?></strong></div><div><span>Laatste export</span><strong><?=h51(isset($t['last_export']['created_at_utc'])?tijd51((string)$t['last_export']['created_at_utc']):'—')?></strong></div><div><span>Purge vanaf</span><strong><?=h51(tijd51($t['purge_not_before_utc']??null))?></strong></div></div>
-<div class="actions">
+<div class="meta"><div><span>Health</span><strong><?=($t['healthy']??false)?'Gezond':($status==='setup_required'?'Nog niet actief':'Niet gezond / n.v.t.')?></strong></div><div><span>Laatste status</span><strong><?=h51(tijd51($t['updated_at_utc']??null))?></strong></div><div><span>Laatste export</span><strong><?=h51(isset($t['last_export']['created_at_utc'])?tijd51((string)$t['last_export']['created_at_utc']):'—')?></strong></div><div><span>Purge vanaf</span><strong><?=h51(tijd51($t['purge_not_before_utc']??null))?></strong></div></div>
+<?php if($status==='setup_required'):?><div class="setup-note">Basisprovisioning is voltooid. Activeer de eerste beheerder via de veilige server-side bootstrap en rond daarna runtime, database, vhost, DNS/TLS, monitoring en lifecycle-activatie af.</div><?php endif;?>
+<?php if($status==='invalid'):?><div class="invalid-note">Deze tenantmap is onvolledig of bevat ongeldige provisioning-/lifecyclemetadata. Controleer dit server-side voordat je verdergaat.</div><?php endif;?>
+<?php if($acties):?><div class="actions">
 <?php foreach($acties as $actie):?>
 <form method="post" autocomplete="off"><input type="hidden" name="csrf" value="<?=h51($csrf)?>"><input type="hidden" name="tenant" value="<?=h51($key)?>"><input type="hidden" name="action" value="<?=h51($actie)?>">
 <?php if(in_array($actie,['delete','purge'],true)):?><input type="text" name="confirm_tenant" placeholder="Typ <?=h51($key)?>" required aria-label="Tenant-key bevestigen"><?php endif;?>
 <?php if($actie==='purge'):?><input type="text" name="confirm_purge" placeholder="VERWIJDER-DEFINITIEF" required aria-label="Definitieve purge bevestigen"><?php endif;?>
 <button class="btn <?=$actie==='purge'?'danger':($actie==='delete'||$actie==='suspend'?'warning':'')?>" type="submit"><?=h51(action51($actie))?></button></form>
 <?php endforeach;?>
-</div></section>
+</div><?php endif;?></section>
 <?php endforeach;?>
 </div>
 <p class="foot">Snapshot bijgewerkt: <?=h51(tijd51($snapshot['generated_at_utc']??null))?> · Tijdzone Europe/Amsterdam. DNS-providerrecords worden nooit automatisch verwijderd.</p>

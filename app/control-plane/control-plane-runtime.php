@@ -1,5 +1,5 @@
 <?php
-// Fase 5.1 — niet-root control-plane webruntime.
+// Control-plane — niet-root webruntime.
 // Deze laag leest alleen de veilige snapshot en schrijft strikt geschematiseerde
 // verzoeken. Er staan bewust geen proc_open/exec/system/shell_exec-aanroepen in.
 
@@ -52,8 +52,6 @@ function cp51SessionBindOperator(): void
         return;
     }
     if (!is_string($gebonden) || !hash_equals($operator, $gebonden)) {
-        // Een browsercookie die onder een andere REMOTE_USER is aangemaakt mag
-        // geen CSRF-token of control-plane state naar de nieuwe identity dragen.
         $_SESSION = [];
         if (!session_regenerate_id(true)) cp51Fail('vreemde operatorsessie kon niet worden vervangen');
         $_SESSION['operator_identity'] = $operator;
@@ -138,6 +136,123 @@ function cp51ToegestaneActies(array $tenant): array
     return [];
 }
 
+function cp57BeschikbareModules(): array
+{
+    return [
+        'website',
+        'ledenadministratie',
+        'werkgroepen',
+        'evenementen',
+        'vergaderingen',
+        'taken',
+        'operationele_taken',
+        'fotoboek',
+        'sponsors',
+        'media',
+        'aanmelden',
+    ];
+}
+
+function cp57TenantKey(string $key): string
+{
+    if ($key !== trim($key) || strlen($key) < 3 || strlen($key) > 63
+        || preg_match('/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/D', $key) !== 1
+        || str_contains($key, '--') || $key === 'default') {
+        throw new RuntimeException('Tenant-key moet 3-63 tekens lang zijn en alleen lowercase letters, cijfers en enkele koppeltekens bevatten.');
+    }
+    return $key;
+}
+
+function cp57Naam(string $naam): string
+{
+    $naam = trim($naam);
+    if ($naam === '' || mb_strlen($naam) > 120 || preg_match('/[\x00-\x1F\x7F]/u', $naam) === 1) {
+        throw new RuntimeException('Verenigingsnaam is leeg, te lang of bevat ongeldige tekens.');
+    }
+    return $naam;
+}
+
+function cp57Host(string $host): string
+{
+    $host = strtolower(trim($host));
+    if (strlen($host) > 253
+        || preg_match('/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/D', $host) !== 1) {
+        throw new RuntimeException('Domeinnaam is niet geldig. Vul alleen de hostnaam in, zonder https:// of pad.');
+    }
+    return $host;
+}
+
+function cp57Modules(mixed $invoer): array
+{
+    if (!is_array($invoer)) throw new RuntimeException('Modulekeuze ontbreekt.');
+    $gekozen = [];
+    foreach ($invoer as $module) {
+        if (!is_string($module) || !in_array($module, cp57BeschikbareModules(), true)) {
+            throw new RuntimeException('Modulekeuze bevat een onbekende module.');
+        }
+        if (in_array($module, $gekozen, true)) throw new RuntimeException('Modulekeuze bevat dubbele waarden.');
+        $gekozen[] = $module;
+    }
+    if (!in_array('website', $gekozen, true)) throw new RuntimeException('De kernmodule Website is verplicht.');
+    $resultaat = [];
+    foreach (cp57BeschikbareModules() as $module) if (in_array($module, $gekozen, true)) $resultaat[] = $module;
+    return $resultaat;
+}
+
+function cp51QueueSchrijf(array $r): string
+{
+    $id = (string)($r['request_id'] ?? '');
+    if (preg_match('/^[0-9a-f]{32}$/D', $id) !== 1) throw new RuntimeException('Aanvraag-id is ongeldig.');
+    $json = json_encode($r, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+    if (!is_string($json)) throw new RuntimeException('Aanvraag kon niet worden geserialiseerd.');
+    $dir = cp51Config()['pending_dir'];
+    if (is_link($dir) || !is_dir($dir) || !is_writable($dir)) throw new RuntimeException('Aanvraagqueue is niet schrijfbaar.');
+    $pad = $dir . '/' . $id . '.json';
+    $h = @fopen($pad, 'x');
+    if (!is_resource($h)) throw new RuntimeException('Aanvraag kon niet exclusief worden aangemaakt.');
+    try {
+        if (!flock($h, LOCK_EX) || fwrite($h, $json . "\n") === false || !fflush($h)) throw new RuntimeException('Aanvraagwrite faalde.');
+    } finally { fclose($h); }
+    @chmod($pad, 0640);
+    return $id;
+}
+
+function cp57ProvisionRequest(array $input): string
+{
+    $tenantKey = cp57TenantKey((string)($input['tenant_key'] ?? ''));
+    $naam = cp57Naam((string)($input['name'] ?? ''));
+    $host = cp57Host((string)($input['host'] ?? ''));
+    $modules = cp57Modules($input['modules'] ?? null);
+
+    foreach (cp51Snapshot()['tenants'] as $tenant) {
+        if (!is_array($tenant)) continue;
+        if (hash_equals($tenantKey, (string)($tenant['tenant_key'] ?? ''))) {
+            throw new RuntimeException('Deze tenant-key bestaat al.');
+        }
+        $bestaandeHost = strtolower((string)($tenant['canonical_host'] ?? ''));
+        if ($bestaandeHost !== '' && hash_equals($host, $bestaandeHost)) {
+            throw new RuntimeException('Deze domeinnaam is al aan een vereniging gekoppeld.');
+        }
+    }
+
+    $id = bin2hex(random_bytes(16));
+    return cp51QueueSchrijf([
+        'schema'=>1,
+        'phase'=>'5.1-request',
+        'request_id'=>$id,
+        'tenant_key'=>$tenantKey,
+        'action'=>'provision',
+        'operator'=>cp51Operator(),
+        'requested_at_utc'=>gmdate('Y-m-d\TH:i:s\Z'),
+        'confirm'=>[],
+        'provision'=>[
+            'name'=>$naam,
+            'host'=>$host,
+            'modules'=>$modules,
+        ],
+    ]);
+}
+
 function cp51Request(string $tenantKey, string $actie, array $input): string
 {
     $tenant = cp51TenantUitSnapshot($tenantKey);
@@ -167,18 +282,7 @@ function cp51Request(string $tenantKey, string $actie, array $input): string
         if (!hash_equals('VERWIJDER-DEFINITIEF', $zin)) throw new RuntimeException('Definitieve bevestiging is niet exact ingevoerd.');
         $r['confirm']['purge'] = $zin;
     }
-    $json = json_encode($r, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-    if (!is_string($json)) throw new RuntimeException('Aanvraag kon niet worden geserialiseerd.');
-    $dir = cp51Config()['pending_dir'];
-    if (is_link($dir) || !is_dir($dir) || !is_writable($dir)) throw new RuntimeException('Aanvraagqueue is niet schrijfbaar.');
-    $pad = $dir . '/' . $id . '.json';
-    $h = @fopen($pad, 'x');
-    if (!is_resource($h)) throw new RuntimeException('Aanvraag kon niet exclusief worden aangemaakt.');
-    try {
-        if (!flock($h, LOCK_EX) || fwrite($h, $json . "\n") === false || !fflush($h)) throw new RuntimeException('Aanvraagwrite faalde.');
-    } finally { fclose($h); }
-    @chmod($pad, 0640);
-    return $id;
+    return cp51QueueSchrijf($r);
 }
 
 function cp51RecentResult(string $requestId, ?string $operator = null): ?array
@@ -191,7 +295,7 @@ function cp51RecentResult(string $requestId, ?string $operator = null): ?array
     $raw = @file_get_contents($f);
     try { $r = is_string($raw) ? json_decode($raw, true, 32, JSON_THROW_ON_ERROR) : null; }
     catch (Throwable $e) { $r = null; }
-    $acties = ['adopt-active','suspend','activate','recover','export','delete','cancel-delete','purge'];
+    $acties = ['provision','adopt-active','suspend','activate','recover','export','delete','cancel-delete','purge'];
     if (!is_array($r)
         || (int)($r['schema'] ?? 0) !== 1
         || ($r['phase'] ?? '') !== '5.1-result'
