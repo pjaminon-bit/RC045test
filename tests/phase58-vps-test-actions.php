@@ -34,6 +34,17 @@ c58(str_contains($deploy,'StrictHostKeyChecking=yes')&&!str_contains($deploy,'ss
 c58(str_contains($deploy,'deploy $DEPLOY_SHA')&&str_contains($deploy,'DEPLOYED $DEPLOY_SHA'),'workflow vraagt alleen exacte commitdeploy en verifieert serverbevestiging');
 c58(str_contains($deploy,'https://test.vps.holox.nl')&&str_contains($deploy,'healthz.php')&&str_contains($deploy,'204 nee'),'post-deploy smoke test bewijst VPS-testhealth');
 
+c58(str_contains($deploy,'id-token: write'),'deployworkflow kan een GitHub OIDC-token voor workload identity aanvragen');
+c58(str_contains($deploy,'tailscale/github-action@306e68a486fd2350f2bfc3b19fcd143891a4a2d8')&&str_contains($deploy,'version: 1.94.2'),'Tailscale GitHub Action en clientversie zijn deterministisch gepind');
+c58(str_contains($deploy,'secrets.TS_OAUTH_CLIENT_ID')&&str_contains($deploy,'secrets.TS_AUDIENCE'),'Tailscale workload identity gebruikt client-ID en audience');
+c58(!str_contains($deploy,'oauth-secret:')&&!str_contains($deploy,'authkey:'),'deployworkflow bewaart geen langdurig Tailscale OAuth-secret of authkey');
+c58(str_contains($deploy,'tags: tag:github-rc045test'),'ephemeral GitHub-runner gebruikt een afzonderlijke least-privilege tag');
+c58(str_contains($deploy,"VPS_TEST_TAILSCALE_HOST || '100.104.242.66'")&&str_contains($deploy,'VPS_TAILSCALE_HOST'),'SSH netwerkdoel is het private Tailscale-adres van platform');
+c58(!str_contains($deploy,"VPS_SSH_HOST: ${{ vars.VPS_TEST_SSH_HOST || 'vps.holox.nl' }}"),'publieke VPS-hostnaam is niet langer het SSH-netwerkdoel');
+c58(str_contains($deploy,'HostKeyAlias="$VPS_SSH_HOST_ALIAS"')&&str_contains($deploy,'VPS_SSH_HOST_ALIAS: vps.holox.nl'),'private Tailscale-route behoudt de out-of-band geverifieerde SSH-hostkey via HostKeyAlias');
+c58(str_contains($deploy,"github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'"),'handmatige privileged deploy kan uitsluitend vanaf main');
+c58(str_contains($deploy,'ping: ${{ vars.VPS_TEST_TAILSCALE_HOST')&&str_contains($deploy,'100.104.242.66'),'Tailscale peerconnectiviteit wordt vóór SSH geverifieerd');
+
 c58(str_contains($entry,'SSH_ORIGINAL_COMMAND')&&str_contains($entry,'^deploy[[:space:]]+([0-9a-f]{40})$'),'forced SSH entrypoint accepteert uitsluitend deploy + 40-hex commit');
 c58(str_contains($entry,'/usr/bin/sudo -n /usr/local/sbin/verenigingsplatform-github-deploy')&&str_contains($entry,'$commit'),'entrypoint kan uitsluitend vaste root-wrapper met gevalideerde commit starten');
 c58(str_contains($wrapper,"repo='https://github.com/pjaminon-bit/RC045test.git'")&&str_contains($wrapper,'rev-parse HEAD'),'root-wrapper bindt staging aan vaste repo en exacte Git-commit');
@@ -41,5 +52,7 @@ c58(str_contains($wrapper,'trusted_prepare=')&&str_contains($wrapper,'/current/b
 c58(str_contains($wrapper,'$trusted_apply')&&str_contains($wrapper,'--check')&&str_contains($wrapper,'--deploy'),'root-wrapper voert bestaande check en immutable deploy uit');
 c58(str_contains($wrapper,'release-state.json')&&str_contains($wrapper,'DEPLOYED $commit'),'root-wrapper bewijst actieve release-state vóór succesmelding');
 c58(str_contains($docs,'RC045test` blijft de bronrepository')&&str_contains($docs,'geen algemene SSH-shell'),'documentatie borgt repobehoud en restricted deployment');
+c58(str_contains($docs,'Tailscale')&&str_contains($docs,'tag:github-rc045test')&&str_contains($docs,'TS_OAUTH_CLIENT_ID')&&str_contains($docs,'TS_AUDIENCE'),'documentatie borgt private Tailscale/OIDC deployment');
+c58(str_contains($docs,'geen publieke SSH-poort')||str_contains($docs,'publieke SSH-poort hoeft niet open'),'documentatie borgt dat SSH op internet gesloten kan blijven');
 
 echo"Phase 5.8 VPS test Actions: {$ok} OK, {$fout} fout(en)\n";exit($fout===0?0:1);
