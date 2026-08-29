@@ -40,7 +40,7 @@ c58(str_contains($deploy,'secrets.TS_OAUTH_CLIENT_ID')&&str_contains($deploy,'se
 c58(!str_contains($deploy,'oauth-secret:')&&!str_contains($deploy,'authkey:'),'deployworkflow bewaart geen langdurig Tailscale OAuth-secret of authkey');
 c58(str_contains($deploy,'tags: tag:github-rc045test'),'ephemeral GitHub-runner gebruikt een afzonderlijke least-privilege tag');
 c58(str_contains($deploy,"VPS_TEST_TAILSCALE_HOST || '100.104.242.66'")&&str_contains($deploy,'VPS_TAILSCALE_HOST'),'SSH netwerkdoel is het private Tailscale-adres van platform');
-c58(!str_contains($deploy,"VPS_SSH_HOST: ${{ vars.VPS_TEST_SSH_HOST || 'vps.holox.nl' }}"),'publieke VPS-hostnaam is niet langer het SSH-netwerkdoel');
+c58(!str_contains($deploy,'VPS_SSH_HOST:'),'publieke VPS-hostnaam is niet langer het SSH-netwerkdoel');
 c58(str_contains($deploy,'HostKeyAlias="$VPS_SSH_HOST_ALIAS"')&&str_contains($deploy,'VPS_SSH_HOST_ALIAS: vps.holox.nl'),'private Tailscale-route behoudt de out-of-band geverifieerde SSH-hostkey via HostKeyAlias');
 c58(str_contains($deploy,"github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'"),'handmatige privileged deploy kan uitsluitend vanaf main');
 c58(str_contains($deploy,'ping: ${{ vars.VPS_TEST_TAILSCALE_HOST')&&str_contains($deploy,'100.104.242.66'),'Tailscale peerconnectiviteit wordt vóór SSH geverifieerd');
