@@ -51,8 +51,6 @@ if ($data === null) {
     // dus een onbruikbare optionele override, niet een reden om de publieke
     // pagina met 500-responses te vervuilen. Log de afwijking wel zodat beheer
     // hem kan herstellen, maar geef de browser expliciet "geen override".
-    // Externe tenants blijven strikt: zij mogen nooit naar RC045/defaultdata
-    // terugvallen en krijgen bij ontbrekende eigen content 404.
     if ($externPad === null && !$configVerplicht) {
         error_log('[platform] standalone override is ongeldig voor dataset ' . $sleutel . '; template-default blijft actief');
         http_response_code(204);
@@ -60,9 +58,13 @@ if ($data === null) {
         header('X-Content-Type-Options: nosniff');
         exit;
     }
-    http_response_code(404);
-    header('Cache-Control: no-store');
-    exit;
+
+    // Voor een externe tenant betekent een ontbrekende optionele publieke
+    // dataset: nog geen beheerinhoud. Dat is geen kapotte URL. Lever daarom een
+    // lege JSON-dataset met HTTP 200. Er is nadrukkelijk geen fallback naar de
+    // voorbeeldvereniging of /data; private tenantopslag blijft de enige bron.
+    // Een echte store-/configuratiefout is hierboven al als 500 afgevangen.
+    $data = [];
 }
 
 // De vaste DEV-codeacceptatie onder /dev bevat bewust geen tenantuploads uit
