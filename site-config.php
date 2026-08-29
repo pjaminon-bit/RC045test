@@ -81,7 +81,9 @@ if ($externPad !== null) {
     // mag die bestanden niet erven en de outputfilter mag er evenmin een
     // fictief pad zoals Testvereniging-logo.png van maken. Alleen exact de
     // ingebouwde defaults worden geneutraliseerd; een echte tenantasset uit de
-    // server-only config of settings blijft onaangeroerd.
+    // server-only config of settings blijft onaangeroerd. Lege branding blijft
+    // bewust leeg: de presentatielaag mag desgewenst een neutrale placeholder
+    // tonen, maar de tenantconfig zelf verzint geen asset-URL.
     $legacyBranding = [
         'logo' => 'rc045-logo.png',
         'social_image' => 'rc045-logo.png',
@@ -96,12 +98,6 @@ if ($externPad !== null) {
         if (hash_equals($legacyPad, trim((string)($config['branding'][$sleutel] ?? '')))) {
             $config['branding'][$sleutel] = '';
         }
-    }
-    if (trim((string)($config['branding']['logo'] ?? '')) === '') {
-        $config['branding']['logo'] = 'images/template-placeholder.svg';
-    }
-    if (trim((string)($config['branding']['social_image'] ?? '')) === '') {
-        $config['branding']['social_image'] = (string)$config['branding']['logo'];
     }
 }
 
