@@ -223,7 +223,7 @@ function bootstrap52Plan(array $in): array
             'os_family' => 'debian-ubuntu',
             'apache_minimum_version' => '2.4.49',
             'postgresql_minimum_major' => 16,
-            'required_php_modules' => ['openssl','pdo_pgsql','mbstring','curl'],
+            'required_php_modules' => ['openssl','pdo_pgsql','mbstring','curl','dom'],
             'packages_are_not_auto_installed' => true,
         ],
         'workflow' => [
