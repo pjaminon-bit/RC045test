@@ -1,10 +1,15 @@
 const { test, expect } = require('@playwright/test');
-const BASE = process.env.PLAYWRIGHT_TEST_BASE_URL || 'https://rc045.nl/dev';
+const BASE = process.env.PLAYWRIGHT_TEST_BASE_URL || 'https://test.vps.holox.nl';
+const BASE_HOST = new URL(BASE).hostname;
 const ADMIN = process.env.E2E_ADMIN_USER;
 const MEMBER = process.env.E2E_MEMBER_USER;
 const PASSWORD = process.env.E2E_PASSWORD;
 
 function url(path){ return BASE.replace(/\/$/,'') + path; }
+function cookieHoortBijHost(cookie){
+  const domain = String(cookie.domain || '').replace(/^\./, '');
+  return domain !== '' && (BASE_HOST === domain || BASE_HOST.endsWith('.' + domain));
+}
 async function login(page, path, user){
   await page.goto(url(path), {waitUntil:'domcontentloaded', timeout:45000});
   await page.locator('#login-gebruikersnaam').fill(user);
@@ -29,7 +34,7 @@ for (const viewport of [
     await login(page, '/beheer/', ADMIN);
     await expect(page.getByRole('button',{name:/uitloggen/i})).toBeVisible();
     const cookies = await context.cookies();
-    const sessie = cookies.find(c => c.domain.includes('rc045.nl') && c.httpOnly);
+    const sessie = cookies.find(c => cookieHoortBijHost(c) && c.httpOnly);
     expect(sessie, 'Geen HttpOnly sessiecookie na beheerlogin').toBeTruthy();
     expect(sessie.secure).toBe(true);
     expect(String(sessie.sameSite).toLowerCase()).toBe('lax');
