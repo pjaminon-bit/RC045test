@@ -1,6 +1,7 @@
 <?php
 if (PHP_SAPI !== 'cli') { http_response_code(403); exit('Alleen via CLI beschikbaar.'); }
 require_once dirname(__DIR__) . '/app/deployment/first-vps-bootstrap-contract.php';
+require_once dirname(__DIR__) . '/app/deployment/php-runtime-requirements.php';
 
 function prep52Stop(string $m, int $c=1): never { fwrite(STDERR,"FOUT: {$m}\n"); exit($c); }
 function prep52Help(): void
@@ -30,6 +31,13 @@ foreach($_SERVER['argv']??[]as$a){if(preg_match('/^--(?:password|pass|secret|tok
 $o=getopt('',['source:','commit:','output:','platform-root::','tenant-base::','php-version::','platform-host:','platform-strategy:','platform-ipv4::','platform-ipv6::','platform-cname::','tenant-key:','tenant-name:','tenant-host:','tenant-strategy:','tenant-ipv4::','tenant-ipv6::','tenant-cname::','operator-user:','modules::','cert-name::','force','dry-run','help']);
 if(isset($o['help'])){prep52Help();exit(0);}foreach(['source','commit','output','platform-host','platform-strategy','tenant-key','tenant-name','tenant-host','tenant-strategy','operator-user']as$k)if(trim((string)($o[$k]??''))==='')prep52Stop('--'.$k.' is verplicht.');
 try{
+    // De releaseguard is de centrale bron voor actuele PHP-runtime-eisen. Het
+    // deterministische fase-5.2 contract moet byte-inhoudelijk dezelfde lijst
+    // dragen; toekomstige drift blokkeert daardoor al bij bundle-generatie.
+    $runtimeRequirements = platformPhpRequiredExtensions();
+    if (!extension_loaded('dom') || !class_exists(DOMDocument::class) || !class_exists(DOMXPath::class)) {
+        throw new RuntimeException('Vereiste PHP DOM-runtime ontbreekt; installeer de XML/DOM-extensie vóór first-VPS bootstrap.');
+    }
     $defs=require dirname(__DIR__).'/app/core/platform-definities.php';$alleModules=array_keys((array)($defs['features']??[]));
     $modules=array_key_exists('modules',$o)?(string)$o['modules']:implode(',',$alleModules);
     $in=[
@@ -41,7 +49,11 @@ try{
         'tenant_key'=>(string)$o['tenant-key'],'tenant_name'=>(string)$o['tenant-name'],'tenant_host'=>(string)$o['tenant-host'],'modules'=>$modules,
         'tenant_dns_strategy'=>(string)$o['tenant-strategy'],'tenant_ipv4'=>(string)($o['tenant-ipv4']??''),'tenant_ipv6'=>(string)($o['tenant-ipv6']??''),'tenant_cname'=>(string)($o['tenant-cname']??''),
     ];
-    $plan=bootstrap52Plan($in);$json=bootstrap52Json($plan);$art=bootstrap52Artifacts($plan);
+    $plan=bootstrap52Plan($in);
+    if (($plan['preflight']['required_php_modules'] ?? null) !== $runtimeRequirements) {
+        throw new RuntimeException('First-VPS PHP-runtimecontract wijkt af van de centrale release-eisen.');
+    }
+    $json=bootstrap52Json($plan);$art=bootstrap52Artifacts($plan);
 }catch(Throwable$e){prep52Stop($e->getMessage());}
 if(isset($o['dry-run'])){echo$json;exit(0);} $force=isset($o['force']);
 $out=(string)$plan['paths']['output_dir'];if(!is_dir($out)&&!@mkdir($out,0750,true)&&!is_dir($out))prep52Stop('Fase-5.2 outputmap kon niet worden aangemaakt.');@chmod($out,0750);

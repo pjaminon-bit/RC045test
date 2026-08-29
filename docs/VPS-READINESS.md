@@ -1,6 +1,6 @@
 # Eerste productie-VPS — readiness en acceptatie
 
-Status per **23-08-2026**.
+Status per **29-08-2026**.
 
 Dit document beschrijft de stap **vóór** `apply-first-vps-bootstrap.php --apply`. Fase 5.2 installeert bewust geen OS-packages. Een nieuwe VPS moet daarom eerst aantoonbaar aan deze voorwaarden voldoen. Pas daarna mag de eerste productiebootstrap starten.
 
@@ -35,14 +35,14 @@ sudo apt update
 sudo apt full-upgrade -y
 sudo apt install -y \
   apache2 apache2-utils \
-  php8.5-cli php8.5-fpm php8.5-pgsql php8.5-mbstring php8.5-curl \
+  php8.5-cli php8.5-fpm php8.5-pgsql php8.5-mbstring php8.5-curl php8.5-xml \
   postgresql postgresql-client \
   certbot fail2ban \
   git curl openssl logrotate \
   procps util-linux passwd tar
 ```
 
-`php8.5-pgsql` levert de PostgreSQL/PDO-driver die de bootstrap als `pdo_pgsql` controleert. `php8.5-mbstring` is vereist voor Unicode-veilige platform-/tenantvalidatie en wordt al tijdens plangeneratie gebruikt. `php8.5-curl` is vereist voor de applicatie-HTTP-client, waaronder de optionele DeepL-vertaalfunctie. `apache2-utils` levert `htpasswd`. De overige packages maken de vaste binaries beschikbaar die de privileged scripts fail-closed controleren.
+`php8.5-pgsql` levert de PostgreSQL/PDO-driver die de bootstrap als `pdo_pgsql` controleert. `php8.5-mbstring` is vereist voor Unicode-veilige platform-/tenantvalidatie en wordt al tijdens plangeneratie gebruikt. `php8.5-curl` is vereist voor de applicatie-HTTP-client, waaronder de optionele DeepL-vertaalfunctie. `php8.5-xml` levert de DOM-runtime (`dom`, `DOMDocument` en `DOMXPath`) die de publieke tenantrenderer gebruikt. `apache2-utils` levert `htpasswd`. De overige packages maken de vaste binaries beschikbaar die de privileged scripts fail-closed controleren.
 
 Controleer na installatie dat er geen uitgestelde reboot door kernel/security-updates nodig is voordat de echte bootstrap start.
 
@@ -64,7 +64,7 @@ De productiepreflight vereist minimaal:
 
 - Apache 2.4.49;
 - exacte gekozen PHP CLI/PHP-FPM-versie: **8.5**;
-- PHP-modules `openssl`, `pdo_pgsql`, `mbstring` en `curl`;
+- PHP-modules `openssl`, `pdo_pgsql`, `mbstring`, `curl` en `dom`, plus beschikbare `DOMDocument`- en `DOMXPath`-klassen;
 - PostgreSQL client/server 16 of nieuwer;
 - Certbot 2.0 of nieuwer;
 - Fail2ban;
@@ -117,7 +117,8 @@ Voer vóór het genereren/toepassen van het bootstrapplan uit:
 cat /etc/os-release
 uname -a
 php8.5 -v
-php8.5 -m | grep -E '^(openssl|pdo_pgsql|mbstring|curl)$'
+php8.5 -m | grep -E '^(openssl|pdo_pgsql|mbstring|curl|dom)$'
+php8.5 -r 'foreach (["DOMDocument","DOMXPath"] as $c) { if (!class_exists($c)) { fwrite(STDERR, "Ontbreekt: $c\n"); exit(1); } } echo "DOM runtime OK\n";'
 php-fpm8.5 -v
 apache2ctl -v
 psql --version

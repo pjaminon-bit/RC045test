@@ -50,7 +50,18 @@ jobs:
           node --check tests/live-dev-browser.spec.js
           node --check tests/live-dev-authenticated.spec.js
       - name: Alle functionele technische en securityregressies
-        run: bash tests/run-all.sh
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash tests/run-all.sh 2>&1 | tee "$RUNNER_TEMP/regression-output.log"
+      - name: Bewaar regressiediagnose
+        if: ${{ always() }}
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: source-regression-${{ github.run_id }}
+          path: ${{ runner.temp }}/regression-output.log
+          if-no-files-found: warn
+          retention-days: 14
 
   live-security:
     needs: source-regression
@@ -101,8 +112,6 @@ jobs:
       (github.event_name == 'workflow_run' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.conclusion == 'success')
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    # Deze job muteert tijdelijk echte DEV-fixtures. Eén globale groep over alle
-    # workflowruns voorkomt dat twee runs elkaars backup als origineel zien.
     concurrency:
       group: rc045test-dev-auth-fixture
       cancel-in-progress: false
@@ -181,7 +190,6 @@ jobs:
               printf 'rm /%s\n' "$f" | sftp_cmd >/dev/null 2>&1 || true
             fi
           done
-          # Bewijs na herstel dat geen synthetische E2E-login is blijven staan.
           controle="/tmp/e2e-auth/restored-users.json"
           if printf 'get /beheer-users.json %s\n' "$controle" | sftp_cmd >/dev/null 2>&1 && [[ -f "$controle" ]]; then
             if grep -Eq 'e2e-(admin|member)-[0-9]+' "$controle"; then
