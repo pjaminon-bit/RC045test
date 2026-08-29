@@ -158,6 +158,12 @@ function tenantPublicRuntimeTransform(string $html, array $config): string
     ) ?? $html;
     $html = str_replace("fetch('aanmelden-ontvangst.php', {", "if (!(window.verenigingSiteContext && window.verenigingSiteContext.external)) fetch('aanmelden-ontvangst.php', {", $html);
 
+    // Neutraliseer historische media vóór tekstuele merkvervanging. Anders kan
+    // rc045-logo.png eerst in bijvoorbeeld Testvereniging-logo.png veranderen
+    // en is de legacy-mediaherkenning daarna te laat. Voor een tenant zonder
+    // eigen logo gebruiken we bewust de lokale dummy-placeholder.
+    $html = tenantPublicRuntimePlaceholderLokaleMedia($html, $logo);
+
     $vervangingen = [
         'RC045 – Bashers of the South' => $volledig,
         'RC045 · Bashers of the South' => $volledig,
@@ -182,7 +188,6 @@ function tenantPublicRuntimeTransform(string $html, array $config): string
         'RC045' => $naam,
     ];
     $html = str_ireplace(array_keys($vervangingen), array_values($vervangingen), $html);
-    $html = tenantPublicRuntimePlaceholderLokaleMedia($html, $logo);
 
     // Historische mailto-credit neutraliseren zonder een hardcoded productmerk.
     $html = preg_replace('~mailto:\?subject=Website%20[^"\']+~i', '#', $html) ?? $html;
