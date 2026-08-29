@@ -75,6 +75,34 @@ if ($overridePad !== null) {
 if ($externPad !== null) {
     $bewerkbaar = tenantSettingsLees($config);
     if ($bewerkbaar !== []) $config = array_replace_recursive($config, $bewerkbaar);
+
+    // Het standalone compatibiliteitsprofiel bevat historische RC045-assets.
+    // Een nieuwe externe tenant die nog geen eigen branding heeft ingesteld
+    // mag die bestanden niet erven en de outputfilter mag er evenmin een
+    // fictief pad zoals Testvereniging-logo.png van maken. Alleen exact de
+    // ingebouwde defaults worden geneutraliseerd; een echte tenantasset uit de
+    // server-only config of settings blijft onaangeroerd.
+    $legacyBranding = [
+        'logo' => 'rc045-logo.png',
+        'social_image' => 'rc045-logo.png',
+        'favicon' => 'favicon.ico',
+        'favicon_16' => 'favicon-16x16.png',
+        'favicon_32' => 'favicon-32x32.png',
+        'favicon_48' => 'favicon-48x48.png',
+        'apple_touch_icon' => 'apple-touch-icon.png',
+        'manifest' => 'site.webmanifest',
+    ];
+    foreach ($legacyBranding as $sleutel => $legacyPad) {
+        if (hash_equals($legacyPad, trim((string)($config['branding'][$sleutel] ?? '')))) {
+            $config['branding'][$sleutel] = '';
+        }
+    }
+    if (trim((string)($config['branding']['logo'] ?? '')) === '') {
+        $config['branding']['logo'] = 'images/template-placeholder.svg';
+    }
+    if (trim((string)($config['branding']['social_image'] ?? '')) === '') {
+        $config['branding']['social_image'] = (string)$config['branding']['logo'];
+    }
 }
 
 $config['vereniging']['sleutel'] = tenantRuntimeVeiligeSleutel((string)($config['vereniging']['sleutel'] ?? 'default'));
