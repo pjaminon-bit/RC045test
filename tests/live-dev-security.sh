@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-BASE="${LIVE_DEV_BASE_URL:-https://rc045.nl/dev}"
+BASE="${LIVE_DEV_BASE_URL:-https://test.vps.holox.nl}"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
@@ -20,10 +20,6 @@ if grep -Eqi '^referrer-policy:' "$TMP/headers.clean"; then ok 'Referrer-Policy 
 if grep -Eqi '^x-frame-options:[[:space:]]*(deny|sameorigin)' "$TMP/headers.clean"; then ok 'legacy clickjackingheader actief'; else bad 'X-Frame-Options ontbreekt'; fi
 if ! grep -Eqi '^x-powered-by:' "$TMP/headers.clean"; then ok 'geen X-Powered-By disclosure'; else bad 'X-Powered-By lekt runtimeinformatie'; fi
 
-# CSP is vanaf de pre-VPS hardening een verplicht contract, niet meer een
-# alternatief voor X-Frame-Options. Uitvoerbare remote scripts moeten geblokkeerd
-# blijven zodat een analytics-CDN nooit dezelfde originrechten krijgt als beheer.
-# OpenStreetMap is uitsluitend als read-only iframe-origin toegestaan.
 csp="$(grep -Ei '^content-security-policy:' "$TMP/headers.clean" | tail -n1 || true)"
 if [[ -n "$csp" ]]; then ok 'Content-Security-Policy actief'; else bad 'Content-Security-Policy ontbreekt'; fi
 for directive in "default-src 'self'" "base-uri 'self'" "object-src 'none'" "frame-ancestors 'none'" "form-action 'self'" "script-src 'self'" "frame-src https://www.openstreetmap.org"; do
@@ -31,11 +27,9 @@ for directive in "default-src 'self'" "base-uri 'self'" "object-src 'none'" "fra
 done
 if ! grep -Eqi 'script-src[^;]*(gc\.zgo\.at|goatcounter|openstreetmap\.org)' <<<"$csp"; then ok 'CSP staat geen externe analytics- of kaartscriptorigin toe'; else bad 'CSP laat externe analytics/kaart-JS als script toe'; fi
 
-# Onveilige HTTP-methoden mogen geen succesvolle response opleveren.
 trace="$(curl --silent --show-error --request TRACE --output /dev/null --write-out '%{http_code}' --connect-timeout 10 --max-time 30 "$BASE/" || true)"
 case "$trace" in 403|405|501) ok "TRACE geblokkeerd ($trace)";; *) bad "TRACE onverwacht toegestaan/status $trace";; esac
 
-# Bestaande harde servergrenzen, plus meerdere traversal-encodings.
 declare -A expected=(
   ["$BASE/app/deployment/first-vps-bootstrap-contract.php"]="403"
   ["$BASE/bin/apply-first-vps-bootstrap.php"]="403"
@@ -52,16 +46,13 @@ for url in "${!expected[@]}"; do
   if [[ "$got" == "${expected[$url]}" ]]; then ok "$url -> $got"; else bad "$url -> $got, verwacht ${expected[$url]}"; fi
 done
 
-# Eenvoudige reflected-XSS-canary: payload mag nooit letterlijk als actieve markup terugkomen.
 payload='%3Cscript%3Ewindow.__RC045_XSS__%3D1%3C%2Fscript%3E'
 curl --silent --show-error --location --output "$TMP/xss" --connect-timeout 10 --max-time 30 "$BASE/?lang=$payload"
 if ! grep -Fqi '<script>window.__RC045_XSS__=1</script>' "$TMP/xss"; then ok 'XSS-canary wordt niet als actieve scriptmarkup gereflecteerd'; else bad 'XSS-canary wordt onveilig gereflecteerd'; fi
 
-# CRLF/header-injection canary via taalparameter mag geen geïnjecteerde header maken.
 curl --silent --show-error --dump-header "$TMP/crlf" --output /dev/null --connect-timeout 10 --max-time 30 "$BASE/?lang=nl%0d%0aX-RC045-Injected:%20yes" || true
 if ! tr -d '\r' < "$TMP/crlf" | grep -Eqi '^X-RC045-Injected:[[:space:]]*yes'; then ok 'geen CRLF headerinjectie via query'; else bad 'CRLF headerinjectie mogelijk'; fi
 
-# Cookies die op login-entrypoints worden gezet moeten hardened zijn.
 for route in beheer/ leden/; do
   label="${route%/}"
   header_file="$TMP/cookie-$label"
@@ -80,7 +71,7 @@ for route in beheer/ leden/; do
 done
 
 if (( fail > 0 )); then
-  echo "Live DEV security: $fail fout(en)" >&2
+  echo "Live VPS-test security: $fail fout(en)" >&2
   exit 1
 fi
-echo 'Live DEV security: ALLES GROEN'
+echo 'Live VPS-test security: ALLES GROEN'
