@@ -63,9 +63,15 @@ c59(
     'legacy data-URL blijft via de whitelisted tenant-aware gateway lopen'
 );
 
-// Borg ook de concrete live-browserfout: zonder eigen logo mag de code niet
-// afhankelijk zijn van een fictief tenantnaam-logo dat niet als bestand bestaat.
-c59(!str_contains($siteConfig, 'Testvereniging-logo.png'), 'geen hardcoded of gegenereerde testtenant-logo-URL in configuratie');
+// Borg de concrete browserfout structureel: na de neutralisatielus mag er geen
+// tweede toewijzing zijn die uit een lege tenantbranding alsnog een nieuw logo-
+// of social-imagepad samenstelt. De vaste standalone defaults bovenin de config
+// blijven uiteraard bestaan voor RC045 zelf.
+c59(
+    !str_contains($siteConfig, "\$config['branding']['logo'] =")
+    && !str_contains($siteConfig, "\$config['branding']['social_image'] ="),
+    'lege externe branding krijgt geen nieuw samengesteld assetpad'
+);
 
 echo "Phase 5.9 live-browser tenant runtime: {$ok} OK, {$fout} fout(en)\n";
 exit($fout === 0 ? 0 : 1);
