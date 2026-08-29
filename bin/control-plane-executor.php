@@ -47,21 +47,59 @@ function cpeVeiligeExport(mixed$x):?array
 {
     if(!is_array($x))return null;$sha=(string)($x['sha256']??'');if(preg_match('/^[0-9a-f]{64}$/D',$sha)!==1)return null;return['sha256'=>$sha,'created_at_utc'=>(string)($x['created_at_utc']??'')];
 }
+function cpeProvisionManifestRow(string$tenant,string$key):array
+{
+    $manifestPad=$tenant.'/tenant.json';$configPad=$tenant.'/config.php';$envPad=$tenant.'/runtime.env';$private=$tenant.'/private';
+    if(is_link($manifestPad)||!is_file($manifestPad)||is_link($configPad)||!is_file($configPad)||is_link($envPad)||!is_file($envPad)||is_link($private)||!is_dir($private))throw new RuntimeException('Basisprovisioning is onvolledig.');
+    $raw=@file_get_contents($manifestPad);try{$m=is_string($raw)?json_decode($raw,true,64,JSON_THROW_ON_ERROR):null;}catch(Throwable$e){$m=null;}
+    if(!is_array($m)||(int)($m['schema']??0)!==1||!hash_equals($key,(string)($m['tenant_key']??''))||($m['require_tenant_config']??false)!==true)throw new RuntimeException('Tenantmanifest is ongeldig.');
+    $url=(string)($m['site_url']??'');$parts=parse_url($url);$host=strtolower((string)($parts['host']??''));
+    if(!is_array($parts)||strtolower((string)($parts['scheme']??''))!=='https'||isset($parts['user'])||isset($parts['pass'])||isset($parts['port'])||isset($parts['query'])||isset($parts['fragment'])||!web42CanoniekeHost($host))throw new RuntimeException('Tenantmanifest bevat geen geldige productiehost.');
+    $path=(string)($parts['path']??'');if($path!==''&&$path!=='/')throw new RuntimeException('Tenantmanifest bevat een URL-subpad.');
+    return['tenant_key'=>$key,'canonical_host'=>$host,'status'=>'setup_required','transition'=>null,'healthy'=>false,'updated_at_utc'=>@gmdate('Y-m-d\TH:i:s\Z',(int)filemtime($manifestPad))?:null,'last_export'=>null,'delete_export'=>null,'purge_not_before_utc'=>null];
+}
 function cpeSnapshot(array$c):array
 {
     $root=$c['tenants_root'];if(runtime41SymlinkInPad($root)!==null||!is_dir($root))throw new RuntimeException('Tenantroot ontbreekt of is onveilig.');$rows=[];
-    foreach(scandir($root)?:[]as$key){if($key==='.'||$key==='..'||!runtime41CanoniekeTenantKey($key))continue;$tenant=$root.'/'.$key;if(is_link($tenant)||!is_dir($tenant))continue;$planPad=$tenant.'/lifecycle/lifecycle-plan.json';if(!is_file($planPad)||is_link($planPad))continue;
-        try{$ctx=lifecycle48PlanLeesEnValideer($planPad);$p=$ctx['plan'];$s=cpeState($p);$rows[]=['tenant_key'=>$key,'canonical_host'=>(string)$p['canonical_host'],'status'=>$s['status'],'transition'=>$s['transition'],'healthy'=>cpeGezond($p,$s['status']),'updated_at_utc'=>$s['updated_at_utc'],'last_export'=>cpeVeiligeExport($s['last_export']),'delete_export'=>cpeVeiligeExport($s['delete_export']),'purge_not_before_utc'=>$s['purge_not_before_utc']];}
-        catch(Throwable$e){$rows[]=['tenant_key'=>$key,'canonical_host'=>'','status'=>'invalid','transition'=>null,'healthy'=>false,'updated_at_utc'=>null,'last_export'=>null,'delete_export'=>null,'purge_not_before_utc'=>null];}
+    foreach(scandir($root)?:[]as$key){if($key==='.'||$key==='..'||!runtime41CanoniekeTenantKey($key))continue;$tenant=$root.'/'.$key;if(is_link($tenant)||!is_dir($tenant))continue;$planPad=$tenant.'/lifecycle/lifecycle-plan.json';
+        if(is_file($planPad)&&!is_link($planPad)){
+            try{$ctx=lifecycle48PlanLeesEnValideer($planPad);$p=$ctx['plan'];$s=cpeState($p);$rows[]=['tenant_key'=>$key,'canonical_host'=>(string)$p['canonical_host'],'status'=>$s['status'],'transition'=>$s['transition'],'healthy'=>cpeGezond($p,$s['status']),'updated_at_utc'=>$s['updated_at_utc'],'last_export'=>cpeVeiligeExport($s['last_export']),'delete_export'=>cpeVeiligeExport($s['delete_export']),'purge_not_before_utc'=>$s['purge_not_before_utc']];}
+            catch(Throwable$e){$rows[]=['tenant_key'=>$key,'canonical_host'=>'','status'=>'invalid','transition'=>null,'healthy'=>false,'updated_at_utc'=>null,'last_export'=>null,'delete_export'=>null,'purge_not_before_utc'=>null];}
+            continue;
+        }
+        try{$rows[]=cpeProvisionManifestRow($tenant,$key);}catch(Throwable$e){$rows[]=['tenant_key'=>$key,'canonical_host'=>'','status'=>'invalid','transition'=>null,'healthy'=>false,'updated_at_utc'=>null,'last_export'=>null,'delete_export'=>null,'purge_not_before_utc'=>null];}
     }
     usort($rows,fn($a,$b)=>strcmp($a['tenant_key'],$b['tenant_key']));return['schema'=>1,'phase'=>'5.1-snapshot','generated_at_utc'=>gmdate('Y-m-d\TH:i:s\Z'),'tenants'=>$rows];
+}
+function cpeProvisionModules():array{return['website','ledenadministratie','werkgroepen','evenementen','vergaderingen','taken','operationele_taken','fotoboek','sponsors','media','aanmelden'];}
+function cpeProvisionPayload(array$r):array
+{
+    $p=$r['provision']??null;if(!is_array($p))throw new RuntimeException('Provisioningpayload ontbreekt.');$keys=array_keys($p);sort($keys,SORT_STRING);if($keys!==['host','modules','name'])throw new RuntimeException('Provisioningpayload bevat onbekende velden.');
+    $name=trim((string)($p['name']??''));if($name===''||mb_strlen($name)>120||preg_match('/[\x00-\x1F\x7F]/u',$name)===1)throw new RuntimeException('Provisioningnaam is ongeldig.');
+    $host=(string)($p['host']??'');if($host!==strtolower(trim($host))||!web42CanoniekeHost($host))throw new RuntimeException('Provisioninghost is niet canoniek.');
+    $mods=$p['modules']??null;if(!is_array($mods)||!array_is_list($mods)||$mods===[])throw new RuntimeException('Provisioningmodules ontbreken.');$seen=[];foreach($mods as$m){if(!is_string($m)||!in_array($m,cpeProvisionModules(),true)||isset($seen[$m]))throw new RuntimeException('Provisioningmodules zijn ongeldig.');$seen[$m]=true;}if(!isset($seen['website']))throw new RuntimeException('Provisioning mist kernmodule website.');$canon=[];foreach(cpeProvisionModules()as$m)if(isset($seen[$m]))$canon[]=$m;
+    return['name'=>$name,'host'=>$host,'modules'=>$canon];
 }
 function cpeRequest(string$f):array
 {
     if(is_link($f)||!is_file($f))throw new RuntimeException('Queue-item is geen veilig regulier bestand.');$base=basename($f);if(preg_match('/^([0-9a-f]{32})\.json$/D',$base,$m)!==1)throw new RuntimeException('Queue-bestandsnaam is ongeldig.');$raw=@file_get_contents($f);try{$r=is_string($raw)?json_decode($raw,true,64,JSON_THROW_ON_ERROR):null;}catch(Throwable$e){$r=null;}
     if(!is_array($r)||(int)($r['schema']??0)!==1||($r['phase']??'')!=='5.1-request'||!hash_equals($m[1],(string)($r['request_id']??'')))throw new RuntimeException('Queue-schema of request-id is ongeldig.');
     if(!runtime41CanoniekeTenantKey((string)($r['tenant_key']??'')))throw new RuntimeException('Queue bevat ongeldige tenant-key.');if(preg_match('/^[A-Za-z0-9][A-Za-z0-9._@-]{1,63}$/D',(string)($r['operator']??''))!==1)throw new RuntimeException('Queue bevat ongeldige operator.');
-    $actions=['adopt-active','suspend','activate','recover','export','delete','cancel-delete','purge'];if(!in_array((string)($r['action']??''),$actions,true))throw new RuntimeException('Queue bevat niet-toegestane actie.');$ts=strtotime((string)($r['requested_at_utc']??''));if($ts===false||abs(time()-$ts)>900)throw new RuntimeException('Queue-aanvraag is verlopen.');if(!is_array($r['confirm']??null))throw new RuntimeException('Queue-confirmatieschema ontbreekt.');return$r;
+    $actions=['provision','adopt-active','suspend','activate','recover','export','delete','cancel-delete','purge'];$action=(string)($r['action']??'');if(!in_array($action,$actions,true))throw new RuntimeException('Queue bevat niet-toegestane actie.');$ts=strtotime((string)($r['requested_at_utc']??''));if($ts===false||abs(time()-$ts)>900)throw new RuntimeException('Queue-aanvraag is verlopen.');if(!is_array($r['confirm']??null))throw new RuntimeException('Queue-confirmatieschema ontbreekt.');
+    $verwacht=['action','confirm','operator','phase','request_id','requested_at_utc','schema','tenant_key'];if($action==='provision')$verwacht[]='provision';sort($verwacht,SORT_STRING);$werkelijk=array_keys($r);sort($werkelijk,SORT_STRING);if($werkelijk!==$verwacht)throw new RuntimeException('Queue bevat onbekende top-level velden.');
+    if($action==='provision'){if(($r['confirm']??[])!==[])throw new RuntimeException('Provisioning accepteert geen confirmatievelden.');cpeProvisionPayload($r);}elseif(isset($r['provision']))throw new RuntimeException('Lifecycle-aanvraag bevat onverwachte provisioningdata.');
+    return$r;
+}
+function cpeProvisionUniek(array$c,array$r):void
+{
+    $key=(string)$r['tenant_key'];$p=cpeProvisionPayload($r);$doel=$c['tenants_root'].'/'.$key;if(file_exists($doel)||is_link($doel))throw new RuntimeException('Tenant-key bestaat al op de server.');
+    foreach(cpeSnapshot($c)['tenants']as$t){if(hash_equals($key,(string)($t['tenant_key']??'')))throw new RuntimeException('Tenant-key bestaat al in platformstatus.');$h=strtolower((string)($t['canonical_host']??''));if($h!==''&&hash_equals($p['host'],$h))throw new RuntimeException('Domeinnaam is al aan een tenant gekoppeld.');}
+    foreach(scandir($c['tenants_root'])?:[]as$other){if($other==='.'||$other==='..'||!runtime41CanoniekeTenantKey($other))continue;$manifest=$c['tenants_root'].'/'.$other.'/tenant.json';if(is_link($manifest)||!is_file($manifest))continue;$raw=@file_get_contents($manifest);$m=is_string($raw)?json_decode($raw,true):null;if(!is_array($m))continue;$parts=parse_url((string)($m['site_url']??''));$h=is_array($parts)?strtolower((string)($parts['host']??'')):'';if($h!==''&&hash_equals($p['host'],$h))throw new RuntimeException('Domeinnaam is al aanwezig in een tenantmanifest.');}
+}
+function cpeProvisionCommand(array$c,array$r,bool$dryRun=false):array
+{
+    $p=cpeProvisionPayload($r);$php=PHP_BINARY;if(!preg_match('#^/usr/bin/php[0-9]{1,2}\.[0-9]{1,2}$#D',$php)||!is_file($php)||!is_executable($php))throw new RuntimeException('Executor draait niet met een exact gepinde productie-PHP-binary.');$script=$c['app_root'].'/bin/provision-tenant.php';if(!is_file($script)||is_link($script))throw new RuntimeException('Tenant-provisioner ontbreekt of is onveilig.');
+    $cmd=[$php,$script,'--key='.$r['tenant_key'],'--name='.$p['name'],'--url=https://'.$p['host'],'--root='.$c['tenants_root'],'--driver=pdo','--modules='.implode(',',$p['modules'])];if($dryRun)$cmd[]='--dry-run';return$cmd;
 }
 function cpeCommand(array$c,array$r):array
 {
@@ -69,6 +107,12 @@ function cpeCommand(array$c,array$r):array
     if(in_array($a,['delete','purge'],true)){$ct=(string)($r['confirm']['tenant']??'');$sha=(string)($r['confirm']['export_sha256']??'');if(!hash_equals($key,$ct)||preg_match('/^[0-9a-f]{64}$/D',$sha)!==1)throw new RuntimeException('Destructieve bevestiging is ongeldig.');$cmd[]='--confirm-tenant='.$ct;$cmd[]='--confirm-export-sha='.$sha;}
     if($a==='purge'){if(!hash_equals('VERWIJDER-DEFINITIEF',(string)($r['confirm']['purge']??'')))throw new RuntimeException('Purgebevestiging is ongeldig.');$cmd[]='--confirm-purge=VERWIJDER-DEFINITIEF';}
     return$cmd;
+}
+function cpeUitvoeren(array$c,array$r):array
+{
+    if(($r['action']??'')!=='provision')return cpeRun(cpeCommand($c,$r));
+    cpeProvisionUniek($c,$r);[$preCode,$preOut,$preErr]=cpeRun(cpeProvisionCommand($c,$r,true));if($preCode!==0)return[$preCode,$preOut,$preErr];
+    [$code,$out,$err]=cpeRun(cpeProvisionCommand($c,$r,false));if($code===0)$out='Basisprovisioning voltooid. Activeer nu de eerste beheerder en rond daarna de VPS-infrastructuur af.';return[$code,$out,$err];
 }
 function cpeResult(array$c,array$r,string$result,string$message):void
 {
@@ -80,6 +124,6 @@ $o=getopt('',['config:','refresh-only','help']);if(isset($o['help'])){echo"Gebru
 try{$c=cpeConfig(trim((string)($o['config']??'')));$lockDir=dirname($c['executor_lock']);if(runtime41SymlinkInPad($lockDir)!==null||!is_dir($lockDir))throw new RuntimeException('Systeem-lockmap ontbreekt of is onveilig.');$lh=@fopen($c['executor_lock'],'c');if(!is_resource($lh))throw new RuntimeException('Control-plane executor-lock kon niet worden geopend.');if(!@chown($c['executor_lock'],0)||!@chgrp($c['executor_lock'],0)||!@chmod($c['executor_lock'],0600)){fclose($lh);throw new RuntimeException('Control-plane executor-lock kon niet root-only worden gemaakt.');}cpeMeta($c['executor_lock'],0600,false,0,0);if(!flock($lh,LOCK_EX|LOCK_NB)){fclose($lh);throw new RuntimeException('Er draait al een control-plane executor.');}
     cpeDir($c['pending_dir'],0730,$c['runtime_user'],$c['runtime_user']);cpeDir($c['processing_dir'],0700,0,0);cpeDir($c['results_dir'],0750,0,$c['runtime_user']);
     cpeWrite($c['snapshot_file'],cpeSnapshot($c),0640,$c['runtime_user']);if(isset($o['refresh-only'])){echo"REFRESH OK\n";exit(0);}
-    while(true){$files=glob($c['pending_dir'].'/*.json')?:[];if($files===[])break;sort($files,SORT_STRING);$verwerkt=0;foreach($files as$f){$id=pathinfo($f,PATHINFO_FILENAME);$dst=$c['processing_dir'].'/'.$id.'.json';if(is_link($f)||file_exists($dst)||!@rename($f,$dst))continue;$verwerkt++;$r=['request_id'=>$id,'tenant_key'=>null,'action'=>null,'operator'=>null];try{$r=cpeRequest($dst);$cmd=cpeCommand($c,$r);[$code,$out,$err]=cpeRun($cmd);if($code!==0)throw new RuntimeException($err!==''?$err:$out);$msg=$out!==''?$out:'OK';cpeResult($c,$r,'ok',$msg);cpeAudit($c,$r,'ok',$msg);}catch(Throwable$e){$msg=$e->getMessage();try{cpeResult($c,$r,'failed',$msg);}catch(Throwable$ignored){}try{cpeAudit($c,$r,'failed',$msg);}catch(Throwable$ignored){}}finally{cpeUnlink($dst,'Verwerkt control-plane queue-item');}cpeWrite($c['snapshot_file'],cpeSnapshot($c),0640,$c['runtime_user']);}if($verwerkt===0)break;}
+    while(true){$files=glob($c['pending_dir'].'/*.json')?:[];if($files===[])break;sort($files,SORT_STRING);$verwerkt=0;foreach($files as$f){$id=pathinfo($f,PATHINFO_FILENAME);$dst=$c['processing_dir'].'/'.$id.'.json';if(is_link($f)||file_exists($dst)||!@rename($f,$dst))continue;$verwerkt++;$r=['request_id'=>$id,'tenant_key'=>null,'action'=>null,'operator'=>null];try{$r=cpeRequest($dst);[$code,$out,$err]=cpeUitvoeren($c,$r);if($code!==0)throw new RuntimeException($err!==''?$err:$out);$msg=$out!==''?$out:'OK';cpeResult($c,$r,'ok',$msg);cpeAudit($c,$r,'ok',$msg);}catch(Throwable$e){$msg=$e->getMessage();try{cpeResult($c,$r,'failed',$msg);}catch(Throwable$ignored){}try{cpeAudit($c,$r,'failed',$msg);}catch(Throwable$ignored){}}finally{cpeUnlink($dst,'Verwerkt control-plane queue-item');}cpeWrite($c['snapshot_file'],cpeSnapshot($c),0640,$c['runtime_user']);}if($verwerkt===0)break;}
     cpeWrite($c['snapshot_file'],cpeSnapshot($c),0640,$c['runtime_user']);echo"EXECUTOR OK\n";
 }catch(Throwable$e){cpeStop($e->getMessage());}
