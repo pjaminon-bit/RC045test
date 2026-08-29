@@ -126,4 +126,5 @@ jobs:
           wacht_op_status "$basis/app/deployment/release-contract.php" 403 nee
           wacht_op_status "$basis/bin/apply-vps-release.php" 403 nee
           wacht_op_status "$basis/tests/phase451-database-reaudit.php" 403 nee
+          wacht_op_status "$basis/tests/phase47-release-rollback.php" 403 nee
           wacht_op_status "$basis/.git/config" 403 nee
