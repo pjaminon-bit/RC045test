@@ -25,8 +25,8 @@ c58(!str_contains($full,'sshpass')&&!str_contains($full,'sftp_cmd')&&!str_contai
 c58(str_contains($full,"vars.VPS_TEST_AUTH_E2E_ENABLED == 'true'")&&str_contains($full,'secrets.VPS_TEST_ADMIN_USER')&&str_contains($full,'secrets.VPS_TEST_MEMBER_USER'),'authenticated VPS-E2E is expliciet gated en gebruikt dedicated secrets');
 
 c58(str_contains($security,'https://test.vps.holox.nl')&&!str_contains($security,'https://rc045.nl/dev'),'live security default is VPS-test');
-c58(str_contains($browser,"https://test.vps.holox.nl")&&!str_contains($browser,"https://rc045.nl/dev"),'browseracceptatie default is VPS-test');
-c58(str_contains($auth,"https://test.vps.holox.nl")&&!str_contains($auth,"domain.includes('rc045.nl')")&&str_contains($auth,'cookieHoortBijHost'),'authenticated browsertest gebruikt dynamische VPS-hostbinding');
+c58(str_contains($browser,'https://test.vps.holox.nl')&&!str_contains($browser,'https://rc045.nl/dev'),'browseracceptatie default is VPS-test');
+c58(str_contains($auth,'https://test.vps.holox.nl')&&!str_contains($auth,"domain.includes('rc045.nl')")&&str_contains($auth,'cookieHoortBijHost'),'authenticated browsertest gebruikt dynamische VPS-hostbinding');
 
 c58(str_contains($deploy,'name: Deploy RC045test to VPS test')&&str_contains($deploy,"vars.VPS_TEST_DEPLOY_ENABLED == 'true'"),'privileged VPS-deploy is apart en standaard expliciet gated');
 c58(str_contains($deploy,'environment: vps-test')&&str_contains($deploy,'secrets.VPS_TEST_DEPLOY_KEY')&&str_contains($deploy,'secrets.VPS_TEST_SSH_KNOWN_HOSTS'),'deploy gebruikt aparte environment-key en gepinde hosttrust');
@@ -35,9 +35,9 @@ c58(str_contains($deploy,'"deploy $DEPLOY_SHA"')&&str_contains($deploy,'DEPLOYED
 c58(str_contains($deploy,'https://test.vps.holox.nl')&&str_contains($deploy,'healthz.php" 204'),'post-deploy smoke test bewijst VPS-testhealth');
 
 c58(str_contains($entry,'SSH_ORIGINAL_COMMAND')&&str_contains($entry,'^deploy[[:space:]]+([0-9a-f]{40})$'),'forced SSH entrypoint accepteert uitsluitend deploy + 40-hex commit');
-c58(str_contains($entry,"exec /usr/bin/sudo -n /usr/local/sbin/verenigingsplatform-github-deploy \"$commit\"")||str_contains($entry,'exec /usr/bin/sudo -n /usr/local/sbin/verenigingsplatform-github-deploy "$commit"'),'entrypoint kan uitsluitend vaste root-wrapper starten');
-c58(str_contains($wrapper,"repo='https://github.com/pjaminon-bit/RC045test.git'")&&str_contains($wrapper,'git')&&str_contains($wrapper,'rev-parse HEAD'),'root-wrapper bindt staging aan vaste repo en exacte Git-commit');
-c58(str_contains($wrapper,"trusted_prepare=\"$platform_root/current/bin/prepare-vps-release.php\"")||str_contains($wrapper,'trusted_prepare="$platform_root/current/bin/prepare-vps-release.php"'),'root-wrapper gebruikt actieve vertrouwde prepare-tooling');
+c58(str_contains($entry,'exec /usr/bin/sudo -n /usr/local/sbin/verenigingsplatform-github-deploy "$commit"'),'entrypoint kan uitsluitend vaste root-wrapper starten');
+c58(str_contains($wrapper,"repo='https://github.com/pjaminon-bit/RC045test.git'")&&str_contains($wrapper,'rev-parse HEAD'),'root-wrapper bindt staging aan vaste repo en exacte Git-commit');
+c58(str_contains($wrapper,'trusted_prepare="$platform_root/current/bin/prepare-vps-release.php"'),'root-wrapper gebruikt actieve vertrouwde prepare-tooling');
 c58(str_contains($wrapper,'"$php" "$trusted_apply" --plan="$plan" --check')&&str_contains($wrapper,'"$php" "$trusted_apply" --plan="$plan" --deploy'),'root-wrapper voert bestaande check en immutable deploy uit');
 c58(str_contains($wrapper,'release-state.json')&&str_contains($wrapper,'echo "DEPLOYED $commit"'),'root-wrapper bewijst actieve release-state vóór succesmelding');
 c58(str_contains($docs,'RC045test` blijft de bronrepository')&&str_contains($docs,'geen algemene SSH-shell'),'documentatie borgt repobehoud en restricted deployment');
