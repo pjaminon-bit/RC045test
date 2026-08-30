@@ -108,13 +108,15 @@ spvCheck(
 );
 
 $contactEndpoint = spvBron($root . '/contact-ontvangst.php');
+$contactStore = spvBron($root . '/contactberichten-opslag.php');
 $contactBeheer = spvBron($root . '/beheer/contactberichten.php');
 $contactRuntime = spvBron($root . '/app/core/contact-inbox-runtime.php');
 spvCheck(
     str_contains($contactEndpoint, 'aanmeldenPogingRegistreer')
     && str_contains($contactEndpoint, "contactAntwoord(503")
     && str_contains($contactEndpoint, "hash('sha256','contact|'")
-    && !str_contains($contactEndpoint, 'REMOTE_ADDR]') ,
+    && !str_contains($contactStore, 'REMOTE_ADDR')
+    && !str_contains($contactStore, "'ip'=>"),
     'contactendpoint gebruikt private fail-closed limiter zonder raw IP-opslag in inbox'
 );
 spvCheck(
