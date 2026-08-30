@@ -26,8 +26,9 @@
 // de pagina die dit bestand insluit, niet naar een vaste beheer.php, zodat
 // hetzelfde formulier op elke afgeschermde pagina werkt.
 //
-// Standalone/legacy gebruikt tijdelijk de bestaande rootbestanden. Een tenant
-// met expliciete private_root gebruikt uitsluitend tenant-lokale authpaden.
+// Standalone gebruikt nog de bestaande rootbestanden, maar masterauthenticatie
+// is net als bij externe tenants uitsluitend hash-only. Een tenant met
+// expliciete private_root gebruikt uitsluitend tenant-lokale authpaden.
 // ============================================================
 
 date_default_timezone_set('Europe/Amsterdam');
@@ -352,44 +353,32 @@ function loginPogingenWissen($pad, $sleutel) {
 }
 
 $configOk = file_exists($configPad);
-$beheerGebruiktLegacyWachtwoord = false;
 if ($configOk) {
+  $BEHEER_WACHTWOORD_HASH = null;
+  $BEHEER_WACHTWOORD = null;
   require $configPad;
 
-  // Voorkeur: alleen een password_hash() in beheer-config.php bewaren.
-  // De oude plaintext-variabele blijft tijdelijk ondersteund zodat een
-  // deploy niemand buitensluit voordat het server-only configbestand via
-  // FTP is omgezet. Zodra een geldige hash aanwezig is, wordt het oude
-  // wachtwoord volledig genegeerd, ook als die variabele nog bestaat.
-  $beheerHashOk = isset($BEHEER_WACHTWOORD_HASH)
-    && is_string($BEHEER_WACHTWOORD_HASH)
+  // Alle installaties zijn hash-only. Een aanwezige plaintextvariabele maakt
+  // de masterconfig ongeldig, ook wanneer daarnaast al een geldige hash staat.
+  // Zo kan een vergeten legacysecret niet ongemerkt op schijf blijven staan.
+  $beheerHashOk = is_string($BEHEER_WACHTWOORD_HASH)
     && $BEHEER_WACHTWOORD_HASH !== ''
     && ((password_get_info($BEHEER_WACHTWOORD_HASH)['algoName'] ?? 'unknown') !== 'unknown');
-  $beheerLegacyOk = isset($BEHEER_WACHTWOORD)
-    && is_string($BEHEER_WACHTWOORD)
-    && $BEHEER_WACHTWOORD !== ''
-    && $BEHEER_WACHTWOORD !== 'VeranderDitWachtwoord';
+  $beheerHeeftPlaintext = is_string($BEHEER_WACHTWOORD)
+    && trim($BEHEER_WACHTWOORD) !== '';
 
-  $configOk = $beheerHashOk || $beheerLegacyOk;
-  $beheerGebruiktLegacyWachtwoord = !$beheerHashOk && $beheerLegacyOk;
+  $configOk = $beheerHashOk && !$beheerHeeftPlaintext;
+  unset($BEHEER_WACHTWOORD);
 }
 
 function authMasterWachtwoordKlopt($invoer) {
-  global $BEHEER_WACHTWOORD_HASH, $BEHEER_WACHTWOORD;
+  global $BEHEER_WACHTWOORD_HASH;
 
-  if (isset($BEHEER_WACHTWOORD_HASH)
-      && is_string($BEHEER_WACHTWOORD_HASH)
-      && $BEHEER_WACHTWOORD_HASH !== ''
-      && ((password_get_info($BEHEER_WACHTWOORD_HASH)['algoName'] ?? 'unknown') !== 'unknown')) {
-    return password_verify((string) $invoer, $BEHEER_WACHTWOORD_HASH);
-  }
-
-  // Alleen migratiepad voor bestaande installaties. Verwijder deze
-  // variabele uit beheer-config.php zodra de hash is ingesteld.
-  return isset($BEHEER_WACHTWOORD)
-    && is_string($BEHEER_WACHTWOORD)
-    && $BEHEER_WACHTWOORD !== ''
-    && hash_equals($BEHEER_WACHTWOORD, (string) $invoer);
+  return isset($BEHEER_WACHTWOORD_HASH)
+    && is_string($BEHEER_WACHTWOORD_HASH)
+    && $BEHEER_WACHTWOORD_HASH !== ''
+    && ((password_get_info($BEHEER_WACHTWOORD_HASH)['algoName'] ?? 'unknown') !== 'unknown')
+    && password_verify((string) $invoer, $BEHEER_WACHTWOORD_HASH);
 }
 
 // ===== Uitloggen =====
