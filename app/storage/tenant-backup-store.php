@@ -443,8 +443,9 @@ function tenantBackupLeesAssetSnapshot(string $scope, string $naam, ?string &$fo
 /**
  * Herstelt één volledige assetnamespace via staging + rename. De gekozen
  * snapshot wordt eerst volledig naar staging gekopieerd. Pas daarna wordt de
- * huidige toestand als nieuwe snapshot vastgelegd. Zo kan retentie de gekozen
- * oude snapshot niet meer onder de voeten van een lopende restore verwijderen.
+ * huidige toestand als verplichte rollback-snapshot vastgelegd. Zo kan retentie
+ * de gekozen oude snapshot niet meer onder de voeten van een lopende restore
+ * verwijderen en start de mutatie nooit zonder duurzame herstelroute.
  */
 function tenantBackupHerstelAssetSnapshot(string $scope, string $naam, ?string &$fout = null): bool
 {
@@ -466,13 +467,26 @@ function tenantBackupHerstelAssetSnapshot(string $scope, string $naam, ?string &
     if (!tenantBackupKopieerMap($payload, $stage)) { tenantBackupVerwijderMap($stage); $fout='Assetsnapshot kon niet naar staging worden gekopieerd.'; return false; }
 
     $hadDoel = is_dir($doel);
-    if ($hadDoel) tenantBackupMaakAssetSnapshot($scope); // best-effort pre-restore snapshot
+    if ($hadDoel) {
+        $rollbackSnapshot = tenantBackupMaakAssetSnapshot($scope);
+        if ($rollbackSnapshot === null) {
+            tenantBackupVerwijderMap($stage);
+            $fout='Assetherstel is afgebroken omdat de huidige assetmap niet als rollback-snapshot kon worden bewaard.';
+            return false;
+        }
+    }
 
     if ($hadDoel && !@rename($doel, $oud)) { tenantBackupVerwijderMap($stage); $fout='Huidige assetmap kon niet veilig worden geparkeerd.'; return false; }
     if (!@rename($stage, $doel)) {
-        if ($hadDoel) @rename($oud, $doel);
+        $rollbackOk = !$hadDoel || @rename($oud, $doel);
         tenantBackupVerwijderMap($stage);
-        $fout='Herstelde assetmap kon niet atomisch worden geplaatst.'; return false;
+        if (!$rollbackOk) {
+            error_log('[platform] CRITICAL assetrestore rollback mislukt; geparkeerde map: ' . $oud);
+            $fout='Assetherstel en automatische rollback zijn mislukt. De vorige assetmap is geparkeerd en de duurzame rollback-snapshot is bewaard.';
+            return false;
+        }
+        $fout='Herstelde assetmap kon niet atomisch worden geplaatst; de vorige toestand is automatisch teruggezet.';
+        return false;
     }
     @chmod($doel, 0750);
     if ($hadDoel) tenantBackupVerwijderMap($oud);
