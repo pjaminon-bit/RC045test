@@ -4,6 +4,13 @@ require_once dirname(__DIR__, 2) . '/app/auth-capabilities.php';
 
 function e2e510Marker(): string { return 'vps-authenticated-e2e-v1'; }
 
+function e2e510DurableMarker(string $tenant): string
+{
+    $tenant = tenantRuntimeVeiligeSleutel($tenant);
+    if ($tenant === '' || $tenant === 'default') throw new InvalidArgumentException('Concrete tenant-key is verplicht.');
+    return '[' . e2e510Marker() . ':' . $tenant . ']';
+}
+
 function e2e510Username(string $value): string
 {
     $value = trim($value);
@@ -130,6 +137,7 @@ function e2e510MergeLeden(array $doc, string $tenant, string $memberUser): array
 
 function e2e510MergeContributies(array $doc, string $tenant): array
 {
+    $tenant = tenantRuntimeVeiligeSleutel($tenant);
     $ids = e2e510Ids($tenant);
     $year = (int)gmdate('Y'); $now = gmdate('c'); $today = gmdate('Y-m-d');
     $regels = [];
@@ -141,7 +149,7 @@ function e2e510MergeContributies(array $doc, string $tenant): array
         'id' => 'contrib_e2e_' . substr(hash('sha256', $ids['member'] . '|' . $year), 0, 16),
         'lid_id' => $ids['member'], 'jaar' => $year, 'lidmaatschap_type' => '', 'status' => 'deels_betaald',
         'verschuldigd_bedrag' => 100.00, 'inschrijfgeld' => 0.00, 'betaald_bedrag' => 25.00, 'betaald_op' => $today,
-        'vrijstelling_reden' => '', 'opmerking' => 'Authenticated VPS E2E fixture', 'aangemaakt' => $now, 'gewijzigd' => $now,
+        'vrijstelling_reden' => '', 'opmerking' => 'Authenticated VPS E2E fixture ' . e2e510DurableMarker($tenant), 'aangemaakt' => $now, 'gewijzigd' => $now,
     ];
     $doc['regels'] = array_values($regels); $doc['updated'] = $now;
     return $doc;
@@ -149,6 +157,7 @@ function e2e510MergeContributies(array $doc, string $tenant): array
 
 function e2e510MergeGroepen(array $doc, string $tenant): array
 {
+    $tenant = tenantRuntimeVeiligeSleutel($tenant);
     $ids = e2e510Ids($tenant); $now = gmdate('c'); $today = gmdate('Y-m-d');
     if (empty($doc['rollen']) || !is_array($doc['rollen'])) {
         $doc['rollen'] = [
@@ -163,7 +172,7 @@ function e2e510MergeGroepen(array $doc, string $tenant): array
         $groepen[] = $groep;
     }
     $groepen[] = [
-        'id'=>$ids['group'],'type'=>'commissie','naam'=>'E2E Testcommissie','omschrijving'=>'Dedicated synthetische VPS-testfixture',
+        'id'=>$ids['group'],'type'=>'commissie','naam'=>'E2E Testcommissie','omschrijving'=>'Dedicated synthetische VPS-testfixture ' . e2e510DurableMarker($tenant),
         'doel'=>'Authenticated ledenportaal end-to-end bewijzen','status'=>'actief','startdatum'=>$today,'einddatum'=>'',
         'leden'=>[['lid_id'=>$ids['member'],'rollen'=>['lid'],'sinds'=>$today,'tot'=>'']], 'aangemaakt'=>$now,'gewijzigd'=>$now,
     ];
