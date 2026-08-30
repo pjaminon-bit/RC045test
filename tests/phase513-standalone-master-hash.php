@@ -83,10 +83,8 @@ try {
     s513Check($code === 0 && str_contains($out, 'STANDALONE MASTER MIGRATION OK'), '--apply migreert plaintextconfig succesvol');
     s513Check(($na['plain'] ?? null) === null && is_string($na['hash'] ?? null) && password_verify($wachtwoord, $na['hash']), 'gemigreerde config bevat alleen een verifieerbare hash');
     s513Check(!str_contains((string)file_get_contents($cfg), $wachtwoord), 'actieve config bevat het oude plaintext secret niet meer');
-    $backups = glob($cfg . '.pre-hash-*.bak') ?: [];
-    s513Check(count($backups) === 1 && file_get_contents($backups[0]) === $voor, 'migrator bewaart exact één bytegetrouwe rollbackbackup');
-    $backupMode = count($backups) === 1 ? (fileperms($backups[0]) & 0777) : 0;
-    s513Check($backupMode === 0600, 'rollbackbackup met oud secret is root/user-only 0600');
+    s513Check((fileperms($cfg) & 0777) === 0640, 'gemigreerde masterconfig krijgt server-only 0640');
+    s513Check((glob($cfg . '.pre-hash-*.bak') ?: []) === [], 'succesvolle migratie laat geen plaintext rollbackbestand achter');
     s513Check(!str_contains($out.$err, $wachtwoord) && !str_contains($out.$err, (string)($na['hash'] ?? '')), 'applyoutput lekt wachtwoord noch hash');
 
     [$code,$out] = s513Run([PHP_BINARY,$migrator,'--config='.$cfg,'--check']);
