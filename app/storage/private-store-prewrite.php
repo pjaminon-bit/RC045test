@@ -114,18 +114,18 @@ function privatePrewriteMaak(string $privateRoot, string $tenantKey, string $bac
     $map = $root . DIRECTORY_SEPARATOR . $backupKey;
     if (!privatePrewriteMaakMap($map, $privateRoot)) return null;
 
-    $payload = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
-    if (!is_string($payload)) return null;
-    $envelope = [
-        'schema' => 1,
-        'purpose' => 'private-store-prewrite-fallback',
-        'tenant_key' => $tenantKey,
-        'backup_key' => $backupKey,
-        'created_at_utc' => gmdate('Y-m-d\\TH:i:s\\Z'),
-        'payload_sha256' => hash('sha256', $payload),
-        'data' => $data,
-    ];
     try {
+        $payload = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+        if (!is_string($payload)) return null;
+        $envelope = [
+            'schema' => 1,
+            'purpose' => 'private-store-prewrite-fallback',
+            'tenant_key' => $tenantKey,
+            'backup_key' => $backupKey,
+            'created_at_utc' => gmdate('Y-m-d\\TH:i:s\\Z'),
+            'payload_sha256' => hash('sha256', $payload),
+            'data' => $data,
+        ];
         $json = json_encode($envelope, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR) . "\n";
         $rand = bin2hex(random_bytes(6));
     } catch (Throwable $e) {
