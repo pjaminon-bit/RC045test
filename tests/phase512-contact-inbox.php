@@ -52,7 +52,7 @@ c512(!empty($platform['beheer']['contactberichten']['gevoelig']),'contactinbox i
 c512(!empty($platform['capabilities']['contact.messages.manage']['gevoelig']),'contactbericht-capability is gevoelig');
 
 $beheer=c512txt($root.'/beheer/contactberichten.php');
-c512(strpos($beheer,"authHeeftCapability('contact.messages.manage')")!==false,'beheerpagina dwingt contactcapability af');
+c512(strpos($beheer,"authHeeftCapability('contact.messages.manage', true)")!==false,'beheerpagina vereist expliciete contactcapability');
 c512(strpos($beheer,'csrfOk()')!==false,'beheeracties zijn CSRF-beveiligd');
 c512(strpos($beheer,'contactBerichtenOpschonenBewaartermijn')!==false,'beheer materialiseert retentie');
 
