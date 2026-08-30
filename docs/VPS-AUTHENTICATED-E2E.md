@@ -1,117 +1,68 @@
 # Authenticated E2E op VPS-test
 
-Doel: beheerlogin, sessiebeveiliging, autorisatie en het gekoppelde ledenportaal automatisch bewijzen tegen `https://test.vps.holox.nl`, zonder productieachtige persoonsgegevens en zonder de oude SFTP-fixturemethode.
+Doel: beheerlogin, sessiebeveiliging, autorisatie en het gekoppelde ledenportaal automatisch bewijzen tegen `https://test.vps.holox.nl`, zonder productieachtige persoonsgegevens, permanente testcredentials, FTP/SFTP of een algemene CI-shell.
 
-## Ontwerp
+## Definitief ontwerp
 
-Tenant `test` krijgt één permanente, duidelijk gemarkeerde synthetische fixture:
+Authenticated E2E gebruikt een tijdelijke fixture per GitHub Actions-run:
 
-- beheeraccount `vps-e2e-admin` met alle actuele beheer-capabilities;
-- ledenaccount `vps-e2e-member` zonder beheer-capabilities;
-- één gekoppeld synthetisch lid `E2E Testlid` met uitsluitend fictieve gegevens;
-- één gedeeltelijk betaalde contributieregel;
-- één `E2E Testcommissie`;
-- één ledenvergadering met `E2E agendapunt` en definitieve testnotulen;
-- één aan het testlid toegewezen taak.
+1. GitHub genereert op de ephemeral hosted runner een cryptografisch willekeurig wachtwoord.
+2. De runner verbindt via dezelfde OIDC/WIF + Tailscale-route als de VPS-deploy.
+3. De bestaande `vst-deploy` SSH-key blijft `restrict` + forced-command gebruiken.
+4. De forced-command gateway accepteert voor E2E uitsluitend exact `e2e check`, `e2e apply` of `e2e cleanup`.
+5. De root-wrapper hardcodeert tenant `test`, `https://test.vps.holox.nl`, `vps-e2e-admin` en `vps-e2e-member`; GitHub kan geen tenant, pad, gebruiker of willekeurig shellcommando meegeven.
+6. De PHP-fixturecode draait niet als root maar als de uit `runtime-plan.json` gevalideerde tenant-runtimegebruiker.
+7. Het wachtwoord gaat uitsluitend via stdin naar `e2e apply`, wordt gehasht en staat nooit in argv, repository of een permanent GitHub Secret.
+8. Playwright voert de authenticated browseracceptatie uit.
+9. Een `always()` cleanup verwijdert daarna alleen records die zowel de interne E2E-fixturemarker als tenantmarker `test` dragen.
 
-De fixture gebruikt de echte tenantgrenzen: `/srv/verenigingen/test/private/auth/users.json` voor auth en de echte PDO/PostgreSQL private store voor domeindata. De helper schrijft niets naar de immutable release en gebruikt geen FTP/SFTP.
+De fixture bevat twee synthetische accounts, één synthetisch lid en gekoppelde contributie-, commissie-, vergadering/notulen- en taakdata. Alle data gebruikt uitsluitend fictieve waarden.
 
-De identifiers zijn deterministisch per tenant. Opnieuw provisionen vervangt alleen deze fixture, roteert de sessiegeneratie van de twee E2E-accounts en laat andere accounts/leden/domeindata staan. Als een gereserveerde fixture-ID of gebruikersnaam al bij een niet-fixture account hoort, stopt de tool fail-closed.
+## Securitygrenzen
 
-## Eenmalig provisionen op VPS-test
+- Publieke TCP/22 blijft dicht; verkeer loopt via Tailscale.
+- Er komt geen self-hosted GitHub runner.
+- De bestaande deployment key krijgt geen algemene shell.
+- De E2E-sudoersregels noemen alleen de drie exacte wrappercommando's en bevatten geen wildcard.
+- De root-wrapper bepaalt zelf de actieve immutable release en accepteert geen releasepad uit GitHub.
+- De wrapper accepteert uitsluitend de vaste testtenant en valideert de runtime-user als `vst` plus 16 hextekens.
+- Domeinwrites lopen in één PostgreSQL-transactie.
+- Voor een authwijziging wordt een tenantlokale backup gemaakt; bij een databasefout wordt de oorspronkelijke authstore teruggezet.
+- Een gereserveerde fixture-ID die al door niet-fixture data wordt gebruikt, stopt fail-closed.
+- Cleanup verwijdert nooit op alleen gebruikersnaam of ID: alleen expliciet gemarkeerde E2E-records van tenant `test` worden verwijderd.
+- Wanneer een runner onverwacht wordt afgebroken kan een fixture tijdelijk achterblijven. Het wachtwoord van die run bestaat daarna nergens persistent; een volgende apply roteert de credentials en cleanup is idempotent. Verwijderde accounts maken bestaande sessies bij het volgende verzoek ongeldig via de normale auth-session-check.
 
-Voer dit pas uit nadat de release met `bin/provision-vps-authenticated-e2e.php` actief is.
+## Eenmalige gateway-installatie
 
-Bepaal eerst de tenant-runtimegebruiker uit het bestaande runtimeplan:
+Eerst moet de release met de ephemeral lifecycle succesvol naar VPS-test zijn gedeployed. Authenticated E2E blijft tot dat moment uitgeschakeld.
+
+Voer daarna éénmalig als root op `platform` uit:
 
 ```bash
-runtime_user="$(python3 - <<'PY'
-import json
-with open('/srv/verenigingen/test/runtime/runtime-plan.json', encoding='utf-8') as f:
-    print(json.load(f)['os']['user'])
-PY
-)"
-printf 'runtime user: %s\n' "$runtime_user"
+bash /srv/verenigingsplatform/current/bin/install-vps-authenticated-e2e-gateway.sh
 ```
 
-Doe daarna eerst de read-only preflight:
+De installer:
 
-```bash
-sudo -u "$runtime_user" /usr/bin/php8.5 \
-  /srv/verenigingsplatform/current/bin/provision-vps-authenticated-e2e.php \
-  --config=/srv/verenigingen/test/config.php \
-  --expected-tenant=test \
-  --expected-site=https://test.vps.holox.nl \
-  --admin-user=vps-e2e-admin \
-  --member-user=vps-e2e-member \
-  --check
-```
+- weigert te draaien als `current` niet naar een immutable 40-hex release wijst;
+- controleert de bestaande forced-command deployentry en maakt daar eerst een root-only backup van;
+- installeert `/usr/local/sbin/verenigingsplatform-github-e2e`;
+- voegt een apart `/etc/sudoers.d/verenigingsplatform-github-e2e` toe met drie exacte allowlistregels;
+- valideert Bash en de volledige sudoersconfig;
+- bewijst dat een willekeurig commando als `uname -a` nog steeds met exitcode 64 wordt geweigerd;
+- voert via de echte `vst-deploy` forced-command route een read-only `e2e check` uit.
 
-Verwacht:
+Verwachte slotregels:
 
 ```text
-E2E CHECK OK  tenant=test storage=pdo fixture=vps-authenticated-e2e-v1
+E2E EPHEMERAL CHECK OK  tenant=test storage=pdo fixture=vps-authenticated-e2e-v1
+E2E GATEWAY INSTALL OK  backup=/root/verenigingsplatform-github-entry.pre-e2e.<timestamp>
 ```
 
-Genereer vervolgens in de VPS-shell een sterk tijdelijk geheim zonder het in command history te zetten:
+Pas nadat die check is bewezen, wordt in een aparte repositorywijziging `live-authenticated` omgezet van de oude secret-gebaseerde methode naar automatisch apply → browseracceptatie → always-cleanup.
 
-```bash
-E2E_PASSWORD="$(python3 -c 'import secrets; print(secrets.token_urlsafe(36))')"
-printf 'Bewaar dit eenmalig als GitHub secret VPS_TEST_E2E_PASSWORD: %s\n' "$E2E_PASSWORD"
-```
+## Geen permanente E2E-secrets meer
 
-Pas de fixture toe. Het wachtwoord loopt uitsluitend via stdin:
+De uiteindelijke workflow heeft geen `VPS_TEST_ADMIN_USER`, `VPS_TEST_MEMBER_USER` of `VPS_TEST_E2E_PASSWORD` nodig. De gebruikersnamen zijn vaste synthetische testidentiteiten in de server-side allowlist en het wachtwoord bestaat alleen tijdens één GitHub-hosted run.
 
-```bash
-printf '%s\n' "$E2E_PASSWORD" | sudo -u "$runtime_user" /usr/bin/php8.5 \
-  /srv/verenigingsplatform/current/bin/provision-vps-authenticated-e2e.php \
-  --config=/srv/verenigingen/test/config.php \
-  --expected-tenant=test \
-  --expected-site=https://test.vps.holox.nl \
-  --admin-user=vps-e2e-admin \
-  --member-user=vps-e2e-member \
-  --password-stdin \
-  --apply
-unset E2E_PASSWORD
-```
-
-Verwacht:
-
-```text
-E2E APPLY OK  tenant=test accounts=2 linked_member=1 fixture=vps-authenticated-e2e-v1
-```
-
-De tool maakt vóór een authwijziging een tenantlokale backup onder `private/backups/auth`. De PostgreSQL domeinwrites lopen in één transactie. Mislukt die transactie, dan wordt de oorspronkelijke authstore teruggezet.
-
-## GitHub-inrichting
-
-Voeg daarna voor de VPS-testomgeving de drie waarden toe:
-
-- `VPS_TEST_ADMIN_USER` = `vps-e2e-admin`;
-- `VPS_TEST_MEMBER_USER` = `vps-e2e-member`;
-- `VPS_TEST_E2E_PASSWORD` = het hierboven gegenereerde wachtwoord.
-
-Zet pas nadat de fixture live is en de drie secrets bestaan:
-
-```text
-VPS_TEST_AUTH_E2E_ENABLED=true
-```
-
-De job `live-authenticated` controleert dan op desktop, tablet en mobiel:
-
-- beheerlogin en veilige sessiecookie;
-- toegang van de E2E-admin tot leden- en gebruikersbeheer;
-- logout;
-- ledenlogin;
-- correcte koppeling met `E2E Testlid`;
-- zichtbaarheid van contributie, commissie, vergadering/notulen en taak;
-- expliciete `403` wanneer het gewone testlid `/beheer/gebruikers.php` probeert te openen.
-
-## Grenzen
-
-- alleen tenant `test` wordt gebruikt in de huidige VPS-testprocedure;
-- geen productieaccounts of echte persoonsgegevens;
-- geen wachtwoord in argv, repository of workflowlogs;
-- geen algemene GitHub-shell naar de VPS nodig;
-- geen SFTP/FTP-fixturetransport;
-- authenticated E2E blijft uit zolang `VPS_TEST_AUTH_E2E_ENABLED` niet `true` is.
+De bestaande secrets voor de private deployroute (`VPS_TEST_DEPLOY_KEY`, gepinde SSH-hosttrust en Tailscale WIF-instellingen) blijven ongewijzigd en worden alleen binnen environment `vps-test` gebruikt.
