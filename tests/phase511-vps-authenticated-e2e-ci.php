@@ -7,6 +7,8 @@ function c511ci(bool $conditie, string $label): void {
 }
 $deploy = (string)file_get_contents($root . '/.github/workflows/deploy-vps-test.yml');
 $full = (string)file_get_contents($root . '/.github/workflows/full-regression.yml');
+$authSpec = (string)file_get_contents($root . '/tests/live-dev-authenticated.spec.js');
+$ephemeralCli = (string)file_get_contents($root . '/bin/vps-authenticated-e2e-ephemeral.php');
 $tailHost = <<<'TXT'
 VPS_TAILSCALE_HOST: ${{ vars.VPS_TEST_TAILSCALE_HOST || '100.104.242.66' }}
 TXT;
@@ -42,6 +44,13 @@ c511ci(str_contains($deploy, $cleanupCondition) && str_contains($deploy, $gatewa
 c511ci(str_contains($deploy, 'authenticated-browser-acceptance-${{ github.run_id }}') && str_contains($deploy, 'retention-days: 30'), 'authenticated browserdiagnose wordt als begrensd artifact bewaard');
 c511ci(!str_contains($full, "  live-authenticated:\n") && str_contains($full, 'workflows:') && str_contains($full, '- Deploy RC045test to VPS test'), 'full regression wacht op de volledige deployworkflow inclusief authenticated E2E');
 c511ci(!str_contains($deploy, 'VPS_TEST_AUTH_E2E_ENABLED') && !str_contains($full, 'VPS_TEST_AUTH_E2E_ENABLED'), 'authenticated E2E is na gateway-installatie niet meer afhankelijk van een handmatige enable-flag');
+
+c511ci(str_contains($ephemeralCli, 'function e2e511LidKoppelingOk') && str_contains($ephemeralCli, 'Ephemeral E2E-lidkoppeling ontbreekt na apply.'), 'apply verifieert na PDO-write de vaste user_id- en accountkoppeling van het fixturelid');
+$statusAssert = strpos($authSpec, 'Authenticated pagina ${path} gaf HTTP ${response.status()} na login');
+$unlinkedAssert = strpos($authSpec, 'E2E-memberaccount is niet aan het fixturelid gekoppeld');
+$welcomeAssert = strpos($authSpec, "getByRole('heading',{name:/Welkom, E2E/i})");
+c511ci(str_contains($authSpec, 'page.waitForNavigation') && is_int($statusAssert), 'authenticated browsertest rapporteert de HTTP-status van de uiteindelijke pagina na login');
+c511ci(is_int($unlinkedAssert) && is_int($welcomeAssert) && $unlinkedAssert < $welcomeAssert, 'ledenportaaltest onderscheidt ontbrekende accountkoppeling vóór inhoudsasserties');
 
 echo "Phase 5.11 automatic ephemeral authenticated E2E CI: {$ok} OK, {$fout} fout(en)\n";
 exit($fout === 0 ? 0 : 1);
