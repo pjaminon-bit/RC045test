@@ -11,14 +11,19 @@ function cookieHoortBijHost(cookie){
   return domain !== '' && (BASE_HOST === domain || BASE_HOST.endsWith('.' + domain));
 }
 async function login(page, path, user){
-  await page.goto(url(path), {waitUntil:'domcontentloaded', timeout:45000});
+  const start = await page.goto(url(path), {waitUntil:'domcontentloaded', timeout:45000});
+  expect(start, `Geen HTTP-response voor loginpagina ${path}`).toBeTruthy();
+  expect(start.status(), `Loginpagina ${path} gaf HTTP ${start.status()}`).toBeLessThan(400);
   await page.locator('#login-gebruikersnaam').fill(user);
   await page.locator('#login-wachtwoord').fill(PASSWORD);
-  await Promise.all([
-    page.waitForLoadState('domcontentloaded'),
+  const [response] = await Promise.all([
+    page.waitForNavigation({waitUntil:'domcontentloaded', timeout:45000}),
     page.getByRole('button',{name:'Inloggen'}).click(),
   ]);
+  expect(response, `Geen navigatieresponse na login op ${path}`).toBeTruthy();
+  expect(response.status(), `Authenticated pagina ${path} gaf HTTP ${response.status()} na login`).toBeLessThan(400);
   await expect(page.locator('#login-wachtwoord')).toHaveCount(0);
+  return response;
 }
 async function screenshot(page, testInfo, name){
   await page.screenshot({path:testInfo.outputPath(name), fullPage:true});
@@ -54,8 +59,8 @@ for (const viewport of [
   test(`${viewport.name}: gekoppeld testlid ziet eigen portaldata maar geen gebruikersbeheer`, async ({page}, testInfo) => {
     await page.setViewportSize({width:viewport.width,height:viewport.height});
     await login(page, '/leden/', MEMBER);
+    await expect(page.getByText('Account nog niet gekoppeld'), 'E2E-memberaccount is niet aan het fixturelid gekoppeld').toHaveCount(0);
     await expect(page.getByRole('heading',{name:/Welkom, E2E/i})).toBeVisible();
-    await expect(page.getByText('Account nog niet gekoppeld')).toHaveCount(0);
     await expect(page.getByText('E2E Testlid')).toBeVisible();
     await expect(page.getByText('E2E Testcommissie')).toBeVisible();
     await expect(page.getByText('Deels betaald')).toBeVisible();

@@ -85,6 +85,16 @@ function e2e511SchrijfDomein(array $leden, array $contributies, array $groepen, 
     if (!repoVergaderingenSchrijf($vergaderingen)) throw new RuntimeException('Vergaderfixture kon niet worden opgeslagen.');
     if (!repoTakenSchrijf($taken)) throw new RuntimeException('Taakfixture kon niet worden opgeslagen.');
 }
+function e2e511LidKoppelingOk(array $leden, string $tenant, string $memberUser): bool {
+    $ids = e2e510Ids($tenant);
+    foreach ((array)($leden['leden'] ?? []) as $lid) {
+        if (!is_array($lid) || ($lid['id'] ?? '') !== $ids['member']) continue;
+        return hash_equals($ids['member_user'], trim((string)($lid['user_id'] ?? '')))
+            && strcasecmp(trim((string)($lid['beheer_account'] ?? '')), $memberUser) === 0
+            && e2e511MarkerRecord($lid, $tenant);
+    }
+    return false;
+}
 
 try {
     $config = require $root . '/site-config.php';
@@ -167,6 +177,7 @@ try {
         exit(0);
     }
     if ($remaining < 7) throw new RuntimeException('Ephemeral E2E-fixture is niet volledig aanwezig na apply.');
+    if (!e2e511LidKoppelingOk($verifyLeden, $tenant, $memberUser)) throw new RuntimeException('Ephemeral E2E-lidkoppeling ontbreekt na apply.');
     echo 'E2E APPLY OK  tenant=' . $tenant . ' accounts=2 linked_member=1 fixture=' . e2e510Marker() . "\n";
 } catch (Throwable $e) {
     e2e511Stop($e->getMessage());
