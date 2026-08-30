@@ -17,10 +17,24 @@ Authenticated E2E gebruikt een tijdelijke fixture per succesvolle VPS-testdeploy
 9. Het wachtwoord gaat uitsluitend via stdin naar `e2e apply`, wordt gehasht en staat nooit in argv, repository of een permanent GitHub Secret.
 10. Een eventuele gemarkeerde fixture van een abrupt afgebroken vorige run wordt eerst idempotent opgeruimd.
 11. Playwright voert de authenticated browseracceptatie uit.
-12. Een `always()` cleanup verwijdert daarna alleen records die zowel de interne E2E-fixturemarker als tenantmarker `test` dragen.
+12. Een `always()` cleanup verwijdert daarna uitsluitend records die aantoonbaar tot de tenantgebonden E2E-fixture behoren.
 13. Pas wanneer de volledige deployworkflow inclusief authenticated E2E groen is, kan `Full regression acceptance` als `workflow_run` doorgaan met de overige live security- en browseracceptatie.
 
 De fixture bevat twee synthetische accounts, één synthetisch lid en gekoppelde contributie-, commissie-, vergadering/notulen- en taakdata. Alle data gebruikt uitsluitend fictieve waarden.
+
+## Duurzame fixturemarkering
+
+Leden, vergaderingen en taken bewaren de interne velden `e2e_fixture` en `e2e_tenant` rechtstreeks. De productie-normalizers voor contributies en groepen accepteren bewust alleen hun eigen domeinvelden en verwijderen onbekende velden. Daarom gebruiken die twee domeinen daarnaast een expliciete tenantgebonden marker in een bestaand toegestaan tekstveld:
+
+```text
+[vps-authenticated-e2e-v1:test]
+```
+
+Voor contributies staat die marker in `opmerking`; voor groepen in `omschrijving`. De E2E-laag controleert daarbij ook de deterministische gereserveerde E2E-identiteit. De productie-normalizers zelf zijn hiervoor niet aangepast en krijgen dus geen test-specifieke velden.
+
+De eerste automatische run op 30 augustus 2026 bracht dit gedrag aan het licht: contributie en groep waren correct geschreven, maar hun onbekende E2E-velden waren tijdens normale domeinvalidatie verwijderd. Daardoor stopte de verify fail-closed. Voor het opruimen van uitsluitend die halfgeschreven synthetische fixture is tijdelijk een extra legacy-herkenning aanwezig. Die is alleen geldig wanneer het gereserveerde lid zelf nog een geldige tenantmarker draagt én contributie/groep op de volledige oude synthetische waarden matchen. Een overeenkomst op alleen ID, gebruikersnaam of lidnummer is onvoldoende en blijft een harde fout.
+
+Na een succesvolle live herstelrun kan deze tijdelijke legacy-herkenning weer uit de code worden verwijderd; de duurzame tenantmarker is dan het enige normalisatiebestendige pad.
 
 ## Waarom authenticated E2E in de deployworkflow staat
 
@@ -45,7 +59,7 @@ Dit betekent ook dat een succesvolle `Deploy RC045test to VPS test` run niet all
 - Domeinwrites lopen in één PostgreSQL-transactie.
 - Voor een authwijziging wordt een tenantlokale backup gemaakt; bij een databasefout wordt de oorspronkelijke authstore teruggezet.
 - Een gereserveerde fixture-ID die al door niet-fixture data wordt gebruikt, stopt fail-closed.
-- Cleanup verwijdert nooit op alleen gebruikersnaam of ID: alleen expliciet gemarkeerde E2E-records van tenant `test` worden verwijderd.
+- Cleanup verwijdert nooit op alleen gebruikersnaam of ID: voor normale records is een expliciete tenantgebonden fixturemarker verplicht; het tijdelijke herstelpad vereist daarnaast de gemarkeerde E2E-lididentiteit en de volledige oude synthetische recordinhoud.
 - De workflow gebruikt dezelfde gepinde SSH-hosttrust en dezelfde private Tailscale-host als deployment.
 - De workflowconcurrency heeft `cancel-in-progress: false`; twee deploy/E2E-runs kunnen daardoor niet tegelijk dezelfde fixture gebruiken.
 - Wanneer een runner buiten GitHub om abrupt verdwijnt kan een fixture tijdelijk achterblijven. Het wachtwoord van die run bestaat daarna nergens persistent; de volgende run begint met cleanup en roteert de credentials. Cleanup is idempotent.
