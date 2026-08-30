@@ -1,6 +1,9 @@
 name: Full regression acceptance
 
 on:
+  push:
+    branches:
+      - main
   pull_request:
     branches:
       - main
@@ -26,6 +29,7 @@ jobs:
   source-regression:
     if: >-
       github.event_name == 'pull_request' ||
+      github.event_name == 'push' ||
       github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'workflow_run' &&
        vars.VPS_TEST_DEPLOY_ENABLED == 'true' &&
