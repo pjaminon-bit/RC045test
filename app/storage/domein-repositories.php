@@ -41,7 +41,16 @@ function repoTakenLees(): array{return privateStoreLees('taken', 'takenLees');}
 function repoTakenSchrijf(array $data, bool $backup=true): bool{return privateStoreSchrijf('taken', $data, static fn($d) => repoPhpJsonSchrijf(takenBestandPad(), TAKEN_VOORLOOP, $d, 'takenMaakBackup', $backup));}
 function repoOperationeleTakenLees(): array{return privateStoreLees('operationele_taken', 'otakenLees');}
 function repoOperationeleTakenSchrijf(array $data, bool $backup=true): bool{return privateStoreSchrijf('operationele_taken', $data, static fn($d) => repoPhpJsonSchrijf(otaakBestandPad(), OTAKEN_VOORLOOP, $d, 'otakenMaakBackup', $backup));}
-function repoEvenementenLees(): array{return privateStoreLees('evenementen', 'evenementenLees');}
+function repoEvenementenLees(): array
+{
+    $data = privateStoreLees('evenementen', 'evenementenLees');
+    if ($data === []) return evenementenLeegBestand();
+    if (!isset($data['evenementen']) || !is_array($data['evenementen'])) {
+        throw new RuntimeException('Evenementenopslag heeft een ongeldige documentstructuur.');
+    }
+    $data['volgnummer'] = isset($data['volgnummer']) ? (int)$data['volgnummer'] : 0;
+    return $data;
+}
 function repoEvenementenSchrijf(array $data, bool $backup=true): bool{return privateStoreSchrijf('evenementen', $data, static fn($d) => repoPhpJsonSchrijf(evenementBestandPad(), EVENEMENTEN_VOORLOOP, $d, 'evenementenMaakBackup', $backup));}
 function repoGroepenLees(): array{return privateStoreLees('groepen', 'groepenLees');}
 function repoGroepenSchrijf(array $data, bool $backup=true): bool{return privateStoreSchrijf('groepen', $data, static fn($d) => repoPhpJsonSchrijf(groepenBestandPad(), GROEPEN_VOORLOOP, $d, 'groepenMaakBackup', $backup));}
