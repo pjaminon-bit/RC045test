@@ -57,7 +57,7 @@ c512(strpos($beheer,'csrfOk()')!==false,'beheeracties zijn CSRF-beveiligd');
 c512(strpos($beheer,'contactBerichtenOpschonenBewaartermijn')!==false,'beheer materialiseert retentie');
 
 $site=c512txt($root.'/site-config.php');
-c512(strpos($site,"$formAction = \"'self'\"")!==false,'CSP staat formulieractie alleen same-origin toe');
+c512(strpos($site,'$formAction = "\'self\'"')!==false,'CSP staat formulieractie alleen same-origin toe');
 c512(stripos($site,'formspree.io')===false,'CSP staat Formspree niet meer toe');
 c512(strpos($site,'contactberichten_bewaardagen')!==false,'contactretentie heeft expliciete standaardconfig');
 $ht=c512txt($root.'/.htaccess');$gi=c512txt($root.'/.gitignore');$backups=c512txt($root.'/beheer/backup-registry.php');
