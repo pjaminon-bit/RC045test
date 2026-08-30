@@ -2,6 +2,45 @@
 
 Belangrijke platformwijzigingen en acceptatiemijlpalen worden hier chronologisch vastgelegd. Historische technische details blijven daarnaast beschikbaar in `docs/migratie-log/` en de fasegerichte documentatie.
 
+## 2026-08-30 — Fase 5.10/5.11 authenticated VPS-testacceptatie groen
+
+### Ephemeral authenticated E2E
+
+- authenticated beheer- en ledenacceptatie op `test.vps.holox.nl` draait volledig automatisch na een succesvolle VPS-testdeploy;
+- de test gebruikt uitsluitend tijdelijke synthetische identiteiten `vps-e2e-admin` en `vps-e2e-member` met een per-run cryptografisch willekeurig wachtwoord;
+- er zijn geen permanente E2E-wachtwoorden of publieke SSH-routes nodig;
+- de bestaande GitHub OIDC/Tailscale WIF-route en gepinde private SSH-hosttrust worden hergebruikt;
+- de forced-command gateway accepteert uitsluitend `e2e check`, `e2e apply` en `e2e cleanup`;
+- fixturedata wordt vóór een run idempotent opgeschoond en na de browsertest via een fail-safe cleanup verwijderd;
+- de uiteindelijke succesvolle cleanup verwijderde alle **7** tijdelijke fixture-records.
+
+### Live gevonden en opgeloste blokkades
+
+- PR #106 herstelde E2E-markers die door bestaande domeinnormalisatie verloren gingen, zonder de productie-normalizers te versoepelen;
+- PR #107 en PR #108 brachten de resterende HTTP 500 in het ledenportaal terug tot een server-side portalruntimefout tijdens `e2e apply`;
+- de concrete oorzaak bleek een nieuwe PDO-tenant zonder opgeslagen evenementencollectie: de repository leverde `[]`, terwijl `evenementenGesorteerd()` een document met `evenementen: []` verwachtte;
+- PR #109 normaliseert uitsluitend een werkelijk ontbrekende evenementencollectie naar het geldige lege domeindocument;
+- een niet-leeg maar ongeldig evenementendocument blijft fail-closed met een runtimefout, zodat opslagcorruptie niet wordt verborgen;
+- regressietest `tests/phase5114-empty-tenant-events.php` borgt leeg sorteren, eerste nummering, volgnummer-normalisatie en fail-closed gedrag bij een corrupte structuur.
+
+### Definitieve VPS-testacceptatie
+
+- gevalideerde applicatierelease: `aca0a1a3e082cef794c4a0fe50768b24c03f5e60`;
+- deployworkflow **#33**, run `33306504848`, volledig succesvol;
+- immutable release-activatie en publieke smoke test groen;
+- `e2e check`, stale-fixture cleanup en `e2e apply` groen met **2 accounts** en **1 gekoppeld testlid**;
+- authenticated Playwright: **6/6 tests groen** in 10,8 seconden;
+- beheerlogin, autorisatie en logout gevalideerd op desktop, tablet en mobiel;
+- gekoppeld ledenportaal gevalideerd op desktop, tablet en mobiel, inclusief afwezigheid van gebruikersbeheer voor het gewone testlid;
+- authenticated Playwright-rapport en screenshots als workflowartifact opgeslagen;
+- afsluitende ephemeral cleanup groen met **7 verwijderde records**;
+- daaropvolgende Full regression acceptance **#356**, run `33306559675`, volledig succesvol;
+- source-regression groen;
+- live-security groen;
+- publieke Playwright-browseracceptatie groen.
+
+Daarmee is fase 5.11 technisch afgerond: dezelfde VPS-testrelease is zowel publiek als authenticated live bewezen, terwijl de tijdelijke testidentiteiten en fixturedata na iedere run volledig worden verwijderd.
+
 ## 2026-08-30 — Fase 5.9/5.9.1 VPS-test browseracceptatie groen
 
 ### Live herstel externe tenant
