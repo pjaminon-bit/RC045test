@@ -28,10 +28,10 @@ function msmAbsoluutPad(string $pad): bool
 }
 
 /**
- * Vind een eenvoudige top-level assignment van één bekende variabele.
- * Toegestaan: $VAR = 'string'; met alleen whitespace/comments tussen tokens.
- * Iedere andere expressie faalt gesloten zodat deze migrator geen willekeurige
- * PHP-config probeert te herschrijven.
+ * Vind een eenvoudige zelfstandige top-level assignment van één bekende
+ * variabele. Toegestaan: $VAR = 'string'; direct na PHP-open-tag of een
+ * eerdere puntkomma, met alleen whitespace/comments tussen tokens.
+ * Conditionele, berekende, geneste of meervoudige assignments falen gesloten.
  *
  * @return array{start:int,end:int,value:string}|null
  */
@@ -62,6 +62,15 @@ function msmVindAssignment(string $bron, string $variabele): ?array
         if ($t === '{' || $t === '(' || $t === '[') $depth++;
         if ($t === '}' || $t === ')' || $t === ']') $depth = max(0, $depth - 1);
         if ($depth !== 0 || !is_array($token) || $token[0] !== T_VARIABLE || $token[1] !== $variabele) continue;
+
+        $vorige = $i - 1;
+        while ($vorige >= 0 && $overslaan($tokens[$vorige])) $vorige--;
+        $vorigeToken = $vorige >= 0 ? $tokens[$vorige] : null;
+        $zelfstandig = ($vorigeToken === ';')
+            || (is_array($vorigeToken) && $vorigeToken[0] === T_OPEN_TAG);
+        if (!$zelfstandig) {
+            msmFout("Onveilige context voor {$variabele}; alleen een zelfstandige top-level stringtoewijzing wordt ondersteund.");
+        }
 
         $start = $offsets[$i];
         $j = $i + 1;
@@ -95,6 +104,12 @@ function msmPhpString(string $waarde): string
     return "'" . str_replace(['\\', "'"], ['\\\\', "\\'"], $waarde) . "'";
 }
 
+foreach (array_slice($argv, 1) as $arg) {
+    if ($arg === '--check' || $arg === '--apply' || $arg === '--help') continue;
+    if (str_starts_with($arg, '--config=') && strlen($arg) > strlen('--config=')) continue;
+    msmFout('Onbekende of onveilige CLI-optie: ' . $arg, 64);
+}
+
 $opties = getopt('', ['config:', 'check', 'apply', 'help']);
 if (isset($opties['help'])) msmGebruik();
 $check = array_key_exists('check', $opties);
@@ -103,7 +118,7 @@ if ($check === $apply) msmFout('Kies exact één actie: --check of --apply.', 64
 
 $config = isset($opties['config']) ? trim((string)$opties['config']) : dirname(__DIR__) . '/beheer-config.php';
 if (!msmAbsoluutPad($config)) msmFout('--config moet een absoluut pad zijn.', 64);
-if (is_link($config) || !is_file($config) || !is_readable($config)) msmFout('Standalone beheer-config.php is niet veilig leesbaar.');
+if (is_link($config) || !is_file($config) || !is_readable($config) || !is_writable($config)) msmFout('Standalone beheer-config.php is niet veilig lees- en schrijfbaar.');
 
 $bron = file_get_contents($config);
 if (!is_string($bron) || $bron === '') msmFout('Standalone beheer-config.php kon niet worden gelezen.');
@@ -146,16 +161,12 @@ $nieuw = $bron;
 foreach ($vervangingen as $v) {
     $nieuw = substr($nieuw, 0, $v['start']) . $v['text'] . substr($nieuw, $v['end']);
 }
-if (str_contains($nieuw, '$BEHEER_WACHTWOORD =')) msmFout('Migratie zou een plaintext masterassignment laten staan; write geweigerd.');
-
-$modus = fileperms($config);
-$modus = is_int($modus) ? ($modus & 0777) : 0640;
-$backup = $config . '.pre-hash-' . date('Ymd_His') . '-' . bin2hex(random_bytes(4)) . '.bak';
-if (!copy($config, $backup)) msmFout('Backup van beheer-config.php kon niet worden gemaakt.');
-@chmod($backup, 0600);
-if (!is_file($backup) || filesize($backup) !== strlen($bron)) {
-    @unlink($backup);
-    msmFout('Backupvalidatie van beheer-config.php is mislukt.');
+if (msmVindAssignment($nieuw, '$BEHEER_WACHTWOORD') !== null) {
+    msmFout('Migratie zou een plaintext masterassignment laten staan; write geweigerd.');
+}
+$candidateHash = msmVindAssignment($nieuw, '$BEHEER_WACHTWOORD_HASH');
+if ($candidateHash === null || !password_verify($plainWaarde, $candidateHash['value'])) {
+    msmFout('Nieuwe hash-only kandidaatconfig doorstaat de credentialcontrole niet.');
 }
 
 $tmp = $config . '.tmp.' . bin2hex(random_bytes(6));
@@ -163,22 +174,29 @@ if (file_put_contents($tmp, $nieuw, LOCK_EX) !== strlen($nieuw)) {
     @unlink($tmp);
     msmFout('Tijdelijke hash-only config kon niet volledig worden geschreven.');
 }
-@chmod($tmp, $modus);
+@chmod($tmp, 0640);
+if (!is_file($tmp) || (fileperms($tmp) & 0777) !== 0640) {
+    @unlink($tmp);
+    msmFout('Tijdelijke hash-only config kreeg niet de vereiste server-only rechten.');
+}
 if (!rename($tmp, $config)) {
     @unlink($tmp);
-    msmFout('Hash-only config kon niet atomisch worden geplaatst; backup blijft beschikbaar.');
+    msmFout('Hash-only config kon niet atomisch worden geplaatst; oorspronkelijke config is niet gewijzigd.');
 }
-@chmod($config, $modus);
+@chmod($config, 0640);
 
 $controle = file_get_contents($config);
+$controlePlain = is_string($controle) ? msmVindAssignment($controle, '$BEHEER_WACHTWOORD') : null;
+$controleHash = is_string($controle) ? msmVindAssignment($controle, '$BEHEER_WACHTWOORD_HASH') : null;
+$eindMode = fileperms($config) & 0777;
 if (!is_string($controle)
-    || str_contains($controle, '$BEHEER_WACHTWOORD =')
-    || msmVindAssignment($controle, '$BEHEER_WACHTWOORD') !== null) {
-    msmFout('Nacontrole vond nog een plaintext masterassignment; herstel vanuit backup: ' . $backup);
-}
-$controleHash = msmVindAssignment($controle, '$BEHEER_WACHTWOORD_HASH');
-if ($controleHash === null || !password_verify($plainWaarde, $controleHash['value'])) {
-    msmFout('Nacontrole van de nieuwe masterhash faalde; herstel vanuit backup: ' . $backup);
+    || $controlePlain !== null
+    || $controleHash === null
+    || !password_verify($plainWaarde, $controleHash['value'])
+    || $eindMode !== 0640) {
+    // De kandidaat was vóór rename al inhoudelijk bewezen. Een fout hier wijst
+    // op filesystemdrift/race; schrijf het oude secret niet opnieuw naar disk.
+    msmFout('Nacontrole van de geplaatste hash-only config faalde; handmatige beoordeling vereist.');
 }
 
-fwrite(STDOUT, "STANDALONE MASTER MIGRATION OK  status=hash-only backup=" . basename($backup) . "\n");
+fwrite(STDOUT, "STANDALONE MASTER MIGRATION OK  status=hash-only\n");
