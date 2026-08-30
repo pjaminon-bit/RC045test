@@ -178,14 +178,16 @@ PHP);
     c54(($ret['removed'] ?? null) === 3, 'oude onbeoordeelde, oude beoordeelde en datumloze aanmeldingen worden verwijderd');
     c54(($ret['ids'] ?? null) === ['recent-nieuw','recent-beoordeeld'], 'recente aanmeldingen blijven binnen de bewaartermijn beschikbaar');
 
-    // 5. Contactprivacy/CSP: externe tenants krijgen een complete browserpolicy
-    // waarin Formspree alleen voor standalone RC045 kan worden toegestaan.
+    // 5. Contactprivacy/CSP: alle installaties houden formulierdata same-origin.
+    // Externe tenant en standalone hebben voor contact geen externe provider
+    // meer nodig; Open-Meteo blijft de enige functionele connect-src uitzondering.
     $siteConfigSrc = (string)file_get_contents($root . '/site-config.php');
+    $contactRuntimeSrc = (string)file_get_contents($root . '/app/core/contact-inbox-runtime.php');
     c54(str_contains($siteConfigSrc, "if (PHP_SAPI !== 'cli' && !headers_sent())"), 'CSP wordt voor webresponses centraal gezet');
     c54(str_contains($siteConfigSrc, "default-src 'self'") && str_contains($siteConfigSrc, "script-src 'self' 'unsafe-inline'") && str_contains($siteConfigSrc, "object-src 'none'"), 'centrale CSP bevat afdwingbare basis- en scriptgrenzen');
-    c54(str_contains($siteConfigSrc, '$formAction = $externPad !== null') && str_contains($siteConfigSrc, '$connectSrc = $externPad !== null'), 'CSP maakt expliciet onderscheid tussen externe tenant en standalone');
-    c54(str_contains($siteConfigSrc, "? \"'self'\"") && str_contains($siteConfigSrc, "https://formspree.io"), 'externe tenant form-action is self-only terwijl standalone Formspree kan behouden');
-    c54(str_contains($siteConfigSrc, "'self' https://api.open-meteo.com") && str_contains($siteConfigSrc, "https://api.open-meteo.com https://formspree.io"), 'connect-src houdt externe tenants vrij van standalone Formspree');
+    c54(str_contains($siteConfigSrc, '$formAction = "\'self\'"') && !str_contains($siteConfigSrc, 'formspree.io'), 'CSP houdt formulieracties voor alle installaties uitsluitend same-origin');
+    c54(str_contains($siteConfigSrc, "'self' https://api.open-meteo.com") && !str_contains($siteConfigSrc, 'https://formspree.io'), 'connect-src bevat geen externe formulierprovider meer');
+    c54(str_contains($contactRuntimeSrc, 'contact-ontvangst.php') && str_contains($contactRuntimeSrc, 'RuntimeException'), 'contactruntime forceert de gedeelde contactvorm fail-closed naar eigen endpoint');
 } finally {
     wis54($tmp);
 }

@@ -101,11 +101,30 @@ spvCheck(
     'OpenStreetMap is uitsluitend als frame toegestaan en krijgt geen scriptrechten'
 );
 spvCheck(
-    str_contains($siteConfig, '$externPad !== null')
-    && str_contains($siteConfig, "https://formspree.io")
-    && str_contains($siteConfig, '$formAction')
-    && str_contains($siteConfig, '$connectSrc'),
-    'CSP houdt standalone Formspree apart van externe tenants'
+    str_contains($siteConfig, '$formAction = "\'self\'"')
+    && str_contains($siteConfig, '$connectSrc')
+    && !str_contains($siteConfig, 'formspree.io'),
+    'CSP houdt publieke formulieren en contactdata uitsluitend same-origin'
+);
+
+$contactEndpoint = spvBron($root . '/contact-ontvangst.php');
+$contactStore = spvBron($root . '/contactberichten-opslag.php');
+$contactBeheer = spvBron($root . '/beheer/contactberichten.php');
+$contactRuntime = spvBron($root . '/app/core/contact-inbox-runtime.php');
+spvCheck(
+    str_contains($contactEndpoint, 'aanmeldenPogingRegistreer')
+    && str_contains($contactEndpoint, "contactAntwoord(503")
+    && str_contains($contactEndpoint, "hash('sha256','contact|'")
+    && !str_contains($contactStore, 'REMOTE_ADDR')
+    && !str_contains($contactStore, "'ip'=>"),
+    'contactendpoint gebruikt private fail-closed limiter zonder raw IP-opslag in inbox'
+);
+spvCheck(
+    str_contains($contactBeheer, "authHeeftCapability('contact.messages.manage', true)")
+    && str_contains($contactBeheer, 'csrfOk()')
+    && str_contains($contactRuntime, 'contact-ontvangst.php')
+    && str_contains($contactRuntime, 'RuntimeException'),
+    'contactinbox vereist expliciete gevoelige autorisatie en fail-closed same-origin routing'
 );
 
 $workflow = spvBron($root . '/.github/workflows/full-regression.yml');

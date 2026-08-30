@@ -47,6 +47,10 @@ $config = [
         'tenaamstelling' => '',
         'omschrijving' => 'Contributie {jaar} - {naam}',
     ],
+    'privacy' => [
+        'aanmeldingen_bewaardagen' => 90,
+        'contactberichten_bewaardagen' => 180,
+    ],
     'modules' => [
         'website'=>true,'ledenadministratie'=>true,'werkgroepen'=>true,'evenementen'=>true,
         'vergaderingen'=>true,'taken'=>true,'operationele_taken'=>true,'fotoboek'=>true,
@@ -105,13 +109,11 @@ $config['vereniging']['sleutel'] = tenantRuntimeVeiligeSleutel((string)($config[
 $timezone = trim((string)($config['vereniging']['timezone'] ?? ''));
 if ($timezone !== '' && in_array($timezone, timezone_identifiers_list(), true)) date_default_timezone_set($timezone);
 
-// Eén afdwingbare browserpolicy. Externe tenants mogen geen historische externe
-// formulierroute gebruiken; aanmeldingen blijven op de eigen tenantinbox.
+// Eén afdwingbare browserpolicy. Publieke formulieren blijven volledig
+// same-origin; persoonsgegevens gaan niet meer naar een externe formprovider.
 if (PHP_SAPI !== 'cli' && !headers_sent()) {
-    $formAction = $externPad !== null ? "'self'" : "'self' https://formspree.io";
-    $connectSrc = $externPad !== null
-        ? "'self' https://api.open-meteo.com"
-        : "'self' https://api.open-meteo.com https://formspree.io";
+    $formAction = "'self'";
+    $connectSrc = "'self' https://api.open-meteo.com";
     header(
         "Content-Security-Policy: default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; "
         . "form-action {$formAction}; script-src 'self' 'unsafe-inline'; "
@@ -127,10 +129,15 @@ vpOps46RegisterFatalLogger($config);
 
 // De algemene neutralisatielaag is buitenste buffer. De mediabuffer start
 // daarna en vult eerst tenant-eigen beelden in; absolute tenant-URLs worden
-// vervolgens door de neutralisatielaag behouden.
+// vervolgens door de neutralisatielaag behouden. De contactguard start als
+// laatste gedeelde buffer en forceert het historische contactformulier naar
+// de eigen inbox; een later gestarte pagina-buffer kan daarna nog veilig
+// tenantinhoud invullen.
 require_once __DIR__ . '/app/core/tenant-public-runtime.php';
 tenantPublicRuntimeStart($config, $externPad);
 require_once __DIR__ . '/app/core/tenant-public-media.php';
 tenantPublicMediaStart($config, $externPad);
+require_once __DIR__ . '/app/core/contact-inbox-runtime.php';
+contactInboxRuntimeStart();
 
 return $config;
