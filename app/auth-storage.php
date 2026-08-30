@@ -38,6 +38,39 @@ function authStorageValideerExterneMaster(string $privateRoot): void
     }
 }
 
+/** Bestaande security-JSON mag nooit stilzwijgend als een lege toestand gelden. */
+function authStorageValideerJsonBestand(string $pad, string $label): void
+{
+    if (!file_exists($pad) && !is_link($pad)) return;
+    if (!is_file($pad) || is_link($pad) || !is_readable($pad)) {
+        tenantRuntimeConfiguratieFout($label . ' is niet veilig leesbaar.');
+    }
+    $raw = @file_get_contents($pad);
+    if (!is_string($raw) || trim($raw) === '') {
+        tenantRuntimeConfiguratieFout($label . ' is leeg of onleesbaar; herstel de securityopslag vóór verder gebruik.');
+    }
+    try {
+        $data = json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
+    } catch (JsonException $e) {
+        tenantRuntimeConfiguratieFout($label . ' bevat ongeldige JSON; herstel de securityopslag vóór verder gebruik.');
+    }
+    if (!is_array($data)) {
+        tenantRuntimeConfiguratieFout($label . ' heeft een ongeldig formaat; herstel de securityopslag vóór verder gebruik.');
+    }
+}
+
+function authStorageValideerSecurityBestanden(array $paden): void
+{
+    foreach ([
+        'users' => 'Gebruikersopslag',
+        'audit' => 'Auditlog',
+        'login_attempts' => 'Login-rate-limitopslag',
+    ] as $sleutel => $label) {
+        $pad = (string)($paden[$sleutel] ?? '');
+        if ($pad !== '') authStorageValideerJsonBestand($pad, $label);
+    }
+}
+
 /**
  * De actieve masterconfig is ook een sessiegeneratie. Een wachtwoordrotatie
  * moet bestaande mastercookies niet ongemerkt laten doorrollen naar de nieuwe
@@ -121,13 +154,6 @@ function authStorageActiveerSessieIsolatie(array $siteConfig, string $projectRoo
         tenantRuntimeConfiguratieFout('Session namespace moet vóór response-output worden geactiveerd.');
     }
 
-    // In de productie-FPM-pool staat session.save_path bewust als
-    // php_admin_value vastgezet. Zo'n waarde kan PHP zelf niet meer via
-    // ini_set() wijzigen. Wanneer FPM al exact het tenantpad afdwingt is dat
-    // dus juist de gewenste veilige toestand en hoeft er niets gewijzigd te
-    // worden. Alleen bij een afwijkende waarde proberen we nog te corrigeren;
-    // lukt dat niet (bijvoorbeeld door een afwijkende php_admin_value), dan
-    // blijft de runtime fail-closed.
     $actiefPad = (string)ini_get('session.save_path');
     if (!hash_equals($sessiePad, $actiefPad)) {
         $gezet = ini_set('session.save_path', $sessiePad);
@@ -148,11 +174,6 @@ function authStorageActiveerSessieIsolatie(array $siteConfig, string $projectRoo
  * Bepaalt alle server-only authpaden als één ondeelbaar contract. Authdata van
  * externe tenants blijft volledig onder private_root. Standalone gebruikt nog
  * zijn legacy databestanden, maar niet langer een gedeelde PHP-sessieruimte.
- *
- * In echte HTTP-runtime wordt de sessie-isolatie hier vóór auth.php zijn
- * session_start() fail-closed geactiveerd. CLI-tests en onderhoudstooling die
- * na console-output alleen paden willen resolveren krijgen uitsluitend de
- * berekende context; zo verandert een read-only opslaginspectie geen PHP ini.
  */
 function authStoragePaden(array $siteConfig, string $projectRoot): array
 {
@@ -166,7 +187,7 @@ function authStoragePaden(array $siteConfig, string $projectRoot): array
     }
 
     if ($privateRoot === null) {
-        return [
+        $paden = [
             'tenant_private' => false,
             'config' => $projectRoot . '/beheer-config.php',
             'users' => $projectRoot . '/beheer-users.json',
@@ -178,9 +199,11 @@ function authStoragePaden(array $siteConfig, string $projectRoot): array
             'session_name' => $sessieContext['name'],
             'session_binding' => $sessieContext['binding'],
         ];
+        authStorageValideerSecurityBestanden($paden);
+        return $paden;
     }
 
-    return [
+    $paden = [
         'tenant_private' => true,
         'config' => $privateRoot . '/auth/master.php',
         'users' => $privateRoot . '/auth/users.json',
@@ -192,6 +215,8 @@ function authStoragePaden(array $siteConfig, string $projectRoot): array
         'session_name' => $sessieContext['name'],
         'session_binding' => $sessieContext['binding'],
     ];
+    authStorageValideerSecurityBestanden($paden);
+    return $paden;
 }
 
 function authStorageMaakSchrijfmap(string $bestand): bool

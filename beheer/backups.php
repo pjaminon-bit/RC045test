@@ -119,8 +119,16 @@ function buTenantHerstel(array $info, string $naam, ?string &$fout = null): bool
         if ($type === 'private') return privateStoreSchrijf($source, $data, static fn($d)=>false);
         if ($type === 'users') {
             $huidig = laadGebruikers($usersBestand);
-            tenantBackupMaakArray($backupKey, $huidig);
-            return schrijfGebruikers($usersBestand, $data);
+            $rollback = tenantBackupMaakArray($backupKey, $huidig);
+            if ($rollback === null) {
+                $fout = 'Gebruikersherstel is afgebroken omdat de huidige accounts niet als rollback-snapshot konden worden bewaard.';
+                return false;
+            }
+            if (!schrijfGebruikers($usersBestand, $data)) {
+                $fout = 'Gebruikersback-up kon niet atomisch worden teruggezet; de rollback-snapshot is bewaard.';
+                return false;
+            }
+            return true;
         }
         $fout = 'Onbekend back-uptype.';
         return false;

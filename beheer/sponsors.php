@@ -5,6 +5,7 @@
 
 require_once dirname(__DIR__) . '/auth.php';
 require_once dirname(__DIR__) . '/app/core/site.php';
+require_once dirname(__DIR__) . '/app/core/atomic-file-transaction.php';
 require_once dirname(__DIR__) . '/app/data-slot.php';
 require_once dirname(__DIR__) . '/app/content/public-content-store.php';
 require_once dirname(__DIR__) . '/app/content/public-asset-store.php';
@@ -118,8 +119,6 @@ function sponsorsVerwerkLogo(string $veld, int $slot, string $huidig): array
     $doel = $sponsorMap . '/' . $bestandsnaam;
     if (is_link($doel)) return ['ok' => false, 'fout' => 'onveilig bestaand bestandsdoel geweigerd.'];
 
-    // Oude variant van hetzelfde slot met een andere extensie opruimen. Een
-    // symlink wordt alleen als link verwijderd en nooit gevolgd.
     foreach (['png', 'jpg', 'webp'] as $ext) {
         $oud = $sponsorMap . '/sponsor-' . ($slot + 1) . '.' . $ext;
         if ($oud === $doel) continue;
@@ -151,62 +150,73 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     } else {
         $slot = dataSlotOpen();
         try {
-            $bestaande = $data['items'];
-            $cta = [
-                'nl' => sponsorsKort($_POST['cta_nl'] ?? '', 200),
-                'en' => sponsorsKort($_POST['cta_en'] ?? '', 200),
-                'de' => sponsorsKort($_POST['cta_de'] ?? '', 200),
-            ];
+            try {
+                atomicFileTransactie([$sponsorBestand, $sponsorMap], function () use (&$data, &$melding, &$meldingType, $sponsorBestand): bool {
+                    $bestaande = $data['items'];
+                    $cta = [
+                        'nl' => sponsorsKort($_POST['cta_nl'] ?? '', 200),
+                        'en' => sponsorsKort($_POST['cta_en'] ?? '', 200),
+                        'de' => sponsorsKort($_POST['cta_de'] ?? '', 200),
+                    ];
 
-            $items = [];
-            $fout = null;
-            foreach ((array) ($_POST['sponsor'] ?? []) as $i => $rij) {
-                if (!is_array($rij)) continue;
-                $index = is_numeric($i) ? (int) $i : count($items);
-                $naam = sponsorsKort($rij['name'] ?? '', 60);
-                if ($naam === '') continue;
+                    $items = [];
+                    $fout = null;
+                    foreach ((array) ($_POST['sponsor'] ?? []) as $i => $rij) {
+                        if (!is_array($rij)) continue;
+                        $index = is_numeric($i) ? (int) $i : count($items);
+                        $naam = sponsorsKort($rij['name'] ?? '', 60);
+                        if ($naam === '') continue;
 
-                $url = trim(is_scalar($rij['url'] ?? '') ? (string) $rij['url'] : '');
-                if ($url !== '' && !preg_match('#^https?://#i', $url)) {
-                    $fout = 'Website van "' . $naam . '" moet beginnen met http:// of https://.';
-                    break;
-                }
-                $url = sponsorsKort($url, 200);
+                        $url = trim(is_scalar($rij['url'] ?? '') ? (string) $rij['url'] : '');
+                        if ($url !== '' && !preg_match('#^https?://#i', $url)) {
+                            $fout = 'Website van "' . $naam . '" moet beginnen met http:// of https://.';
+                            break;
+                        }
+                        $url = sponsorsKort($url, 200);
 
-                $huidigLogo = (string) ($bestaande[$index]['logo'] ?? '');
-                $logo = sponsorsVerwerkLogo('sponsor_logo_' . $index, $index, $huidigLogo);
-                if (!$logo['ok']) {
-                    $fout = 'Logo van "' . $naam . '": ' . ($logo['fout'] ?? 'onbekende fout');
-                    break;
-                }
-                if (($logo['logo'] ?? '') === '') {
-                    $fout = 'Voeg een logo toe voor "' . $naam . '".';
-                    break;
-                }
+                        $huidigLogo = (string) ($bestaande[$index]['logo'] ?? '');
+                        $logo = sponsorsVerwerkLogo('sponsor_logo_' . $index, $index, $huidigLogo);
+                        if (!$logo['ok']) {
+                            $fout = 'Logo van "' . $naam . '": ' . ($logo['fout'] ?? 'onbekende fout');
+                            break;
+                        }
+                        if (($logo['logo'] ?? '') === '') {
+                            $fout = 'Voeg een logo toe voor "' . $naam . '".';
+                            break;
+                        }
 
-                $items[] = [
-                    'name' => $naam,
-                    'url' => $url,
-                    'logo' => (string) $logo['logo'],
-                    'width' => (int) ($logo['width'] ?? 0),
-                    'height' => (int) ($logo['height'] ?? 0),
-                ];
-            }
+                        $items[] = [
+                            'name' => $naam,
+                            'url' => $url,
+                            'logo' => (string) $logo['logo'],
+                            'width' => (int) ($logo['width'] ?? 0),
+                            'height' => (int) ($logo['height'] ?? 0),
+                        ];
+                    }
 
-            if ($fout !== null) {
-                $melding = $fout;
-                $meldingType = 'fout';
-            } else {
-                $nieuw = ['updated' => date('c'), 'items' => $items, 'cta' => $cta];
-                if (sponsorsSchrijf($sponsorBestand, $nieuw)) {
+                    if ($fout !== null) {
+                        $melding = $fout;
+                        $meldingType = 'fout';
+                        return false;
+                    }
+
+                    $nieuw = ['updated' => date('c'), 'items' => $items, 'cta' => $cta];
+                    if (!sponsorsSchrijf($sponsorBestand, $nieuw)) {
+                        $melding = 'Opslaan mislukt. De eerdere sponsorbestanden zijn teruggezet.';
+                        $meldingType = 'fout';
+                        return false;
+                    }
+
                     $data = $nieuw;
                     $melding = 'Opgeslagen. De sponsoren op de website zijn bijgewerkt.';
                     $meldingType = 'ok';
-                    schrijfLog($logBestand, $huidigeGebruiker, 'sponsors', count($items) . ' sponsor(s) opgeslagen via modulaire editor');
-                } else {
-                    $melding = 'Opslaan mislukt. Controleer de schrijfrechten van de contentopslag.';
-                    $meldingType = 'fout';
-                }
+                    schrijfLog($GLOBALS['logBestand'], $GLOBALS['huidigeGebruiker'], 'sponsors', count($items) . ' sponsor(s) opgeslagen via modulaire editor');
+                    return true;
+                });
+            } catch (Throwable $e) {
+                error_log('[platform] sponsortransactie mislukt: ' . $e->getMessage());
+                $melding = 'Opslaan is veilig afgebroken; de vorige sponsorconfiguratie is behouden.';
+                $meldingType = 'fout';
             }
         } finally {
             dataSlotDicht($slot);

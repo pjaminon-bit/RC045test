@@ -63,8 +63,8 @@ try {
         'VERENIGING_PRIVATE_ROOT' => $private,
     ];
 
-    // 1. Capabilitymigratie: ontbrekend legacyprofiel mag op een externe
-    // tenant nooit in brede beheerrechten veranderen.
+    // 1. Capabilitymigratie: ontbrekend legacyprofiel mag op geen enkele
+    // installatie in brede beheerrechten veranderen.
     $capWorker = $tmp . '/cap-worker.php';
     file_put_contents($capWorker, <<<'PHP'
 <?php
@@ -84,11 +84,11 @@ PHP);
     c54(($cap['caps'] ?? null) === [], 'legacy account krijgt extern geen impliciete brede capabilities');
     c54(($cap['migrated_caps'] ?? null) === [] && ($cap['migrated_tabs'] ?? null) === [], 'legacy migratie schrijft extern een expliciet leeg rechtenprofiel');
 
-    // Standalone blijft bewust compatibel tot RC045 zelf gecontroleerd is
-    // gemigreerd; zo verandert deze securityfix geen bestaand beheeraccount.
+    // Standalone volgt dezelfde fail-closed rechtenregel: zonder expliciet
+    // rechtenprofiel ontstaan nooit impliciete brede beheerrechten.
     [$legacyCode, $legacyRaw] = r54([PHP_BINARY, $capWorker, $root]);
     $legacy = json_decode($legacyRaw, true);
-    c54($legacyCode === 0 && is_array($legacy) && count((array)($legacy['caps'] ?? [])) > 0, 'standalone RC045 behoudt tijdelijk de legacy compatibilityfallback');
+    c54($legacyCode === 0 && is_array($legacy) && ($legacy['caps'] ?? null) === [], 'standalone account zonder expliciet rechtenprofiel krijgt geen brede legacy-capabilities');
 
     // 2. Centrale sessiepoort: zelfs vóór een expliciete migratie kan een oud
     // account op een externe tenant geen beheerpagina bereiken. De synthetische

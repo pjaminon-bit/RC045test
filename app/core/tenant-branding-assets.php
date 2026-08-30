@@ -3,6 +3,7 @@
 // Veilige tenantbranding- en website-assets
 // ============================================================
 require_once __DIR__ . '/tenant-runtime.php';
+require_once __DIR__ . '/atomic-file-transaction.php';
 
 function tenantBrandingAssetTypes(): array
 {
@@ -14,6 +15,46 @@ function tenantBrandingAssetRoot(array $config): ?string
     $privateRoot = tenantRuntimePrivateRoot($config);
     if ($privateRoot === null) return null;
     return rtrim($privateRoot, '/\\') . DIRECTORY_SEPARATOR . 'public-assets' . DIRECTORY_SEPARATOR . 'branding';
+}
+
+/**
+ * Brandingbestanden en site.json vormen één logische wijziging. De eerste
+ * upload in een request snapshot de brandingmap; tenantSettingsSchrijf()
+ * commit of rollbackt deze transactie. Een onverwacht einde van het request
+ * rolt standaard terug, zodat een half afgeronde upload nooit live blijft.
+ */
+function tenantBrandingAssetTransactieBegin(array $config): void
+{
+    $root = tenantBrandingAssetRoot($config);
+    if ($root === null) throw new RuntimeException('Brandingtransactie vereist private tenantopslag.');
+    $actief = $GLOBALS['tenantBrandingAssetTx'] ?? null;
+    if (is_array($actief) && empty($actief['closed'])) {
+        if (!hash_equals((string)($actief['branding_root'] ?? ''), $root)) {
+            throw new RuntimeException('Meerdere brandingroots in één request zijn niet toegestaan.');
+        }
+        return;
+    }
+    $tx = atomicFileTxBegin([$root]);
+    $tx['branding_root'] = $root;
+    $GLOBALS['tenantBrandingAssetTx'] = $tx;
+    if (empty($GLOBALS['tenantBrandingAssetTxShutdown'])) {
+        $GLOBALS['tenantBrandingAssetTxShutdown'] = true;
+        register_shutdown_function(static function (): void {
+            if (!isset($GLOBALS['tenantBrandingAssetTx']) || !is_array($GLOBALS['tenantBrandingAssetTx'])) return;
+            $tx =& $GLOBALS['tenantBrandingAssetTx'];
+            if (empty($tx['closed']) && !atomicFileTxRollback($tx)) {
+                error_log('[platform] brandingtransactie kon bij shutdown niet volledig worden teruggedraaid');
+            }
+        });
+    }
+}
+
+function tenantBrandingAssetTransactieAfronden(bool $succes): bool
+{
+    if (!isset($GLOBALS['tenantBrandingAssetTx']) || !is_array($GLOBALS['tenantBrandingAssetTx'])) return true;
+    $tx =& $GLOBALS['tenantBrandingAssetTx'];
+    if (!empty($tx['closed'])) return true;
+    return $succes ? atomicFileTxCommit($tx) : atomicFileTxRollback($tx);
 }
 
 function tenantBrandingAssetNaamGeldig(string $naam): bool
@@ -92,6 +133,7 @@ function tenantBrandingAssetUpload(array $config, array $upload, string $type): 
 
     $root = tenantBrandingAssetRoot($config);
     if ($root === null) throw new RuntimeException('Brandinguploads zijn alleen beschikbaar voor tenants met private opslag.');
+    tenantBrandingAssetTransactieBegin($config);
     if (is_link($root)) throw new RuntimeException('Brandingopslag is onveilig geconfigureerd.');
     if (!is_dir($root) && !@mkdir($root, 0750, true)) throw new RuntimeException('Brandingmap kon niet worden aangemaakt.');
     clearstatcache(true, $root);

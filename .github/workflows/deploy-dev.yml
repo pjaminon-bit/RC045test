@@ -23,185 +23,28 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - name: Controleer PHP syntax
-        shell: bash
+      - name: Runtimeversies
         run: |
           set -euo pipefail
           php -v
+          node --version
+          npm --version
+
+      - name: Syntax volledige repository
+        shell: bash
+        run: |
+          set -euo pipefail
           while IFS= read -r -d '' bestand; do
             php -l "$bestand"
-          done < <(find . -type f -name '*.php' -print0)
-
-      - name: Basis architectuurtest
-        run: php tests/phase25-architecture.php
-
-      - name: Uitgebreide platformtests
-        shell: bash
-        run: |
-          set -euo pipefail
+          done < <(find . -type f -name '*.php' -not -path './node_modules/*' -print0)
           node --check lidmaatschap-aanmelden.js
-          php tests/phase25-domain-integrity.php
-          php tests/phase251-groups.php
-          php tests/phase252-ux.php
-          php tests/phase26-ui.php
-          php tests/phase262-ui.php
-          php tests/phase31-tenant-boundary.php
-          php tests/phase32-provisioner.php
-          php tests/phase321-runtime-failclosed.php
-          php tests/phase321-auth-isolation.php
-          php tests/phase321-session-tenant-binding.php
-          php tests/phase321-provisioner-path-security.php
-          php tests/phase321-public-content-isolation.php
-          php tests/phase321-public-assets-isolation.php
-          php tests/phase321-public-assets-parent-symlink.php
-          php -m | grep -qi '^pdo_sqlite$' || { echo 'pdo_sqlite ontbreekt op de runner' >&2; exit 1; }
-          php tests/phase321-tenant-backups.php
-          php tests/phase33-second-tenant.php
-          php tests/phase34-admin-bootstrap.php
-          php tests/phase35-vps-deployment.php
-          php tests/phase351-security-reaudit.php
-          php tests/phase351-master-session-generation.php
-          php tests/phase41-vps-runtime-isolation.php
-          php tests/phase411-runtime-reaudit.php
-          php tests/phase42-apache-vhosts.php
-          php tests/phase43-dns-readiness.php
-          php tests/phase44-tls-https.php
-          php tests/phase45-database-provisioning.php
-          php tests/phase451-database-reaudit.php
-          php tests/phase46-monitoring-logging.php
-          php tests/phase47-release-rollback.php
-          php tests/phase48-tenant-lifecycle.php
-          php tests/phase481-purge-recovery-hardening.php
-          php tests/phase482-lifecycle-mutation-results.php
-          php tests/phase51-control-plane.php
-          php tests/phase511-control-plane-identity.php
-          php tests/phase512-control-plane-auth.php
-          php tests/phase513-control-plane-rate-limit.php
-          php tests/phase514-executor-mutation-results.php
-          php tests/phase52-first-vps-bootstrap.php
-          php tests/phase54-tenant-public-template.php
-          php tests/phase54-security-hardening.php
-          php tests/phase541-security-edgecases.php
-          php tests/phase55-php-runtime-guard.php
-          php tests/phase56-product-branding.php
-          php tests/phase57-control-plane-provisioning.php
-          if [[ -f tests/phase58-vps-test-actions.php ]]; then php tests/phase58-vps-test-actions.php; fi
-          php tests/private-store-pdo-sqlite.php
-          php tests/phase321-pdo-isolation.php
-          php tests/private-store-pdo-failclosed.php
-          test ! -e site-config.local.php
+          node --check tests/live-dev-browser.spec.js
+          node --check tests/live-dev-authenticated.spec.js
 
-  verify-vps-current:
-    if: github.event_name != 'pull_request'
-    needs: validate
-    runs-on: ubuntu-latest
-    steps:
-      - name: Controleer huidige VPS-testtenant
+      - name: Volledige bronregressie
         shell: bash
         run: |
           set -euo pipefail
-          basis='https://test.vps.holox.nl'
-          wacht_op_status() {
-            local url="$1"
-            local verwacht="$2"
-            local volg_redirects="${3:-nee}"
-            local poging status
-            for poging in 1 2 3 4 5 6; do
-              if [[ "$volg_redirects" == 'ja' ]]; then
-                status="$(curl --silent --show-error --location --output /dev/null --write-out '%{http_code}' --connect-timeout 10 --max-time 30 "$url" || true)"
-              else
-                status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' --connect-timeout 10 --max-time 30 "$url" || true)"
-              fi
-              if [[ "$status" == "$verwacht" ]]; then echo "OK: $url -> HTTP $status"; return 0; fi
-              echo "Poging $poging: $url gaf HTTP ${status:-geen}, verwacht $verwacht"; sleep 5
-            done
-            echo "FOUT: $url gaf na meerdere pogingen niet HTTP $verwacht" >&2
-            return 1
-          }
-
-          wacht_op_status "$basis/" 200 ja
-          wacht_op_status "$basis/beheer/" 200 ja
-          wacht_op_status "$basis/leden/" 200 ja
-          wacht_op_status "$basis/healthz.php" 204 nee
-
-          protected_routes=(
-            '/app/paneel-hulp.php'
-            '/app/operational-log.php'
-            '/app/deployment/monitoring-contract.php'
-            '/app/deployment/release-contract.php'
-            '/app/deployment/lifecycle-contract.php'
-            '/app/deployment/lifecycle-purge-hardening.php'
-            '/app/deployment/control-plane-contract.php'
-            '/app/deployment/control-plane-identity.php'
-            '/app/deployment/control-plane-auth-hardening.php'
-            '/app/deployment/first-vps-bootstrap-contract.php'
-            '/app/control-plane/control-plane-runtime.php'
-            '/app/control-plane-web/index.php'
-            '/aanmeldingen-opslag.php'
-            '/groepen-opslag.php'
-            '/ledenlabels-opslag.php'
-            '/beheer/backup-registry.php'
-            '/bin/provision-tenant.php'
-            '/bin/bootstrap-tenant-admin.php'
-            '/bin/prepare-vps-deployment.php'
-            '/bin/prepare-vps-runtime.php'
-            '/bin/apply-vps-runtime.php'
-            '/bin/prepare-vps-webserver.php'
-            '/bin/apply-vps-webserver.php'
-            '/bin/prepare-vps-dns.php'
-            '/bin/check-vps-dns.php'
-            '/bin/prepare-vps-tls.php'
-            '/bin/apply-vps-tls.php'
-            '/bin/prepare-vps-database.php'
-            '/bin/apply-vps-database.php'
-            '/bin/check-vps-database.php'
-            '/bin/prepare-vps-monitoring.php'
-            '/bin/apply-vps-monitoring.php'
-            '/bin/check-vps-health.php'
-            '/bin/prepare-vps-release.php'
-            '/bin/apply-vps-release.php'
-            '/bin/check-release-tenant.php'
-            '/bin/prepare-vps-lifecycle.php'
-            '/bin/apply-vps-lifecycle.php'
-            '/bin/prepare-vps-control-plane.php'
-            '/bin/apply-vps-control-plane.php'
-            '/bin/control-plane-executor.php'
-            '/bin/bootstrap-control-plane-operator.php'
-            '/bin/prepare-first-vps-bootstrap.php'
-            '/bin/apply-first-vps-bootstrap.php'
-            '/tests/phase35-vps-deployment.php'
-            '/tests/phase351-security-reaudit.php'
-            '/tests/phase41-vps-runtime-isolation.php'
-            '/tests/phase411-runtime-reaudit.php'
-            '/tests/phase42-apache-vhosts.php'
-            '/tests/phase43-dns-readiness.php'
-            '/tests/phase44-tls-https.php'
-            '/tests/phase45-database-provisioning.php'
-            '/tests/phase451-database-reaudit.php'
-            '/tests/phase46-monitoring-logging.php'
-            '/tests/phase47-release-rollback.php'
-            '/tests/phase48-tenant-lifecycle.php'
-            '/tests/phase481-purge-recovery-hardening.php'
-            '/tests/phase482-lifecycle-mutation-results.php'
-            '/tests/phase51-control-plane.php'
-            '/tests/phase511-control-plane-identity.php'
-            '/tests/phase512-control-plane-auth.php'
-            '/tests/phase513-control-plane-rate-limit.php'
-            '/tests/phase514-executor-mutation-results.php'
-            '/tests/phase52-first-vps-bootstrap.php'
-            '/docs/VPS-DEPLOYMENT.md'
-            '/docs/VPS-WEBSERVER.md'
-            '/docs/VPS-DNS.md'
-            '/docs/VPS-TLS.md'
-            '/docs/VPS-DATABASE.md'
-            '/docs/VPS-MONITORING.md'
-            '/docs/VPS-RELEASES.md'
-            '/docs/VPS-LIFECYCLE.md'
-            '/docs/VPS-CONTROL-PLANE.md'
-            '/docs/VPS-FIRST-BOOTSTRAP.md'
-            '/dev-build.json'
-            '/.git/config'
-          )
-          for route in "${protected_routes[@]}"; do
-            wacht_op_status "$basis$route" 403 nee
-          done
+          php -m | grep -qi '^pdo_sqlite$' || { echo 'pdo_sqlite ontbreekt op de runner' >&2; exit 1; }
+          bash tests/run-all.sh
+          test ! -e site-config.local.php

@@ -44,5 +44,5 @@ $health=(string)file_get_contents($production['health']);c514(str_contains($heal
 c514(str_contains($health,'[$code,,$err]=health46Run([$adapter],$json."\n");')&&!str_contains($health,'@proc_open'),'alert-adapter gebruikt dezelfde begrensde runner met payload via STDIN');
 $web=(string)file_get_contents($production['webserver']);c514(str_contains($web,'process521Run($cmd, null, null, null, 300)')&&str_contains($web,'Apache control-binary ontbreekt of is niet absoluut.'),'webserver gebruikt gedeelde runner en eist absoluut Apache executablepad');
 
-$workflow=(string)file_get_contents($root.'/.github/workflows/deploy-dev.yml');c514(str_contains($workflow,'phase514-executor-mutation-results.php'),'fase 5.1.4 executor mutation-resulttest draait in CI');
+$workflow=(string)file_get_contents($root.'/.github/workflows/deploy-dev.yml');$runAll=(string)file_get_contents($root.'/tests/run-all.sh');c514(str_contains($workflow,'bash tests/run-all.sh')&&str_contains($runAll,"find tests -maxdepth 1 -type f -name '*.php'")&&str_contains($runAll,'php "$test_file"'),'fase 5.1.4 executor mutation-resulttest valt automatisch onder de volledige CI-regressiesuite');
 echo"Phase 5.1.4 executor mutation results: {$ok} OK, {$fout} fout(en)\n";exit($fout===0?0:1);

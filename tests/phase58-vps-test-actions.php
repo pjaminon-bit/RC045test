@@ -15,13 +15,19 @@ foreach(['rc045.nl/dev','FTP_USERNAME','FTP_SERVER','FTP_PASSWORD','SFTP-Deploy-
     c58(!str_contains($validate,$oud)&&!str_contains($full,$oud),"oude DEV/SFTP-koppeling verwijderd: {$oud}");
 }
 c58(str_contains($validate,'name: Validate RC045test'),'hoofdworkflow heet alleen nog validatie');
-c58(str_contains($validate,"basis='https://test.vps.holox.nl'")&&str_contains($validate,'healthz.php')&&str_contains($validate,'204 nee'),'hoofdworkflow controleert de echte VPS-testtenant en 204-health');
-c58(str_contains($validate,'phase57-control-plane-provisioning.php')&&str_contains($validate,'phase58-vps-test-actions.php'),'recente fase-5.7 en 5.8 regressies draaien in de hoofdvalidatie');
+c58(str_contains($validate,'bash tests/run-all.sh'),'hoofdvalidatie gebruikt de complete dynamische bronregressiesuite');
+c58(!str_contains($validate,'phase57-control-plane-provisioning.php')&&!str_contains($validate,'phase58-vps-test-actions.php'),'hoofdvalidatie onderhoudt geen handmatige lijst van individuele regressietests');
 c58(!str_contains($validate,'dev-build.json <<EOF')&&!str_contains($validate,'remote_path:'),'hoofdworkflow schrijft of uploadt geen legacy DEV-build meer');
 
+c58(str_contains($full,"  push:\n    branches:\n      - main"),'full regression draait op iedere push naar main vóór deployment');
+c58(str_contains($full,'bash tests/run-all.sh'),'full regression gebruikt de volledige dynamische testset');
 c58(str_contains($full,'LIVE_DEV_BASE_URL: https://test.vps.holox.nl')&&str_contains($full,'PLAYWRIGHT_TEST_BASE_URL: https://test.vps.holox.nl'),'full regression gebruikt VPS-test als live basis');
-c58(str_contains($full,'Deploy RC045test to VPS test'),'full regression volgt de VPS-deployworkflow');
+c58(str_contains($full,'Deploy RC045test to VPS test'),'post-deploy full regression volgt de VPS-deployworkflow voor live checks');
 c58(!str_contains($full,'sshpass')&&!str_contains($full,'sftp_cmd')&&!str_contains($full,'authenticated-e2e-fixtures.php'),'authenticated E2E muteert geen losse productie-/tenantbestanden via SFTP');
+
+c58(str_contains($deploy,"      - Full regression acceptance"),'privileged deploy wacht op Full regression acceptance');
+c58(!str_contains($deploy,"      - Validate RC045test"),'privileged deploy wacht niet langer alleen op de beperkte Validate-workflow');
+c58(str_contains($deploy,"github.event.workflow_run.event == 'push'")&&str_contains($deploy,"github.event.workflow_run.head_branch == 'main'")&&str_contains($deploy,"github.event.workflow_run.conclusion == 'success'"),'automatische deploy accepteert uitsluitend succesvolle main-push full regression');
 c58(
     str_contains($deploy,"  live-authenticated:\n")
     && str_contains($deploy,'needs: deploy-vps-test')

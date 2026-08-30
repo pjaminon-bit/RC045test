@@ -22,5 +22,5 @@ c511(str_contains($account,'control511GroupIdentity')&&str_contains($account,'co
 c511(strpos($account,'control511GroupIdentity')<strpos($account,"'/usr/sbin/useradd'"),'GID-exclusiviteit wordt vóór eventuele usercreatie bewezen');
 c511(str_contains($account,"'/usr/bin/id','-G'")&&str_contains($account,'supplementary groups'),'numeric group membership moet exact alleen de primary GID bevatten');
 c511(str_contains($apply,'[$dc,,$de]=cpaRun([\'/usr/bin/systemctl\',\'daemon-reload\'])')&&str_contains($apply,'systemd daemon-reload faalt'),'daemon-reload resultaat wordt niet langer genegeerd');
-$workflow=(string)file_get_contents($root.'/.github/workflows/deploy-dev.yml');c511(str_contains($workflow,'phase511-control-plane-identity.php'),'fase 5.1.1 identity test draait in CI');
+$workflow=(string)file_get_contents($root.'/.github/workflows/deploy-dev.yml');$runAll=(string)file_get_contents($root.'/tests/run-all.sh');c511(str_contains($workflow,'bash tests/run-all.sh')&&str_contains($runAll,"find tests -maxdepth 1 -type f -name '*.php'")&&str_contains($runAll,'php "$test_file"'),'fase 5.1.1 identity test valt automatisch onder de volledige CI-regressiesuite');
 echo"Phase 5.1.1 control-plane identity: {$ok} OK, {$fout} fout(en)\n";exit($fout===0?0:1);

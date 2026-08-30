@@ -121,4 +121,12 @@ function aanmeldingenPasRetentieToe(array &$data,?int $nu=null): int
     }));
     return$voor-count($data['aanmeldingen']);
 }
-function aanmeldingenOpschonenBewaartermijn(): int{$data=aanmeldingenLees();$aantal=aanmeldingenPasRetentieToe($data);if($aantal>0&&!aanmeldingenSchrijf($data))return 0;return$aantal;}
+function aanmeldingenOpschonenBewaartermijn(): int
+{
+    $data=aanmeldingenLees();
+    $aantal=aanmeldingenPasRetentieToe($data);
+    if($aantal>0&&!aanmeldingenSchrijf($data)){
+        throw new RuntimeException('Verlopen aanmeldingen konden niet duurzaam uit de opslag worden verwijderd.');
+    }
+    return$aantal;
+}

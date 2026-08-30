@@ -48,8 +48,18 @@ c451(substr_count($apply, 'runtime41SymlinkInPad(') >= 5, 'root-HBA writes en bu
 c451(str_contains($apply, "runtime41BestaandPad(apply45PgQuery('SHOW hba_file')"), 'actief pg_hba.conf-pad wordt volledig symlink-vrij opgelost');
 
 $workflow = (string)file_get_contents($root . '/.github/workflows/deploy-dev.yml');
-c451(str_contains($workflow, 'php tests/phase451-database-reaudit.php'), 'fase 4.5.1 heraudit draait in CI');
-c451(str_contains($workflow, '/tests/phase451-database-reaudit.php'), 'fase 4.5.1 test blijft via DEV HTTP-smoke afgeschermd');
+$runAll = (string)file_get_contents($root . '/tests/run-all.sh');
+$htaccess = (string)file_get_contents($root . '/.htaccess');
+c451(
+    str_contains($workflow, 'bash tests/run-all.sh')
+    && str_contains($runAll, "find tests -maxdepth 1 -type f -name '*.php'")
+    && str_contains($runAll, 'php "$test_file"'),
+    'fase 4.5.1 heraudit valt automatisch onder de volledige CI-regressiesuite'
+);
+c451(
+    str_contains($htaccess, 'RewriteRule ^(?:app|bin|tests|docs|\\.github|\\.git)(?:/|$) - [F,L,NC]'),
+    'fase 4.5.1 test blijft via HTTP fail-closed afgeschermd'
+);
 
 echo "Phase 4.5.1 database reaudit: {$ok} OK, {$fout} fout(en)\n";
 exit($fout === 0 ? 0 : 1);

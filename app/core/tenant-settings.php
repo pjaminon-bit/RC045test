@@ -139,29 +139,41 @@ function tenantSettingsLees(array $config): array
 
 function tenantSettingsSchrijf(array $basisConfig, array $input): bool
 {
-    $pad = tenantSettingsPad($basisConfig);
-    if ($pad === null) return false;
-    $privateRoot = tenantRuntimePrivateRoot($basisConfig);
-    if ($privateRoot === null || !is_dir($privateRoot) || is_link($privateRoot)) return false;
+    $geslaagd = false;
+    try {
+        $pad = tenantSettingsPad($basisConfig);
+        if ($pad === null) return false;
+        $privateRoot = tenantRuntimePrivateRoot($basisConfig);
+        if ($privateRoot === null || !is_dir($privateRoot) || is_link($privateRoot)) return false;
 
-    $map = dirname($pad);
-    if (is_link($map)) return false;
-    if (!is_dir($map) && !@mkdir($map, 0750, true)) return false;
-    clearstatcache(true, $map);
-    if (!is_dir($map) || is_link($map)) return false;
-    @chmod($map, 0750);
+        $map = dirname($pad);
+        if (is_link($map)) return false;
+        if (!is_dir($map) && !@mkdir($map, 0750, true)) return false;
+        clearstatcache(true, $map);
+        if (!is_dir($map) || is_link($map)) return false;
+        @chmod($map, 0750);
 
-    $huidig = tenantSettingsLees($basisConfig);
-    $data = tenantSettingsNormaliseer($input, $huidig);
-    $json = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
-    if ($json === false) return false;
+        $huidig = tenantSettingsLees($basisConfig);
+        $data = tenantSettingsNormaliseer($input, $huidig);
+        $json = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+        if ($json === false) return false;
 
-    try { $suffix = bin2hex(random_bytes(6)); }
-    catch (Throwable $e) { $suffix = substr(hash('sha256', (string)microtime(true)), 0, 12); }
-    $tmp = $pad . '.tmp.' . $suffix;
-    if (@file_put_contents($tmp, $json, LOCK_EX) === false) return false;
-    @chmod($tmp, 0640);
-    if (!@rename($tmp, $pad)) { @unlink($tmp); return false; }
-    @chmod($pad, 0640);
-    return true;
+        try { $suffix = bin2hex(random_bytes(6)); }
+        catch (Throwable $e) { $suffix = substr(hash('sha256', (string)microtime(true)), 0, 12); }
+        $tmp = $pad . '.tmp.' . $suffix;
+        if (@file_put_contents($tmp, $json, LOCK_EX) === false) return false;
+        @chmod($tmp, 0640);
+        if (!@rename($tmp, $pad)) { @unlink($tmp); return false; }
+        @chmod($pad, 0640);
+        $geslaagd = true;
+        return true;
+    } finally {
+        if (function_exists('tenantBrandingAssetTransactieAfronden')) {
+            $afgerond = tenantBrandingAssetTransactieAfronden($geslaagd);
+            if (!$afgerond) {
+                error_log('[platform] brandingtransactie kon niet veilig worden afgerond');
+                if ($geslaagd) throw new RuntimeException('Brandingtransactie kon niet veilig worden gecommit.');
+            }
+        }
+    }
 }
