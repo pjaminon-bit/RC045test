@@ -25,7 +25,7 @@ if (tenantBackupActief()) {
     }
 
     $private = [
-        'leden'=>'Ledenadministratie','aanmeldingen'=>'Aanmeldingen-inbox','contributies'=>'Contributie-administratie',
+        'leden'=>'Ledenadministratie','aanmeldingen'=>'Aanmeldingen-inbox','contactberichten'=>'Contactberichten-inbox','contributies'=>'Contributie-administratie',
         'groepen'=>'Commissies en werkgroepen','ledenlabels'=>'Ledenlabels en segmenten','vergaderingen'=>'Vergaderingen',
         'taken'=>'Taken','operationele_taken'=>'Operationele taken','evenementen'=>'Evenementen',
     ];
@@ -66,6 +66,7 @@ return [
     'changelog' => ['label'=>'Changelog (eigen regels)','pad'=>$data.'/changelog.json','schrijffunctie'=>'json'],
     'leden' => ['label'=>'Ledenadministratie','pad'=>$root.'/leden-data.php','schrijffunctie'=>'phpjson'],
     'aanmeldingen_inbox' => ['label'=>'Aanmeldingen-inbox','pad'=>$root.'/aanmeldingen-data.php','schrijffunctie'=>'phpjson'],
+    'contactberichten_inbox' => ['label'=>'Contactberichten-inbox','pad'=>$root.'/contactberichten-data.php','schrijffunctie'=>'phpjson'],
     'contributies' => ['label'=>'Contributie-administratie','pad'=>$root.'/contributies-data.php','schrijffunctie'=>'phpjson'],
     'groepen' => ['label'=>'Commissies en werkgroepen','pad'=>$root.'/groepen-data.php','schrijffunctie'=>'phpjson'],
     'ledenlabels' => ['label'=>'Ledenlabels en segmenten','pad'=>$root.'/ledenlabels-data.php','schrijffunctie'=>'phpjson'],
