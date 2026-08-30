@@ -118,7 +118,8 @@ if ($check === $apply) msmFout('Kies exact één actie: --check of --apply.', 64
 
 $config = isset($opties['config']) ? trim((string)$opties['config']) : dirname(__DIR__) . '/beheer-config.php';
 if (!msmAbsoluutPad($config)) msmFout('--config moet een absoluut pad zijn.', 64);
-if (is_link($config) || !is_file($config) || !is_readable($config) || !is_writable($config)) msmFout('Standalone beheer-config.php is niet veilig lees- en schrijfbaar.');
+if (is_link($config) || !is_file($config) || !is_readable($config)) msmFout('Standalone beheer-config.php is niet veilig leesbaar.');
+if ($apply && !is_writable($config)) msmFout('Standalone beheer-config.php is niet veilig schrijfbaar.');
 
 $bron = file_get_contents($config);
 if (!is_string($bron) || $bron === '') msmFout('Standalone beheer-config.php kon niet worden gelezen.');
@@ -165,7 +166,11 @@ if (msmVindAssignment($nieuw, '$BEHEER_WACHTWOORD') !== null) {
     msmFout('Migratie zou een plaintext masterassignment laten staan; write geweigerd.');
 }
 $candidateHash = msmVindAssignment($nieuw, '$BEHEER_WACHTWOORD_HASH');
-if ($candidateHash === null || !password_verify($plainWaarde, $candidateHash['value'])) {
+$candidateOk = $candidateHash !== null
+    && ($hashGeldig
+        ? hash_equals($hashAssignment['value'], $candidateHash['value'])
+        : password_verify($plainWaarde, $candidateHash['value']));
+if (!$candidateOk) {
     msmFout('Nieuwe hash-only kandidaatconfig doorstaat de credentialcontrole niet.');
 }
 
@@ -189,10 +194,13 @@ $controle = file_get_contents($config);
 $controlePlain = is_string($controle) ? msmVindAssignment($controle, '$BEHEER_WACHTWOORD') : null;
 $controleHash = is_string($controle) ? msmVindAssignment($controle, '$BEHEER_WACHTWOORD_HASH') : null;
 $eindMode = fileperms($config) & 0777;
+$eindCredentialOk = $controleHash !== null
+    && ($hashGeldig
+        ? hash_equals($hashAssignment['value'], $controleHash['value'])
+        : password_verify($plainWaarde, $controleHash['value']));
 if (!is_string($controle)
     || $controlePlain !== null
-    || $controleHash === null
-    || !password_verify($plainWaarde, $controleHash['value'])
+    || !$eindCredentialOk
     || $eindMode !== 0640) {
     // De kandidaat was vóór rename al inhoudelijk bewezen. Een fout hier wijst
     // op filesystemdrift/race; schrijf het oude secret niet opnieuw naar disk.
