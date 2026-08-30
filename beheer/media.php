@@ -1,6 +1,7 @@
 <?php
 require_once dirname(__DIR__) . '/auth.php';
 require_once dirname(__DIR__) . '/app/core/site.php';
+require_once dirname(__DIR__) . '/app/core/atomic-file-transaction.php';
 require_once dirname(__DIR__) . '/app/data-slot.php';
 require_once dirname(__DIR__) . '/app/content/public-content-store.php';
 
@@ -52,8 +53,18 @@ if(($_SERVER['REQUEST_METHOD']??'')==='POST'){
    foreach((array)($_POST['media']??[]) as $rij){ if(!is_array($rij)) continue; $titelNl=mediaKort($rij['title_nl']??'',100); if($titelNl==='') continue; $link=trim((string)($rij['link']??'')); if($link!==''&&!preg_match('#^https?://#i',$link)){ $fout='Link bij "'.$titelNl.'" moet beginnen met http:// of https://.'; break; } $nieuw[]=['date'=>mediaDatumIso($rij['date']??''),'bron'=>mediaKort($rij['bron']??'',60),'icoon'=>(($rij['icoon']??'📺')==='📰'?'📰':'📺'),'title'=>['nl'=>$titelNl,'en'=>mediaKort($rij['title_en']??'',100),'de'=>mediaKort($rij['title_de']??'',100)],'desc'=>['nl'=>mediaKort($rij['desc_nl']??'',300),'en'=>mediaKort($rij['desc_en']??'',300),'de'=>mediaKort($rij['desc_de']??'',300)],'link'=>$link,'linktekst'=>['nl'=>mediaKort($rij['linktekst_nl']??'',40),'en'=>mediaKort($rij['linktekst_en']??'',40),'de'=>mediaKort($rij['linktekst_de']??'',40)]]; }
    $nieuwTekst=['hero_sub'=>['nl'=>mediaKort($_POST['hero_sub']['nl']??'',400),'en'=>mediaKort($_POST['hero_sub']['en']??'',400),'de'=>mediaKort($_POST['hero_sub']['de']??'',400)]];
    if($fout!==''){ $melding=$fout;$type='fout'; }
-   elseif(mediaSchrijf($mediaBestand,$nieuw)&&mediaSchrijf($mediaTekstBestand,$nieuwTekst)){ $items=$nieuw;$tekst=mediaVulStandaard($mediaTekstStandaard,$nieuwTekst);$melding='Opgeslagen. De media-pagina is bijgewerkt.';$type='ok';schrijfLog($logBestand,$huidigeGebruiker,'media',count($items).' item(s) en paginatekst opgeslagen via modulaire editor'); }
-   else { $melding='Opslaan mislukt. Controleer de schrijfrechten van de contentopslag.';$type='fout'; }
+   else {
+     try {
+       $geschreven=atomicFileTransactie([$mediaBestand,$mediaTekstBestand],static function()use($mediaBestand,$mediaTekstBestand,$nieuw,$nieuwTekst):bool{
+         return mediaSchrijf($mediaBestand,$nieuw)&&mediaSchrijf($mediaTekstBestand,$nieuwTekst);
+       });
+     } catch(Throwable $e) {
+       error_log('[platform] mediatransactie mislukt: '.$e->getMessage());
+       $geschreven=false;
+     }
+     if($geschreven){ $items=$nieuw;$tekst=mediaVulStandaard($mediaTekstStandaard,$nieuwTekst);$melding='Opgeslagen. De media-pagina is bijgewerkt.';$type='ok';schrijfLog($logBestand,$huidigeGebruiker,'media',count($items).' item(s) en paginatekst opgeslagen via modulaire editor'); }
+     else { $melding='Opslaan mislukt. Beide media-datasets zijn teruggezet naar de vorige toestand.';$type='fout'; }
+   }
  } finally { dataSlotDicht($slot); }}
 }
 if(!$items) $items=[];
