@@ -10,7 +10,7 @@ check411(str_contains($apply, 'Tenant system group mag geen expliciete groepsled
 check411(str_contains($apply, 'Tenant-GID wordt ook door een andere groepsnaam gebruikt'), 'dubbele GID onder andere groepsnaam wordt geweigerd');
 check411(str_contains($apply, 'Tenant-GID is primary group van een andere account'), 'andere account met tenant-GID als primary group wordt geweigerd');
 check411(str_contains($apply, 'Tenant-UID wordt ook door een andere account gebruikt'), 'dubbele UID onder andere accountnaam wordt geweigerd');
-check411(str_contains($apply, "['pgrep', '-u', $tenantUser]"), 'actieve processen worden per tenant-runtimeuser gecontroleerd');
+check411(str_contains($apply, "['pgrep', '-u', \$tenantUser]"), 'actieve processen worden per tenant-runtimeuser gecontroleerd');
 check411(str_contains($apply, 'Stop eerst de tenant-PHP-FPM pool'), 'reapply faalt gesloten zolang tenantprocessen actief zijn');
 
 $posGroep = strpos($apply, 'apply41ControleerGroepExclusief($tenantGroup, $gid, $tenantUser);');
@@ -20,7 +20,7 @@ $posIdle = strpos($apply, 'apply41RuntimeMoetInactiefZijn($tenantUser);');
 $posMetadata = strpos($apply, 'apply41MetadataRechten($plan);');
 check411($posGroep !== false && $posUser !== false && $posGroep < $posUser, 'GID-exclusiviteit wordt vóór usercreatie gecontroleerd');
 check411($posUid !== false && $posIdle !== false && $posMetadata !== false && $posUid < $posIdle && $posIdle < $posMetadata, 'UID-exclusiviteit en processtilstand worden vóór filesystemmutaties afgedwongen');
-check411(str_contains($apply, "if ($code === 1) return;") && str_contains($apply, 'pgrep ontbreekt of gaf een onverwachte status'), 'procescontrole accepteert alleen expliciet geen-processen en faalt anders gesloten');
+check411(str_contains($apply, "if (\$code === 1) return;") && str_contains($apply, 'pgrep ontbreekt of gaf een onverwachte status'), 'procescontrole accepteert alleen expliciet geen-processen en faalt anders gesloten');
 
 $workflow = (string)file_get_contents($root . '/.github/workflows/deploy-dev.yml');
 $runAll = (string)file_get_contents($root . '/tests/run-all.sh');
