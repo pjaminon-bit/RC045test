@@ -53,5 +53,7 @@ try{
  c48(!str_contains($apply,'rm -rf')&&!str_contains($apply,'shell_exec(')&&!str_contains($apply,'exec('),'destructieve lifecycle gebruikt geen shell/rm-rf escape');
  c48(str_contains($apply,'FILE_APPEND|LOCK_EX')&&str_contains($contract,"'audit_file' => '/var/log/verenigingsplatform/lifecycle.jsonl'"),'lifecycle-acties worden tenantgebonden server-side geaudit');
 
- $workflow=(string)file_get_contents($root.'/.github/workflows/deploy-dev.yml');c48(str_contains($workflow,'phase48-tenant-lifecycle.php'),'fase 4.8 test draait in CI');c48(str_contains($workflow,'/bin/apply-vps-lifecycle.php')&&str_contains($workflow,'/tests/phase48-tenant-lifecycle.php'),'4.8 tooling/test blijven via DEV HTTP-smoke afgeschermd');
+ $workflow=(string)file_get_contents($root.'/.github/workflows/deploy-dev.yml');$runAll=(string)file_get_contents($root.'/tests/run-all.sh');$htaccess=(string)file_get_contents($root.'/.htaccess');
+ c48(str_contains($workflow,'bash tests/run-all.sh')&&str_contains($runAll,"find tests -maxdepth 1 -type f -name '*.php'")&&str_contains($runAll,'php "$test_file"'),'fase 4.8 test valt automatisch onder de volledige CI-regressiesuite');
+ c48(str_contains($htaccess,'RewriteRule ^(?:app|bin|tests|docs|\\.github|\\.git)(?:/|$) - [F,L,NC]'),'4.8 tooling/test blijven via HTTP fail-closed afgeschermd');
 }finally{rm48($tmp);}echo"Phase 4.8 tenant lifecycle: {$ok} OK, {$fout} fout(en)\n";exit($fout===0?0:1);
