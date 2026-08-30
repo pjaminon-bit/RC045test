@@ -111,14 +111,19 @@ spvCheck(
 $workflow = spvBron($root . '/.github/workflows/full-regression.yml');
 $deployWorkflow = spvBron($root . '/.github/workflows/deploy-vps-test.yml');
 $deployEntry = spvBron($root . '/ops/vps-test-deploy/verenigingsplatform-github-entry');
+$e2eInstaller = spvBron($root . '/bin/install-vps-authenticated-e2e-gateway.sh');
 spvCheck(
     !str_contains($workflow, 'sshpass')
     && !str_contains($workflow, 'StrictHostKeyChecking=accept-new')
     && !str_contains($workflow, 'FTP_USERNAME')
     && !str_contains($workflow, 'FTP_PASSWORD')
-    && str_contains($workflow, 'group: rc045test-vps-auth-fixture')
-    && str_contains($workflow, 'cancel-in-progress: false'),
-    'authenticated CI muteert geen VPS-data via legacy SFTP/TOFU en blijft per run geserialiseerd'
+    && !str_contains($deployWorkflow, 'sshpass')
+    && !str_contains($deployWorkflow, 'StrictHostKeyChecking=accept-new')
+    && !str_contains($deployWorkflow, 'FTP_USERNAME')
+    && !str_contains($deployWorkflow, 'FTP_PASSWORD')
+    && str_contains($deployWorkflow, 'group: rc045test-vps-test-deploy')
+    && str_contains($deployWorkflow, 'cancel-in-progress: false'),
+    'authenticated CI muteert geen VPS-data via legacy SFTP/TOFU en blijft met deploy per run geserialiseerd'
 );
 spvCheck(
     str_contains($deployWorkflow, 'StrictHostKeyChecking=yes')
@@ -131,10 +136,17 @@ spvCheck(
 spvCheck(
     str_contains($deployEntry, 'SSH_ORIGINAL_COMMAND')
     && str_contains($deployEntry, '^deploy[[:space:]]+([0-9a-f]{40})$')
-    && str_contains($deployEntry, '/usr/local/sbin/verenigingsplatform-github-deploy'),
-    'GitHub SSH-key kan uitsluitend een exact 40-hex releaseverzoek aan de vaste deploywrapper doorgeven'
+    && str_contains($deployEntry, '/usr/local/sbin/verenigingsplatform-github-deploy')
+    && str_contains($e2eInstaller, "'e2e check'")
+    && str_contains($e2eInstaller, "'e2e apply'")
+    && str_contains($e2eInstaller, "'e2e cleanup'")
+    && !str_contains($e2eInstaller, 'verenigingsplatform-github-e2e *'),
+    'GitHub SSH-key blijft beperkt tot vaste deploy- en E2E-forced-command allowlist'
 );
-spvCheck(substr_count($workflow, 'npm ci --ignore-scripts') >= 2, 'browserjobs gebruiken uitsluitend gelockte Node dependencies');
+spvCheck(
+    (substr_count($workflow, 'npm ci --ignore-scripts') + substr_count($deployWorkflow, 'npm ci --ignore-scripts')) >= 2,
+    'alle browserjobs gebruiken uitsluitend gelockte Node dependencies'
+);
 
 $cp = spvBron($root . '/app/control-plane/control-plane-runtime.php');
 spvCheck(
