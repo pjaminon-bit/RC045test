@@ -2,6 +2,32 @@
 
 Belangrijke platformwijzigingen en acceptatiemijlpalen worden hier chronologisch vastgelegd. Historische technische details blijven daarnaast beschikbaar in `docs/migratie-log/` en de fasegerichte documentatie.
 
+## 2026-08-30 — Fase 5.9/5.9.1 VPS-test browseracceptatie groen
+
+### Live herstel externe tenant
+
+- PR #101 herstelde de browserruntime voor een lege externe tenant zonder terugval naar RC045/defaultdata;
+- ontbrekende whitelisted publieke tenantdatasets leveren voortaan een lege HTTP 200 JSON-dataset, terwijl ongeldige of niet-whitelisted sleutels fail-closed 404 blijven;
+- nieuwe externe tenants krijgen neutrale, betekenisvolle startinhoud voor `ontstaan.html` en `baanreglement.html`;
+- historische RC045-brandingdefaults worden voor externe tenants geneutraliseerd zodat geen fictieve tenantasset-URL wordt geconstrueerd;
+- PR #102 corrigeerde de transformatievolgorde: historische `rc045-logo.png`-referenties worden vóór merknaamvervanging naar de neutrale templateplaceholder omgezet;
+- regressiedekking toegevoegd zodat `Testvereniging-logo.png` of een vergelijkbare niet-bestaande afgeleide assetnaam niet opnieuw kan ontstaan.
+
+### VPS-test acceptatie
+
+- actuele gedeployde `main`-baseline: `f2b6a06acf1e7e38a74291130f6f55d63953377b`;
+- automatische VPS-testdeploy run `33277215732` succesvol afgerond;
+- Full regression acceptance run `33277229149` succesvol afgerond;
+- source-regression groen;
+- live-security groen;
+- publieke Playwright-browseracceptatie: **20/20 tests groen**;
+- desktop, tablet en mobiel gecontroleerd voor `/`, `/ontstaan.html`, `/baanreglement.html`, `/aanmelden.html`, `/beheer/` en `/leden/`;
+- geen kapotte afbeeldingen, console-errors, page-errors, mislukte same-origin requests of horizontale overflow gevonden;
+- crawl van zichtbare interne publiekslinks en browservalidatie van publieke formulieren groen;
+- `live-authenticated` blijft bewust uitgeschakeld/skipped totdat de dedicated VPS-testidentiteiten voor beheerder en lid worden geactiveerd.
+
+Deze acceptatie bevestigt dat de publieke VPS-testbaseline en live security op `test.vps.holox.nl` groen zijn. Authenticated beheer- en leden-E2E is de eerstvolgende afzonderlijke acceptatiestap.
+
 ## 2026-08-28 — Fase 5.4.1 RC045-templatepariteit
 
 - foutieve vereenvoudigde tenanthomepage met afwijkend menu en secties verwijderd;
