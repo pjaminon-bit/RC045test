@@ -4,6 +4,7 @@
 // ============================================================
 require_once dirname(__DIR__) . '/core/tenant-runtime.php';
 require_once __DIR__ . '/tenant-backup-store.php';
+require_once __DIR__ . '/private-store-prewrite.php';
 require_once __DIR__ . '/pdo-runtime.php';
 
 function privateStoreConfig(): array{static$config=null;if($config===null){$geladen=require dirname(__DIR__,2).'/site-config.php';$config=is_array($geladen)?$geladen:[];}return$config;}
@@ -11,6 +12,26 @@ function privateStoreTenant(): string{$config=privateStoreConfig();return tenant
 function privateStoreDriver(): string{$config=privateStoreConfig();$driver=strtolower(trim((string)($config['opslag']['private_driver']??'json')));return$driver==='pdo'?'pdo':'json';}
 function privateStoreJsonRoot(): ?string{return tenantRuntimePrivateRoot(privateStoreConfig());}
 function privateStoreBackupSleutel(string $collectie): string{return'private-'.tenantRuntimeCollectieSleutel($collectie);}
+
+/**
+ * Iedere bestaande tenantcollectie moet vóór overschrijven aantoonbaar een
+ * duurzame herstelroute krijgen. Eerst wordt de normale tenantbackup gebruikt.
+ * Alleen als die door legacy filesystemdrift niet schrijfbaar is, mag de aparte
+ * tenant-lokale prewrite-journal als tweede herstelroute worden gebruikt.
+ * Beide routes falen gesloten: null betekent dat de caller niet mag schrijven.
+ */
+function privateStoreVerplichtePrebackup(string $collectie, array $oudData): ?string
+{
+    if(!tenantBackupActief())return null;
+    $sleutel=privateStoreBackupSleutel($collectie);
+    $snapshot=tenantBackupMaakArray($sleutel,$oudData);
+    if($snapshot!==null)return$snapshot;
+    $root=privateStoreJsonRoot();
+    if($root===null)return null;
+    $fallback=privatePrewriteMaak($root,privateStoreTenant(),$sleutel,$oudData);
+    if($fallback!==null)error_log('[platform] normale tenantbackup niet schrijfbaar; duurzame prewrite-fallback gebruikt voor '.$collectie);
+    return$fallback;
+}
 
 function privateStoreLegacyFallbackToegestaan(): bool
 {
@@ -125,9 +146,9 @@ function privateStoreSchrijf(string $collectie,array $data,callable $jsonSchrijv
             $root=privateStoreJsonRoot();$pad=$root===null?null:tenantRuntimeCollectiePad($root,$collectie);
             if($pad!==null&&is_file($pad)){
                 $oud=privateStoreJsonLees($collectie);
-                $snapshot=tenantBackupMaakArray(privateStoreBackupSleutel($collectie),$oud);
+                $snapshot=privateStoreVerplichtePrebackup($collectie,$oud);
                 if(tenantBackupActief()&&$snapshot===null){
-                    error_log('[platform] private JSON write afgebroken: pre-backup faalde voor '.$collectie);
+                    error_log('[platform] private JSON write afgebroken: alle duurzame pre-backuproutes faalden voor '.$collectie);
                     throw new RuntimeException('Private verenigingsopslag kon niet veilig worden geback-upt.');
                 }
             }
@@ -142,8 +163,8 @@ function privateStoreSchrijf(string $collectie,array $data,callable $jsonSchrijv
         if($oudRij){
             $oudPayload=(string)($oudRij['payload']??'');$oudData=json_decode($oudPayload,true);
             if(json_last_error()!==JSON_ERROR_NONE||!is_array($oudData))throw new RuntimeException('Bestaande private-store payload is beschadigd.');
-            $snapshot=tenantBackupMaakArray(privateStoreBackupSleutel($collectie),$oudData);
-            if(tenantBackupActief()&&$snapshot===null)throw new RuntimeException('Pre-backup kon niet worden opgeslagen.');
+            $snapshot=privateStoreVerplichtePrebackup($collectie,$oudData);
+            if(tenantBackupActief()&&$snapshot===null)throw new RuntimeException('Geen duurzame pre-backuproute kon worden opgeslagen.');
         }
     }catch(Throwable $e){error_log('[platform] private store pre-backup mislukt voor '.$collectie.': '.$e->getMessage());throw new RuntimeException('Private verenigingsopslag kon niet veilig worden geback-upt.',0,$e);}
     if($driver==='pgsql')$sql='INSERT INTO vereniging_private_store (tenant_key, collection_key, payload, updated_at) VALUES (:tenant,:collection,:payload,:updated) ON CONFLICT (tenant_key, collection_key) DO UPDATE SET payload = EXCLUDED.payload, updated_at = EXCLUDED.updated_at';
