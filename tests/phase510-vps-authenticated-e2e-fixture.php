@@ -28,6 +28,6 @@ $cli=(string)file_get_contents($root.'/bin/provision-vps-authenticated-e2e.php')
 c510(str_contains($cli,"'password-stdin'")&&str_contains($cli,'stream_get_contents(STDIN)')&&!str_contains($cli,"'password:'"),'provisioner accepteert wachtwoord uitsluitend via stdin');
 c510(str_contains($cli,"private_driver']??'')))!=='pdo'")&&str_contains($cli,'privateStoreTransactie('),'provisioner vereist PDO en schrijft domeindata transactioneel');
 c510(str_contains($cli,'e2e510AuthHerstel(')&&str_contains($cli,'backups/auth'),'authstore heeft backup en herstelpad bij mislukte databasedeploy');
-$workflow=(string)file_get_contents($root.'/.github/workflows/full-regression.yml');
-c510(str_contains($workflow,'VPS_TEST_AUTH_E2E_ENABLED')&&str_contains($workflow,'VPS_TEST_ADMIN_USER')&&str_contains($workflow,'VPS_TEST_MEMBER_USER')&&str_contains($workflow,'VPS_TEST_E2E_PASSWORD'),'CI blijft expliciet gated en gebruikt dedicated VPS-testsecrets');
+$deployWorkflow=(string)file_get_contents($root.'/.github/workflows/deploy-vps-test.yml');
+c510(str_contains($deployWorkflow,'E2E_ADMIN_USER: vps-e2e-admin')&&str_contains($deployWorkflow,'E2E_MEMBER_USER: vps-e2e-member')&&!str_contains($deployWorkflow,'VPS_TEST_ADMIN_USER')&&!str_contains($deployWorkflow,'VPS_TEST_MEMBER_USER')&&!str_contains($deployWorkflow,'VPS_TEST_E2E_PASSWORD'),'CI gebruikt vaste synthetische identiteiten zonder permanente authenticated E2E-secrets');
 echo"Phase 5.10 VPS authenticated E2E fixture: {$ok} OK, {$fout} fout(en)\n";exit($fout===0?0:1);
