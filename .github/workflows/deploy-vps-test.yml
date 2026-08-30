@@ -164,11 +164,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          password="$(python3 - <<'PY'
-          import secrets
-          print(secrets.token_urlsafe(48))
-          PY
-          )"
+          password="$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')"
           [[ ${#password} -ge 32 && ${#password} -le 256 ]] || { echo 'Genereren ephemeral wachtwoord faalde' >&2; exit 1; }
           echo "::add-mask::$password"
           printf 'E2E_PASSWORD=%s\n' "$password" >> "$GITHUB_ENV"
@@ -191,19 +187,18 @@ jobs:
           umask 077
           printf '%s\n' "$VPS_TEST_DEPLOY_KEY" > "$HOME/.ssh/vps-test-deploy"
           printf '%s\n' "$VPS_TEST_SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
-          cat > "$HOME/.ssh/config" <<EOF
-          Host vps-test-private
-            HostName $VPS_TAILSCALE_HOST
-            HostKeyAlias $VPS_SSH_HOST_ALIAS
-            User $VPS_SSH_USER
-            Port $VPS_SSH_PORT
-            IdentityFile $HOME/.ssh/vps-test-deploy
-            BatchMode yes
-            IdentitiesOnly yes
-            StrictHostKeyChecking yes
-            UserKnownHostsFile $HOME/.ssh/known_hosts
-            ConnectTimeout 15
-          EOF
+          printf '%s\n' \
+            'Host vps-test-private' \
+            "  HostName $VPS_TAILSCALE_HOST" \
+            "  HostKeyAlias $VPS_SSH_HOST_ALIAS" \
+            "  User $VPS_SSH_USER" \
+            "  Port $VPS_SSH_PORT" \
+            "  IdentityFile $HOME/.ssh/vps-test-deploy" \
+            '  BatchMode yes' \
+            '  IdentitiesOnly yes' \
+            '  StrictHostKeyChecking yes' \
+            "  UserKnownHostsFile $HOME/.ssh/known_hosts" \
+            '  ConnectTimeout 15' > "$HOME/.ssh/config"
           chmod 600 "$HOME/.ssh/vps-test-deploy" "$HOME/.ssh/known_hosts" "$HOME/.ssh/config"
 
       - name: Bewijs beperkte E2E-gateway
