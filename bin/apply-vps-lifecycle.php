@@ -28,7 +28,7 @@ function apply48Binary(string $name): string
     ];
     if (!isset($known[$name])) throw new RuntimeException('Niet-toegestane lifecycle PATH-binary: ' . $name);
     foreach ($known[$name] as $candidate) {
-        if (is_file($candidate) && is_executable($candidate)) return $cache[$name] = $name;
+        if (is_file($candidate) && is_executable($candidate)) return $cache[$name] = $candidate;
     }
     throw new RuntimeException('Vereiste lifecycle-executable ontbreekt: ' . $name);
 }
@@ -165,7 +165,7 @@ function apply48SuspendedVhost(array $p):string
         '# Fase 4.8: statische HTTPS-placeholder voor suspended tenant; geen PHP/FPM/database.',
         '<VirtualHost *:443>','    ServerName '.$host,'    StrictHostCheck On','    SSLEngine on','    SSLStrictSNIVHostCheck On','    SSLProtocol all -SSLv3 -TLSv1 -TLSv1.1','    SSLCompression Off',
         '    SSLCertificateFile '.tls44ApacheQuote($cert.'/fullchain.pem'),'    SSLCertificateKeyFile '.tls44ApacheQuote($cert.'/privkey.pem'),
-        '    Header always set Strict-Transport-Security "max-age=31536000"','    Header always set Cache-Control "no-store, max-age=0"','    Header always set X-Robots-Tag "noindex, nofollow, noarchive"','    Header always set X-Content-Type-Options "nosniff"','    Header always set Referrer-Policy "no-referrer"','    Header always set Content-Security-Policy "default-src \'none\'; style-src \'unsafe-inline\'; base-uri \'none\'; frame-ancestors \'none\'"',
+        '    Header always set Strict-Transport-Security "max-age=31536000"','    Header always set Cache-Control "no-store, max-age=0"','    Header always set X-Robots-Tag "noindex, nofollow,noarchive"','    Header always set X-Content-Type-Options "nosniff"','    Header always set Referrer-Policy "no-referrer"','    Header always set Content-Security-Policy "default-src \'none\'; style-src \'unsafe-inline\'; base-uri \'none\'; frame-ancestors \'none\'"',
         '    RewriteEngine On','    RewriteCond %{SSL:SSL_TLS_SNI} !^'.$hostRe.'$ [NC,OR]','    RewriteCond %{HTTP_HOST} !^'.$hostRe.'(?::443)?$ [NC]','    RewriteRule ^ - [F,L]',
         '    DocumentRoot '.tls44ApacheQuote($x['root']),'    DirectoryIndex index.html','    ErrorDocument 503 /index.html','    RewriteCond %{REQUEST_URI} !^/index\\.html$ [NC]','    RewriteRule ^ - [R=503,L]',
         '    <Directory '.tls44ApacheQuote($x['root']).'>','        Options None','        AllowOverride None','        Require all granted','        <LimitExcept GET HEAD>','            Require all denied','        </LimitExcept>','    </Directory>','</VirtualHost>',''
