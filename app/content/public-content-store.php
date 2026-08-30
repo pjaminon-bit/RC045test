@@ -15,8 +15,6 @@ function publicContentDefinities(): array
     static $definities = null;
     if ($definities !== null) return $definities;
 
-    // Alleen expliciet geregistreerde datasets zijn via het publieke endpoint
-    // opvraagbaar. Binaire uploads worden apart door public-asset.php bediend.
     $definities = [
         'homepage' => 'homepage.json',
         'ontstaan' => 'ontstaan.json',
@@ -59,12 +57,6 @@ function publicContentLegacyRoot(): string
     return siteProjectRoot() . DIRECTORY_SEPARATOR . 'data';
 }
 
-/**
- * Geeft voor externe/private-root tenants de eigen contentroot terug.
- * Een expliciete externe tenant zonder private_root faalt bewust hard: in dat
- * scenario terugvallen op /data zou precies de cross-tenant fout opnieuw
- * introduceren die deze laag moet voorkomen.
- */
 function publicContentTenantRoot(): ?string
 {
     $config = siteConfig();
@@ -107,11 +99,6 @@ function publicContentSleutelVoorPad(string $pad): ?string
     return null;
 }
 
-/**
- * Compatibiliteitsadapter voor bestaande beheereditors die nog een absoluut
- * projectpad als /data/contact.json doorgeven. Alleen exact geregistreerde
- * legacybestanden worden omgebogen; willekeurige paden blijven ongemoeid.
- */
 function publicContentMapLegacyPad(string $pad): string
 {
     $legacyRoot = publicContentLegacyRoot();
@@ -151,15 +138,22 @@ function publicContentMaakBackupVoorPad(string $pad): ?string
 }
 
 /**
- * Centrale tenantwriter voor restore en nieuwe codepaden. De huidige versie
- * wordt vóór overschrijven tenant-lokaal geback-upt. Standalone legacy-editors
- * blijven hun bestaande schrijver gebruiken.
+ * Centrale tenantwriter voor restore en nieuwe codepaden. Als er al een
+ * huidige versie bestaat is een aantoonbaar opgeslagen pre-write snapshot een
+ * harde voorwaarde; een backupfout mag nooit ongemerkt gevolgd worden door de
+ * destructieve overschrijving.
  */
 function publicContentSchrijfTenant(string $sleutel, array $data, bool $maakBackup = true): bool
 {
     $pad = publicContentPad($sleutel);
     if ($pad === null || !publicContentIsTenantPad($pad) || !tenantBackupPadVeilig($pad)) return false;
-    if ($maakBackup && is_file($pad)) publicContentMaakBackupVoorPad($pad);
+    if ($maakBackup && is_file($pad)) {
+        $snapshot = publicContentMaakBackupVoorPad($pad);
+        if ($snapshot === null) {
+            error_log('[platform] publieke contentwrite afgebroken: pre-backup faalde voor ' . $sleutel);
+            return false;
+        }
+    }
 
     $map = dirname($pad);
     if (!is_dir($map) && !@mkdir($map, 0750, true)) return false;
