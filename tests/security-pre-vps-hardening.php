@@ -16,8 +16,9 @@ function spvBron(string $pad): string {
 
 $cap = spvBron($root . '/app/auth-capabilities.php');
 spvCheck(
-    str_contains($cap, 'authExterneTenantActief()?[]:authLegacyBredeCapabilities()'),
-    'externe tenant krijgt geen brede legacy capabilityfallback'
+    str_contains($cap, "if(array_key_exists('tabs',\$r)&&is_array(\$r['tabs']))return authCapabilitiesVanTabs(\$r['tabs']);return[];}")
+    && !str_contains($cap, 'authExterneTenantActief()?[]:authLegacyBredeCapabilities()'),
+    'ontbrekende capability- en tabvelden geven nooit brede legacyrechten'
 );
 
 $sessionStorage = spvBron($root . '/app/auth-storage.php');
