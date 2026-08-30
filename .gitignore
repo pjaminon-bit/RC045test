@@ -32,6 +32,7 @@ vertaal-config.php
 # Private verenigingsadministratie
 leden-data.php
 aanmeldingen-data.php
+contactberichten-data.php
 contributies-data.php
 vergaderingen-data.php
 taken-data.php
