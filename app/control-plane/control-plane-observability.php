@@ -1,8 +1,8 @@
 <?php
 // Platformbeheer observability — uitsluitend niet-root, read-only diagnose.
-// Deze laag gebruikt alleen de bestaande control-plane runtimeconfig en
-// server-side statebestanden. Er worden geen processen gestart en geen
-// tenant-private bestanden geopend.
+// Deze laag gebruikt alleen bestaande control-plane runtimeconfig, server-side
+// state en niet-gevoelige Linux capaciteitsinformatie. Er worden bewust geen
+// processen gestart en geen tenant-private bestanden geopend.
 
 function cpAdminDirectoryStatus(string $path, bool $writable = false): array
 {
@@ -37,10 +37,95 @@ function cpAdminSnapshotLeeftijd(array $snapshot): ?int
     return max(0, time() - $ts);
 }
 
+function cpAdminProcTekst(string $pad, int $maxBytes = 262144): ?string
+{
+    if (!in_array($pad, ['/proc/uptime','/proc/meminfo','/proc/cpuinfo'], true)) return null;
+    if (!is_file($pad) || !is_readable($pad)) return null;
+    $raw = @file_get_contents($pad, false, null, 0, $maxBytes);
+    return is_string($raw) && $raw !== '' ? $raw : null;
+}
+
+function cpAdminPercentage(?int $used, ?int $total): ?float
+{
+    if ($used === null || $total === null || $total <= 0 || $used < 0) return null;
+    return round(min(100, max(0, ($used / $total) * 100)), 1);
+}
+
+function cpAdminSysteemStatus(): array
+{
+    $c = cp51Config();
+    $realApp = realpath($c['app_root']);
+    $release = null;
+    if (is_string($realApp)) {
+        $base = basename($realApp);
+        if (preg_match('/^[0-9a-f]{40}$/D', $base) === 1) $release = $base;
+    }
+
+    $uptime = null;
+    $uptimeRaw = cpAdminProcTekst('/proc/uptime', 256);
+    if (is_string($uptimeRaw) && preg_match('/^([0-9]+(?:\.[0-9]+)?)/', trim($uptimeRaw), $m) === 1) {
+        $uptime = max(0, (int)floor((float)$m[1]));
+    }
+
+    $memoryTotal = null;
+    $memoryAvailable = null;
+    $mem = cpAdminProcTekst('/proc/meminfo');
+    if (is_string($mem)) {
+        if (preg_match('/^MemTotal:\s+([0-9]+)\s+kB$/m', $mem, $m) === 1) $memoryTotal = (int)$m[1] * 1024;
+        if (preg_match('/^MemAvailable:\s+([0-9]+)\s+kB$/m', $mem, $m) === 1) $memoryAvailable = (int)$m[1] * 1024;
+    }
+    $memoryUsed = $memoryTotal !== null && $memoryAvailable !== null ? max(0, $memoryTotal - $memoryAvailable) : null;
+
+    $cpuCount = 1;
+    $cpu = cpAdminProcTekst('/proc/cpuinfo');
+    if (is_string($cpu)) {
+        $n = preg_match_all('/^processor\s*:/m', $cpu);
+        if (is_int($n) && $n > 0) $cpuCount = $n;
+    }
+    $loadRaw = function_exists('sys_getloadavg') ? @sys_getloadavg() : false;
+    $load = is_array($loadRaw) && count($loadRaw) >= 3
+        ? ['one'=>(float)$loadRaw[0], 'five'=>(float)$loadRaw[1], 'fifteen'=>(float)$loadRaw[2]]
+        : ['one'=>null, 'five'=>null, 'fifteen'=>null];
+
+    $diskTotal = null;
+    $diskFree = null;
+    $tenantRoot = $c['tenants_root'];
+    if (cp51Absoluut($tenantRoot) && !is_link($tenantRoot) && is_dir($tenantRoot)) {
+        $total = @disk_total_space($tenantRoot);
+        $free = @disk_free_space($tenantRoot);
+        if (is_float($total) || is_int($total)) $diskTotal = max(0, (int)$total);
+        if (is_float($free) || is_int($free)) $diskFree = max(0, (int)$free);
+    }
+    $diskUsed = $diskTotal !== null && $diskFree !== null ? max(0, $diskTotal - $diskFree) : null;
+
+    return [
+        'release_sha'=>$release,
+        'php_version'=>PHP_VERSION,
+        'uptime_seconds'=>$uptime,
+        'cpu_count'=>$cpuCount,
+        'load'=>$load,
+        'memory'=>[
+            'total_bytes'=>$memoryTotal,
+            'available_bytes'=>$memoryAvailable,
+            'used_bytes'=>$memoryUsed,
+            'used_percent'=>cpAdminPercentage($memoryUsed, $memoryTotal),
+        ],
+        'disk'=>[
+            'path'=>$tenantRoot,
+            'total_bytes'=>$diskTotal,
+            'free_bytes'=>$diskFree,
+            'used_bytes'=>$diskUsed,
+            'used_percent'=>cpAdminPercentage($diskUsed, $diskTotal),
+        ],
+    ];
+}
+
 function cpAdminPlatformStatus(array $snapshot): array
 {
     $c = cp51Config();
     $pending = cpAdminDirectoryStatus($c['pending_dir'], true);
+    // processing_dir is bewust root:root 0700. De weblaag hoort die map niet
+    // rechtstreeks te kunnen lezen; dat is dus geen platformfout.
     $processing = cpAdminDirectoryStatus($c['processing_dir']);
     $results = cpAdminDirectoryStatus($c['results_dir']);
     $sessions = cpAdminDirectoryStatus($c['sessions_dir'], true);
@@ -48,20 +133,31 @@ function cpAdminPlatformStatus(array $snapshot): array
     $age = cpAdminSnapshotLeeftijd($snapshot);
 
     $pendingCount = count(cpAdminVeiligeJsonBestanden($c['pending_dir']));
-    $processingCount = count(cpAdminVeiligeJsonBestanden($c['processing_dir']));
+    $processingCount = $processing['ok'] ? count(cpAdminVeiligeJsonBestanden($c['processing_dir'])) : null;
     $resultCount = count(cpAdminVeiligeJsonBestanden($c['results_dir']));
+    $system = cpAdminSysteemStatus();
 
     $critical = [];
     $warnings = [];
     if (!$pending['ok']) $critical[] = 'Aanvraagqueue is niet schrijfbaar door de control-plane runtime.';
     if (!$sessions['ok']) $critical[] = 'Sessiestore is niet schrijfbaar.';
     if (!$snapshotOk) $critical[] = 'Platformstatussnapshot is niet leesbaar.';
-    if (!$processing['ok']) $warnings[] = 'Executor-processingqueue is vanuit de weblaag niet controleerbaar.';
     if (!$results['ok']) $warnings[] = 'Executorresultaten zijn vanuit de weblaag niet leesbaar.';
-    if ($processingCount > 0) $warnings[] = $processingCount . ' aanvraag/aanvragen staan nog in verwerking.';
+    if ($processingCount !== null && $processingCount > 0) $warnings[] = $processingCount . ' aanvraag/aanvragen staan nog in verwerking.';
     if ($pendingCount > 10) $warnings[] = 'De aanvraagqueue loopt op (' . $pendingCount . ' wachtend).';
     if ($age === null) $warnings[] = 'Leeftijd van de platformsnapshot is onbekend.';
     elseif ($age > 3600) $warnings[] = 'De platformsnapshot is ouder dan één uur; tenant-health kan verouderd zijn.';
+
+    $diskPercent = $system['disk']['used_percent'];
+    if (is_float($diskPercent) && $diskPercent >= 97.0) $critical[] = 'Platformopslag is voor ' . $diskPercent . '% gevuld; lifecyclemutaties zijn uit voorzorg geblokkeerd.';
+    elseif (is_float($diskPercent) && $diskPercent >= 90.0) $warnings[] = 'Platformopslag is voor ' . $diskPercent . '% gevuld.';
+
+    $memoryPercent = $system['memory']['used_percent'];
+    if (is_float($memoryPercent) && $memoryPercent >= 90.0) $warnings[] = 'Geheugengebruik is hoog (' . $memoryPercent . '%).';
+    $loadOne = $system['load']['one'];
+    if (is_float($loadOne) && $system['cpu_count'] > 0 && $loadOne > ($system['cpu_count'] * 1.5)) {
+        $warnings[] = 'Systeemload is verhoogd (' . round($loadOne, 2) . ' op ' . $system['cpu_count'] . ' CPU-threads).';
+    }
 
     $tenants = is_array($snapshot['tenants'] ?? null) ? $snapshot['tenants'] : [];
     $counts = [
@@ -103,6 +199,7 @@ function cpAdminPlatformStatus(array $snapshot): array
             'writable'=>$pending['ok'],
         ],
         'counts'=>$counts,
+        'system'=>$system,
     ];
 }
 
@@ -132,4 +229,25 @@ function cpAdminLeeftijdLabel(?int $seconds): string
     if ($seconds < 3600) return intdiv($seconds, 60) . ' min';
     if ($seconds < 86400) return intdiv($seconds, 3600) . ' uur';
     return intdiv($seconds, 86400) . ' dagen';
+}
+
+function cpAdminBytesLabel(?int $bytes): string
+{
+    if ($bytes === null || $bytes < 0) return 'onbekend';
+    $units = ['B','KB','MB','GB','TB'];
+    $value = (float)$bytes;
+    $i = 0;
+    while ($value >= 1024 && $i < count($units)-1) { $value /= 1024; $i++; }
+    $precision = $i < 2 ? 0 : 1;
+    return number_format($value, $precision, ',', '.') . ' ' . $units[$i];
+}
+
+function cpAdminUptimeLabel(?int $seconds): string
+{
+    if ($seconds === null || $seconds < 0) return 'onbekend';
+    $dagen = intdiv($seconds, 86400);
+    $uren = intdiv($seconds % 86400, 3600);
+    if ($dagen > 0) return $dagen . 'd ' . $uren . 'u';
+    $minuten = intdiv($seconds % 3600, 60);
+    return $uren . 'u ' . $minuten . 'm';
 }
