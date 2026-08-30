@@ -22,7 +22,7 @@ try{
  $obs=(string)file_get_contents($root.'/app/control-plane/control-plane-observability.php');
  c516(!str_contains($obs,'proc_open(')&&!str_contains($obs,'shell_exec(')&&!str_contains($obs,'system(')&&!str_contains($obs,'exec('),'capaciteitstelemetrie start geen processen');
  c516(str_contains($obs,"['/proc/uptime','/proc/meminfo','/proc/cpuinfo']"),'proc-lezer gebruikt een vaste allowlist');
- c516(str_contains($obs,"$diskPercent >= 97.0")&&str_contains($obs,'lifecyclemutaties zijn uit voorzorg geblokkeerd'),'kritiek volle disk blokkeert beheerwrites fail-closed');
+ c516(str_contains($obs,'$diskPercent >= 97.0')&&str_contains($obs,'lifecyclemutaties zijn uit voorzorg geblokkeerd'),'kritiek volle disk blokkeert beheerwrites fail-closed');
  $ui=(string)file_get_contents($root.'/app/control-plane-web/index.php');
  c516(str_contains($ui,'Systeem & capaciteit')&&str_contains($ui,'Platformopslag')&&str_contains($ui,'Geheugen')&&str_contains($ui,'Release'),'platformconsole maakt capaciteit zichtbaar');
 }finally{rm516($tmp);}echo"Phase 5.1.6 platform capacity: {$ok} OK, {$fout} fout(en)\n";exit($fout===0?0:1);
