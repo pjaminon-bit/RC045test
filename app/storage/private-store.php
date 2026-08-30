@@ -12,13 +12,6 @@ function privateStoreDriver(): string{$config=privateStoreConfig();$driver=strto
 function privateStoreJsonRoot(): ?string{return tenantRuntimePrivateRoot(privateStoreConfig());}
 function privateStoreBackupSleutel(string $collectie): string{return'private-'.tenantRuntimeCollectieSleutel($collectie);}
 
-/**
- * Legacy JSON/PHP fallback is uitsluitend bedoeld voor de bestaande losse
- * RC045-installatie tijdens de migratie. Zodra een tenant expliciet via een
- * extern configbestand draait, of een eigen private_root heeft, is terugvallen
- * op projectrootdata verboden. Een ontbrekende PDO-collectie betekent dan
- * bewust: deze tenant heeft nog geen data.
- */
 function privateStoreLegacyFallbackToegestaan(): bool
 {
     $externConfig = trim((string)(getenv('VERENIGING_CONFIG_FILE') ?: ''));
@@ -51,13 +44,6 @@ function privateStoreJsonSchrijf(string $collectie,array $data): bool
     return true;
 }
 
-/**
- * Resolutievolgorde voor PDO:
- * 1. bestaande expliciete DSN in serverconfig (legacy/standalone compatibiliteit);
- * 2. bestaande VERENIGING_DB_* environment (legacy compatibiliteit);
- * 3. fase 4.5 serverruntime: vast database-runtime.json + lokale peer-auth,
- *    uitsluitend voor een externe tenant met lege DSN/user/password.
- */
 function privateStorePdoVerbindingsdata(): array
 {
     $config=privateStoreConfig();
@@ -105,7 +91,6 @@ function privateStorePdo(): PDO
     }
 }
 
-/** Alleen legacy/direct PDO mag nog een minimaal schema lazy aanmaken. Fase 4.5 PostgreSQL doet nooit DDL vanuit een webrequest. */
 function privateStoreEnsureSchema(PDO $pdo): void
 {
     $pdo->exec('CREATE TABLE IF NOT EXISTS vereniging_private_store (tenant_key VARCHAR(80) NOT NULL, collection_key VARCHAR(120) NOT NULL, payload TEXT NOT NULL, updated_at VARCHAR(40) NOT NULL, PRIMARY KEY (tenant_key, collection_key))');
@@ -140,7 +125,11 @@ function privateStoreSchrijf(string $collectie,array $data,callable $jsonSchrijv
             $root=privateStoreJsonRoot();$pad=$root===null?null:tenantRuntimeCollectiePad($root,$collectie);
             if($pad!==null&&is_file($pad)){
                 $oud=privateStoreJsonLees($collectie);
-                tenantBackupMaakArray(privateStoreBackupSleutel($collectie),$oud);
+                $snapshot=tenantBackupMaakArray(privateStoreBackupSleutel($collectie),$oud);
+                if(tenantBackupActief()&&$snapshot===null){
+                    error_log('[platform] private JSON write afgebroken: pre-backup faalde voor '.$collectie);
+                    throw new RuntimeException('Private verenigingsopslag kon niet veilig worden geback-upt.');
+                }
             }
             return privateStoreJsonSchrijf($collectie,$data);
         }
@@ -150,8 +139,13 @@ function privateStoreSchrijf(string $collectie,array $data,callable $jsonSchrijv
     try{
         $oudStmt=$pdo->prepare('SELECT payload FROM vereniging_private_store WHERE tenant_key = :tenant AND collection_key = :collection');
         $oudStmt->execute(['tenant'=>$tenant,'collection'=>$collectie]);$oudRij=$oudStmt->fetch();
-        if($oudRij){$oudPayload=(string)($oudRij['payload']??'');$oudData=json_decode($oudPayload,true);if(json_last_error()===JSON_ERROR_NONE&&is_array($oudData))tenantBackupMaakArray(privateStoreBackupSleutel($collectie),$oudData);}
-    }catch(Throwable $e){error_log('[platform] private store pre-backup read mislukt voor '.$collectie.': '.$e->getMessage());throw new RuntimeException('Private verenigingsopslag kon niet veilig worden geback-upt.',0,$e);}
+        if($oudRij){
+            $oudPayload=(string)($oudRij['payload']??'');$oudData=json_decode($oudPayload,true);
+            if(json_last_error()!==JSON_ERROR_NONE||!is_array($oudData))throw new RuntimeException('Bestaande private-store payload is beschadigd.');
+            $snapshot=tenantBackupMaakArray(privateStoreBackupSleutel($collectie),$oudData);
+            if(tenantBackupActief()&&$snapshot===null)throw new RuntimeException('Pre-backup kon niet worden opgeslagen.');
+        }
+    }catch(Throwable $e){error_log('[platform] private store pre-backup mislukt voor '.$collectie.': '.$e->getMessage());throw new RuntimeException('Private verenigingsopslag kon niet veilig worden geback-upt.',0,$e);}
     if($driver==='pgsql')$sql='INSERT INTO vereniging_private_store (tenant_key, collection_key, payload, updated_at) VALUES (:tenant,:collection,:payload,:updated) ON CONFLICT (tenant_key, collection_key) DO UPDATE SET payload = EXCLUDED.payload, updated_at = EXCLUDED.updated_at';
     elseif($driver==='sqlite')$sql='INSERT INTO vereniging_private_store (tenant_key, collection_key, payload, updated_at) VALUES (:tenant,:collection,:payload,:updated) ON CONFLICT(tenant_key, collection_key) DO UPDATE SET payload = excluded.payload, updated_at = excluded.updated_at';
     else$sql='INSERT INTO vereniging_private_store (tenant_key, collection_key, payload, updated_at) VALUES (:tenant,:collection,:payload,:updated) ON DUPLICATE KEY UPDATE payload=VALUES(payload), updated_at=VALUES(updated_at)';
