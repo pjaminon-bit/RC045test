@@ -7,7 +7,7 @@ require_once dirname(__DIR__) . '/app/auth-capabilities.php';
 require_once dirname(__DIR__) . '/app/data-slot.php';
 require_once dirname(__DIR__) . '/contactberichten-opslag.php';
 if(!$ingelogd){header('Location: ./');exit;}
-if(!authHeeftCapability('contact.messages.manage')){http_response_code(403);echo'Geen toegang tot Contactberichten.';exit;}
+if(!authHeeftCapability('contact.messages.manage', true)){http_response_code(403);echo'Geen toegang tot Contactberichten.';exit;}
 
 function cbEsc($v): string{return htmlspecialchars((string)$v,ENT_QUOTES,'UTF-8');}
 function cbFlash(string $tekst,string $type='ok'): void{$_SESSION['contactberichten_flash']=['tekst'=>$tekst,'type'=>$type];}
