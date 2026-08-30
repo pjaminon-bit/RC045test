@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   workflow_run:
     workflows:
-      - Validate RC045test
+      - Full regression acceptance
     types:
       - completed
 
