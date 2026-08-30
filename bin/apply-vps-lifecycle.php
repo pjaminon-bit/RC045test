@@ -28,7 +28,7 @@ function apply48Binary(string $name): string
     ];
     if (!isset($known[$name])) throw new RuntimeException('Niet-toegestane lifecycle PATH-binary: ' . $name);
     foreach ($known[$name] as $candidate) {
-        if (is_file($candidate) && is_executable($candidate)) return $cache[$name] = $candidate;
+        if (is_file($candidate) && is_executable($candidate)) return $cache[$name] = $name;
     }
     throw new RuntimeException('Vereiste lifecycle-executable ontbreekt: ' . $name);
 }
@@ -148,24 +148,55 @@ function apply48ApacheTestReload(array $p):void
     [$c,$o,$e]=apply48Run([(string)$p['apache']['control_binary'],'configtest']);if($c!==0)throw new RuntimeException('Apache configtest faalt: '.trim($o."\n".$e));
     [$c,,$e]=apply48Run(['systemctl','reload','apache2']);if($c!==0)throw new RuntimeException('Apache reload faalt: '.$e);
 }
+function apply48SuspendedPaden(array $p):array
+{
+    $tenant=(string)$p['tenant_key'];if(!runtime41CanoniekeTenantKey($tenant))throw new RuntimeException('Ongeldige tenant-key voor suspended placeholder.');
+    $naam='210-vp-'.$tenant.'-suspended.conf';
+    return ['root'=>'/var/www/verenigingsplatform-suspended','index'=>'/var/www/verenigingsplatform-suspended/index.html','available'=>'/etc/apache2/sites-available/'.$naam,'enabled'=>'/etc/apache2/sites-enabled/'.$naam];
+}
+function apply48SuspendedHtml():string
+{
+    return '<!doctype html><html lang="nl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow,noarchive"><title>Website tijdelijk uitgeschakeld</title><style>html{color-scheme:light}*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px;background:#f4f6f4;color:#17211b;font:16px/1.55 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.card{width:min(680px,100%);background:#fff;border:1px solid #dce3de;border-radius:18px;padding:clamp(28px,6vw,54px);box-shadow:0 14px 44px rgba(18,38,25,.08);text-align:center}.mark{width:52px;height:52px;margin:0 auto 20px;border-radius:50%;display:grid;place-items:center;background:#eef3ef;font-size:24px}h1{margin:0 0 12px;font-size:clamp(1.55rem,4vw,2.25rem);line-height:1.18}p{margin:0 auto;max-width:520px;color:#647169}.foot{margin-top:28px;padding-top:20px;border-top:1px solid #edf0ed;color:#8a948d;font-size:.82rem}</style></head><body><main class="card"><div class="mark" aria-hidden="true">⏸</div><h1>Deze vereniging is tijdelijk uitgeschakeld</h1><p>De website is op dit moment niet beschikbaar. Probeer het later opnieuw of neem contact op met de vereniging als je vragen hebt.</p><div class="foot">Verenigingsplatform</div></main></body></html>\n';
+}
+function apply48SuspendedVhost(array $p):string
+{
+    $x=apply48SuspendedPaden($p);$host=(string)$p['canonical_host'];$hostRe=preg_quote($host,'/');$cert='/etc/letsencrypt/live/'.(string)$p['tls']['cert_name'];
+    return implode("\n",[
+        '# Fase 4.8: statische HTTPS-placeholder voor suspended tenant; geen PHP/FPM/database.',
+        '<VirtualHost *:443>','    ServerName '.$host,'    StrictHostCheck On','    SSLEngine on','    SSLStrictSNIVHostCheck On','    SSLProtocol all -SSLv3 -TLSv1 -TLSv1.1','    SSLCompression Off',
+        '    SSLCertificateFile '.tls44ApacheQuote($cert.'/fullchain.pem'),'    SSLCertificateKeyFile '.tls44ApacheQuote($cert.'/privkey.pem'),
+        '    Header always set Strict-Transport-Security "max-age=31536000"','    Header always set Cache-Control "no-store, max-age=0"','    Header always set X-Robots-Tag "noindex, nofollow, noarchive"','    Header always set X-Content-Type-Options "nosniff"','    Header always set Referrer-Policy "no-referrer"','    Header always set Content-Security-Policy "default-src \'none\'; style-src \'unsafe-inline\'; base-uri \'none\'; frame-ancestors \'none\'"',
+        '    RewriteEngine On','    RewriteCond %{SSL:SSL_TLS_SNI} !^'.$hostRe.'$ [NC,OR]','    RewriteCond %{HTTP_HOST} !^'.$hostRe.'(?::443)?$ [NC]','    RewriteRule ^ - [F,L]',
+        '    DocumentRoot '.tls44ApacheQuote($x['root']),'    DirectoryIndex index.html','    ErrorDocument 503 /index.html','    RewriteCond %{REQUEST_URI} !^/index\\.html$ [NC]','    RewriteRule ^ - [R=503,L]',
+        '    <Directory '.tls44ApacheQuote($x['root']).'>','        Options None','        AllowOverride None','        Require all granted','        <LimitExcept GET HEAD>','            Require all denied','        </LimitExcept>','    </Directory>','</VirtualHost>',''
+    ]);
+}
+function apply48SuspendedBestanden(array $p):array
+{
+    $x=apply48SuspendedPaden($p);apply48SafeDir($x['root'],0755);apply48Write($x['index'],apply48SuspendedHtml(),0644);apply48Write($x['available'],apply48SuspendedVhost($p),0644);return$x;
+}
 function apply48ApacheAan(array $p):void
 {
     apply48ExactFile((string)$p['apache']['tenant_http_available'],(string)$p['apache']['tenant_http_bundle'],'HTTP-vhost');
     apply48ExactFile((string)$p['apache']['tenant_https_available'],(string)$p['apache']['tenant_https_bundle'],'HTTPS-vhost');
+    $s=apply48SuspendedPaden($p);$sWeg=false;
+    if(is_link($s['enabled'])){if(!is_file($s['available'])||realpath($s['enabled'])!==realpath($s['available']))throw new RuntimeException('Onverwachte suspended HTTPS-link.');if(!@unlink($s['enabled']))throw new RuntimeException('Suspended HTTPS-link kon niet worden uitgeschakeld.');$sWeg=true;}elseif(file_exists($s['enabled']))throw new RuntimeException('Suspended HTTPS enabled-doel is geen symlink.');
     $paren=[[$p['apache']['tenant_http_available'],$p['apache']['tenant_http_enabled']],[$p['apache']['tenant_https_available'],$p['apache']['tenant_https_enabled']]];$nieuw=[];
-    try{foreach($paren as[$d,$l]){$bestond=apply48LinkExact((string)$l,(string)$d);$nieuw[(string)$l]=!$bestond;if(!$bestond&&!@symlink((string)$d,(string)$l))throw new RuntimeException('Tenant Apache-link kon niet worden gemaakt.');}apply48ApacheTestReload($p);}catch(Throwable$e){foreach($nieuw as$l=>$n)if($n&&is_link($l))@unlink($l);try{apply48ApacheTestReload($p);}catch(Throwable$ignored){}throw$e;}
+    try{foreach($paren as[$d,$l]){$bestond=apply48LinkExact((string)$l,(string)$d);$nieuw[(string)$l]=!$bestond;if(!$bestond&&!@symlink((string)$d,(string)$l))throw new RuntimeException('Tenant Apache-link kon niet worden gemaakt.');}apply48ApacheTestReload($p);}catch(Throwable$e){foreach($nieuw as$l=>$n)if($n&&is_link($l))@unlink($l);if($sWeg&&!file_exists($s['enabled'])&&!is_link($s['enabled'])&&is_file($s['available']))@symlink($s['available'],$s['enabled']);try{apply48ApacheTestReload($p);}catch(Throwable$ignored){}throw$e;}
 }
 function apply48ApacheSuspend(array $p):void
 {
     apply48ExactFile((string)$p['apache']['tenant_http_available'],(string)$p['apache']['tenant_http_bundle'],'HTTP-01 vhost');
+    apply48ExactFile((string)$p['apache']['tenant_https_available'],(string)$p['apache']['tenant_https_bundle'],'HTTPS-vhost');
     if(!apply48LinkExact((string)$p['apache']['tenant_http_enabled'],(string)$p['apache']['tenant_http_available']))throw new RuntimeException('HTTP-01 tenantroute moet actief blijven tijdens suspend.');
-    $l=(string)$p['apache']['tenant_https_enabled'];$d=(string)$p['apache']['tenant_https_available'];$weg=false;
-    if(is_link($l)){if(realpath($l)!==realpath($d))throw new RuntimeException('Onverwachte tenant HTTPS-link.');if(!@unlink($l))throw new RuntimeException('Tenant HTTPS-link kon niet worden uitgeschakeld.');$weg=true;}elseif(file_exists($l))throw new RuntimeException('Tenant HTTPS enabled-doel is geen symlink.');
-    try{apply48ApacheTestReload($p);}catch(Throwable$e){if($weg&&!file_exists($l)&&!is_link($l))@symlink($d,$l);try{apply48ApacheTestReload($p);}catch(Throwable$ignored){}throw$e;}
+    $s=apply48SuspendedBestanden($p);$l=(string)$p['apache']['tenant_https_enabled'];$d=(string)$p['apache']['tenant_https_available'];$appWeg=false;$placeholderNieuw=false;
+    if(is_link($l)){if(realpath($l)!==realpath($d))throw new RuntimeException('Onverwachte tenant HTTPS-link.');if(!@unlink($l))throw new RuntimeException('Tenant HTTPS-link kon niet worden uitgeschakeld.');$appWeg=true;}elseif(file_exists($l))throw new RuntimeException('Tenant HTTPS enabled-doel is geen symlink.');
+    if(is_link($s['enabled'])){if(realpath($s['enabled'])!==realpath($s['available']))throw new RuntimeException('Onverwachte suspended HTTPS-link.');}elseif(file_exists($s['enabled']))throw new RuntimeException('Suspended HTTPS enabled-doel is geen symlink.');else{if(!@symlink($s['available'],$s['enabled']))throw new RuntimeException('Suspended HTTPS-placeholder kon niet worden geactiveerd.');$placeholderNieuw=true;}
+    try{apply48ApacheTestReload($p);}catch(Throwable$e){if($placeholderNieuw&&is_link($s['enabled']))@unlink($s['enabled']);if($appWeg&&!file_exists($l)&&!is_link($l))@symlink($d,$l);try{apply48ApacheTestReload($p);}catch(Throwable$ignored){}throw$e;}
 }
 function apply48ApachePurge(array $p):void
 {
-    $weg=[];foreach([[$p['apache']['tenant_http_enabled'],$p['apache']['tenant_http_available']],[$p['apache']['tenant_https_enabled'],$p['apache']['tenant_https_available']]]as[$l,$d]){if(is_link((string)$l)){if(realpath((string)$l)!==realpath((string)$d))throw new RuntimeException('Onverwachte tenant Apache-link: '.$l);$weg[]=[(string)$l,(string)$d];}elseif(file_exists((string)$l))throw new RuntimeException('Tenant Apache enabled-doel is geen symlink.');}
+    $s=apply48SuspendedPaden($p);$weg=[];foreach([[$p['apache']['tenant_http_enabled'],$p['apache']['tenant_http_available']],[$p['apache']['tenant_https_enabled'],$p['apache']['tenant_https_available']],[$s['enabled'],$s['available']]]as[$l,$d]){if(is_link((string)$l)){if(!is_file((string)$d)||realpath((string)$l)!==realpath((string)$d))throw new RuntimeException('Onverwachte tenant Apache-link: '.$l);$weg[]=[(string)$l,(string)$d];}elseif(file_exists((string)$l))throw new RuntimeException('Tenant Apache enabled-doel is geen symlink.');}
     foreach($weg as[$l])if(!@unlink($l))throw new RuntimeException('Tenant Apache-link kon niet worden verwijderd: '.$l);
     try{apply48ApacheTestReload($p);}catch(Throwable$e){foreach($weg as[$l,$d])if(!file_exists($l)&&!is_link($l))@symlink($d,$l);try{apply48ApacheTestReload($p);}catch(Throwable$ignored){}throw$e;}
 }
@@ -241,7 +272,7 @@ function apply48PurgeInfra(array$p):void
     $db=(string)$p['database']['database'];$app=(string)$p['database']['app_role'];$owner=(string)$p['database']['owner_role'];if(apply48DbBestaat('database',$db)){if(!hash_equals((string)$p['database']['marker'],apply48DbMarker('database',$db)))throw new RuntimeException('Database-marker wijkt af bij purge.');apply48Pg('SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE pid<>pg_backend_pid() AND datname='.database45SqlLiteral($db));apply48Pg('DROP DATABASE '.$db);}foreach([[$app,'app'],[$owner,'owner']]as[$r,$label])if(apply48DbBestaat('role',$r)){if(!hash_equals((string)$p['database']['marker'],apply48DbMarker('role',$r)))throw new RuntimeException($label.'-role marker wijkt af bij purge.');apply48Pg('DROP ROLE '.$r);}
     $hba=(string)$p['database']['hba_file'];if(is_link($hba))throw new RuntimeException('Tenant HBA is een symlink.');if(is_file($hba)&&!@unlink($hba))throw new RuntimeException('Tenant HBA kon niet worden verwijderd.');if(apply48Pg('SELECT pg_reload_conf()')!=='t')throw new RuntimeException('PostgreSQL HBA reload faalde tijdens purge.');
     foreach([(string)$p['monitoring']['timer_file'],(string)$p['monitoring']['service_file'],(string)$p['monitoring']['tenant_logrotate'],(string)$p['monitoring']['health_status'],(string)$p['monitoring']['alert_state']]as$f)apply48Unlink($f,'Tenant monitoringartifact');[$dc,,$de]=apply48Run(['systemctl','daemon-reload']);if($dc!==0)throw new RuntimeException('systemd daemon-reload faalde tijdens tenantpurge: '.$de);
-    foreach([(string)$p['apache']['tenant_http_available'],(string)$p['apache']['tenant_https_available'],(string)$p['apache']['routing_fragment']]as$f)apply48Unlink($f,'Apache tenantartifact');apply48ApacheTestReload($p);
+    $s=apply48SuspendedPaden($p);foreach([(string)$p['apache']['tenant_http_available'],(string)$p['apache']['tenant_https_available'],(string)$p['apache']['routing_fragment'],$s['available']]as$f)apply48Unlink($f,'Apache tenantartifact');apply48ApacheTestReload($p);
     $renew=(string)$p['tls']['renewal_conf'];if(file_exists($renew)||is_dir('/etc/letsencrypt/live/'.(string)$p['tls']['cert_name'])){[$c,$o,$e]=apply48Run(['certbot','delete','--cert-name',(string)$p['tls']['cert_name'],'--non-interactive']);if($c!==0)throw new RuntimeException('Certbot tenantcertificaat kon niet veilig worden verwijderd: '.trim($o."\n".$e));}
     $acme=(string)$p['tls']['acme_webroot'];if(file_exists($acme)){if(runtime41SymlinkInPad($acme)!==null)throw new RuntimeException('ACME webroot is onveilig.');apply48RmStrict($acme);}
     $u=(string)$p['runtime']['user'];if(!apply48ProcessenStil($p))throw new RuntimeException('Tenant Linux-user heeft nog processen vóór userdel.');if(function_exists('posix_getpwnam')&&is_array(@posix_getpwnam($u))){[$c,,$e]=apply48Run(['userdel',$u]);if($c!==0||is_array(@posix_getpwnam($u)))throw new RuntimeException('Tenant system user kon niet worden verwijderd: '.$e);}if(function_exists('posix_getgrnam')&&is_array(@posix_getgrnam((string)$p['runtime']['group']))){[$c,,$e]=apply48Run(['groupdel',(string)$p['runtime']['group']]);if($c!==0||is_array(@posix_getgrnam((string)$p['runtime']['group'])))throw new RuntimeException('Tenant system group kon niet worden verwijderd: '.$e);}
