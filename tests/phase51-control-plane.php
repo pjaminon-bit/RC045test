@@ -58,5 +58,5 @@ try{
  c51(str_contains($apply,"'/usr/bin/systemd-analyze','verify'")&&str_contains($apply,"'configtest'")&&str_contains($apply,"'enable','--now'"),'root-apply valideert FPM/Apache/systemd vóór queue-activatie');
  c51(str_contains($apply,'function cpaDeps')&&str_contains($apply,"'/usr/bin/systemctl'")&&str_contains($apply,"'/usr/bin/id'"),'root-apply valideert vaste systeemdependencies vóór mutaties');
  c51(str_contains($apply,'function cpaPhp')&&str_contains($apply,'function cpaServiceBytes')&&str_contains($apply,"str_replace('ExecStart=/usr/bin/php '")&&str_contains($apply,'cpaRun([cpaPhp($p)'),'root-apply pint systemd executor en eerste snapshot aan exact geplande PHP-versie');
- $workflow=(string)file_get_contents($root.'/.github/workflows/deploy-dev.yml');c51(str_contains($workflow,'phase51-control-plane.php'),'fase 5.1 test draait in CI');
+ $workflow=(string)file_get_contents($root.'/.github/workflows/deploy-dev.yml');$runAll=(string)file_get_contents($root.'/tests/run-all.sh');c51(str_contains($workflow,'bash tests/run-all.sh')&&str_contains($runAll,"find tests -maxdepth 1 -type f -name '*.php'")&&str_contains($runAll,'php "$test_file"'),'fase 5.1 test valt automatisch onder de volledige CI-regressiesuite');
 }finally{rm51($tmp);}echo"Phase 5.1 control-plane: {$ok} OK, {$fout} fout(en)\n";exit($fout===0?0:1);
