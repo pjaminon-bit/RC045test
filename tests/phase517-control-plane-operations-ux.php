@@ -16,7 +16,7 @@ try{
  c517(count($pending)===2&&in_array($id,$ids,true)&&in_array($stale,$ids,true),'pending overzicht toont uitsluitend valide aanvragen van huidige operator');
  c517(!in_array($other,$ids,true),'pending aanvragen van andere operator lekken niet naar beheerconsole');
  $staleRow=null;foreach($pending as$r)if(($r['request_id']??'')===$stale)$staleRow=$r;c517(is_array($staleRow)&&($staleRow['stale']??false)===true&&($staleRow['age_seconds']??0)>=900,'oude pending aanvraag wordt zichtbaar als queue-aandachtspunt');
- c517(cpOpsPendingRequests('andere.operator',12)[0]['request_id']??null===$other,'operatorfilter werkt ook zelfstandig voor andere geldige operator');
+ $andere=cpOpsPendingRequests('andere.operator',12);c517(count($andere)===1&&($andere[0]['request_id']??null)===$other,'operatorfilter werkt ook zelfstandig voor andere geldige operator');
 
  $active=['tenant_key'=>'alpha','status'=>'active','healthy'=>false,'transition'=>null,'last_export'=>null,'purge_not_before_utc'=>null];
  $suspended=['tenant_key'=>'bravo','status'=>'suspended','healthy'=>false,'transition'=>null,'last_export'=>null,'purge_not_before_utc'=>null];
