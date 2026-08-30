@@ -81,7 +81,24 @@ secOk(str_contains($ht, 'RewriteRule') && str_contains($ht, '[F,L]'), '.htaccess
 secOk(!str_contains($ht, 'rc045.nl') || str_contains($ht, '#'), '.htaccess dwingt geen vaste RC045-hostredirect af');
 
 $auth = $productionPhp['auth.php'] ?? '';
-secOk(str_contains($auth, 'hash_equals') && str_contains($auth, 'password_verify'), 'authenticatie gebruikt constant-time vergelijking en password_verify');
+$masterStart = strpos($auth, 'function authMasterWachtwoordKlopt');
+$masterEind = $masterStart === false ? false : strpos($auth, '// ===== Uitloggen =====', $masterStart);
+$masterBron = ($masterStart !== false && $masterEind !== false) ? substr($auth, $masterStart, $masterEind - $masterStart) : '';
+secOk(
+    $masterBron !== ''
+    && str_contains($masterBron, 'password_verify')
+    && str_contains($masterBron, '$BEHEER_WACHTWOORD_HASH')
+    && preg_match('/\$BEHEER_WACHTWOORD(?!_HASH)\b/', $masterBron) !== 1
+    && !str_contains($masterBron, 'hash_equals'),
+    'masterauth gebruikt uitsluitend password_verify tegen een gehashte credential'
+);
+secOk(
+    str_contains($auth, '$configOk = $beheerHashOk && !$beheerHeeftPlaintext')
+    && str_contains($auth, 'unset($BEHEER_WACHTWOORD)')
+    && !str_contains($auth, '$configOk = $beheerHashOk || $beheerLegacyOk'),
+    'plaintext masterconfig wordt voor alle installaties fail-closed geweigerd'
+);
+secOk(str_contains($auth, 'hash_equals') && str_contains($auth, 'password_verify'), 'overige authenticatie behoudt constant-time vergelijking en password_verify');
 secOk(str_contains($auth, 'session_regenerate_id'), 'authenticatie roteert sessie-id');
 
 $sponsors = $productionPhp['beheer/sponsors.php'] ?? '';
