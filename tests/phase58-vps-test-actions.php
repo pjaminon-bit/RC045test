@@ -22,7 +22,23 @@ c58(!str_contains($validate,'dev-build.json <<EOF')&&!str_contains($validate,'re
 c58(str_contains($full,'LIVE_DEV_BASE_URL: https://test.vps.holox.nl')&&str_contains($full,'PLAYWRIGHT_TEST_BASE_URL: https://test.vps.holox.nl'),'full regression gebruikt VPS-test als live basis');
 c58(str_contains($full,'Deploy RC045test to VPS test'),'full regression volgt de VPS-deployworkflow');
 c58(!str_contains($full,'sshpass')&&!str_contains($full,'sftp_cmd')&&!str_contains($full,'authenticated-e2e-fixtures.php'),'authenticated E2E muteert geen losse productie-/tenantbestanden via SFTP');
-c58(str_contains($full,"vars.VPS_TEST_AUTH_E2E_ENABLED == 'true'")&&str_contains($full,'secrets.VPS_TEST_ADMIN_USER')&&str_contains($full,'secrets.VPS_TEST_MEMBER_USER'),'authenticated VPS-E2E is expliciet gated en gebruikt dedicated secrets');
+c58(
+    str_contains($deploy,"  live-authenticated:\n")
+    && str_contains($deploy,'needs: deploy-vps-test')
+    && str_contains($deploy,'E2E_ADMIN_USER: vps-e2e-admin')
+    && str_contains($deploy,'E2E_MEMBER_USER: vps-e2e-member')
+    && str_contains($deploy,'secrets.token_urlsafe(48)')
+    && str_contains($deploy,"ssh vps-test-private 'e2e check'")
+    && str_contains($deploy,"ssh vps-test-private 'e2e apply'")
+    && str_contains($deploy,"ssh vps-test-private 'e2e cleanup'")
+    && !str_contains($deploy,'VPS_TEST_AUTH_E2E_ENABLED')
+    && !str_contains($full,'VPS_TEST_AUTH_E2E_ENABLED')
+    && !str_contains($deploy,'VPS_TEST_E2E_PASSWORD')
+    && !str_contains($full,'VPS_TEST_E2E_PASSWORD')
+    && !str_contains($deploy,'VPS_TEST_ADMIN_USER')
+    && !str_contains($deploy,'VPS_TEST_MEMBER_USER'),
+    'authenticated VPS-E2E volgt deploy verplicht met per-run credentials en vaste gateway-allowlist'
+);
 
 c58(str_contains($security,'https://test.vps.holox.nl')&&!str_contains($security,'https://rc045.nl/dev'),'live security default is VPS-test');
 c58(str_contains($browser,'https://test.vps.holox.nl')&&!str_contains($browser,'https://rc045.nl/dev'),'browseracceptatie default is VPS-test');
