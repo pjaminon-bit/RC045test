@@ -3,6 +3,8 @@ $root = dirname(__DIR__); $ok = 0; $fout = 0;
 function c511(bool $c, string $label): void { global $ok, $fout; if ($c) { $ok++; echo "OK: {$label}\n"; } else { $fout++; fwrite(STDERR, "FOUT: {$label}\n"); } }
 require_once $root . '/app/deployment/authenticated-e2e-fixture.php';
 require_once $root . '/app/deployment/authenticated-e2e-ephemeral.php';
+require_once $root . '/app/leden/contributies.php';
+require_once $root . '/app/leden/groepen.php';
 $tenant = 'test'; $admin = 'vps-e2e-admin'; $member = 'vps-e2e-member'; $ids = e2e510Ids($tenant);
 $hash = password_hash('Fixture-test-password-2026-ephemeral-aaaaaaaa', PASSWORD_DEFAULT);
 if (!is_string($hash)) { fwrite(STDERR, "Password hash testsetup faalde.\n"); exit(1); }
@@ -20,13 +22,46 @@ foreach ([[$leden,'leden'],[$contrib,'regels'],[$groepen,'groepen'],[$verg,'verg
         if (is_array($r) && str_contains((string)($r['id'] ?? ''), '_e2e_') && !e2e511MarkerRecord($r,$tenant)) $allMarked = false;
     }
 }
-c511($allMarked, 'ieder ephemeral domeinrecord draagt expliciete fixture- én tenantmarker');
+c511($allMarked, 'ieder ongenormaliseerd ephemeral domeinrecord draagt expliciete fixture- én tenantmarker');
+
+$persistedContrib = contributiesNormaliseerDocument($contrib);
+$persistedGroepen = groepenNormaliseerDocument($groepen);
+$persistedContribRecord = null;
+foreach ($persistedContrib['regels'] as $r) if (is_array($r) && ($r['lid_id'] ?? '') === $ids['member']) $persistedContribRecord = $r;
+$persistedGroupRecord = null;
+foreach ($persistedGroepen['groepen'] as $r) if (is_array($r) && ($r['id'] ?? '') === $ids['group']) $persistedGroupRecord = $r;
+c511(is_array($persistedContribRecord) && !isset($persistedContribRecord['e2e_fixture']) && e2e511ContributionFixtureRecord($persistedContribRecord,$tenant), 'contributiemarker overleeft productie-normalisatie in een toegestaan veld');
+c511(is_array($persistedGroupRecord) && !isset($persistedGroupRecord['e2e_fixture']) && e2e511GroupFixtureRecord($persistedGroupRecord,$tenant), 'groepsmarker overleeft productie-normalisatie in een toegestaan veld');
+c511(e2e511CountAll($users,$leden,$persistedContrib,$persistedGroepen,$verg,$taken,$tenant)===7, 'fixture blijft volledig herkenbaar na echte contributie- en groepsnormalisatie');
+
 $cleanUsers = e2e511CleanupAuth($users,$tenant);
 [$cleanLeden,$cleanContrib,$cleanGroepen,$cleanVerg,$cleanTaken] = e2e511CleanupDocuments($leden,$contrib,$groepen,$verg,$taken,$tenant);
 c511(e2e511CountAll($cleanUsers,$cleanLeden,$cleanContrib,$cleanGroepen,$cleanVerg,$cleanTaken,$tenant)===0, 'cleanup verwijdert alle en uitsluitend gemarkeerde tenantfixturedata');
 c511(count($cleanLeden['leden'])===1 && ($cleanLeden['leden'][0]['id']??'')==='lid_real', 'cleanup behoudt bestaand lid');
 c511(count($cleanContrib['regels'])===1 && ($cleanContrib['regels'][0]['id']??'')==='c_real', 'cleanup behoudt bestaande contributie');
 c511(count($cleanGroepen['groepen'])===1 && ($cleanGroepen['groepen'][0]['id']??'')==='g_real', 'cleanup behoudt bestaande groep');
+
+[$persistCleanLeden,$persistCleanContrib,$persistCleanGroepen,$persistCleanVerg,$persistCleanTaken] = e2e511CleanupDocuments($leden,$persistedContrib,$persistedGroepen,$verg,$taken,$tenant);
+c511(e2e511CountAll([],$persistCleanLeden,$persistCleanContrib,$persistCleanGroepen,$persistCleanVerg,$persistCleanTaken,$tenant)===0, 'cleanup verwijdert ook genormaliseerde duurzame contributie- en groepsmarkers');
+
+$legacyContrib = $persistedContrib;
+foreach ($legacyContrib['regels'] as &$r) if (is_array($r) && ($r['lid_id'] ?? '') === $ids['member']) $r['opmerking'] = 'Authenticated VPS E2E fixture';
+unset($r);
+$legacyGroepen = $persistedGroepen;
+foreach ($legacyGroepen['groepen'] as &$r) if (is_array($r) && ($r['id'] ?? '') === $ids['group']) $r['omschrijving'] = 'Dedicated synthetische VPS-testfixture';
+unset($r);
+$legacyAccepted = true;
+try { e2e511AssertReservedSlots($leden,$legacyContrib,$legacyGroepen,$verg,$taken,$tenant); } catch (RuntimeException $e) { $legacyAccepted=false; }
+c511($legacyAccepted, 'halfgeschreven fase-5.11 fixture is alleen met gemarkeerd E2E-lid herkenbaar voor herstel');
+[$legacyCleanLeden,$legacyCleanContrib,$legacyCleanGroepen,$legacyCleanVerg,$legacyCleanTaken] = e2e511CleanupDocuments($leden,$legacyContrib,$legacyGroepen,$verg,$taken,$tenant);
+c511(e2e511CountAll([],$legacyCleanLeden,$legacyCleanContrib,$legacyCleanGroepen,$legacyCleanVerg,$legacyCleanTaken,$tenant)===0, 'legacy herstelpad ruimt de aantoonbaar synthetische halfgeschreven fixture op');
+$legacyTampered = $legacyContrib;
+foreach ($legacyTampered['regels'] as &$r) if (is_array($r) && ($r['lid_id'] ?? '') === $ids['member']) $r['betaald_bedrag'] = 24.00;
+unset($r);
+$collision=false;
+try { e2e511AssertReservedSlots($leden,$legacyTampered,$legacyGroepen,$verg,$taken,$tenant); } catch (RuntimeException $e) { $collision=true; }
+c511($collision, 'legacy herstel weigert gereserveerde contributie zodra synthetische waarden afwijken');
+
 $collision=false;
 try { e2e511AssertReservedSlots(['leden'=>[['id'=>$ids['member'],'voornaam'=>'Echt']]], ['regels'=>[]], ['groepen'=>[]], ['vergaderingen'=>[]], ['taken'=>[]], $tenant); } catch (RuntimeException $e) { $collision=true; }
 c511($collision, 'gereserveerde domein-ID botst fail-closed met niet-fixture data');
