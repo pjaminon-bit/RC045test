@@ -36,6 +36,8 @@ require_once $root . '/app/auth-storage.php';
 require_once $root . '/app/storage/domein-repositories.php';
 require_once $root . '/app/leden/contributies.php';
 require_once $root . '/app/leden/groepen.php';
+require_once $root . '/app/leden/service.php';
+require_once $root . '/app/leden/portaal-service.php';
 
 function e2e511Stop(string $message, int $code = 1): void { fwrite(STDERR, 'FOUT: ' . $message . "\n"); exit($code); }
 function e2e511AuthLees(string $pad): array {
@@ -94,6 +96,33 @@ function e2e511LidKoppelingOk(array $leden, string $tenant, string $memberUser):
             && e2e511MarkerRecord($lid, $tenant);
     }
     return false;
+}
+function e2e511PortalRuntimeProbe(array $leden, string $tenant): void {
+    $ids = e2e510Ids($tenant);
+    $lid = null;
+    foreach ((array)($leden['leden'] ?? []) as $record) {
+        if (is_array($record) && ($record['id'] ?? '') === $ids['member']) { $lid = $record; break; }
+    }
+    if (!is_array($lid)) throw new RuntimeException('Portalprobe mist het synthetische lid.');
+    $lidId = $ids['member'];
+    $bestuurslid = ledenIsBestuurslid($lid);
+    $probes = [
+        'vergaderingen' => static fn() => portaalVergaderingenVoorLid(),
+        'taken' => static fn() => portaalTakenVoorLid($lidId),
+        'operationele-taken' => static fn() => portaalOperationeleTakenVoorLid($lidId, $bestuurslid),
+        'evenementen' => static fn() => portaalEvenementenVoorLid($bestuurslid),
+        'groepen' => static fn() => portaalGroepenVoorLid($lidId),
+        'labels' => static fn() => portaalLabelsVoorLid($lidId),
+        'groeprollen' => static fn() => groepenRolMap(groepenLeesDocument(), true),
+        'lidmaatschap' => static fn() => ledenServiceType($lid),
+        'contributie' => static fn() => contributieVoorLidJaar($lidId, (int)date('Y')),
+    ];
+    foreach ($probes as $naam => $probe) {
+        try { $probe(); }
+        catch (Throwable $e) {
+            throw new RuntimeException('Portalprobe ' . $naam . ' faalde: ' . get_class($e) . ' · ' . $e->getMessage(), 0, $e);
+        }
+    }
 }
 
 try {
@@ -178,6 +207,7 @@ try {
     }
     if ($remaining < 7) throw new RuntimeException('Ephemeral E2E-fixture is niet volledig aanwezig na apply.');
     if (!e2e511LidKoppelingOk($verifyLeden, $tenant, $memberUser)) throw new RuntimeException('Ephemeral E2E-lidkoppeling ontbreekt na apply.');
+    e2e511PortalRuntimeProbe($verifyLeden, $tenant);
     echo 'E2E APPLY OK  tenant=' . $tenant . ' accounts=2 linked_member=1 fixture=' . e2e510Marker() . "\n";
 } catch (Throwable $e) {
     e2e511Stop($e->getMessage());

@@ -46,6 +46,7 @@ c511ci(!str_contains($full, "  live-authenticated:\n") && str_contains($full, 'w
 c511ci(!str_contains($deploy, 'VPS_TEST_AUTH_E2E_ENABLED') && !str_contains($full, 'VPS_TEST_AUTH_E2E_ENABLED'), 'authenticated E2E is na gateway-installatie niet meer afhankelijk van een handmatige enable-flag');
 
 c511ci(str_contains($ephemeralCli, 'function e2e511LidKoppelingOk') && str_contains($ephemeralCli, 'Ephemeral E2E-lidkoppeling ontbreekt na apply.'), 'apply verifieert na PDO-write de vaste user_id- en accountkoppeling van het fixturelid');
+c511ci(str_contains($ephemeralCli, 'function e2e511PortalRuntimeProbe') && str_contains($ephemeralCli, 'Portalprobe ') && str_contains($ephemeralCli, 'portaalVergaderingenVoorLid') && str_contains($ephemeralCli, 'contributieVoorLidJaar'), 'apply traceert server-side portaldata per veilige fasenaam zonder extra SSH- of logrechten');
 $statusAssert = strpos($authSpec, 'Authenticated pagina ${path} gaf HTTP ${response.status()} na login');
 $unlinkedAssert = strpos($authSpec, 'E2E-memberaccount is niet aan het fixturelid gekoppeld');
 $welcomeAssert = strpos($authSpec, "getByRole('heading',{name:/Welkom, E2E/i})");
