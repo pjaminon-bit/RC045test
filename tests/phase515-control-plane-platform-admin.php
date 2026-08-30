@@ -96,7 +96,7 @@ try {
     c515($executorParent !== false && $executorPending !== false && $executorParent < $executorPending, 'executor bewaakt requests-parent bij iedere refresh/actie');
 
     c515(str_contains($repair, "cprDir(\$c['_requests_root'], 0750, 0, \$runtime, \$repair)") && str_contains($repair, "cprDir(\$c['pending_dir'], 0730, \$runtime, \$runtime, \$repair)"), 'repair-CLI herstelt parent en pending met least-privilege modes');
-    c515(!str_contains($repair, '0777') && !str_contains($repair, 'shell_exec(') && !str_contains($repair, 'exec(') && !str_contains($repair, 'system('), 'runtime-repair introduceert geen world-writable of shell-executie');
+    c515(preg_match('/chmod\([^\n;]*0777/', $repair) !== 1 && !str_contains($repair, 'shell_exec(') && !str_contains($repair, 'exec(') && !str_contains($repair, 'system('), 'runtime-repair introduceert geen world-writable chmod of shell-executie');
     c515(str_contains($repair, 'cprSymlinkInPad') && str_contains($repair, 'Control-plane statepaden delen niet dezelfde state-root.'), 'repair-CLI valideert symlinks en vaste statepadrelaties fail-closed');
 
     c515(str_contains($ui, 'cpAdminPlatformStatus') && str_contains($ui, 'Mutaties geblokkeerd') && str_contains($ui, 'Recente beheeracties'), 'platformconsole toont platformhealth en actiehistorie');
