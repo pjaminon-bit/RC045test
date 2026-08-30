@@ -53,6 +53,8 @@ try{
  c47(!str_contains($apply,'rm -rf')&&!str_contains($apply,'unlink($final)'),'bestaande immutable releases worden nooit automatisch verwijderd');
  c47(str_contains($apply,"\$mode==='bootstrap'")&&str_contains($apply,'tenantbasis is niet leeg'),'bootstrap is expliciet en alleen vóór tenantactivatie');
  $cand=(string)file_get_contents($root.'/bin/check-release-tenant.php');c47(str_contains($cand,"SELECT 1")&&!str_contains($cand,'INSERT ')&&!str_contains($cand,'UPDATE ')&&!str_contains($cand,'DELETE '),'kandidaattenantprobe is database read-only');
- $workflow=(string)file_get_contents($root.'/.github/workflows/deploy-dev.yml');c47(str_contains($workflow,'phase47-release-rollback.php'),'fase 4.7 test draait in CI');c47(str_contains($workflow,'/bin/apply-vps-release.php')&&str_contains($workflow,'/tests/phase47-release-rollback.php'),'4.7 tooling en test blijven via DEV HTTP-smoke afgeschermd');
+ $workflow=(string)file_get_contents($root.'/.github/workflows/deploy-dev.yml');$runAll=(string)file_get_contents($root.'/tests/run-all.sh');$htaccess=(string)file_get_contents($root.'/.htaccess');
+ c47(str_contains($workflow,'bash tests/run-all.sh')&&str_contains($runAll,"find tests -maxdepth 1 -type f -name '*.php'")&&str_contains($runAll,'php "$test_file"'),'fase 4.7 test valt automatisch onder de volledige CI-regressiesuite');
+ c47(str_contains($htaccess,'RewriteRule ^(?:app|bin|tests|docs|\\.github|\\.git)(?:/|$) - [F,L,NC]'),'4.7 tooling en test blijven via HTTP fail-closed afgeschermd');
 }finally{rm47($tmp);}
 echo"Phase 4.7 release rollback: {$ok} OK, {$fout} fout(en)\n";exit($fout===0?0:1);
