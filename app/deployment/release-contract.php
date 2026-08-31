@@ -25,20 +25,38 @@ function release47VeiligAbsoluut(string $pad, string $label): string
     return $pad;
 }
 
-function release47GenegeerdPad(string $rel): bool
+function release47ManifestPolicyActueel(): int
 {
+    return 2;
+}
+
+function release47ManifestPolicyValideer(int $policy): int
+{
+    if (!in_array($policy, [1, 2], true)) {
+        throw new RuntimeException('Onbekende release-manifestpolicy.');
+    }
+    return $policy;
+}
+
+function release47GenegeerdPad(string $rel, ?int $manifestPolicy = null): bool
+{
+    $policy = release47ManifestPolicyValideer($manifestPolicy ?? release47ManifestPolicyActueel());
     $rel = ltrim(str_replace('\\', '/', $rel), '/');
-    foreach (['.git/', '.github/', 'ops/', 'data/', 'data-backups/', 'images/fotoboek/', 'images/sponsors/'] as $prefix) {
+    $prefixes = ['.git/', '.github/', 'data/', 'data-backups/', 'images/fotoboek/', 'images/sponsors/'];
+    if ($policy >= 2) $prefixes[] = 'ops/';
+    foreach ($prefixes as $prefix) {
         if (str_starts_with($rel, $prefix)) return true;
     }
-    if (in_array($rel, [
-        '.git', '.github', 'ops', 'data', 'data-backups', 'images/fotoboek', 'images/sponsors',
+    $namen = [
+        '.git', '.github', 'data', 'data-backups', 'images/fotoboek', 'images/sponsors',
         'beheer-config.php', 'beheer-users.json', 'beheer-log.json', 'beheer-login-pogingen.json',
         'site-config.local.php', 'vertaal-config.php', 'leden-data.php', 'aanmeldingen-data.php',
         'contributies-data.php', 'vergaderingen-data.php', 'taken-data.php', 'operationele-taken-data.php',
         'evenementen-data.php', 'groepen-data.php', 'ledenlabels-data.php', 'dev-build.json', '.DS_Store',
         '.verenigingsplatform-release.json',
-    ], true)) return true;
+    ];
+    if ($policy >= 2) $namen[] = 'ops';
+    if (in_array($rel, $namen, true)) return true;
     return preg_match('/\.sqlite3?$/Di', $rel) === 1;
 }
 
@@ -52,8 +70,9 @@ function release47VerbodenGeheimPad(string $rel): bool
     return preg_match('/\.(?:pem|key|p12|pfx)$/Di', $basis) === 1;
 }
 
-function release47Manifest(string $root): array
+function release47Manifest(string $root, ?int $manifestPolicy = null): array
 {
+    $policy = release47ManifestPolicyValideer($manifestPolicy ?? release47ManifestPolicyActueel());
     $root = runtime41BestaandPad($root, 'Releasebron', true);
     $bestanden = [];
     $it = new RecursiveIteratorIterator(
@@ -63,7 +82,7 @@ function release47Manifest(string $root): array
     foreach ($it as $info) {
         $pad = $info->getPathname();
         $rel = ltrim(substr(str_replace('\\', '/', $pad), strlen(str_replace('\\', '/', $root))), '/');
-        if ($rel === '' || release47GenegeerdPad($rel)) continue;
+        if ($rel === '' || release47GenegeerdPad($rel, $policy)) continue;
         if (release47VerbodenGeheimPad($rel)) throw new RuntimeException("Releasebron bevat een verboden secretachtig bestand: {$rel}");
         if (is_link($pad)) throw new RuntimeException("Releasebron bevat symlink: {$rel}");
         if ($info->isDir()) continue;
@@ -89,6 +108,7 @@ function release47Manifest(string $root): array
         'file_count' => count($bestanden),
         'bytes' => $bytes,
         'files' => $bestanden,
+        'manifest_policy' => $policy,
     ];
 }
 
@@ -111,6 +131,7 @@ function release47Plan(string $sourceRoot, string $commit, string $platformRoot,
         'commit' => $commit,
         'source' => [
             'root' => $source['root'],
+            'manifest_policy' => $source['manifest_policy'],
             'manifest_sha256' => $source['sha256'],
             'file_count' => $source['file_count'],
             'bytes' => $source['bytes'],
@@ -188,10 +209,12 @@ function release47PlanLeesEnValideer(string $pad): array
 
 function release47Marker(array $plan): array
 {
+    $policy = release47ManifestPolicyValideer((int)($plan['source']['manifest_policy'] ?? release47ManifestPolicyActueel()));
     return [
         'schema' => 1,
         'phase' => '4.7-release',
         'commit' => $plan['commit'],
+        'manifest_policy' => $policy,
         'manifest_sha256' => $plan['source']['manifest_sha256'],
         'file_count' => (int)$plan['source']['file_count'],
         'bytes' => (int)$plan['source']['bytes'],
@@ -208,19 +231,21 @@ function release47MarkerLees(string $releaseDir, bool $controleerInhoud = true):
     if (is_link($markerPad) || !is_file($markerPad)) throw new RuntimeException('Release mist een regulier markerbestand.');
     $raw = @file_get_contents($markerPad);
     $marker = is_string($raw) ? json_decode($raw, true) : null;
-    if (!is_array($marker) || (int)($marker['schema'] ?? 0) !== 1 || ($marker['phase'] ?? '') !== '4.7-release'
+    $manifestPolicy = is_array($marker) && array_key_exists('manifest_policy', $marker) ? $marker['manifest_policy'] : 1;
+    if (!is_array($marker) || !is_int($manifestPolicy) || !in_array($manifestPolicy, [1, 2], true)
+        || (int)($marker['schema'] ?? 0) !== 1 || ($marker['phase'] ?? '') !== '4.7-release'
         || !hash_equals($commit, (string)($marker['commit'] ?? '')) || ($marker['immutable'] ?? false) !== true
         || preg_match('/^[0-9a-f]{64}$/D', (string)($marker['manifest_sha256'] ?? '')) !== 1) {
         throw new RuntimeException('Release marker is ongeldig of hoort bij een andere release.');
     }
     if ($controleerInhoud) {
-        $manifest = release47Manifest($releaseDir);
+        $manifest = release47Manifest($releaseDir, $manifestPolicy);
         if (!hash_equals((string)$marker['manifest_sha256'], $manifest['sha256'])
             || (int)$marker['file_count'] !== $manifest['file_count'] || (int)$marker['bytes'] !== $manifest['bytes']) {
             throw new RuntimeException('Immutable release-inhoud wijkt af van de marker.');
         }
     }
-    return ['path' => $releaseDir, 'marker' => $marker];
+    return ['path' => $releaseDir, 'marker' => $marker, 'manifest_policy' => $manifestPolicy];
 }
 
 function release47StateEntry(array $markerCtx): array
