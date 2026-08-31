@@ -2,9 +2,7 @@
 // Platformbeheer observability — uitsluitend niet-root, read-only diagnose.
 // Deze laag gebruikt alleen bestaande control-plane runtimeconfig, server-side
 // state en niet-gevoelige Linux capaciteitsinformatie. Er worden bewust geen
-// processen gestart en geen tenant-private bestanden geopend.
-
-require_once dirname(__DIR__) . '/deployment/privileged-ops-contract.php';
+// processen gestart en geen tenant-private of root-only bestanden geopend.
 
 function cpAdminDirectoryStatus(string $path, bool $writable = false): array
 {
@@ -53,7 +51,46 @@ function cpAdminPercentage(?int $used, ?int $total): ?float
     return round(min(100, max(0, ($used / $total) * 100)), 1);
 }
 
-function cpAdminSysteemStatus(): array
+function cpAdminPrivilegedOpsUitSnapshot(array $snapshot): array
+{
+    $ops = $snapshot['privileged_ops'] ?? null;
+    if (!is_array($ops)
+        || (int)($ops['schema'] ?? 0) !== 1
+        || !in_array((string)($ops['status'] ?? ''), ['ok','drift','missing','unsafe'], true)
+        || !is_array($ops['tools'] ?? null)) {
+        return ['schema'=>1,'status'=>'unknown','tools'=>[]];
+    }
+
+    $tools = [];
+    foreach ($ops['tools'] as $tool) {
+        if (!is_array($tool)) return ['schema'=>1,'status'=>'unknown','tools'=>[]];
+        $id = (string)($tool['id'] ?? '');
+        $version = (string)($tool['version'] ?? '');
+        $status = (string)($tool['status'] ?? '');
+        $expected = (string)($tool['expected_sha256'] ?? '');
+        $installed = $tool['installed_sha256'] ?? null;
+        $reason = $tool['reason'] ?? null;
+        if (preg_match('/^[a-z0-9][a-z0-9-]{1,63}$/D', $id) !== 1
+            || preg_match('/^sha256-[0-9a-f]{12}$/D', $version) !== 1
+            || !in_array($status, ['ok','drift','missing','unsafe'], true)
+            || preg_match('/^[0-9a-f]{64}$/D', $expected) !== 1
+            || ($installed !== null && (!is_string($installed) || preg_match('/^[0-9a-f]{64}$/D', $installed) !== 1))
+            || ($reason !== null && (!is_string($reason) || preg_match('/^[a-z_]{1,40}$/D', $reason) !== 1))) {
+            return ['schema'=>1,'status'=>'unknown','tools'=>[]];
+        }
+        $tools[] = [
+            'id'=>$id,
+            'version'=>$version,
+            'status'=>$status,
+            'expected_sha256'=>$expected,
+            'installed_sha256'=>$installed,
+            'reason'=>$reason,
+        ];
+    }
+    return ['schema'=>1,'status'=>(string)$ops['status'],'tools'=>$tools];
+}
+
+function cpAdminSysteemStatus(array $snapshot): array
 {
     $c = cp51Config();
     $realApp = realpath($c['app_root']);
@@ -119,7 +156,7 @@ function cpAdminSysteemStatus(): array
             'used_bytes'=>$diskUsed,
             'used_percent'=>cpAdminPercentage($diskUsed, $diskTotal),
         ],
-        'privileged_ops'=>privilegedOpsSnapshot(),
+        'privileged_ops'=>cpAdminPrivilegedOpsUitSnapshot($snapshot),
     ];
 }
 
@@ -138,7 +175,7 @@ function cpAdminPlatformStatus(array $snapshot): array
     $pendingCount = count(cpAdminVeiligeJsonBestanden($c['pending_dir']));
     $processingCount = $processing['ok'] ? count(cpAdminVeiligeJsonBestanden($c['processing_dir'])) : null;
     $resultCount = count(cpAdminVeiligeJsonBestanden($c['results_dir']));
-    $system = cpAdminSysteemStatus();
+    $system = cpAdminSysteemStatus($snapshot);
 
     $critical = [];
     $warnings = [];
@@ -163,6 +200,9 @@ function cpAdminPlatformStatus(array $snapshot): array
     }
 
     $ops = is_array($system['privileged_ops'] ?? null) ? $system['privileged_ops'] : [];
+    if (($ops['status'] ?? '') === 'unknown') {
+        $warnings[] = 'Integriteitsstatus van privileged deploytooling ontbreekt in de root-snapshot.';
+    }
     foreach ($ops['tools'] ?? [] as $tool) {
         if (!is_array($tool)) continue;
         $id = (string)($tool['id'] ?? 'onbekend');
