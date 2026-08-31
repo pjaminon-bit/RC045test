@@ -76,7 +76,7 @@ function control59DnsPlanProfile(string $tenantRoot): ?array
     if(!is_array($p)||(int)($p['schema']??0)!==1||($p['phase']??'')!=='4.3')throw new RuntimeException('Bestaand DNS-plan heeft ongeldig schema.');
     $strategy=(string)($p['strategy']??'');$terminal=(array)($p['expected']['terminal']??[]);$owner=(array)($p['expected']['owner']??[]);
     $ipv4=array_values((array)($terminal['a']??[]));$ipv6=array_values((array)($terminal['aaaa']??[]));$cname='';
-    if($strategy==='cname')$cname=(string)((array)($owner['cname']??[]))[0];
+    if($strategy==='cname'){$cnameList=(array)($owner['cname']??[]);$cname=(string)($cnameList[0]??'');}
     return['strategy'=>$strategy,'ipv4'=>$ipv4,'ipv6'=>$ipv6,'cname'=>$cname];
 }
 
@@ -113,7 +113,7 @@ function control59Resume(array $c,array $r): string
     $config=$root.'/config.php';$deployment=$root.'/deployment.json';$runtime=$root.'/runtime/runtime-plan.json';$web=$root.'/webserver/web-plan.json';$database=$root.'/database/database-plan.json';$dns=$root.'/dns/dns-plan.json';$readiness=$root.'/dns/dns-readiness.json';$tls=$root.'/tls/tls-plan.json';$monitoring=$root.'/monitoring/monitoring-plan.json';$lifecycle=$root.'/lifecycle/lifecycle-plan.json';
 
     if(control59Before((string)$state['stage'],'plans_ready')){
-        [,,$,$phpVersion]=control59RunPhp($c,'prepare-vps-deployment.php',['--config='.$config,'--app-root='.$c['app_root']]);
+        [, , , $phpVersion]=control59RunPhp($c,'prepare-vps-deployment.php',['--config='.$config,'--app-root='.$c['app_root']]);
         control59RunPhp($c,'prepare-vps-runtime.php',['--deployment='.$deployment,'--php-version='.$phpVersion]);
         control59RunPhp($c,'prepare-vps-webserver.php',['--runtime-plan='.$runtime]);
         control59RunPhp($c,'prepare-vps-database.php',['--runtime-plan='.$runtime]);
