@@ -67,8 +67,23 @@ c58(str_contains($deploy,'HostKeyAlias="$VPS_SSH_HOST_ALIAS"')&&str_contains($de
 c58(str_contains($deploy,"github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'"),'handmatige privileged deploy kan uitsluitend vanaf main');
 c58(str_contains($deploy,'ping: ${{ vars.VPS_TEST_TAILSCALE_HOST')&&str_contains($deploy,'100.104.242.66'),'Tailscale peerconnectiviteit wordt vóór SSH geverifieerd');
 
-c58(str_contains($entry,'SSH_ORIGINAL_COMMAND')&&str_contains($entry,'^deploy[[:space:]]+([0-9a-f]{40})$'),'forced SSH entrypoint accepteert uitsluitend deploy + 40-hex commit');
-c58(str_contains($entry,'/usr/bin/sudo -n /usr/local/sbin/verenigingsplatform-github-deploy')&&str_contains($entry,'$commit'),'entrypoint kan uitsluitend vaste root-wrapper met gevalideerde commit starten');
+c58(
+    str_contains($entry,'SSH_ORIGINAL_COMMAND')
+    && str_contains($entry,'^deploy[[:space:]]+([0-9a-f]{40})$')
+    && str_contains($entry,"'e2e check'")
+    && str_contains($entry,"'e2e apply'")
+    && str_contains($entry,"'e2e cleanup'")
+    && !str_contains($entry,'eval ')
+    && !str_contains($entry,'bash -c')
+    && !str_contains($entry,'sh -c'),
+    'forced SSH entrypoint accepteert alleen deploy + 40-hex commit en drie vaste E2E-acties'
+);
+c58(
+    str_contains($entry,'/usr/bin/sudo -n /usr/local/sbin/verenigingsplatform-github-deploy "${BASH_REMATCH[1]}"')
+    && substr_count($entry,'exec /usr/bin/sudo -n ')===4
+    && substr_count($entry,'/usr/local/sbin/verenigingsplatform-github-e2e ')===3,
+    'entrypoint kan uitsluitend de vaste deploywrapper of drie vaste E2E-subcommando’s starten'
+);
 c58(str_contains($wrapper,"repo='https://github.com/pjaminon-bit/RC045test.git'")&&str_contains($wrapper,'rev-parse HEAD'),'root-wrapper bindt staging aan vaste repo en exacte Git-commit');
 c58(str_contains($wrapper,'trusted_prepare=')&&str_contains($wrapper,'/current/bin/prepare-vps-release.php')&&str_contains($wrapper,'trusted_apply=')&&str_contains($wrapper,'/current/bin/apply-vps-release.php'),'root-wrapper gebruikt actieve vertrouwde release-tooling');
 c58(str_contains($wrapper,'$trusted_apply')&&str_contains($wrapper,'--check')&&str_contains($wrapper,'--deploy'),'root-wrapper voert bestaande check en immutable deploy uit');
