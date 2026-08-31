@@ -42,7 +42,7 @@ c59(str_contains($exec,"'/usr/bin/systemctl','reload'")&&str_contains($exec,"'/u
 c59(str_contains($adminExec,"'onboarding-resume'=>control59Resume")&&str_contains($adminExec,'control59DnsProfile($admin'),'root-executor valideert en routeert onboarding-resume');
 c59(str_contains($adminExec,"['dns_profile']")&&str_contains($adminExec,'control59DnsPlanProfile'),'snapshot exposeert alleen gesanitiseerd DNS-profiel voor hervatten');
 c59(str_contains($rootExec,'control58PlatformActions()')&&str_contains($rootExec,'control58ValidateAdminRequest'),'queue gebruikt gedeeld actioncontract en root-side adminvalidatie');
-c59(str_contains($web,"cpSuiteQueue($tenant,'onboarding-resume'")&&str_contains($web,'cpSuiteRequire(\'mutate\')'),'webhelper vereist mutatierecht en schrijft alleen geschematiseerde onboardingrequest');
+c59(str_contains($web,'cpSuiteQueue($tenant,\'onboarding-resume\'')&&str_contains($web,'cpSuiteRequire(\'mutate\')'),'webhelper vereist mutatierecht en schrijft alleen geschematiseerde onboardingrequest');
 c59(str_contains($page,'Onboarding hervatten')&&str_contains($page,'Wachtwoorden en providercredentials blijven buiten de browser')&&str_contains($page,'dns_strategy'),'dedicated wizard maakt secretgrens en DNS-input duidelijk');
 c59(str_contains($page,'bootstrap-tenant-admin.php')&&str_contains($page,'server-side stap'),'eerste beheerder blijft expliciet een server-side secretstap');
 c59(str_contains($js,"href = '/onboarding.php'")&&str_contains($js,'Automatische onboarding openen'),'bestaande Onboarding-navigatie linkt CSP-safe naar automatische wizard');
