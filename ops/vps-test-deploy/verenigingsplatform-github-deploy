@@ -28,6 +28,20 @@ done
 [[ -d "$platform_root" && -L "$platform_root/current" ]] || { echo 'Actieve immutable platformrelease ontbreekt.' >&2; exit 69; }
 [[ -d "$tenant_base" ]] || { echo 'Tenantbasis ontbreekt.' >&2; exit 69; }
 
+# De SSH-deploycredential mag uitsluitend de actuele main-tip activeren. Een
+# willekeurige bestaande repositorycommit (of een oude geldige release) is via
+# deze gateway dus geen geldig deploydoel. Rollback blijft een aparte,
+# gecontroleerde serveractie via de vertrouwde release-tooling.
+read -r main_commit main_ref < <("$git" ls-remote "$repo" refs/heads/main)
+[[ "$main_ref" == 'refs/heads/main' && "$main_commit" =~ ^[0-9a-f]{40}$ ]] || {
+  echo 'Actuele main-tip kon niet betrouwbaar uit GitHub worden bepaald.' >&2
+  exit 65
+}
+[[ "$commit" == "$main_commit" ]] || {
+  echo 'Deploy geweigerd: gevraagde commit is niet de actuele main-tip.' >&2
+  exit 65
+}
+
 "$install" -d -m 0700 -o root -g root "$staging_base"
 stage="$("$mktemp" -d --tmpdir="$staging_base" "release-${commit:0:12}.XXXXXX")"
 source_root="$stage/source"
