@@ -361,6 +361,8 @@ function loginPogingenWissen($pad, $sleutel) {
 
 $configOk = file_exists($configPad);
 if ($configOk) {
+  $BEHEER_WACHTWOORD_HASH = null;
+  $BEHEER_WACHTWOORD = null;
   require $configPad;
 
   // Alle installaties zijn hash-only. Een aanwezige plaintextvariabele maakt
