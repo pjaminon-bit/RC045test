@@ -77,7 +77,7 @@ function atomicFileTxBegin(array $paden): array
             }
             $entries[] = ['pad'=>$pad, 'bestond'=>$bestaat, 'type'=>$type, 'snapshot'=>$snapshot];
         }
-        return ['root'=>$root, 'entries'=>$entries, 'committed'=>false, 'closed'=>false];
+        return ['root'=>$root, 'entries'=>$entries, 'committed'=>false, 'rolled_back'=>false, 'closed'=>false];
     } catch (Throwable $e) {
         atomicFileTxVerwijder($root);
         throw $e;
@@ -96,9 +96,10 @@ function atomicFileTxCleanup(array &$tx): bool
 function atomicFileTxRollback(array &$tx): bool
 {
     if (!empty($tx['closed'])) return true;
-    // Zodra de mutatie als committed is gemarkeerd, mogen gedeeltelijk al
-    // verwijderde snapshots nooit meer als rollbackbron worden gebruikt.
-    if (!empty($tx['committed'])) return atomicFileTxCleanup($tx);
+    // Na een vastgelegde commit of al voltooide rollback mag uitsluitend de
+    // stagingcleanup opnieuw worden geprobeerd. De snapshots kunnen op dat
+    // moment al gedeeltelijk verwijderd zijn.
+    if (!empty($tx['committed']) || !empty($tx['rolled_back'])) return atomicFileTxCleanup($tx);
 
     $ok = true;
     $entries = array_reverse((array)($tx['entries'] ?? []));
@@ -114,11 +115,10 @@ function atomicFileTxRollback(array &$tx): bool
         if (file_exists($pad) && !atomicFileTxVerwijder($pad)) { $ok = false; continue; }
         if ($bestond && !atomicFileTxKopieer($snapshot, $pad)) $ok = false;
     }
-    if ($ok) {
-        $tx['committed'] = false;
-        if (!atomicFileTxCleanup($tx)) $ok = false;
-    }
-    return $ok;
+    if (!$ok) return false;
+
+    $tx['rolled_back'] = true;
+    return atomicFileTxCleanup($tx);
 }
 
 function atomicFileTxCommit(array &$tx): bool
@@ -144,9 +144,9 @@ function atomicFileTransactie(array $paden, callable $mutatie)
         if (!atomicFileTxCommit($tx)) throw new RuntimeException('Mutatie slaagde maar transactiestaging kon niet worden opgeruimd.');
         return $resultaat;
     } catch (Throwable $e) {
-        if (!empty($tx['committed'])) {
-            // De mutatie staat al vast; probeer alleen staging nogmaals op te
-            // ruimen. Een rollback is vanaf dit moment bewust verboden.
+        if (!empty($tx['committed']) || !empty($tx['rolled_back'])) {
+            // Businessstatus staat al vast; probeer uitsluitend staging nogmaals
+            // op te ruimen. Geen tweede commit of rollback.
             atomicFileTxCleanup($tx);
         } elseif (empty($tx['closed']) && !atomicFileTxRollback($tx)) {
             throw new RuntimeException('Mutatie faalde en rollback kon niet volledig worden uitgevoerd.', 0, $e);
