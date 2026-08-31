@@ -1,6 +1,7 @@
 <?php
 if (PHP_SAPI !== 'cli') { http_response_code(403); exit('Alleen via CLI beschikbaar.'); }
 require_once dirname(__DIR__) . '/app/deployment/lifecycle-contract.php';
+require_once dirname(__DIR__) . '/app/deployment/privileged-ops-contract.php';
 require_once dirname(__DIR__) . '/app/deployment/process-runner.php';
 require_once dirname(__DIR__) . '/app/deployment/control-plane-admin-executor.php';
 
@@ -80,7 +81,7 @@ function cpeSnapshot(array$c):array
         }
         try{$row=cpeProvisionManifestRow($tenant,$key);$rows[]=control58EnrichTenantRow($c,$tenant,$row,null);}catch(Throwable$e){$row=['tenant_key'=>$key,'canonical_host'=>'','status'=>'invalid','transition'=>null,'healthy'=>false,'updated_at_utc'=>null,'last_export'=>null,'delete_export'=>null,'purge_not_before_utc'=>null];$rows[]=control58EnrichTenantRow($c,$tenant,$row,null);}
     }
-    usort($rows,fn($a,$b)=>strcmp($a['tenant_key'],$b['tenant_key']));return['schema'=>1,'phase'=>'5.1-snapshot','generated_at_utc'=>gmdate('Y-m-d\TH:i:s\Z'),'tenants'=>$rows];
+    usort($rows,fn($a,$b)=>strcmp($a['tenant_key'],$b['tenant_key']));return['schema'=>1,'phase'=>'5.1-snapshot','generated_at_utc'=>gmdate('Y-m-d\TH:i:s\Z'),'privileged_ops'=>privilegedOpsSnapshot(),'tenants'=>$rows];
 }
 function cpeProvisionModules():array{return['website','ledenadministratie','werkgroepen','evenementen','vergaderingen','taken','operationele_taken','fotoboek','sponsors','media','aanmelden'];}
 function cpeProvisionTenantKey(string$key):string
