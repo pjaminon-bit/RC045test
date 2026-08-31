@@ -279,7 +279,7 @@ function web42HttpsRoutingFragment(array $plan): string
         '    Require all granted',
         '</Directory>',
         '',
-        '<LocationMatch "^/(?:app|bin|tests|docs|\\.github|\\.git)(?:/|$)">',
+        '<LocationMatch "^/(?:app|bin|ops|tests|docs|\\.github|\\.git)(?:/|$)">',
         '    Require all denied',
         '</LocationMatch>',
         '',
