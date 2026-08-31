@@ -26,13 +26,14 @@ try{
  c517(cpOpsTenantAttention($stable)===[],'gezonde stabiele tenant krijgt geen vals aandachtspunt');
  c517((cpOpsExportStatus(['last_export'=>['sha256'=>str_repeat('e',64),'created_at_utc'=>gmdate('Y-m-d\TH:i:s\Z')]])['available']??false)===true,'exportdiagnose accepteert alleen SHA-gebonden exportmetadata');
 
- $ops=(string)file_get_contents($root.'/app/control-plane/control-plane-operations.php');$ui=(string)file_get_contents($root.'/app/control-plane-web/index.php');
- c517(str_contains($ui,'data-confirm-suspend="1"')&&str_contains($ui,'window.confirm')&&str_contains($ui,'Weet je het zeker?'),'uitschakelen vereist expliciete browserbevestiging met duidelijke vraag');
- c517(str_contains($ui,'tijdelijke placeholder')&&str_contains($ui,'tenant-runtime/database worden gestopt'),'deactivatiebevestiging benoemt concrete gevolgen');
- c517(str_contains($ui,'value="attention">Aandacht nodig')&&str_contains($ui,"card.dataset.attention==='1'"),'beheerconsole heeft operationeel aandachtfilter');
+ $ops=(string)file_get_contents($root.'/app/control-plane/control-plane-operations.php');$ui=(string)file_get_contents($root.'/app/control-plane-web/index.php');$js=(string)file_get_contents($root.'/app/control-plane-web/app.js');
+ c517(str_contains($ui,'data-confirm-suspend="1"')&&str_contains($js,'window.confirm')&&str_contains($js,'Weet je het zeker?'),'uitschakelen vereist CSP-veilige expliciete browserbevestiging met duidelijke vraag');
+ c517(str_contains($js,'tijdelijke placeholder')&&str_contains($js,'tenant-runtime/database worden gestopt'),'deactivatiebevestiging benoemt concrete gevolgen');
+ c517(str_contains($ui,'value="attention">Aandacht nodig')&&str_contains($js,"card.dataset.attention === '1'"),'beheerconsole heeft operationeel aandachtfilter');
  c517(str_contains($ui,'Openstaande aanvragen')&&str_contains($ui,'cpOpsPendingRequests($operator, 12)'),'beheerconsole toont operatorgebonden pending queue');
  c517(str_contains($ui,'Veilige export')&&str_contains($ui,'Transition')&&str_contains($ui,'Laatste status'),'tenantkaart toont lifecycle- en exportdiagnostiek');
  c517(str_contains($ui,'Tenantbeheer ↗')&&str_contains($ui,'Kopieer key')&&str_contains($ui,'Kopieer domein'),'tenantkaart bevat veilige operationele snelkoppelingen');
  c517(str_contains($ui,'@media(max-width:1080px){.system-grid,.meta{'),'responsive tenantdiagnostiek gebruikt geldige zelfstandige mediaregel');
+ c517(str_contains($ui,'<script src="/app.js" defer></script>')&&!str_contains($ui,'<script>'),'interactieve console gebruikt externe CSP-veilige JavaScriptbron');
  c517(!str_contains($ops,'processing_dir')&&!str_contains($ops,'proc_open(')&&!str_contains($ops,'shell_exec(')&&!str_contains($ops,'system(')&&!str_contains($ops,'exec('),'operationele webhelper opent geen root-only processingmap en start geen processen');
 }finally{rm517($tmp);}echo"Phase 5.1.7 control-plane operations UX: {$ok} OK, {$fout} fout(en)\n";exit($fout===0?0:1);

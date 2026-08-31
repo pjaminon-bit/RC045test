@@ -1,0 +1,50 @@
+<?php
+$root=dirname(__DIR__);$ok=0;$fout=0;
+function c58(bool$c,string$l):void{global$ok,$fout;if($c){$ok++;echo"OK: {$l}\n";}else{$fout++;fwrite(STDERR,"FOUT: {$l}\n");}}
+function rm58(string$p):void{if(is_link($p)||is_file($p)){@unlink($p);return;}if(!is_dir($p))return;foreach(scandir($p)?:[]as$n){if($n==='.'||$n==='..')continue;rm58($p.'/'.$n);}@rmdir($p);}
+require_once $root.'/app/deployment/control-plane-admin-suite-contract.php';
+
+c58(control58Roles()===['owner','operator','viewer'],'platformrollen hebben vaste allowlist');
+c58(control58RoleCan('owner','roles')&&control58RoleCan('owner','mutate')&&control58RoleCan('operator','mutate')&&!control58RoleCan('operator','roles')&&!control58RoleCan('viewer','mutate')&&control58RoleCan('viewer','read'),'capabilitymodel scheidt eigenaar, beheerder en alleen-lezen');
+c58(control58ScheduleActions()===['suspend','activate','export','cancel-delete']&&!in_array('delete',control58ScheduleActions(),true)&&!in_array('purge',control58ScheduleActions(),true),'geplande acties sluiten destructieve delete en purge uit');
+$roles=control58RolesDocument(['schema'=>1,'phase'=>'5.8-operators','updated_at_utc'=>gmdate('c'),'roles'=>['alice'=>'owner','bob'=>'viewer']]);
+c58(is_array($roles)&&($roles['roles']['alice']??'')==='owner','geldig rollenbestand wordt strikt geaccepteerd');
+c58(control58RolesDocument(['schema'=>1,'phase'=>'5.8-operators','updated_at_utc'=>gmdate('c'),'roles'=>['bob'=>'viewer']])===null,'rollenbestand zonder eigenaar faalt gesloten');
+$sid=str_repeat('a',32);$schedule=control58ScheduleDocument(['schema'=>1,'phase'=>'5.8-schedule','schedule_id'=>$sid,'tenant_key'=>'alpha','operator'=>'alice','action'=>'suspend','execute_at_utc'=>gmdate('c',time()+3600),'status'=>'scheduled','request_id'=>null,'message'=>null]);
+c58(is_array($schedule)&&$schedule['action']==='suspend','schedulecontract accepteert geldige veilige lifecycleplanning');
+c58(control58ScheduleDocument(['schema'=>1,'phase'=>'5.8-schedule','schedule_id'=>$sid,'tenant_key'=>'alpha','operator'=>'alice','action'=>'purge','execute_at_utc'=>gmdate('c',time()+3600),'status'=>'scheduled'])===null,'schedulecontract weigert purge');
+
+$tmp=sys_get_temp_dir().'/rc045-phase58-'.bin2hex(random_bytes(5));$state=$tmp.'/state';$tenants=$tmp.'/tenants';foreach([$state.'/requests/pending',$state.'/requests/processing',$state.'/results',$state.'/sessions',$state.'/schedules',$tenants]as$d)@mkdir($d,0770,true);
+try{
+ $cfg=['schema'=>1,'phase'=>'5.1-runtime','host'=>'beheer.example.test','app_root'=>$root,'tenants_root'=>$tenants,'runtime_user'=>get_current_user()?:'runner','pending_dir'=>$state.'/requests/pending','processing_dir'=>$state.'/requests/processing','results_dir'=>$state.'/results','sessions_dir'=>$state.'/sessions','snapshot_file'=>$state.'/snapshot.json','executor_lock'=>$tmp.'/executor.lock','audit_file'=>$tmp.'/audit.jsonl','lifecycle_apply'=>$root.'/bin/apply-vps-lifecycle.php'];file_put_contents($tmp.'/runtime.json',json_encode($cfg));
+ file_put_contents($cfg['snapshot_file'],json_encode(['schema'=>1,'phase'=>'5.1-snapshot','generated_at_utc'=>gmdate('Y-m-d\TH:i:s\Z'),'tenants'=>[['tenant_key'=>'alpha','canonical_host'=>'alpha.example.test','status'=>'active','transition'=>null,'healthy'=>true,'updated_at_utc'=>gmdate('Y-m-d\TH:i:s\Z'),'last_export'=>['sha256'=>str_repeat('b',64),'created_at_utc'=>gmdate('Y-m-d\TH:i:s\Z',time()-31*86400)],'delete_export'=>null,'purge_not_before_utc'=>null,'tls'=>['status'=>'expiring','valid_to_utc'=>gmdate('Y-m-d\TH:i:s\Z',time()+20*86400),'days_remaining'=>20],'storage'=>['bytes'=>1048576,'files'=>20,'truncated'=>false],'backup'=>['available'=>true,'created_at_utc'=>gmdate('Y-m-d\TH:i:s\Z',time()-31*86400),'age_days'=>31],'onboarding'=>['steps'=>[['key'=>'basis','label'=>'Basis tenant','done'=>true],['key'=>'active','label'=>'Actief','done'=>true]]]]]]));
+ putenv('VP_CONTROL_PLANE_CONFIG='.$tmp.'/runtime.json');$_SERVER['REMOTE_USER']='operator.test';
+ require_once $root.'/app/control-plane/control-plane-runtime.php';require_once $root.'/app/control-plane/control-plane-observability.php';require_once $root.'/app/control-plane/control-plane-admin-suite.php';
+ $statePaths=cpSuitePaths();c58($statePaths['roles_file']===$state.'/operators.json'&&$statePaths['audit_view_file']===$state.'/audit-view.json'&&$statePaths['schedules_dir']===$state.'/schedules','admin-suite state wordt compatibel uit bestaande control-plane state-root afgeleid');
+ $legacy=cpSuiteRolesState('operator.test');c58(($legacy['initialized']??true)===false&&($legacy['role']??'')==='owner','bestaande operator behoudt vóór rolleninitialisatie huidige beheerrechten');
+ file_put_contents($state.'/operators.json',json_encode(['schema'=>1,'phase'=>'5.8-operators','updated_at_utc'=>gmdate('Y-m-d\TH:i:s\Z'),'roles'=>['operator.test'=>'viewer','eigenaar.test'=>'owner']]));
+ c58(cpSuiteRole('operator.test')==='viewer'&&!cpSuiteCan('mutate','operator.test'),'weblaag maakt viewer werkelijk read-only zodra rollenstore bestaat');
+ $notifications=cpSuiteNotifications(cp51Snapshot(),['critical'=>[],'warnings'=>[]],[]);$texts=implode(' ',array_column($notifications,'message'));
+ c58(str_contains($texts,'TLS-certificaat')&&str_contains($texts,'geverifieerde export'),'centrale meldingen signaleren TLS-expiry en oude export');
+ $doc=['schema'=>1,'phase'=>'5.8-audit-view','generated_at_utc'=>gmdate('Y-m-d\TH:i:s\Z'),'rows'=>[['timestamp_utc'=>gmdate('Y-m-d\TH:i:s\Z'),'operator'=>'operator.test','tenant_key'=>'alpha','action'=>'diagnose','result'=>'ok','message'=>'veilig']]];file_put_contents($state.'/audit-view.json',json_encode($doc));
+ c58(count(cpSuiteAuditRows(10))===1,'weblaag leest uitsluitend gesanitiseerde auditweergave');
+ $sch=['schema'=>1,'phase'=>'5.8-schedule','schedule_id'=>str_repeat('c',32),'tenant_key'=>'alpha','operator'=>'eigenaar.test','action'=>'suspend','execute_at_utc'=>gmdate('Y-m-d\TH:i:s\Z',time()+3600),'status'=>'scheduled','request_id'=>null,'message'=>null];file_put_contents($state.'/schedules/'.str_repeat('c',32).'.json',json_encode($sch));
+ c58(count(cpSuiteSchedules())===1,'weblaag leest veilige schedulemetadata zonder systemd-toegang');
+
+ $ui=(string)file_get_contents($root.'/app/control-plane-web/index.php');$js=(string)file_get_contents($root.'/app/control-plane-web/app.js');$web=(string)file_get_contents($root.'/app/control-plane/control-plane-admin-suite.php');$exec=(string)file_get_contents($root.'/app/deployment/control-plane-admin-executor.php');$runner=(string)file_get_contents($root.'/bin/control-plane-scheduled-run.php');$rootExec=(string)file_get_contents($root.'/bin/control-plane-executor.php');$apache=(string)file_get_contents($root.'/app/deployment/control-plane-contract.php');
+ c58(str_contains($ui,'Overzicht')&&str_contains($ui,'Verenigingen')&&str_contains($ui,'Onboarding')&&str_contains($ui,'Operaties')&&str_contains($ui,'Operators')&&str_contains($ui,'Auditlog'),'beheerconsole is taakgericht opgesplitst in duidelijke navigatie');
+ c58(str_contains($ui,'Meldingen & aandachtspunten')&&str_contains($ui,'TLS geldig tot')&&str_contains($ui,'Tenantopslag')&&str_contains($ui,'Veilige export'),'console toont centrale meldingen plus TLS, capaciteit en backup per tenant');
+ c58(str_contains($ui,'Onboardingwizard')&&str_contains($ui,'bootstrap-tenant-admin.php')&&str_contains($ui,'Wachtwoord blijft buiten browser en queue'),'onboardingwizard bewaakt secretgrens voor eerste tenantbeheerder');
+ c58(str_contains($ui,'Platformrollen')&&str_contains($ui,'Eigenaar')&&str_contains($ui,'Alleen lezen'),'operatorrollen zijn zichtbaar en beheerbaar vanuit console');
+ c58(str_contains($ui,'Geplande acties')&&str_contains($ui,'delete/purge zijn nooit planbaar'),'UI maakt veilige planning expliciet en sluit destructieve planning uit');
+ c58(str_contains($ui,'Centraal auditlog')&&str_contains($ui,'CSV exporteren')&&str_contains($ui,"export'] ?? '') === 'audit-csv'"),'auditlog is doorzoekbaar en als CSV exporteerbaar');
+ c58(str_contains($ui,'Veilige diagnose')&&str_contains($ui,'TLS vernieuwen')&&str_contains($ui,'geen impersonatie, vrije shell of databaseconsole'),'gevaarlijke beheerwensen zijn vervangen door begrensde veilige flows');
+ c58(str_contains($ui,'<script src="/app.js" defer></script>')&&str_contains($js,'window.confirm')&&str_contains($apache,"default-src \\'self\\'"),'interacties werken via self-hosted script onder bestaande strikte CSP');
+ c58(!str_contains($web,'proc_open(')&&!str_contains($web,'shell_exec(')&&!str_contains($web,'system(')&&!str_contains($web,'exec('),'admin-suite webhelper start geen processen');
+ c58(str_contains($exec,"'/usr/bin/systemd-run'")&&str_contains($exec,"'/usr/bin/systemctl'")&&str_contains($exec,"'renew','--cert-name'")&&!str_contains($exec,'--force-renewal'),'privileged helper gebruikt vaste systemd/Certbot routes en nooit force-renewal');
+ c58(!str_contains($exec,'shell_exec(')&&!str_contains($exec,'`')&&!str_contains($runner,'shell_exec(')&&!str_contains($runner,'proc_open('),'admin-suite introduceert geen vrije shell in privileged helpers');
+ c58(str_contains($rootExec,'control58ValidateAdminRequest')&&str_contains($rootExec,"control58RoleCan(\$role,'mutate')")&&str_contains($rootExec,'control58ExecutorRefresh($c)'),'root-executor dwingt rollen opnieuw af en vernieuwt gesanitiseerde beheerstatus');
+ c58(str_contains($exec,'De laatste Eigenaar kan niet worden gedegradeerd.'),'rollenbeheer voorkomt lock-out door laatste eigenaar te beschermen');
+ c58(str_contains($exec,'control58AuditRefresh')&&str_contains($web,"audit_view_file")&&!str_contains($web,"['audit_file']"),'ruwe root-auditlog wordt alleen server-side gesanitiseerd voor webweergave');
+}finally{rm58($tmp);}
+echo"Phase 5.8 control-plane admin suite: {$ok} OK, {$fout} fout(en)\n";exit($fout===0?0:1);
