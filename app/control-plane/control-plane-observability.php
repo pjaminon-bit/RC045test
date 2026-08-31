@@ -66,7 +66,7 @@ function cpAdminSysteemStatus(): array
     $uptime = null;
     $uptimeRaw = cpAdminProcTekst('/proc/uptime', 256);
     if (is_string($uptimeRaw) && preg_match('/^([0-9]+(?:\.[0-9]+)?)/', trim($uptimeRaw), $m) === 1) {
-        $uptime = max(0, (int)floor((float)$m[1]);
+        $uptime = max(0, (int)floor((float)$m[1]));
     }
 
     $memoryTotal = null;
