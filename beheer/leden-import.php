@@ -6,12 +6,13 @@ require_once dirname(__DIR__) . '/auth.php';
 require_once dirname(__DIR__) . '/app/auth-capabilities.php';
 require_once dirname(__DIR__) . '/app/data-slot.php';
 require_once dirname(__DIR__) . '/app/storage/private-store.php';
+require_once dirname(__DIR__) . '/app/storage/private-store-batch-transaction.php';
 require_once dirname(__DIR__) . '/app/leden/service.php';
 require_once dirname(__DIR__) . '/app/leden/contributies.php';
 if(!$ingelogd){header('Location: ./');exit;}
 if(!authHeeftCapability('members.manage')){http_response_code(403);echo'Geen toegang tot ledenimport.';exit;}
 function liEsc($v):string{return htmlspecialchars((string)$v,ENT_QUOTES,'UTF-8');}
-function liFlash(string $t,string $type='ok'):void{$_SESSION['leden_import_flash']=['tekst'=>$t,'type'=>$type];}
+function liFlash(string $t,string$type='ok'):void{$_SESSION['leden_import_flash']=['tekst'=>$t,'type'=>$type];}
 function liRedirect():void{header('Location: leden-import.php');exit;}
 $flash=$_SESSION['leden_import_flash']??null;unset($_SESSION['leden_import_flash']);$preview=$_SESSION['leden_import_preview']??null;
 if(($_SERVER['REQUEST_METHOD']??'')==='POST'){
@@ -34,8 +35,8 @@ if(($_SERVER['REQUEST_METHOD']??'')==='POST'){
                 if($idx===null){if((int)$lid['nummer']<=0)$lid['nummer']=ledenVolgendNummer($data);else foreach($data['leden'] as $ander)if((int)($ander['nummer']??0)===(int)$lid['nummer']){$lid['nummer']=ledenVolgendNummer($data);break;}if($lid['inschrijfdatum']==='')$lid['inschrijfdatum']=date('Y-m-d');$lid['bron']='csv_import';$data['leden'][]=$lid;$toegevoegd++;}else{$data['leden'][$idx]=$lid;$bijgewerkt++;}$data['volgnummer']=max((int)($data['volgnummer']??0),(int)$lid['nummer']);
                 foreach($financeRuw as $jaar=>$regel){if(!is_array($regel))continue;$j=(int)$jaar;if($j<2000||$j>2099)continue;$status=ledenContributieStatusUitTekst($regel['contributiestatus']??'');$bTxt=str_replace(',','.',trim((string)($regel['contributiebedrag']??'')));$iTxt=str_replace(',','.',trim((string)($regel['inschrijfgeld']??'')));$bedrag=is_numeric($bTxt)?(float)$bTxt:0.0;$inschrijf=is_numeric($iTxt)?(float)$iTxt:0.0;$type=ledenServiceType($lid);contributieUpsert($fin,['lid_id'=>$lid['id'],'jaar'=>$j,'lidmaatschap_type'=>$type['id']??($lid['lidmaatschap_type']??''),'status'=>$status,'verschuldigd_bedrag'=>$bedrag,'inschrijfgeld'=>$inschrijf,'betaald_bedrag'=>$status==='betaald'?$bedrag+$inschrijf:0,'betaald_op'=>'','vrijstelling_reden'=>$status==='kwijtgescholden'?'Geïmporteerde vrijstelling':'','opmerking'=>'Geïmporteerd uit CSV '.(string)($preview['bestand']??'')]);$finAantal++;}
             }
-            privateStoreTransactie(function()use($data,$fin,$finAantal){if(!ledenServiceSchrijf($data))throw new RuntimeException('Leden konden niet worden opgeslagen.');if($finAantal>0&&!contributiesSchrijf($fin))throw new RuntimeException('Contributies konden niet worden opgeslagen.');});
-        }catch(Throwable $e){error_log('[beheer/leden-import] '.$e->getMessage());$fout='Import is niet volledig opgeslagen. In PDO-modus is de transactie teruggedraaid; de preview blijft beschikbaar.';}finally{dataSlotDicht($slot);}
+            privateStoreBatchTransactie(['leden','contributies'],[ledenBestandPad(),contributiesBestandPad()],function()use($data,$fin,$finAantal){if(!ledenServiceSchrijf($data))throw new RuntimeException('Leden konden niet worden opgeslagen.');if($finAantal>0&&!contributiesSchrijf($fin))throw new RuntimeException('Contributies konden niet worden opgeslagen.');});
+        }catch(Throwable $e){error_log('[beheer/leden-import] '.$e->getMessage());$fout='Import is niet volledig opgeslagen. Alle wijzigingen van deze import zijn teruggedraaid; de preview blijft beschikbaar.';}finally{dataSlotDicht($slot);}
         if($fout!==''){liFlash($fout,'fout');liRedirect();}schrijfLog($logBestand,$huidigeGebruiker,'leden_csv_import',$toegevoegd.' toegevoegd · '.$bijgewerkt.' bijgewerkt · '.$finAantal.' financiële regel(s)');unset($_SESSION['leden_import_preview']);liFlash('Import voltooid: '.$toegevoegd.' toegevoegd, '.$bijgewerkt.' bijgewerkt, '.$finAantal.' contributieregel(s).');liRedirect();
     }
     liFlash('Onbekende importactie.','fout');liRedirect();
