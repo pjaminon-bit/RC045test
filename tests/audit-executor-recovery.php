@@ -8,7 +8,11 @@ $checks = [
     'result conflict protection' => is_string($source) && str_contains($source, 'Conflicterend bestaand executorresultaat.'),
     'root capacity guard' => is_string($source) && str_contains($source, 'function cpePlatformMutatieInterlock'),
     'no blind crash retry' => is_string($source) && str_contains($source, 'niet automatisch opnieuw uitgevoerd'),
-    'schedule validation anchored to request' => is_string($admin) && str_contains($admin, "$requested=strtotime((string)($r['requested_at_utc']??''))") && !str_contains($admin, '$ts<time()+30'),
+    'schedule validation anchored to request' => is_string($admin)
+        && str_contains($admin, '$requested=strtotime')
+        && str_contains($admin, 'requested_at_utc')
+        && str_contains($admin, '$ts<$requested+30')
+        && !str_contains($admin, '$ts<time()+30'),
     'legacy cancel path fail closed' => is_string($admin) && str_contains($admin, 'Schedule-cancel mag uitsluitend via de gelockte root-executorroute worden uitgevoerd.'),
 ];
 $ok = 0;
