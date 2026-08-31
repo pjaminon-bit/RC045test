@@ -72,7 +72,8 @@ RewriteRule ^(.+)\.html$ $1.php [L]
 # SERVER-ONLY BESTANDEN EN ONTWIKKELTOOLING
 # ============================================================
 RewriteRule ^beheer-(config\.php|users\.json|log\.json|login-pogingen\.json)$ - [F,L]
-RewriteRule ^(?:app|bin|ops|tests|docs|\.github|\.git)(?:/|$) - [F,L,NC]
+RewriteRule ^(?:app|bin|tests|docs|\.github|\.git)(?:/|$) - [F,L,NC]
+RewriteRule ^ops(?:/|$) - [F,L,NC]
 RewriteRule ^leden-app\.php$ - [F,L,NC]
 RewriteRule ^data-backups(?:/|$) - [F,L,NC]
 RewriteRule ^beheer/(?:backup-registry\.php|gebruikers-rechten\.php|fotoboek-lib\.php)$ - [F,L,NC]
