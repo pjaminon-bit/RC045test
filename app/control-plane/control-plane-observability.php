@@ -66,7 +66,7 @@ function cpAdminSysteemStatus(): array
     $uptime = null;
     $uptimeRaw = cpAdminProcTekst('/proc/uptime', 256);
     if (is_string($uptimeRaw) && preg_match('/^([0-9]+(?:\.[0-9]+)?)/', trim($uptimeRaw), $m) === 1) {
-        $uptime = max(0, (int)floor((float)$m[1]));
+        $uptime = max(0, (int)floor((float)$m[1]);
     }
 
     $memoryTotal = null;
@@ -168,7 +168,7 @@ function cpAdminPlatformStatus(array $snapshot): array
         $id = (string)($tool['id'] ?? 'onbekend');
         $status = (string)($tool['status'] ?? 'unsafe');
         if ($status === 'unsafe') {
-            $critical[] = 'Privileged deploytooling ' . $id . ' heeft onveilige bestandsmetadata of kan niet veilig worden gevalideerd.';
+            $warnings[] = 'Privileged deploytooling ' . $id . ' heeft onveilige bestandsmetadata of kan niet veilig worden gevalideerd.';
         } elseif ($status === 'drift') {
             $warnings[] = 'Privileged deploytooling ' . $id . ' wijkt af van de versie die de actieve release verwacht.';
         } elseif ($status === 'missing') {
