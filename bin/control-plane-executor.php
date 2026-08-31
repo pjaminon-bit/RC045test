@@ -128,9 +128,16 @@ function cpeCommand(array$c,array$r):array
     if($a==='purge'){if(!hash_equals('VERWIJDER-DEFINITIEF',(string)($r['confirm']['purge']??'')))throw new RuntimeException('Purgebevestiging is ongeldig.');$cmd[]='--confirm-purge=VERWIJDER-DEFINITIEF';}
     return$cmd;
 }
+function cpeScheduleLock(array$c,string$id){
+    if(preg_match('/^[0-9a-f]{32}$/D',$id)!==1)throw new RuntimeException('Schedule-lock id is ongeldig.');$dir=control58ExecutorPaths($c)['schedules_dir'];cpeDir($dir,0750,0,$c['runtime_user']);$path=$dir.'/'.$id.'.lock';if(runtime41SymlinkInPad($path)!==null)throw new RuntimeException('Schedule-lock bevat symlink.');$h=@fopen($path,'c');if(!is_resource($h))throw new RuntimeException('Schedule-lock kon niet worden geopend.');if(!@chown($path,0)||!@chgrp($path,0)||!@chmod($path,0600)){fclose($h);throw new RuntimeException('Schedule-lock kon niet root-only worden gemaakt.');}cpeMeta($path,0600,false,0,0);if(!flock($h,LOCK_EX)){fclose($h);throw new RuntimeException('Schedule-lock kon niet worden verkregen.');}return$h;
+}
+function cpeScheduleCancelVeilig(array$c,array$r):array
+{
+    $id=(string)($r['admin']['schedule_id']??'');$lock=cpeScheduleLock($c,$id);try{$doc=control58ReadSchedule($c,$id);if(!hash_equals((string)$r['tenant_key'],(string)$doc['tenant_key']))throw new RuntimeException('Schedule hoort bij andere tenant.');if(($doc['status']??'')!=='scheduled')throw new RuntimeException('Alleen een nog niet uitgevoerde schedule kan worden geannuleerd.');$systemctl='/usr/bin/systemctl';if(!is_file($systemctl)||!is_executable($systemctl))throw new RuntimeException('systemctl ontbreekt.');$unit=control58ScheduleUnit($id);[$code,$out,$err]=cpeRun([$systemctl,'stop',$unit.'.timer',$unit.'.service']);if($code!==0)throw new RuntimeException('Geplande systemd-unit kon niet veilig worden gestopt: '.trim($err!==''?$err:$out));$doc['status']='cancelled';$doc['message']='Geannuleerd door '.$r['operator'].'.';control58WriteSchedule($c,$doc);return[0,'Geplande actie geannuleerd.',''];}finally{flock($lock,LOCK_UN);fclose($lock);}
+}
 function cpeUitvoeren(array$c,array$r):array
 {
-    $admin=control58ExecuteAdminAction($c,$r);if($admin!==null)return$admin;
+    if(($r['action']??'')==='schedule-cancel')return cpeScheduleCancelVeilig($c,$r);$admin=control58ExecuteAdminAction($c,$r);if($admin!==null)return$admin;
     if(($r['action']??'')!=='provision')return cpeRun(cpeCommand($c,$r));
     cpeProvisionUniek($c,$r);[$preCode,$preOut,$preErr]=cpeRun(cpeProvisionCommand($c,$r,true));if($preCode!==0)return[$preCode,$preOut,$preErr];
     [$code,$out,$err]=cpeRun(cpeProvisionCommand($c,$r,false));if($code===0)$out='Basisprovisioning voltooid. Activeer nu de eerste beheerder en rond daarna de VPS-infrastructuur af.';return[$code,$out,$err];
