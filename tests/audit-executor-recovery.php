@@ -1,16 +1,19 @@
 <?php
 $source = file_get_contents(dirname(__DIR__) . '/bin/control-plane-executor.php');
+$admin = file_get_contents(dirname(__DIR__) . '/app/deployment/control-plane-admin-executor.php');
 $checks = [
-    'journal states' => "'accepted','executing','effect_committed'",
-    'startup reconciliation' => 'function cpeReconcileProcessing',
-    'idempotent audit' => 'function cpeAuditEenmalig',
-    'result conflict protection' => 'Conflicterend bestaand executorresultaat.',
-    'root capacity guard' => 'function cpePlatformMutatieInterlock',
-    'no blind crash retry' => 'niet automatisch opnieuw uitgevoerd',
+    'journal states' => is_string($source) && str_contains($source, "'accepted','executing','effect_committed'"),
+    'startup reconciliation' => is_string($source) && str_contains($source, 'function cpeReconcileProcessing'),
+    'idempotent audit' => is_string($source) && str_contains($source, 'function cpeAuditEenmalig'),
+    'result conflict protection' => is_string($source) && str_contains($source, 'Conflicterend bestaand executorresultaat.'),
+    'root capacity guard' => is_string($source) && str_contains($source, 'function cpePlatformMutatieInterlock'),
+    'no blind crash retry' => is_string($source) && str_contains($source, 'niet automatisch opnieuw uitgevoerd'),
+    'schedule validation anchored to request' => is_string($admin) && str_contains($admin, "$requested=strtotime((string)($r['requested_at_utc']??''))") && !str_contains($admin, '$ts<time()+30'),
+    'legacy cancel path fail closed' => is_string($admin) && str_contains($admin, 'Schedule-cancel mag uitsluitend via de gelockte root-executorroute worden uitgevoerd.'),
 ];
 $ok = 0;
-foreach ($checks as $label => $needle) {
-    if (is_string($source) && str_contains($source, $needle)) {
+foreach ($checks as $label => $passed) {
+    if ($passed) {
         echo "OK: {$label}\n";
         $ok++;
     } else {
