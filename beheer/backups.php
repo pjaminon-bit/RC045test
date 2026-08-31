@@ -5,6 +5,7 @@
 require_once dirname(__DIR__) . '/auth.php';
 require_once dirname(__DIR__) . '/app/data-slot.php';
 require_once dirname(__DIR__) . '/app/auth-capabilities.php';
+require_once dirname(__DIR__) . '/app/auth-restore.php';
 require_once dirname(__DIR__) . '/app/storage/tenant-backup-store.php';
 
 if (!$ingelogd) { header('Location: ./'); exit; }
@@ -124,6 +125,7 @@ function buTenantHerstel(array $info, string $naam, ?string &$fout = null): bool
                 $fout = 'Gebruikersherstel is afgebroken omdat de huidige accounts niet als rollback-snapshot konden worden bewaard.';
                 return false;
             }
+            $data = authRestoreRoteerSessieversies($data, $huidig);
             if (!schrijfGebruikers($usersBestand, $data)) {
                 $fout = 'Gebruikersback-up kon niet atomisch worden teruggezet; de rollback-snapshot is bewaard.';
                 return false;
@@ -199,9 +201,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
                         $slot = dataSlotOpen();
                         try {
                             $type = (string)($info['schrijffunctie'] ?? 'json');
-                            $ok = $type === 'gebruikers'
-                                ? schrijfGebruikers($info['pad'], $herstelData)
-                                : buSchrijfBestand($info['pad'], $herstelData, $type);
+                            if ($type === 'gebruikers') {
+                                $huidig = laadGebruikers($info['pad']);
+                                $herstelData = authRestoreRoteerSessieversies($herstelData, $huidig);
+                                $ok = schrijfGebruikers($info['pad'], $herstelData);
+                            } else {
+                                $ok = buSchrijfBestand($info['pad'], $herstelData, $type);
+                            }
                         } finally { dataSlotDicht($slot); }
                         if ($ok) {
                             $tijd = @filemtime($realPad) ?: time();

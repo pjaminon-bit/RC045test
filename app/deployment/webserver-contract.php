@@ -88,7 +88,7 @@ function web42RuntimeContext(string $runtimePlanPad): array
 function web42OutputDir(string $pad, string $tenantRoot): string
 {
     if (!runtime41IsAbsoluutPad($pad) || runtime41HeeftRelatieveSegmenten($pad)) {
-        throw new RuntimeException('Webserver outputmap moet een absoluut veilig POSIX-pad zijn.');
+        throw new RuntimeException('Webserver outputmap moet een absoluut veilig POSIX-pad zonder . of .. segmenten zijn.');
     }
     $pad = runtime41NormPad($pad);
     $tenantRoot = runtime41NormPad($tenantRoot);
@@ -280,6 +280,10 @@ function web42HttpsRoutingFragment(array $plan): string
         '</Directory>',
         '',
         '<LocationMatch "^/(?:app|bin|tests|docs|\\.github|\\.git)(?:/|$)">',
+        '    Require all denied',
+        '</LocationMatch>',
+        '',
+        '<LocationMatch "^/ops(?:/|$)">',
         '    Require all denied',
         '</LocationMatch>',
         '',

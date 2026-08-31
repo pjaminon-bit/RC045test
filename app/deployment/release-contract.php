@@ -28,11 +28,11 @@ function release47VeiligAbsoluut(string $pad, string $label): string
 function release47GenegeerdPad(string $rel): bool
 {
     $rel = ltrim(str_replace('\\', '/', $rel), '/');
-    foreach (['.git/', '.github/', 'data/', 'data-backups/', 'images/fotoboek/', 'images/sponsors/'] as $prefix) {
+    foreach (['.git/', '.github/', 'ops/', 'data/', 'data-backups/', 'images/fotoboek/', 'images/sponsors/'] as $prefix) {
         if (str_starts_with($rel, $prefix)) return true;
     }
     if (in_array($rel, [
-        '.git', '.github', 'data', 'data-backups', 'images/fotoboek', 'images/sponsors',
+        '.git', '.github', 'ops', 'data', 'data-backups', 'images/fotoboek', 'images/sponsors',
         'beheer-config.php', 'beheer-users.json', 'beheer-log.json', 'beheer-login-pogingen.json',
         'site-config.local.php', 'vertaal-config.php', 'leden-data.php', 'aanmeldingen-data.php',
         'contributies-data.php', 'vergaderingen-data.php', 'taken-data.php', 'operationele-taken-data.php',

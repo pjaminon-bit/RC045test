@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
   id-token: write
 
 concurrency:
@@ -39,6 +40,21 @@ jobs:
       TS_OAUTH_CLIENT_ID: ${{ secrets.TS_OAUTH_CLIENT_ID }}
       TS_AUDIENCE: ${{ secrets.TS_AUDIENCE }}
     steps:
+      - name: Valideer gemergde PR-lineage voor iedere deploy
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$DEPLOY_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'Ongeldige release-SHA' >&2; exit 1; }
+          gekoppelde_prs="$(gh api \
+            -H 'Accept: application/vnd.github+json' \
+            "/repos/$GITHUB_REPOSITORY/commits/$DEPLOY_SHA/pulls")"
+          jq -e 'any(.[]; .merged_at != null and .base.ref == "main")' <<<"$gekoppelde_prs" >/dev/null || {
+            echo 'Deploy geweigerd: release-SHA is niet afkomstig uit een gemergde pull request naar main.' >&2
+            exit 1
+          }
+
       - name: Valideer deployconfiguratie
         shell: bash
         run: |

@@ -188,10 +188,53 @@ function cp57Modules(mixed $invoer): array
     return $resultaat;
 }
 
+function cp51MuterendeQueueActies(): array
+{
+    return [
+        'provision','adopt-active','suspend','activate','recover','export','delete','cancel-delete','purge',
+        'operator-role-set','schedule-create','tls-renew','onboarding-resume',
+    ];
+}
+
+/**
+ * Server-side equivalent van de kritieke platform-health interlock uit de UI.
+ * Deze controle draait direct vóór iedere muterende queuewrite, zodat een
+ * handmatig POST-verzoek de uitgeschakelde UI-knoppen niet kan omzeilen.
+ * Diagnose, refresh en schedule-cancel blijven bewust beschikbaar als
+ * herstel-/risicoreducerende acties.
+ */
+function cp51PlatformMutatieInterlock(): void
+{
+    $c = cp51Config();
+    $sessies = (string)$c['sessions_dir'];
+    if (is_link($sessies) || !is_dir($sessies) || !is_writable($sessies)) {
+        throw new RuntimeException('Platformmutaties zijn geblokkeerd: sessiestore is niet schrijfbaar.');
+    }
+    $snapshot = (string)$c['snapshot_file'];
+    if (is_link($snapshot) || !is_file($snapshot) || !is_readable($snapshot)) {
+        throw new RuntimeException('Platformmutaties zijn geblokkeerd: platformstatussnapshot is niet leesbaar.');
+    }
+    $root = (string)$c['tenants_root'];
+    if (!cp51Absoluut($root) || is_link($root) || !is_dir($root)) {
+        throw new RuntimeException('Platformmutaties zijn geblokkeerd: tenantbasis is niet veilig beschikbaar.');
+    }
+    $total = @disk_total_space($root);
+    $free = @disk_free_space($root);
+    if ((is_float($total) || is_int($total)) && (is_float($free) || is_int($free)) && $total > 0) {
+        $used = max(0.0, (float)$total - max(0.0, (float)$free));
+        $pct = min(100.0, max(0.0, ($used / (float)$total) * 100.0));
+        if ($pct >= 97.0) {
+            throw new RuntimeException('Platformmutaties zijn geblokkeerd: platformopslag is voor minimaal 97% gevuld.');
+        }
+    }
+}
+
 function cp51QueueSchrijf(array $r): string
 {
     $id = (string)($r['request_id'] ?? '');
     if (preg_match('/^[0-9a-f]{32}$/D', $id) !== 1) throw new RuntimeException('Aanvraag-id is ongeldig.');
+    $actie = (string)($r['action'] ?? '');
+    if (in_array($actie, cp51MuterendeQueueActies(), true)) cp51PlatformMutatieInterlock();
     $json = json_encode($r, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
     if (!is_string($json)) throw new RuntimeException('Aanvraag kon niet worden geserialiseerd.');
     $dir = cp51Config()['pending_dir'];
