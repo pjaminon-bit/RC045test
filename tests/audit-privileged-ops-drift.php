@@ -92,7 +92,7 @@ try {
 $observability = (string)file_get_contents($root . '/app/control-plane/control-plane-observability.php');
 o134(str_contains($observability, "'privileged_ops'=>privilegedOpsSnapshot()"), 'platformobservability meet privileged tooling read-only');
 o134(str_contains($observability, 'wijkt af van de versie die de actieve release verwacht'), 'platformbeheer waarschuwt bij privileged ops-drift');
-o134(str_contains($observability, 'onveilige bestandsmetadata'), 'onveilige privileged tooling wordt als kritisch signaal zichtbaar');
+o134(str_contains($observability, "$warnings[] = 'Privileged deploytooling '") && !str_contains($observability, "$critical[] = 'Privileged deploytooling '"), 'ops-integriteit blijft waarschuwing en introduceert geen UI-only lifecycleblokkade');
 
 echo "Privileged ops drift audit: {$ok} OK, {$fout} fout(en)\n";
 exit($fout === 0 ? 0 : 1);
