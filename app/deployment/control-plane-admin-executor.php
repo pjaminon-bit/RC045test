@@ -86,7 +86,7 @@ function control58ValidateAdminRequest(array $c,array $r): void
     if($action==='schedule-create'){
         $keys=array_keys($admin);sort($keys,SORT_STRING);if($keys!==['execute_at_utc','target_action'])throw new RuntimeException('Schedulepayload is ongeldig.');
         if((string)$r['tenant_key']==='platform'||!runtime41CanoniekeTenantKey((string)$r['tenant_key'])||!in_array((string)$admin['target_action'],control58ScheduleActions(),true))throw new RuntimeException('Schedule bevat ongeldige tenant/actie.');
-        $ts=strtotime((string)$admin['execute_at_utc']);if($ts===false||$ts<time()+30||$ts>time()+366*86400)throw new RuntimeException('Schedulemoment valt buiten toegestane periode.');return;
+        $ts=strtotime((string)$admin['execute_at_utc']);$requested=strtotime((string)($r['requested_at_utc']??''));if($ts===false||$requested===false||$ts<$requested+30||$ts>$requested+366*86400)throw new RuntimeException('Schedulemoment valt buiten toegestane periode ten opzichte van de oorspronkelijke aanvraag.');return;
     }
     if($action==='schedule-cancel'){
         if(array_keys($admin)!==['schedule_id']||preg_match('/^[0-9a-f]{32}$/D',(string)$admin['schedule_id'])!==1)throw new RuntimeException('Schedule-cancel payload is ongeldig.');return;
@@ -205,8 +205,7 @@ function control58ScheduleCreate(array $c,array $r): string
 
 function control58ScheduleCancel(array $c,array $r): string
 {
-    $id=(string)$r['admin']['schedule_id'];$doc=control58ReadSchedule($c,$id);if(!hash_equals((string)$r['tenant_key'],$doc['tenant_key']))throw new RuntimeException('Schedule hoort bij andere tenant.');if($doc['status']!=='scheduled')throw new RuntimeException('Alleen een nog niet uitgevoerde schedule kan worden geannuleerd.');
-    $systemctl='/usr/bin/systemctl';if(!is_file($systemctl)||!is_executable($systemctl))throw new RuntimeException('systemctl ontbreekt.');$unit=control58ScheduleUnit($id);cpeRun([$systemctl,'stop',$unit.'.timer',$unit.'.service']);$doc['status']='cancelled';$doc['message']='Geannuleerd door '.$r['operator'].'.';control58WriteSchedule($c,$doc);return'Geplande actie geannuleerd.';
+    throw new RuntimeException('Schedule-cancel mag uitsluitend via de gelockte root-executorroute worden uitgevoerd.');
 }
 
 function control58RoleSet(array $c,array $r): string
