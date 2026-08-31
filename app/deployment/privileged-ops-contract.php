@@ -1,8 +1,9 @@
 <?php
 // Read-only contract voor privileged/root-tooling die bewust buiten de
 // immutable applicatierelease blijft. De actieve release beschrijft welke
-// bytes op vaste root-owned installatiepaden worden verwacht; alleen de
-// root-executor meet de werkelijk geïnstalleerde bestanden.
+// bytes op vaste root-owned installatiepaden worden verwacht. Observability
+// controleert die wereldleesbare executables alleen met lstat/hash_file en
+// krijgt daarmee geen extra rootrechten of uitvoermogelijkheid.
 
 function privilegedOpsContract(): array
 {
