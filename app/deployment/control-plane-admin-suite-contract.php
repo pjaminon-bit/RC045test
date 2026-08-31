@@ -104,7 +104,7 @@ function control58ScheduleDocument(mixed $input): ?array
 
 function control58PlatformActions(): array
 {
-    return ['admin-refresh','operator-role-set','schedule-create','schedule-cancel','diagnose','tls-renew'];
+    return ['admin-refresh','operator-role-set','schedule-create','schedule-cancel','diagnose','tls-renew','onboarding-resume'];
 }
 
 function control58AuditDocument(mixed $input): ?array
