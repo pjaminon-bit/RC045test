@@ -5,6 +5,7 @@
 require_once __DIR__ . '/control-plane-admin-suite-contract.php';
 require_once __DIR__ . '/control-plane-auth-hardening.php';
 require_once __DIR__ . '/tls-contract.php';
+require_once __DIR__ . '/control-plane-onboarding-executor.php';
 
 function control58ExecutorPaths(array $c): array
 {
@@ -90,6 +91,11 @@ function control58ValidateAdminRequest(array $c,array $r): void
     if($action==='schedule-cancel'){
         if(array_keys($admin)!==['schedule_id']||preg_match('/^[0-9a-f]{32}$/D',(string)$admin['schedule_id'])!==1)throw new RuntimeException('Schedule-cancel payload is ongeldig.');return;
     }
+    if($action==='onboarding-resume'){
+        $key=(string)$r['tenant_key'];if(!runtime41CanoniekeTenantKey($key))throw new RuntimeException('Onboarding bevat ongeldige tenant-key.');
+        $tenant=control58FindTenant($c,$key);$status=(string)($tenant['status']??'');if(!in_array($status,['setup_required','unmanaged'],true))throw new RuntimeException('Tenant staat niet in een hervatbare onboardingstatus.');
+        control59DnsProfile($admin,(string)($tenant['canonical_host']??''));return;
+    }
     if(in_array($action,['diagnose','tls-renew'],true)){
         if($admin!==[]||(string)$r['tenant_key']==='platform'||!runtime41CanoniekeTenantKey((string)$r['tenant_key']))throw new RuntimeException('Tenantbeheerpayload is ongeldig.');
     }
@@ -156,6 +162,7 @@ function control58EnrichTenantRow(array $c,string $tenantRoot,array $row,?array 
         try{$ctx=is_file($tlsPath)&&!is_link($tlsPath)?tls44PlanLeesEnValideer($tlsPath,false):null;$fake=is_array($ctx)?['tls'=>['cert_name'=>(string)$ctx['plan']['acme']['cert_name']],'canonical_host'=>(string)$ctx['plan']['canonical_host']]:null;$row['tls']=$fake!==null?control58TlsStatusFromPlan($fake):['status'=>'not_configured','valid_to_utc'=>null,'days_remaining'=>null];}
         catch(Throwable$e){$row['tls']=['status'=>'invalid','valid_to_utc'=>null,'days_remaining'=>null];}
     }
+    try{$row['dns_profile']=control59DnsPlanProfile($tenantRoot);}catch(Throwable$e){$row['dns_profile']=null;}
     $row['onboarding']=control58Onboarding($tenantRoot,(string)($row['status']??''));return$row;
 }
 
@@ -245,6 +252,7 @@ function control58ExecuteAdminAction(array $c,array $r): ?array
         'schedule-cancel'=>control58ScheduleCancel($c,$r),
         'diagnose'=>control58Diagnose($c,$r),
         'tls-renew'=>control58TlsRenew($c,$r),
+        'onboarding-resume'=>control59Resume($c,$r),
         default=>throw new RuntimeException('Onbekende adminactie.'),
     };
     return[0,$message,''];
