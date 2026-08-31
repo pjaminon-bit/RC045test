@@ -5,7 +5,7 @@ $ht=@file_get_contents($root.'/.htaccess');
 $web=@file_get_contents($root.'/app/deployment/webserver-contract.php');
 $checks=[
  'release excludes ops'=>is_string($release)&&str_contains($release,"'.git/', '.github/', 'ops/'" )&&str_contains($release,"'.git', '.github', 'ops'"),
- 'htaccess denies ops'=>is_string($ht)&&str_contains($ht,'(?:app|bin|ops|tests|docs|\\.github|\\.git)'),
+ 'htaccess denies ops'=>is_string($ht)&&str_contains($ht,'RewriteRule ^ops(?:/|$) - [F,L,NC]'),
  'vhost denies ops'=>is_string($web)&&str_contains($web,'(?:app|bin|ops|tests|docs|\\\\.github|\\\\.git)'),
 ];
 $ok=0;foreach($checks as$label=>$pass){if($pass){echo"OK: {$label}\n";$ok++;}else fwrite(STDERR,"FOUT: {$label}\n");}
