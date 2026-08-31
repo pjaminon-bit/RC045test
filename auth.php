@@ -249,12 +249,15 @@ function schrijfLog($pad, $gebruiker, $actie, $details = '') {
 // een lijst unix-tijdstippen. Het IP zelf wordt dus niet op schijf bewaard.
 // Alle lees-wijzig-schrijfhandelingen hieronder gebruiken één apart slot;
 // LOCK_EX op alleen file_put_contents() is daarvoor niet voldoende.
+// Alleen een niet-bestaand bestand is een geldige lege state. Als een bestaand
+// bestand niet veilig kan worden gelezen of geen JSON-object/array bevat,
+// retourneert deze helper null zodat ieder loginpad fail-closed kan stoppen.
 function laadLoginPogingen($pad) {
   if (!file_exists($pad)) return [];
   $ruw = @file_get_contents($pad);
-  if ($ruw === false) return [];
+  if ($ruw === false) return null;
   $json = json_decode($ruw, true);
-  return is_array($json) ? $json : [];
+  return is_array($json) ? $json : null;
 }
 
 function schrijfLoginPogingen($pad, $pogingen) {
@@ -295,14 +298,15 @@ function loginPogingenOpschonen(&$pogingen, $sleutel, $venster, $nu) {
 }
 
 // Geeft het hoogste aantal minuten van de actieve limieten, 0 als er geen
-// blokkade is, of null als de limiter-opslag niet veilig gelockt kon worden.
-// In dat laatste geval faalt inloggen gesloten: liever even niet inloggen dan
-// brute-forcebescherming ongemerkt uitschakelen.
+// blokkade is, of null als de limiter-opslag niet veilig gelezen, gelockt of
+// bijgewerkt kon worden. In dat laatste geval faalt inloggen gesloten: liever
+// even niet inloggen dan brute-forcebescherming ongemerkt uitschakelen.
 function loginLockoutMinuten($pad, array $limieten, $venster) {
   $slot = loginPogingenSlotOpen();
   if (!$slot) return null;
   try {
     $pogingen = laadLoginPogingen($pad);
+    if (!is_array($pogingen)) return null;
     $nu = time();
     $minuten = 0;
     foreach ($limieten as $sleutel => $drempel) {
@@ -311,7 +315,7 @@ function loginLockoutMinuten($pad, array $limieten, $venster) {
         $minuten = max($minuten, (int) ceil((min($recent) + $venster - $nu) / 60));
       }
     }
-    schrijfLoginPogingen($pad, $pogingen);
+    if (!schrijfLoginPogingen($pad, $pogingen)) return null;
     return $minuten;
   } finally {
     loginPogingenSlotDicht($slot);
@@ -319,12 +323,14 @@ function loginLockoutMinuten($pad, array $limieten, $venster) {
 }
 
 // Registreert één mislukte poging tegelijk voor alle meegegeven sleutels
-// (hier: gebruikersnaam én IP), onder hetzelfde slot.
+// (hier: gebruikersnaam én IP), onder hetzelfde slot. Iedere read- of
+// writefout retourneert false; de aanroeper moet login dan fail-closed stoppen.
 function loginPogingRegistreren($pad, array $sleutels, $venster) {
   $slot = loginPogingenSlotOpen();
   if (!$slot) return false;
   try {
     $pogingen = laadLoginPogingen($pad);
+    if (!is_array($pogingen)) return false;
     $nu = time();
     foreach (array_unique($sleutels) as $sleutel) {
       $recent = loginPogingenOpschonen($pogingen, $sleutel, $venster, $nu);
@@ -345,6 +351,7 @@ function loginPogingenWissen($pad, $sleutel) {
   if (!$slot) return false;
   try {
     $pogingen = laadLoginPogingen($pad);
+    if (!is_array($pogingen)) return false;
     if (isset($pogingen[$sleutel])) unset($pogingen[$sleutel]);
     return schrijfLoginPogingen($pad, $pogingen);
   } finally {
@@ -479,9 +486,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['formulier'] ?? '') === 'in
       exit;
     }
 
-    loginPogingRegistreren($loginPogingenBestand, [$lockoutGebruikerSleutel, $lockoutIpSleutel], $loginLockoutVenster);
+    $pogingOpgeslagen = loginPogingRegistreren(
+      $loginPogingenBestand,
+      [$lockoutGebruikerSleutel, $lockoutIpSleutel],
+      $loginLockoutVenster
+    );
     sleep(2); // blijft daarnaast bestaan als simpele, extra afremming
-    $inlogFout = 'Gebruikersnaam of wachtwoord onjuist.';
+    $inlogFout = $pogingOpgeslagen
+      ? 'Gebruikersnaam of wachtwoord onjuist.'
+      : 'Inloggen is tijdelijk niet beschikbaar. Probeer het over een minuut opnieuw.';
   }
 }
 
