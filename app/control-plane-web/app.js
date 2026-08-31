@@ -7,6 +7,29 @@
   const count = document.getElementById('tenant-count');
   const empty = document.getElementById('no-results');
 
+  const systemGrid = document.querySelector('.system-grid');
+  if (systemGrid) {
+    const fitSystemGrid = () => {
+      const width = systemGrid.getBoundingClientRect().width;
+      const columns = width >= 650 ? 3 : (width >= 300 ? 2 : 1);
+      systemGrid.style.gridTemplateColumns = `repeat(${columns}, minmax(0, 1fr))`;
+
+      systemGrid.querySelectorAll('.metric strong').forEach((value) => {
+        value.style.wordBreak = 'normal';
+        value.style.overflowWrap = 'normal';
+        value.style.whiteSpace = 'nowrap';
+      });
+    };
+
+    fitSystemGrid();
+    if ('ResizeObserver' in window) {
+      const systemGridObserver = new ResizeObserver(fitSystemGrid);
+      systemGridObserver.observe(systemGrid);
+    } else {
+      window.addEventListener('resize', fitSystemGrid, { passive: true });
+    }
+  }
+
   const applyTenantFilter = () => {
     if (!cards.length) return;
     const q = (search?.value || '').trim().toLowerCase();
