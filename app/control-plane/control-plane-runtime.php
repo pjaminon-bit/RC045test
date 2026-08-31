@@ -139,17 +139,8 @@ function cp51ToegestaneActies(array $tenant): array
 function cp57BeschikbareModules(): array
 {
     return [
-        'website',
-        'ledenadministratie',
-        'werkgroepen',
-        'evenementen',
-        'vergaderingen',
-        'taken',
-        'operationele_taken',
-        'fotoboek',
-        'sponsors',
-        'media',
-        'aanmelden',
+        'website','ledenadministratie','werkgroepen','evenementen','vergaderingen','taken',
+        'operationele_taken','fotoboek','sponsors','media','aanmelden',
     ];
 }
 
@@ -187,9 +178,7 @@ function cp57Modules(mixed $invoer): array
     if (!is_array($invoer)) throw new RuntimeException('Modulekeuze ontbreekt.');
     $gekozen = [];
     foreach ($invoer as $module) {
-        if (!is_string($module) || !in_array($module, cp57BeschikbareModules(), true)) {
-            throw new RuntimeException('Modulekeuze bevat een onbekende module.');
-        }
+        if (!is_string($module) || !in_array($module, cp57BeschikbareModules(), true)) throw new RuntimeException('Modulekeuze bevat een onbekende module.');
         if (in_array($module, $gekozen, true)) throw new RuntimeException('Modulekeuze bevat dubbele waarden.');
         $gekozen[] = $module;
     }
@@ -223,33 +212,17 @@ function cp57ProvisionRequest(array $input): string
     $naam = cp57Naam((string)($input['name'] ?? ''));
     $host = cp57Host((string)($input['host'] ?? ''));
     $modules = cp57Modules($input['modules'] ?? null);
-
     foreach (cp51Snapshot()['tenants'] as $tenant) {
         if (!is_array($tenant)) continue;
-        if (hash_equals($tenantKey, (string)($tenant['tenant_key'] ?? ''))) {
-            throw new RuntimeException('Deze tenant-key bestaat al.');
-        }
+        if (hash_equals($tenantKey, (string)($tenant['tenant_key'] ?? ''))) throw new RuntimeException('Deze tenant-key bestaat al.');
         $bestaandeHost = strtolower((string)($tenant['canonical_host'] ?? ''));
-        if ($bestaandeHost !== '' && hash_equals($host, $bestaandeHost)) {
-            throw new RuntimeException('Deze domeinnaam is al aan een vereniging gekoppeld.');
-        }
+        if ($bestaandeHost !== '' && hash_equals($host, $bestaandeHost)) throw new RuntimeException('Deze domeinnaam is al aan een vereniging gekoppeld.');
     }
-
     $id = bin2hex(random_bytes(16));
     return cp51QueueSchrijf([
-        'schema'=>1,
-        'phase'=>'5.1-request',
-        'request_id'=>$id,
-        'tenant_key'=>$tenantKey,
-        'action'=>'provision',
-        'operator'=>cp51Operator(),
-        'requested_at_utc'=>gmdate('Y-m-d\TH:i:s\Z'),
-        'confirm'=>[],
-        'provision'=>[
-            'name'=>$naam,
-            'host'=>$host,
-            'modules'=>$modules,
-        ],
+        'schema'=>1,'phase'=>'5.1-request','request_id'=>$id,'tenant_key'=>$tenantKey,'action'=>'provision',
+        'operator'=>cp51Operator(),'requested_at_utc'=>gmdate('Y-m-d\TH:i:s\Z'),'confirm'=>[],
+        'provision'=>['name'=>$naam,'host'=>$host,'modules'=>$modules],
     ]);
 }
 
@@ -257,25 +230,14 @@ function cp51Request(string $tenantKey, string $actie, array $input): string
 {
     $tenant = cp51TenantUitSnapshot($tenantKey);
     if (!in_array($actie, cp51ToegestaneActies($tenant), true)) throw new RuntimeException('Actie is niet toegestaan vanuit de actuele tenantstatus.');
-    $operator = cp51Operator();
-    $id = bin2hex(random_bytes(16));
-    $r = [
-        'schema'=>1,
-        'phase'=>'5.1-request',
-        'request_id'=>$id,
-        'tenant_key'=>$tenantKey,
-        'action'=>$actie,
-        'operator'=>$operator,
-        'requested_at_utc'=>gmdate('Y-m-d\TH:i:s\Z'),
-        'confirm'=>[],
-    ];
+    $operator = cp51Operator();$id = bin2hex(random_bytes(16));
+    $r = ['schema'=>1,'phase'=>'5.1-request','request_id'=>$id,'tenant_key'=>$tenantKey,'action'=>$actie,'operator'=>$operator,'requested_at_utc'=>gmdate('Y-m-d\TH:i:s\Z'),'confirm'=>[]];
     if (in_array($actie, ['delete','purge'], true)) {
         $typed = trim((string)($input['confirm_tenant'] ?? ''));
         if (!hash_equals($tenantKey, $typed)) throw new RuntimeException('Typ de tenant-key exact ter bevestiging.');
         $sha = (string)($tenant['last_export']['sha256'] ?? $tenant['delete_export']['sha256'] ?? '');
         if (preg_match('/^[0-9a-f]{64}$/D', $sha) !== 1) throw new RuntimeException('Er is geen geldige geverifieerde export gekoppeld.');
-        $r['confirm']['tenant'] = $tenantKey;
-        $r['confirm']['export_sha256'] = $sha;
+        $r['confirm']['tenant'] = $tenantKey;$r['confirm']['export_sha256'] = $sha;
     }
     if ($actie === 'purge') {
         $zin = trim((string)($input['confirm_purge'] ?? ''));
@@ -295,27 +257,18 @@ function cp51RecentResult(string $requestId, ?string $operator = null): ?array
     $raw = @file_get_contents($f);
     try { $r = is_string($raw) ? json_decode($raw, true, 32, JSON_THROW_ON_ERROR) : null; }
     catch (Throwable $e) { $r = null; }
-    $acties = ['provision','adopt-active','suspend','activate','recover','export','delete','cancel-delete','purge'];
+    $acties = ['provision','adopt-active','suspend','activate','recover','export','delete','cancel-delete','purge','admin-refresh','operator-role-set','schedule-create','schedule-cancel','diagnose','tls-renew'];
+    $tenant=(string)($r['tenant_key']??'');$tenantValid=$tenant==='platform'||preg_match('/^[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])?$/D',$tenant)===1;
     if (!is_array($r)
         || (int)($r['schema'] ?? 0) !== 1
         || ($r['phase'] ?? '') !== '5.1-result'
         || !hash_equals($requestId, (string)($r['request_id'] ?? ''))
         || !hash_equals($operator, (string)($r['operator'] ?? ''))
-        || preg_match('/^[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])?$/D', (string)($r['tenant_key'] ?? '')) !== 1
+        || !$tenantValid
         || !in_array((string)($r['action'] ?? ''), $acties, true)
         || !in_array((string)($r['result'] ?? ''), ['ok','failed'], true)
         || !is_string($r['message'] ?? null)
         || mb_strlen((string)$r['message']) > 500
-        || strtotime((string)($r['completed_at_utc'] ?? '')) === false) {
-        return null;
-    }
-    return [
-        'request_id'=>$requestId,
-        'tenant_key'=>(string)$r['tenant_key'],
-        'action'=>(string)$r['action'],
-        'operator'=>(string)$r['operator'],
-        'result'=>(string)$r['result'],
-        'message'=>(string)$r['message'],
-        'completed_at_utc'=>(string)$r['completed_at_utc'],
-    ];
+        || strtotime((string)($r['completed_at_utc'] ?? '')) === false) return null;
+    return ['request_id'=>$requestId,'tenant_key'=>$tenant,'action'=>(string)$r['action'],'operator'=>(string)$r['operator'],'result'=>(string)$r['result'],'message'=>(string)$r['message'],'completed_at_utc'=>(string)$r['completed_at_utc']];
 }
