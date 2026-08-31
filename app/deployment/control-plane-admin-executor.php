@@ -121,11 +121,25 @@ function control58TenantStorage(string $tenantRoot,int $maxFiles=100000): array
     return['bytes'=>$bytes,'files'=>$files,'truncated'=>$truncated];
 }
 
+function control58CertbotFullchainBestand(string $cert,string $liveRoot='/etc/letsencrypt/live',string $archiveRoot='/etc/letsencrypt/archive'): ?string
+{
+    if(preg_match('/^[a-z0-9][a-z0-9-]{2,80}$/D',$cert)!==1)return null;
+    $liveRoot=rtrim($liveRoot,'/');$archiveRoot=rtrim($archiveRoot,'/');
+    if($liveRoot===''||$archiveRoot===''||!str_starts_with($liveRoot,'/')||!str_starts_with($archiveRoot,'/'))return null;
+    $file=$liveRoot.'/'.$cert.'/fullchain.pem';
+    if(!is_link($file))return null;
+    $real=@realpath($file);$archiveBase=@realpath($archiveRoot.'/'.$cert);
+    if($real===false||$archiveBase===false||!is_file($real)||!is_readable($real)||!is_dir($archiveBase))return null;
+    $prefix=rtrim($archiveBase,'/').'/';
+    if(!str_starts_with($real,$prefix))return null;
+    return $real;
+}
+
 function control58TlsStatusFromPlan(array $plan): array
 {
     $cert=(string)($plan['tls']['cert_name']??'');$host=(string)($plan['canonical_host']??'');
     if(preg_match('/^[a-z0-9][a-z0-9-]{2,80}$/D',$cert)!==1||!web42CanoniekeHost($host))return['status'=>'unknown','valid_to_utc'=>null,'days_remaining'=>null];
-    $file='/etc/letsencrypt/live/'.$cert.'/fullchain.pem';if(is_link($file)||!is_file($file)||!is_readable($file))return['status'=>'missing','valid_to_utc'=>null,'days_remaining'=>null,'cert_name'=>$cert];
+    $file=control58CertbotFullchainBestand($cert);if($file===null)return['status'=>'missing','valid_to_utc'=>null,'days_remaining'=>null,'cert_name'=>$cert];
     $raw=@file_get_contents($file);$x=is_string($raw)?@openssl_x509_read($raw):false;$info=$x!==false?@openssl_x509_parse($x):false;
     if(!is_array($info))return['status'=>'invalid','valid_to_utc'=>null,'days_remaining'=>null,'cert_name'=>$cert];
     $to=(int)($info['validTo_time_t']??0);$from=(int)($info['validFrom_time_t']??PHP_INT_MAX);$san=(string)($info['extensions']['subjectAltName']??'');$names=[];foreach(explode(',',$san)as$item){$item=trim($item);if(str_starts_with($item,'DNS:'))$names[]=strtolower(substr($item,4));}
