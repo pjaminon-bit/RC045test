@@ -15,6 +15,7 @@ repo='https://github.com/pjaminon-bit/RC045test.git'
 platform_root='/srv/verenigingsplatform'
 tenant_base='/srv/verenigingen'
 staging_base='/var/lib/verenigingsplatform/github-staging'
+control_plane_config='/etc/verenigingsplatform/control-plane/runtime.json'
 php='/usr/bin/php8.5'
 git='/usr/bin/git'
 install='/usr/bin/install'
@@ -84,5 +85,29 @@ active="$("$readlink_bin" -f "$platform_root/current")"
 
 state_commit="$("$php" -r '$p="/srv/verenigingsplatform/release-state.json";$r=@file_get_contents($p);$d=is_string($r)?json_decode($r,true):null;echo is_array($d)?(string)($d["active"]["commit"]??""):"";')"
 [[ "$state_commit" == "$commit" ]] || { echo 'release-state.json bevestigt de nieuwe commit niet.' >&2; exit 70; }
+
+# Een immutable deploy kan ook de manier wijzigen waarop control-plane
+# telemetry wordt afgeleid. Laat daarom, als de control-plane op deze server is
+# geïnstalleerd, direct de nieuw geactiveerde executor een verse snapshot
+# opbouwen. Zo blijft bijvoorbeeld TLS-status niet afkomstig uit de vorige
+# release. De refresh verwerkt geen nieuwe pending lifecycle-aanvragen.
+if [[ -e "$control_plane_config" || -L "$control_plane_config" ]]; then
+  [[ -f "$control_plane_config" && ! -L "$control_plane_config" ]] || {
+    echo 'Control-plane runtimeconfig bestaat maar is geen veilig regulier bestand.' >&2
+    exit 71
+  }
+  control_executor="$platform_root/current/bin/control-plane-executor.php"
+  control_executor_real="$("$readlink_bin" -f "$control_executor")"
+  [[ "$control_executor_real" == "$platform_root/releases/$commit/bin/control-plane-executor.php" && -f "$control_executor_real" ]] || {
+    echo 'Control-plane executor resolveert niet naar de zojuist geactiveerde release.' >&2
+    exit 71
+  }
+  refresh_output="$("$php" "$control_executor" --config="$control_plane_config" --refresh-only)"
+  printf '%s\n' "$refresh_output"
+  grep -Fqx 'REFRESH OK' <<<"$refresh_output" || {
+    echo 'Control-plane snapshotrefresh gaf niet de verwachte bevestiging.' >&2
+    exit 71
+  }
+fi
 
 echo "DEPLOYED $commit"
