@@ -63,5 +63,19 @@
     button.addEventListener('click', () => search?.focus());
   });
 
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('section') === 'onboarding') {
+    const title = document.querySelector('.section-title');
+    if (title && !document.getElementById('resume-onboarding-link')) {
+      const link = document.createElement('a');
+      link.id = 'resume-onboarding-link';
+      link.href = '/onboarding.php';
+      link.className = 'btn primary';
+      link.textContent = 'Automatische onboarding openen';
+      link.style.marginTop = '10px';
+      title.appendChild(link);
+    }
+  }
+
   applyTenantFilter();
 })();
