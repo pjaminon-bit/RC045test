@@ -77,16 +77,29 @@ function atomicFileTxBegin(array $paden): array
             }
             $entries[] = ['pad'=>$pad, 'bestond'=>$bestaat, 'type'=>$type, 'snapshot'=>$snapshot];
         }
-        return ['root'=>$root, 'entries'=>$entries, 'closed'=>false];
+        return ['root'=>$root, 'entries'=>$entries, 'committed'=>false, 'closed'=>false];
     } catch (Throwable $e) {
         atomicFileTxVerwijder($root);
         throw $e;
     }
 }
 
+function atomicFileTxCleanup(array &$tx): bool
+{
+    if (!empty($tx['closed'])) return true;
+    $root = (string)($tx['root'] ?? '');
+    $ok = $root === '' || !file_exists($root) || atomicFileTxVerwijder($root);
+    if ($ok) $tx['closed'] = true;
+    return $ok;
+}
+
 function atomicFileTxRollback(array &$tx): bool
 {
     if (!empty($tx['closed'])) return true;
+    // Zodra de mutatie als committed is gemarkeerd, mogen gedeeltelijk al
+    // verwijderde snapshots nooit meer als rollbackbron worden gebruikt.
+    if (!empty($tx['committed'])) return atomicFileTxCleanup($tx);
+
     $ok = true;
     $entries = array_reverse((array)($tx['entries'] ?? []));
     foreach ($entries as $entry) {
@@ -101,19 +114,22 @@ function atomicFileTxRollback(array &$tx): bool
         if (file_exists($pad) && !atomicFileTxVerwijder($pad)) { $ok = false; continue; }
         if ($bestond && !atomicFileTxKopieer($snapshot, $pad)) $ok = false;
     }
-    $root = (string)($tx['root'] ?? '');
-    if ($root !== '' && file_exists($root) && !atomicFileTxVerwijder($root)) $ok = false;
-    $tx['closed'] = true;
+    if ($ok) {
+        $tx['committed'] = false;
+        if (!atomicFileTxCleanup($tx)) $ok = false;
+    }
     return $ok;
 }
 
 function atomicFileTxCommit(array &$tx): bool
 {
     if (!empty($tx['closed'])) return true;
-    $root = (string)($tx['root'] ?? '');
-    $ok = $root === '' || !file_exists($root) || atomicFileTxVerwijder($root);
-    $tx['closed'] = true;
-    return $ok;
+    // De businessmutatie is op dit punt al geslaagd. Markeer dat vóór cleanup,
+    // zodat een cleanupfout nooit een onveilige rollback met deels verwijderde
+    // snapshots kan veroorzaken. Cleanup mag daarna veilig opnieuw worden
+    // geprobeerd zolang closed nog false is.
+    $tx['committed'] = true;
+    return atomicFileTxCleanup($tx);
 }
 
 function atomicFileTransactie(array $paden, callable $mutatie)
@@ -128,7 +144,11 @@ function atomicFileTransactie(array $paden, callable $mutatie)
         if (!atomicFileTxCommit($tx)) throw new RuntimeException('Mutatie slaagde maar transactiestaging kon niet worden opgeruimd.');
         return $resultaat;
     } catch (Throwable $e) {
-        if (empty($tx['closed']) && !atomicFileTxRollback($tx)) {
+        if (!empty($tx['committed'])) {
+            // De mutatie staat al vast; probeer alleen staging nogmaals op te
+            // ruimen. Een rollback is vanaf dit moment bewust verboden.
+            atomicFileTxCleanup($tx);
+        } elseif (empty($tx['closed']) && !atomicFileTxRollback($tx)) {
             throw new RuntimeException('Mutatie faalde en rollback kon niet volledig worden uitgevoerd.', 0, $e);
         }
         throw $e;
