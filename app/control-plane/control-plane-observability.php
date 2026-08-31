@@ -4,6 +4,8 @@
 // state en niet-gevoelige Linux capaciteitsinformatie. Er worden bewust geen
 // processen gestart en geen tenant-private bestanden geopend.
 
+require_once dirname(__DIR__) . '/deployment/privileged-ops-contract.php';
+
 function cpAdminDirectoryStatus(string $path, bool $writable = false): array
 {
     if (!cp51Absoluut($path) || is_link($path) || !is_dir($path)) {
@@ -117,6 +119,7 @@ function cpAdminSysteemStatus(): array
             'used_bytes'=>$diskUsed,
             'used_percent'=>cpAdminPercentage($diskUsed, $diskTotal),
         ],
+        'privileged_ops'=>privilegedOpsSnapshot(),
     ];
 }
 
@@ -157,6 +160,20 @@ function cpAdminPlatformStatus(array $snapshot): array
     $loadOne = $system['load']['one'];
     if (is_float($loadOne) && $system['cpu_count'] > 0 && $loadOne > ($system['cpu_count'] * 1.5)) {
         $warnings[] = 'Systeemload is verhoogd (' . round($loadOne, 2) . ' op ' . $system['cpu_count'] . ' CPU-threads).';
+    }
+
+    $ops = is_array($system['privileged_ops'] ?? null) ? $system['privileged_ops'] : [];
+    foreach ($ops['tools'] ?? [] as $tool) {
+        if (!is_array($tool)) continue;
+        $id = (string)($tool['id'] ?? 'onbekend');
+        $status = (string)($tool['status'] ?? 'unsafe');
+        if ($status === 'unsafe') {
+            $warnings[] = 'Privileged deploytooling ' . $id . ' heeft onveilige bestandsmetadata of kan niet veilig worden gevalideerd.';
+        } elseif ($status === 'drift') {
+            $warnings[] = 'Privileged deploytooling ' . $id . ' wijkt af van de versie die de actieve release verwacht.';
+        } elseif ($status === 'missing') {
+            $warnings[] = 'Privileged deploytooling ' . $id . ' ontbreekt op het verwachte installatiepad.';
+        }
     }
 
     $tenants = is_array($snapshot['tenants'] ?? null) ? $snapshot['tenants'] : [];
