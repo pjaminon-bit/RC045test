@@ -35,6 +35,15 @@ function cpeAudit(array$c,array$r,string$result,string$message=''):void
 {
     cpeDir(dirname($c['audit_file']),0750,0,'adm');$row=['timestamp_utc'=>gmdate('Y-m-d\TH:i:s\Z'),'request_id'=>$r['request_id']??null,'operator'=>$r['operator']??null,'tenant_key'=>$r['tenant_key']??null,'action'=>$r['action']??null,'result'=>$result];if($message!=='')$row['message']=substr(preg_replace('/\s+/',' ',trim($message))??'',0,300);$j=json_encode($row,JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE);if(!is_string($j)||@file_put_contents($c['audit_file'],$j."\n",FILE_APPEND|LOCK_EX)===false)throw new RuntimeException('Control-plane auditwrite faalde.');if(!@chown($c['audit_file'],0)||!@chgrp($c['audit_file'],'adm')||!@chmod($c['audit_file'],0640))throw new RuntimeException('Control-plane auditmetadata kon niet worden genormaliseerd.');cpeMeta($c['audit_file'],0640,false,0,'adm');
 }
+function cpeAuditHeeftRequest(array$c,string$id):bool
+{
+    if(preg_match('/^[0-9a-f]{32}$/D',$id)!==1)return false;$f=(string)$c['audit_file'];if(!is_file($f)||is_link($f)||!is_readable($f))return false;$h=@fopen($f,'rb');if(!is_resource($h))return false;
+    try{while(($line=fgets($h))!==false){$row=json_decode($line,true);if(is_array($row)&&hash_equals($id,(string)($row['request_id']??'')))return true;}}finally{fclose($h);}return false;
+}
+function cpeAuditEenmalig(array$c,array$r,string$result,string$message=''):void
+{
+    $id=(string)($r['request_id']??'');if(cpeAuditHeeftRequest($c,$id))return;cpeAudit($c,$r,$result,$message);
+}
 function cpeUnlink(string$p,string$label):void{if(is_link($p)||is_file($p)){if(!@unlink($p))throw new RuntimeException($label.' kon niet worden verwijderd: '.$p);clearstatcache(true,$p);if(file_exists($p)||is_link($p))throw new RuntimeException($label.' bleef bestaan na verwijdering: '.$p);}elseif(file_exists($p))throw new RuntimeException($label.' is geen veilig regulier bestand: '.$p);}
 function cpeState(array$p):array
 {
@@ -86,13 +95,13 @@ function cpeProvisionPayload(array$r):array
     $mods=$p['modules']??null;if(!is_array($mods)||!array_is_list($mods)||$mods===[])throw new RuntimeException('Provisioningmodules ontbreken.');$seen=[];foreach($mods as$m){if(!is_string($m)||!in_array($m,cpeProvisionModules(),true)||isset($seen[$m]))throw new RuntimeException('Provisioningmodules zijn ongeldig.');$seen[$m]=true;}if(!isset($seen['website']))throw new RuntimeException('Provisioning mist kernmodule website.');$canon=[];foreach(cpeProvisionModules()as$m)if(isset($seen[$m]))$canon[]=$m;
     return['name'=>$name,'host'=>$host,'modules'=>$canon];
 }
-function cpeRequest(string$f):array
+function cpeRequest(string$f,bool$allowExpired=false):array
 {
     if(is_link($f)||!is_file($f))throw new RuntimeException('Queue-item is geen veilig regulier bestand.');$base=basename($f);if(preg_match('/^([0-9a-f]{32})\.json$/D',$base,$m)!==1)throw new RuntimeException('Queue-bestandsnaam is ongeldig.');$raw=@file_get_contents($f);try{$r=is_string($raw)?json_decode($raw,true,64,JSON_THROW_ON_ERROR):null;}catch(Throwable$e){$r=null;}
     if(!is_array($r)||(int)($r['schema']??0)!==1||($r['phase']??'')!=='5.1-request'||!hash_equals($m[1],(string)($r['request_id']??'')))throw new RuntimeException('Queue-schema of request-id is ongeldig.');
     $action=(string)($r['action']??'');$platformAction=in_array($action,control58PlatformActions(),true);$tenant=(string)($r['tenant_key']??'');
     if(($tenant!=='platform'&&!runtime41CanoniekeTenantKey($tenant))||($tenant==='platform'&&!$platformAction))throw new RuntimeException('Queue bevat ongeldige tenant-key.');if(preg_match('/^[A-Za-z0-9][A-Za-z0-9._@-]{1,63}$/D',(string)($r['operator']??''))!==1)throw new RuntimeException('Queue bevat ongeldige operator.');
-    $lifecycleActions=['adopt-active','suspend','activate','recover','export','delete','cancel-delete','purge'];$actions=array_merge(['provision'],$lifecycleActions,control58PlatformActions());if(!in_array($action,$actions,true))throw new RuntimeException('Queue bevat niet-toegestane actie.');$ts=strtotime((string)($r['requested_at_utc']??''));if($ts===false||abs(time()-$ts)>900)throw new RuntimeException('Queue-aanvraag is verlopen.');if(!is_array($r['confirm']??null))throw new RuntimeException('Queue-confirmatieschema ontbreekt.');
+    $lifecycleActions=['adopt-active','suspend','activate','recover','export','delete','cancel-delete','purge'];$actions=array_merge(['provision'],$lifecycleActions,control58PlatformActions());if(!in_array($action,$actions,true))throw new RuntimeException('Queue bevat niet-toegestane actie.');$ts=strtotime((string)($r['requested_at_utc']??''));if($ts===false||(!$allowExpired&&abs(time()-$ts)>900))throw new RuntimeException('Queue-aanvraag is verlopen.');if(!is_array($r['confirm']??null))throw new RuntimeException('Queue-confirmatieschema ontbreekt.');
     $verwacht=['action','confirm','operator','phase','request_id','requested_at_utc','schema','tenant_key'];if($action==='provision')$verwacht[]='provision';if($platformAction&&array_key_exists('admin',$r))$verwacht[]='admin';sort($verwacht,SORT_STRING);$werkelijk=array_keys($r);sort($werkelijk,SORT_STRING);if($werkelijk!==$verwacht)throw new RuntimeException('Queue bevat onbekende top-level velden.');
     if($platformAction){if(($r['confirm']??[])!==[])throw new RuntimeException('Platformbeheeractie accepteert geen lifecycle-confirmaties.');control58ValidateAdminRequest($GLOBALS['cpe_current_config']??throw new RuntimeException('Executorconfig ontbreekt tijdens rollenvalidatie.'),$r);}
     else{
@@ -126,16 +135,63 @@ function cpeUitvoeren(array$c,array$r):array
     cpeProvisionUniek($c,$r);[$preCode,$preOut,$preErr]=cpeRun(cpeProvisionCommand($c,$r,true));if($preCode!==0)return[$preCode,$preOut,$preErr];
     [$code,$out,$err]=cpeRun(cpeProvisionCommand($c,$r,false));if($code===0)$out='Basisprovisioning voltooid. Activeer nu de eerste beheerder en rond daarna de VPS-infrastructuur af.';return[$code,$out,$err];
 }
+function cpeMuterendeActie(string$action):bool
+{
+    return in_array($action,['provision','adopt-active','suspend','activate','recover','export','delete','cancel-delete','purge','operator-role-set','schedule-create','tls-renew','onboarding-resume'],true);
+}
+function cpePlatformMutatieInterlock(array$c,array$r):void
+{
+    if(!cpeMuterendeActie((string)($r['action']??'')))return;$root=(string)$c['tenants_root'];if(runtime41SymlinkInPad($root)!==null||!is_dir($root))throw new RuntimeException('Platformmutatie geblokkeerd: tenantbasis is niet veilig beschikbaar.');$total=@disk_total_space($root);$free=@disk_free_space($root);if((is_float($total)||is_int($total))&&(is_float($free)||is_int($free))&&$total>0){$used=max(0.0,(float)$total-max(0.0,(float)$free));$pct=min(100.0,max(0.0,($used/(float)$total)*100.0));if($pct>=97.0)throw new RuntimeException('Platformmutatie geblokkeerd: platformopslag is voor minimaal 97% gevuld.');}
+}
+function cpeResultPad(array$c,string$id):string
+{
+    if(preg_match('/^[0-9a-f]{32}$/D',$id)!==1)throw new RuntimeException('Resultaat-id is ongeldig.');return$c['results_dir'].'/'.$id.'.json';
+}
+function cpeResultLees(array$c,string$id):?array
+{
+    $p=cpeResultPad($c,$id);if(!file_exists($p)&&!is_link($p))return null;if(is_link($p)||!is_file($p)||!is_readable($p))throw new RuntimeException('Bestaand executorresultaat is onveilig.');$raw=@file_get_contents($p);$d=is_string($raw)?json_decode($raw,true):null;if(!is_array($d)||(int)($d['schema']??0)!==1||($d['phase']??'')!=='5.1-result'||!hash_equals($id,(string)($d['request_id']??''))||!in_array((string)($d['result']??''),['ok','failed'],true))throw new RuntimeException('Bestaand executorresultaat heeft ongeldig schema.');return$d;
+}
 function cpeResult(array$c,array$r,string$result,string$message):void
 {
-    cpeDir($c['results_dir'],0750,0,$c['runtime_user']);$safe=substr(preg_replace('/\s+/',' ',trim($message))??'',0,500);cpeWrite($c['results_dir'].'/'.$r['request_id'].'.json',['schema'=>1,'phase'=>'5.1-result','request_id'=>$r['request_id'],'tenant_key'=>$r['tenant_key'],'action'=>$r['action'],'operator'=>$r['operator'],'result'=>$result,'message'=>$safe,'completed_at_utc'=>gmdate('Y-m-d\TH:i:s\Z')],0640,$c['runtime_user']);control58MarkScheduleResult($c,(string)$r['request_id'],$result,$safe);
+    $id=(string)$r['request_id'];$existing=cpeResultLees($c,$id);$safe=substr(preg_replace('/\s+/',' ',trim($message))??'',0,500);
+    if($existing!==null){if(!hash_equals((string)$existing['tenant_key'],(string)$r['tenant_key'])||!hash_equals((string)$existing['action'],(string)$r['action'])||!hash_equals((string)$existing['operator'],(string)$r['operator'])||!hash_equals((string)$existing['result'],$result))throw new RuntimeException('Conflicterend bestaand executorresultaat.');control58MarkScheduleResult($c,$id,$result,$safe);return;}
+    cpeDir($c['results_dir'],0750,0,$c['runtime_user']);cpeWrite(cpeResultPad($c,$id),['schema'=>1,'phase'=>'5.1-result','request_id'=>$id,'tenant_key'=>$r['tenant_key'],'action'=>$r['action'],'operator'=>$r['operator'],'result'=>$result,'message'=>$safe,'completed_at_utc'=>gmdate('Y-m-d\TH:i:s\Z')],0640,$c['runtime_user']);control58MarkScheduleResult($c,$id,$result,$safe);
+}
+function cpeJournalPad(array$c,string$id):string
+{
+    if(preg_match('/^[0-9a-f]{32}$/D',$id)!==1)throw new RuntimeException('Journal-id is ongeldig.');return$c['processing_dir'].'/'.$id.'.journal.json';
+}
+function cpeJournalWrite(array$c,array$r,string$state,string$message=''):void
+{
+    if(!in_array($state,['accepted','executing','effect_committed'],true))throw new RuntimeException('Onbekende executorjournalstatus.');$id=(string)$r['request_id'];$doc=['schema'=>1,'phase'=>'5.8-execution-journal','request_id'=>$id,'tenant_key'=>$r['tenant_key']??null,'action'=>$r['action']??null,'operator'=>$r['operator']??null,'state'=>$state,'updated_at_utc'=>gmdate('Y-m-d\TH:i:s\Z'),'message'=>substr(preg_replace('/\s+/',' ',trim($message))??'',0,500)];cpeWrite(cpeJournalPad($c,$id),$doc,0600,0);
+}
+function cpeJournalLees(array$c,string$id):?array
+{
+    $p=cpeJournalPad($c,$id);if(!file_exists($p)&&!is_link($p))return null;if(is_link($p)||!is_file($p)||!is_readable($p))throw new RuntimeException('Executorjournal is onveilig.');$raw=@file_get_contents($p);$d=is_string($raw)?json_decode($raw,true):null;if(!is_array($d)||(int)($d['schema']??0)!==1||($d['phase']??'')!=='5.8-execution-journal'||!hash_equals($id,(string)($d['request_id']??''))||!in_array((string)($d['state']??''),['accepted','executing','effect_committed'],true))throw new RuntimeException('Executorjournal heeft ongeldig schema.');return$d;
+}
+function cpeProcessingOpruimen(array$c,string$requestPad,string$id):void
+{
+    cpeUnlink($requestPad,'Verwerkt control-plane queue-item');$journal=cpeJournalPad($c,$id);if(file_exists($journal)||is_link($journal))cpeUnlink($journal,'Executorjournal');
+}
+function cpeReconcileProcessing(array$c):void
+{
+    $files=glob($c['processing_dir'].'/*.json')?:[];sort($files,SORT_STRING);
+    foreach($files as$f){$base=basename($f);if(preg_match('/^([0-9a-f]{32})\.json$/D',$base,$m)!==1)continue;$id=$m[1];$r=cpeRequest($f,true);$result=cpeResultLees($c,$id);$journal=cpeJournalLees($c,$id);
+        if($result!==null){control58MarkScheduleResult($c,$id,(string)$result['result'],(string)$result['message']);cpeAuditEenmalig($c,$r,(string)$result['result'],(string)$result['message']);cpeProcessingOpruimen($c,$f,$id);continue;}
+        $state=(string)($journal['state']??'');if($state==='effect_committed'){$msg=(string)($journal['message']??'Uitvoering voltooid vóór executorherstel.');cpeResult($c,$r,'ok',$msg);cpeAuditEenmalig($c,$r,'ok',$msg);cpeProcessingOpruimen($c,$f,$id);continue;}
+        if($state==='executing'){$msg='Uitkomst onbekend na executoronderbreking; de actie is uit veiligheid niet automatisch opnieuw uitgevoerd. Controleer de actuele tenantstatus vóór een bewuste nieuwe aanvraag.';cpeResult($c,$r,'failed',$msg);cpeAuditEenmalig($c,$r,'failed',$msg);cpeProcessingOpruimen($c,$f,$id);continue;}
+        $msg='Executor werd onderbroken vóór aantoonbare uitvoering; de aanvraag is niet automatisch hervat. Dien de actie na controle opnieuw in.';cpeResult($c,$r,'failed',$msg);cpeAuditEenmalig($c,$r,'failed',$msg);cpeProcessingOpruimen($c,$f,$id);
+    }
 }
 
 foreach($_SERVER['argv']??[]as$a)if(preg_match('/^--(?:password|pass|secret|token|credential|webhook)(?:=|$)/i',(string)$a)===1)cpeStop('Secrets horen niet in executor-argumenten.');
 $o=getopt('',['config:','refresh-only','help']);if(isset($o['help'])){echo"Gebruik: sudo php bin/control-plane-executor.php --config=/etc/verenigingsplatform/control-plane/runtime.json [--refresh-only]\n";exit(0);}if(PHP_OS_FAMILY!=='Linux'||!function_exists('posix_geteuid')||posix_geteuid()!==0)cpeStop('Control-plane executor vereist Linux root.');
 try{$c=cpeConfig(trim((string)($o['config']??'')));$GLOBALS['cpe_current_config']=$c;$lockDir=dirname($c['executor_lock']);if(runtime41SymlinkInPad($lockDir)!==null||!is_dir($lockDir))throw new RuntimeException('Systeem-lockmap ontbreekt of is onveilig.');$lh=@fopen($c['executor_lock'],'c');if(!is_resource($lh))throw new RuntimeException('Control-plane executor-lock kon niet worden geopend.');if(!@chown($c['executor_lock'],0)||!@chgrp($c['executor_lock'],0)||!@chmod($c['executor_lock'],0600)){fclose($lh);throw new RuntimeException('Control-plane executor-lock kon niet root-only worden gemaakt.');}cpeMeta($c['executor_lock'],0600,false,0,0);if(!flock($lh,LOCK_EX|LOCK_NB)){fclose($lh);throw new RuntimeException('Er draait al een control-plane executor.');}
-    cpeDir(dirname($c['pending_dir']),0750,0,$c['runtime_user']);cpeDir($c['pending_dir'],0730,$c['runtime_user'],$c['runtime_user']);cpeDir($c['processing_dir'],0700,0,0);cpeDir($c['results_dir'],0750,0,$c['runtime_user']);control58ExecutorRefresh($c);
+    cpeDir(dirname($c['pending_dir']),0750,0,$c['runtime_user']);cpeDir($c['pending_dir'],0730,$c['runtime_user'],$c['runtime_user']);cpeDir($c['processing_dir'],0700,0,0);cpeDir($c['results_dir'],0750,0,$c['runtime_user']);cpeReconcileProcessing($c);control58ExecutorRefresh($c);
     cpeWrite($c['snapshot_file'],cpeSnapshot($c),0640,$c['runtime_user']);if(isset($o['refresh-only'])){echo"REFRESH OK\n";exit(0);}
-    while(true){$files=glob($c['pending_dir'].'/*.json')?:[];if($files===[])break;sort($files,SORT_STRING);$verwerkt=0;foreach($files as$f){$id=pathinfo($f,PATHINFO_FILENAME);$dst=$c['processing_dir'].'/'.$id.'.json';if(is_link($f)||file_exists($dst)||!@rename($f,$dst))continue;$verwerkt++;$r=['request_id'=>$id,'tenant_key'=>null,'action'=>null,'operator'=>null];try{$r=cpeRequest($dst);[$code,$out,$err]=cpeUitvoeren($c,$r);if($code!==0)throw new RuntimeException($err!==''?$err:$out);$msg=$out!==''?$out:'OK';cpeResult($c,$r,'ok',$msg);cpeAudit($c,$r,'ok',$msg);}catch(Throwable$e){$msg=$e->getMessage();try{cpeResult($c,$r,'failed',$msg);}catch(Throwable$ignored){}try{cpeAudit($c,$r,'failed',$msg);}catch(Throwable$ignored){}}finally{cpeUnlink($dst,'Verwerkt control-plane queue-item');}control58ExecutorRefresh($c);cpeWrite($c['snapshot_file'],cpeSnapshot($c),0640,$c['runtime_user']);}if($verwerkt===0)break;}
+    while(true){$files=glob($c['pending_dir'].'/*.json')?:[];if($files===[])break;sort($files,SORT_STRING);$verwerkt=0;foreach($files as$f){$id=pathinfo($f,PATHINFO_FILENAME);$dst=$c['processing_dir'].'/'.$id.'.json';if(is_link($f)||file_exists($dst)||!@rename($f,$dst))continue;$verwerkt++;$r=['request_id'=>$id,'tenant_key'=>null,'action'=>null,'operator'=>null];$cleanup=true;$effectCommitted=false;
+        try{$r=cpeRequest($dst);cpeJournalWrite($c,$r,'accepted');cpePlatformMutatieInterlock($c,$r);cpeJournalWrite($c,$r,'executing');[$code,$out,$err]=cpeUitvoeren($c,$r);if($code!==0)throw new RuntimeException($err!==''?$err:$out);$msg=$out!==''?$out:'OK';$effectCommitted=true;cpeJournalWrite($c,$r,'effect_committed',$msg);cpeResult($c,$r,'ok',$msg);try{cpeAuditEenmalig($c,$r,'ok',$msg);}catch(Throwable$auditError){$cleanup=false;fwrite(STDERR,'WAARSCHUWING: '.$auditError->getMessage()."; resultaat blijft OK en wordt bij volgende executorstart gereconcilieerd.\n");}}
+        catch(Throwable$e){$msg=$e->getMessage();if($effectCommitted){$cleanup=false;fwrite(STDERR,'WAARSCHUWING: mutatie is uitgevoerd maar administratieve afronding faalde: '.$msg."\n");}else{try{cpeResult($c,$r,'failed',$msg);}catch(Throwable$ignored){}try{cpeAuditEenmalig($c,$r,'failed',$msg);}catch(Throwable$ignored){}}}
+        finally{if($cleanup)cpeProcessingOpruimen($c,$dst,$id);}control58ExecutorRefresh($c);cpeWrite($c['snapshot_file'],cpeSnapshot($c),0640,$c['runtime_user']);}if($verwerkt===0)break;}
     control58ExecutorRefresh($c);cpeWrite($c['snapshot_file'],cpeSnapshot($c),0640,$c['runtime_user']);echo"EXECUTOR OK\n";
 }catch(Throwable$e){cpeStop($e->getMessage());}
