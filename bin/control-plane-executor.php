@@ -95,7 +95,11 @@ function cpeProvisionPayload(array$r):array
     $mods=$p['modules']??null;if(!is_array($mods)||!array_is_list($mods)||$mods===[])throw new RuntimeException('Provisioningmodules ontbreken.');$seen=[];foreach($mods as$m){if(!is_string($m)||!in_array($m,cpeProvisionModules(),true)||isset($seen[$m]))throw new RuntimeException('Provisioningmodules zijn ongeldig.');$seen[$m]=true;}if(!isset($seen['website']))throw new RuntimeException('Provisioning mist kernmodule website.');$canon=[];foreach(cpeProvisionModules()as$m)if(isset($seen[$m]))$canon[]=$m;
     return['name'=>$name,'host'=>$host,'modules'=>$canon];
 }
-function cpeRequest(string$f,bool$allowExpired=false):array
+function cpeRequestBinding(array$r):string
+{
+    $json=json_encode($r,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);if(!is_string($json))throw new RuntimeException('Requestbinding kon niet worden berekend.');return hash('sha256',$json);
+}
+function cpeRequest(string$f,bool$allowExpired=false,bool$eerderGevalideerd=false):array
 {
     if(is_link($f)||!is_file($f))throw new RuntimeException('Queue-item is geen veilig regulier bestand.');$base=basename($f);if(preg_match('/^([0-9a-f]{32})\.json$/D',$base,$m)!==1)throw new RuntimeException('Queue-bestandsnaam is ongeldig.');$raw=@file_get_contents($f);try{$r=is_string($raw)?json_decode($raw,true,64,JSON_THROW_ON_ERROR):null;}catch(Throwable$e){$r=null;}
     if(!is_array($r)||(int)($r['schema']??0)!==1||($r['phase']??'')!=='5.1-request'||!hash_equals($m[1],(string)($r['request_id']??'')))throw new RuntimeException('Queue-schema of request-id is ongeldig.');
@@ -103,9 +107,9 @@ function cpeRequest(string$f,bool$allowExpired=false):array
     if(($tenant!=='platform'&&!runtime41CanoniekeTenantKey($tenant))||($tenant==='platform'&&!$platformAction))throw new RuntimeException('Queue bevat ongeldige tenant-key.');if(preg_match('/^[A-Za-z0-9][A-Za-z0-9._@-]{1,63}$/D',(string)($r['operator']??''))!==1)throw new RuntimeException('Queue bevat ongeldige operator.');
     $lifecycleActions=['adopt-active','suspend','activate','recover','export','delete','cancel-delete','purge'];$actions=array_merge(['provision'],$lifecycleActions,control58PlatformActions());if(!in_array($action,$actions,true))throw new RuntimeException('Queue bevat niet-toegestane actie.');$ts=strtotime((string)($r['requested_at_utc']??''));if($ts===false||(!$allowExpired&&abs(time()-$ts)>900))throw new RuntimeException('Queue-aanvraag is verlopen.');if(!is_array($r['confirm']??null))throw new RuntimeException('Queue-confirmatieschema ontbreekt.');
     $verwacht=['action','confirm','operator','phase','request_id','requested_at_utc','schema','tenant_key'];if($action==='provision')$verwacht[]='provision';if($platformAction&&array_key_exists('admin',$r))$verwacht[]='admin';sort($verwacht,SORT_STRING);$werkelijk=array_keys($r);sort($werkelijk,SORT_STRING);if($werkelijk!==$verwacht)throw new RuntimeException('Queue bevat onbekende top-level velden.');
-    if($platformAction){if(($r['confirm']??[])!==[])throw new RuntimeException('Platformbeheeractie accepteert geen lifecycle-confirmaties.');control58ValidateAdminRequest($GLOBALS['cpe_current_config']??throw new RuntimeException('Executorconfig ontbreekt tijdens rollenvalidatie.'),$r);}
+    if($platformAction){if(($r['confirm']??[])!==[])throw new RuntimeException('Platformbeheeractie accepteert geen lifecycle-confirmaties.');if(!$eerderGevalideerd)control58ValidateAdminRequest($GLOBALS['cpe_current_config']??throw new RuntimeException('Executorconfig ontbreekt tijdens rollenvalidatie.'),$r);elseif(array_key_exists('admin',$r)&&!is_array($r['admin']))throw new RuntimeException('Eerder gevalideerde adminpayload is niet langer een array.');}
     else{
-        $role=control58ExecutorRole($GLOBALS['cpe_current_config']??throw new RuntimeException('Executorconfig ontbreekt tijdens rollenvalidatie.'),(string)$r['operator']);if(!control58RoleCan($role,'mutate'))throw new RuntimeException('Operatorrol staat tenantmutaties niet toe.');
+        if(!$eerderGevalideerd){$role=control58ExecutorRole($GLOBALS['cpe_current_config']??throw new RuntimeException('Executorconfig ontbreekt tijdens rollenvalidatie.'),(string)$r['operator']);if(!control58RoleCan($role,'mutate'))throw new RuntimeException('Operatorrol staat tenantmutaties niet toe.');}
         if($action==='provision'){if(($r['confirm']??[])!==[])throw new RuntimeException('Provisioning accepteert geen confirmatievelden.');cpeProvisionPayload($r);}elseif(isset($r['provision']))throw new RuntimeException('Lifecycle-aanvraag bevat onverwachte provisioningdata.');
     }
     return$r;
@@ -170,11 +174,15 @@ function cpeJournalPad(array$c,string$id):string
 }
 function cpeJournalWrite(array$c,array$r,string$state,string$message=''):void
 {
-    if(!in_array($state,['accepted','executing','effect_committed'],true))throw new RuntimeException('Onbekende executorjournalstatus.');$id=(string)$r['request_id'];$doc=['schema'=>1,'phase'=>'5.8-execution-journal','request_id'=>$id,'tenant_key'=>$r['tenant_key']??null,'action'=>$r['action']??null,'operator'=>$r['operator']??null,'state'=>$state,'updated_at_utc'=>gmdate('Y-m-d\TH:i:s\Z'),'message'=>substr(preg_replace('/\s+/',' ',trim($message))??'',0,500)];cpeWrite(cpeJournalPad($c,$id),$doc,0600,0);
+    if(!in_array($state,['accepted','executing','effect_committed'],true))throw new RuntimeException('Onbekende executorjournalstatus.');$id=(string)$r['request_id'];$doc=['schema'=>1,'phase'=>'5.8-execution-journal','request_id'=>$id,'request_sha256'=>cpeRequestBinding($r),'tenant_key'=>$r['tenant_key']??null,'action'=>$r['action']??null,'operator'=>$r['operator']??null,'state'=>$state,'updated_at_utc'=>gmdate('Y-m-d\TH:i:s\Z'),'message'=>substr(preg_replace('/\s+/',' ',trim($message))??'',0,500)];cpeWrite(cpeJournalPad($c,$id),$doc,0600,0);
 }
 function cpeJournalLees(array$c,string$id):?array
 {
-    $p=cpeJournalPad($c,$id);if(!file_exists($p)&&!is_link($p))return null;if(is_link($p)||!is_file($p)||!is_readable($p))throw new RuntimeException('Executorjournal is onveilig.');$raw=@file_get_contents($p);$d=is_string($raw)?json_decode($raw,true):null;if(!is_array($d)||(int)($d['schema']??0)!==1||($d['phase']??'')!=='5.8-execution-journal'||!hash_equals($id,(string)($d['request_id']??''))||!in_array((string)($d['state']??''),['accepted','executing','effect_committed'],true))throw new RuntimeException('Executorjournal heeft ongeldig schema.');return$d;
+    $p=cpeJournalPad($c,$id);if(!file_exists($p)&&!is_link($p))return null;if(is_link($p)||!is_file($p)||!is_readable($p))throw new RuntimeException('Executorjournal is onveilig.');$raw=@file_get_contents($p);$d=is_string($raw)?json_decode($raw,true):null;if(!is_array($d)||(int)($d['schema']??0)!==1||($d['phase']??'')!=='5.8-execution-journal'||!hash_equals($id,(string)($d['request_id']??''))||preg_match('/^[0-9a-f]{64}$/D',(string)($d['request_sha256']??''))!==1||!in_array((string)($d['state']??''),['accepted','executing','effect_committed'],true))throw new RuntimeException('Executorjournal heeft ongeldig schema.');return$d;
+}
+function cpeJournalBindtRequest(array$journal,array$r):bool
+{
+    return hash_equals((string)$journal['request_sha256'],cpeRequestBinding($r))&&hash_equals((string)($journal['tenant_key']??''),(string)($r['tenant_key']??''))&&hash_equals((string)($journal['action']??''),(string)($r['action']??''))&&hash_equals((string)($journal['operator']??''),(string)($r['operator']??''));
 }
 function cpeProcessingOpruimen(array$c,string$requestPad,string$id):void
 {
@@ -183,11 +191,13 @@ function cpeProcessingOpruimen(array$c,string$requestPad,string$id):void
 function cpeReconcileProcessing(array$c):void
 {
     $files=glob($c['processing_dir'].'/*.json')?:[];sort($files,SORT_STRING);
-    foreach($files as$f){$base=basename($f);if(preg_match('/^([0-9a-f]{32})\.json$/D',$base,$m)!==1)continue;$id=$m[1];$r=cpeRequest($f,true);$result=cpeResultLees($c,$id);$journal=cpeJournalLees($c,$id);
-        if($result!==null){control58MarkScheduleResult($c,$id,(string)$result['result'],(string)$result['message']);cpeAuditEenmalig($c,$r,(string)$result['result'],(string)$result['message']);cpeProcessingOpruimen($c,$f,$id);continue;}
-        $state=(string)($journal['state']??'');if($state==='effect_committed'){$msg=(string)($journal['message']??'Uitvoering voltooid vóór executorherstel.');cpeResult($c,$r,'ok',$msg);cpeAuditEenmalig($c,$r,'ok',$msg);cpeProcessingOpruimen($c,$f,$id);continue;}
-        if($state==='executing'){$msg='Uitkomst onbekend na executoronderbreking; de actie is uit veiligheid niet automatisch opnieuw uitgevoerd. Controleer de actuele tenantstatus vóór een bewuste nieuwe aanvraag.';cpeResult($c,$r,'failed',$msg);cpeAuditEenmalig($c,$r,'failed',$msg);cpeProcessingOpruimen($c,$f,$id);continue;}
-        $msg='Executor werd onderbroken vóór aantoonbare uitvoering; de aanvraag is niet automatisch hervat. Dien de actie na controle opnieuw in.';cpeResult($c,$r,'failed',$msg);cpeAuditEenmalig($c,$r,'failed',$msg);cpeProcessingOpruimen($c,$f,$id);
+    foreach($files as$f){$base=basename($f);if(preg_match('/^([0-9a-f]{32})\.json$/D',$base,$m)!==1)continue;$id=$m[1];
+        try{$journal=cpeJournalLees($c,$id);$r=cpeRequest($f,true,$journal!==null);if($journal!==null&&!cpeJournalBindtRequest($journal,$r))throw new RuntimeException('Executorjournal hoort niet byte-inhoudelijk bij het processing-request.');$result=cpeResultLees($c,$id);
+            if($result!==null){control58MarkScheduleResult($c,$id,(string)$result['result'],(string)$result['message']);cpeAuditEenmalig($c,$r,(string)$result['result'],(string)$result['message']);cpeProcessingOpruimen($c,$f,$id);continue;}
+            $state=(string)($journal['state']??'');if($state==='effect_committed'){$msg=(string)($journal['message']??'Uitvoering voltooid vóór executorherstel.');cpeResult($c,$r,'ok',$msg);cpeAuditEenmalig($c,$r,'ok',$msg);cpeProcessingOpruimen($c,$f,$id);continue;}
+            if($state==='executing'){$msg='Uitkomst onbekend na executoronderbreking; de actie is uit veiligheid niet automatisch opnieuw uitgevoerd. Controleer de actuele tenantstatus vóór een bewuste nieuwe aanvraag.';cpeResult($c,$r,'failed',$msg);cpeAuditEenmalig($c,$r,'failed',$msg);cpeProcessingOpruimen($c,$f,$id);continue;}
+            $msg='Executor werd onderbroken vóór aantoonbare uitvoering; de aanvraag is niet automatisch hervat. Dien de actie na controle opnieuw in.';cpeResult($c,$r,'failed',$msg);cpeAuditEenmalig($c,$r,'failed',$msg);cpeProcessingOpruimen($c,$f,$id);
+        }catch(Throwable$e){fwrite(STDERR,'WAARSCHUWING: processing-request '.substr($id,0,8).' kon niet veilig worden gereconcilieerd en blijft root-only staan: '.$e->getMessage()."\n");}
     }
 }
 
