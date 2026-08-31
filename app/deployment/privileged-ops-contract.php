@@ -1,9 +1,47 @@
 <?php
-// Read-only contract voor privileged/root-tooling die bewust buiten de
-// immutable applicatierelease blijft. De actieve release beschrijft welke
-// bytes op vaste root-owned installatiepaden worden verwacht. Observability
-// controleert die wereldleesbare executables alleen met lstat/hash_file en
-// krijgt daarmee geen extra rootrechten of uitvoermogelijkheid.
+// Read-only contract voor privileged/root-artifacts die bewust buiten de
+// immutable applicatierelease blijven. De actieve release beschrijft welke
+// bytes en metadata op een kleine vaste allowlist van installatiepaden worden
+// verwacht. Productie meet dit contract vanuit de bestaande root-executor en
+// publiceert alleen de uitkomst in de control-plane snapshot.
+
+function privilegedOpsStructuralDefinitions(): array
+{
+    return [
+        'github-entry' => [
+            'source_path' => 'ops/vps-test-deploy/verenigingsplatform-github-entry',
+            'installed_path' => '/usr/local/bin/verenigingsplatform-github-entry',
+            'expected_uid' => 0,
+            'expected_gid' => 0,
+            'expected_mode' => 0755,
+            'expected_executable' => true,
+        ],
+        'github-deploy' => [
+            'source_path' => 'ops/vps-test-deploy/verenigingsplatform-github-deploy',
+            'installed_path' => '/usr/local/sbin/verenigingsplatform-github-deploy',
+            'expected_uid' => 0,
+            'expected_gid' => 0,
+            'expected_mode' => 0755,
+            'expected_executable' => true,
+        ],
+        'github-e2e' => [
+            'source_path' => 'ops/vps-test-deploy/verenigingsplatform-github-e2e',
+            'installed_path' => '/usr/local/sbin/verenigingsplatform-github-e2e',
+            'expected_uid' => 0,
+            'expected_gid' => 0,
+            'expected_mode' => 0755,
+            'expected_executable' => true,
+        ],
+        'github-e2e-sudoers' => [
+            'source_path' => 'ops/vps-test-deploy/verenigingsplatform-github-e2e.sudoers',
+            'installed_path' => '/etc/sudoers.d/verenigingsplatform-github-e2e',
+            'expected_uid' => 0,
+            'expected_gid' => 0,
+            'expected_mode' => 0440,
+            'expected_executable' => false,
+        ],
+    ];
+}
 
 function privilegedOpsContract(): array
 {
@@ -13,13 +51,14 @@ function privilegedOpsContract(): array
         'tools' => [
             [
                 'id' => 'github-entry',
-                'version' => 'sha256-b34d36a418eb',
+                'version' => 'sha256-48bdaaa5e9cd',
                 'source_path' => 'ops/vps-test-deploy/verenigingsplatform-github-entry',
                 'installed_path' => '/usr/local/bin/verenigingsplatform-github-entry',
-                'expected_sha256' => 'b34d36a418eb0be4c7806803976b41e76603001b593247c7ba279f7988fd2b8b',
+                'expected_sha256' => '48bdaaa5e9cd3a23987b3dd996c641a9a16f278a64623fbf1108cb4c237e5324',
                 'expected_uid' => 0,
                 'expected_gid' => 0,
                 'expected_mode' => 0755,
+                'expected_executable' => true,
             ],
             [
                 'id' => 'github-deploy',
@@ -30,6 +69,29 @@ function privilegedOpsContract(): array
                 'expected_uid' => 0,
                 'expected_gid' => 0,
                 'expected_mode' => 0755,
+                'expected_executable' => true,
+            ],
+            [
+                'id' => 'github-e2e',
+                'version' => 'sha256-a416e4cb44a6',
+                'source_path' => 'ops/vps-test-deploy/verenigingsplatform-github-e2e',
+                'installed_path' => '/usr/local/sbin/verenigingsplatform-github-e2e',
+                'expected_sha256' => 'a416e4cb44a680f20c9bf924ddde2cefec49f715ea542c7c706b4d46db46e32e',
+                'expected_uid' => 0,
+                'expected_gid' => 0,
+                'expected_mode' => 0755,
+                'expected_executable' => true,
+            ],
+            [
+                'id' => 'github-e2e-sudoers',
+                'version' => 'sha256-4e74398220ae',
+                'source_path' => 'ops/vps-test-deploy/verenigingsplatform-github-e2e.sudoers',
+                'installed_path' => '/etc/sudoers.d/verenigingsplatform-github-e2e',
+                'expected_sha256' => '4e74398220aeef8c1307ef8931e726a6e375c911ef4fb6f813673a470199f59d',
+                'expected_uid' => 0,
+                'expected_gid' => 0,
+                'expected_mode' => 0440,
+                'expected_executable' => false,
             ],
         ],
     ];
@@ -39,34 +101,33 @@ function privilegedOpsDefinitionValid(array $tool): bool
 {
     $id = (string)($tool['id'] ?? '');
     $version = (string)($tool['version'] ?? '');
-    $source = (string)($tool['source_path'] ?? '');
-    $installed = (string)($tool['installed_path'] ?? '');
     $sha = (string)($tool['expected_sha256'] ?? '');
-    $uid = $tool['expected_uid'] ?? null;
-    $gid = $tool['expected_gid'] ?? null;
-    $mode = $tool['expected_mode'] ?? null;
+    $structural = privilegedOpsStructuralDefinitions()[$id] ?? null;
 
-    if (preg_match('/^[a-z0-9][a-z0-9-]{1,63}$/D', $id) !== 1) return false;
+    if (!is_array($structural)) return false;
     if (preg_match('/^sha256-[0-9a-f]{12}$/D', $version) !== 1) return false;
-    if (preg_match('#^ops/vps-test-deploy/[a-z0-9][a-z0-9._-]{1,100}$#D', $source) !== 1) return false;
-    if (preg_match('#^/usr/local/(?:bin|sbin)/[a-z0-9][a-z0-9._-]{1,100}$#D', $installed) !== 1) return false;
     if (preg_match('/^[0-9a-f]{64}$/D', $sha) !== 1) return false;
-    if (!is_int($uid) || $uid < 0 || !is_int($gid) || $gid < 0) return false;
-    if (!is_int($mode) || $mode < 0 || $mode > 0777) return false;
-    return hash_equals('sha256-' . substr($sha, 0, 12), $version);
+    if (!hash_equals('sha256-' . substr($sha, 0, 12), $version)) return false;
+
+    foreach ($structural as $key => $expected) {
+        if (!array_key_exists($key, $tool) || $tool[$key] !== $expected) return false;
+    }
+    return true;
 }
 
 /**
  * Meet één bestand zonder iets uit te voeren of te wijzigen. Het padargument
  * is generiek gehouden zodat de functie met tijdelijke fixtures testbaar is;
- * productie roept hem uitsluitend aan met het statische contract hierboven.
+ * productie roept hem uitsluitend vanuit de root-executor aan met het vaste
+ * contract hierboven.
  */
 function privilegedOpsMeasureFile(
     string $path,
     string $expectedSha256,
     int $expectedUid,
     int $expectedGid,
-    int $expectedMode
+    int $expectedMode,
+    bool $expectedExecutable
 ): array {
     $result = ['status'=>'missing','installed_sha256'=>null,'reason'=>'missing'];
     if ($path === '' || !str_starts_with($path, '/') || str_contains($path, "\0") || preg_match('#(?:^|/)\.\.?(/|$)#', $path)) {
@@ -87,7 +148,10 @@ function privilegedOpsMeasureFile(
         return ['status'=>'unsafe','installed_sha256'=>null,'reason'=>'hash_failed'];
     }
     $mode = (int)$stat['mode'] & 0777;
-    if ((int)$stat['uid'] !== $expectedUid || (int)$stat['gid'] !== $expectedGid || $mode !== $expectedMode || !is_executable($path)) {
+    if ((int)$stat['uid'] !== $expectedUid
+        || (int)$stat['gid'] !== $expectedGid
+        || $mode !== $expectedMode
+        || is_executable($path) !== $expectedExecutable) {
         return ['status'=>'unsafe','installed_sha256'=>$actual,'reason'=>'metadata'];
     }
     if (!hash_equals($expectedSha256, $actual)) {
@@ -115,7 +179,8 @@ function privilegedOpsSnapshot(): array
             (string)$definition['expected_sha256'],
             (int)$definition['expected_uid'],
             (int)$definition['expected_gid'],
-            (int)$definition['expected_mode']
+            (int)$definition['expected_mode'],
+            (bool)$definition['expected_executable']
         );
         $status = (string)$measured['status'];
         if (($rank[$status] ?? 99) > ($rank[$overall] ?? 99)) $overall = $status;
