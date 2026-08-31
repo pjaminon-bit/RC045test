@@ -10,7 +10,7 @@ $checks = [
     'no blind crash retry' => is_string($source) && str_contains($source, 'niet automatisch opnieuw uitgevoerd'),
     'journal binds validated request bytes' => is_string($source)
         && str_contains($source, 'function cpeRequestBinding')
-        && str_contains($source, "'request_sha256'=>cpeRequestBinding($r)")
+        && str_contains($source, "'request_sha256'=>cpeRequestBinding(\$r)")
         && str_contains($source, 'function cpeJournalBindtRequest')
         && str_contains($source, 'Executorjournal hoort niet byte-inhoudelijk bij het processing-request.'),
     'recovery bypass requires existing bound journal' => is_string($source)
