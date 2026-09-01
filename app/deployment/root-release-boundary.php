@@ -60,12 +60,70 @@ function process521PhpBinary(string $binary): bool
     return preg_match('#^/usr/bin/php(?:[0-9]{1,2}\.[0-9]{1,2})?$#D', $binary) === 1;
 }
 
+function process521HostEngineReleaseScript(string $hostRoot, string $child): ?string
+{
+    $allowed = [
+        'check-vps-health.php',
+        'prepare-vps-deployment.php',
+        'prepare-vps-runtime.php',
+        'prepare-vps-webserver.php',
+        'prepare-vps-database.php',
+        'prepare-vps-dns.php',
+        'apply-vps-runtime.php',
+        'apply-vps-webserver.php',
+        'apply-vps-database.php',
+        'check-vps-dns.php',
+        'prepare-vps-tls.php',
+        'apply-vps-tls.php',
+        'prepare-vps-monitoring.php',
+        'apply-vps-monitoring.php',
+        'prepare-vps-lifecycle.php',
+        'apply-vps-lifecycle.php',
+        'provision-tenant.php',
+    ];
+    $base = basename($child);
+    if (!in_array($base, $allowed, true)) return null;
+    $trusted = realpath($hostRoot . '/bin/' . $base);
+    if ($trusted === false || !is_file($trusted) || is_link($trusted) || !str_starts_with($trusted, $hostRoot . '/bin/')) {
+        throw new RuntimeException('Toegestaan host-engine script ontbreekt of valt buiten de host-engine: ' . $base);
+    }
+    return $trusted;
+}
+
+function process521HostEngineSystemdRun(array $cmd, string $hostRoot): array
+{
+    if (($cmd[0] ?? '') !== '/usr/bin/systemd-run') return $cmd;
+    $phpIndex = null;
+    foreach ($cmd as $i => $arg) {
+        if ($i === 0) continue;
+        if (is_string($arg) && process521PhpBinary($arg)) { $phpIndex = $i; break; }
+    }
+    if ($phpIndex === null || !isset($cmd[$phpIndex + 1]) || !is_string($cmd[$phpIndex + 1])) return $cmd;
+    $child = realpath($cmd[$phpIndex + 1]);
+    $releaseRoot = $child === false ? null : process521ReleaseRootFromReal($child);
+    if ($releaseRoot === null) return $cmd;
+    if (basename($child) !== 'control-plane-scheduled-run.php') {
+        throw new RuntimeException('systemd-run naar applicatierelease-PHP is geblokkeerd.');
+    }
+    $trusted = realpath($hostRoot . '/bin/control-plane-scheduled-run.php');
+    if ($trusted === false || !is_file($trusted) || is_link($trusted) || !str_starts_with($trusted, $hostRoot . '/bin/')) {
+        throw new RuntimeException('Host-engine scheduled-run helper ontbreekt of is onveilig.');
+    }
+    $cmd[$phpIndex + 1] = $trusted;
+    return $cmd;
+}
+
 function process521RootPhpBoundary(array $cmd): array
 {
     if (PHP_OS_FAMILY !== 'Linux' || !function_exists('posix_geteuid') || posix_geteuid() !== 0) return $cmd;
-    if ($cmd === [] || !isset($cmd[0]) || !process521PhpBinary((string)$cmd[0])) return $cmd;
+    if ($cmd === [] || !isset($cmd[0])) return $cmd;
 
     $hostRoot = process521HostEngineRoot();
+    if ($hostRoot !== null && (string)$cmd[0] === '/usr/bin/systemd-run') {
+        return process521HostEngineSystemdRun($cmd, $hostRoot);
+    }
+    if (!process521PhpBinary((string)$cmd[0])) return $cmd;
+
     $trustedRelease = $hostRoot === null ? process521TrustedRunnerReleaseRoot() : null;
     if ($hostRoot === null && $trustedRelease === null) return $cmd;
 
@@ -88,25 +146,19 @@ function process521RootPhpBoundary(array $cmd): array
     $childRoot = $child === false ? null : process521ReleaseRootFromReal($child);
     if ($childRoot === null) return $cmd;
 
-    // Host-engine: nooit PHP uit een applicatierelease als root. Alleen een
-    // healthaanroep wordt vervangen door de root-owned host-engine checker.
+    // Host-engine: een beperkte lijst legacy beheercommando's wordt naar het
+    // byte-gecontroleerde host-equivalent herschreven. Alle overige release-PHP
+    // blijft fail-closed geblokkeerd.
     if ($hostRoot !== null) {
-        if (basename($child) === 'check-vps-health.php') {
-            $hostChecker = realpath($hostRoot . '/bin/check-vps-health.php');
-            if ($hostChecker === false || !is_file($hostChecker) || is_link($hostChecker)
-                || !str_starts_with($hostChecker, $hostRoot . '/')) {
-                throw new RuntimeException('Host-engine healthchecker ontbreekt of valt buiten de host-engine.');
-            }
-            $cmd[1] = $hostChecker;
-            return $cmd;
-        }
-        throw new RuntimeException('Root-PHP naar applicatiereleasecode is vanuit host-engine geblokkeerd.');
+        $trusted = process521HostEngineReleaseScript($hostRoot, $child);
+        if ($trusted === null) throw new RuntimeException('Root-PHP naar applicatiereleasecode is vanuit host-engine geblokkeerd.');
+        $cmd[1] = $trusted;
+        return $cmd;
     }
 
     // Compatibiliteit voor een reeds vertrouwde immutable release. Deze route
-    // blijft fail-closed en wordt door de nieuwe deploy/systemd paden niet meer
-    // als rootentrypoint gebruikt; hij ondersteunt uitsluitend rollback/recovery
-    // tijdens de gecontroleerde migratie.
+    // ondersteunt uitsluitend rollback/recovery tijdens de gecontroleerde
+    // first-hop migratie en verdwijnt uit de permanente rootentrypoints.
     if ($trustedRelease !== null && hash_equals($trustedRelease, $childRoot)) {
         $cmd[1] = $child;
         return $cmd;
