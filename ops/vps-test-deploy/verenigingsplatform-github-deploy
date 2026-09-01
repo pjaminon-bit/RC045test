@@ -25,8 +25,9 @@ rm='/usr/bin/rm'
 readlink_bin='/usr/bin/readlink'
 grep_bin='/usr/bin/grep'
 stat_bin='/usr/bin/stat'
+systemctl='/usr/bin/systemctl'
 
-for exe in "$php" "$git" "$install" "$mktemp" "$rm" "$readlink_bin" "$grep_bin" "$stat_bin" "$host_launcher"; do
+for exe in "$php" "$git" "$install" "$mktemp" "$rm" "$readlink_bin" "$grep_bin" "$stat_bin" "$systemctl" "$host_launcher"; do
   [[ -x "$exe" ]] || { echo "Vereiste executable ontbreekt: $exe" >&2; exit 69; }
 done
 [[ -d "$platform_root" && -L "$platform_root/current" ]] || { echo 'Actieve immutable platformrelease ontbreekt.' >&2; exit 69; }
@@ -56,11 +57,15 @@ for unit in "${health_units[@]}"; do
     exit 69
   }
 done
-control_service='/etc/systemd/system/verenigingsplatform-control-plane.service'
-if [[ -e "$control_service" || -L "$control_service" ]]; then
-  [[ -f "$control_service" && ! -L "$control_service" ]] || { echo 'Control-plane service is onveilig.' >&2; exit 69; }
-  "$grep_bin" -Fq "ExecStart=$host_launcher control-plane --config=$control_plane_config" "$control_service" || {
-    echo 'Control-plane service is nog niet naar host-tooling gemigreerd.' >&2
+control_service='verenigingsplatform-control-plane.service'
+if "$systemctl" cat "$control_service" --no-pager >/dev/null 2>&1; then
+  control_exec="$(SYSTEMD_PAGER=cat "$systemctl" --no-pager show "$control_service" -p ExecStart --value)"
+  [[ "$control_exec" == *"$host_launcher control-plane --config=$control_plane_config"* ]] || {
+    echo 'Effectieve control-plane service is nog niet naar host-tooling gemigreerd.' >&2
+    exit 69
+  }
+  [[ "$control_exec" != *'/srv/verenigingsplatform/current/'* && "$control_exec" != *'/srv/verenigingsplatform/releases/'* ]] || {
+    echo 'Effectieve control-plane service bevat nog root→release code.' >&2
     exit 69
   }
 fi
