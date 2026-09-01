@@ -51,7 +51,7 @@ c157(str_contains($installer,'-m 0444')&&str_contains($installer,'"$chmod_bin" 0
 c157(!str_contains($installer,'php ')&&!str_contains($installer,'./bin/'),'host-engine installer voert geen PHP of bin-code uit de repositorycheckout uit');
 
 c157(str_starts_with($migration,"#!/usr/bin/bash\n")&&str_contains($migration,"export PATH='/usr/sbin:/usr/bin:/sbin:/bin'"),'live migratie pint Bash en systeem-PATH');
-c157(!str_contains($migration,'(?:')&&str_contains($migration,'"$tenant" =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?$')&&str_contains($migration,'"${#tenant}" -lt 3')&&str_contains($migration,'"$tenant" == *--*'),'live migratie gebruikt Bash-geldige canonieke tenantvalidatie');
+c157(!str_contains($migration,'(?:')&&str_contains($migration,'=~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?$')&&str_contains($migration,'${#tenant}" -lt 3')&&str_contains($migration,'"$tenant" == *--*'),'live migratie gebruikt Bash-geldige canonieke tenantvalidatie');
 c157(str_contains($migration,"'vp-control-schedule-*'")&&str_contains($migration,'Migratie geweigerd: er bestaan nog vp-control-schedule-* systemd-units.'),'live migratie weigert achterblijvende pre-migratie scheduled rootjobs');
 c157(str_contains($migration,'monitoring-prepare')&&str_contains($migration,'monitoring-apply')&&str_contains($migration,'lifecycle-prepare'),'live migratie regenereert monitoring en afhankelijke lifecyclecontracten');
 c157(str_contains($migration,'ROOT BOUNDARY MIGRATION OK')&&str_contains($migration,'root-boundary-migration'),'live migratie bewaart root-only herstelbewijs en geeft expliciet succes');
