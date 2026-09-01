@@ -2,6 +2,7 @@
 $root=dirname(__DIR__);$ok=0;$fout=0;
 function c157(bool$c,string$l):void{global$ok,$fout;if($c){$ok++;echo"OK: {$l}\n";}else{$fout++;fwrite(STDERR,"FOUT: {$l}\n");}}
 require_once $root.'/app/deployment/root-release-boundary.php';
+require_once $root.'/app/deployment/monitoring-contract.php';
 
 $sha=str_repeat('a',40);$release='/srv/verenigingsplatform/releases/'.$sha;
 c157(process521ReleaseRootFromReal($release.'/bin/check-vps-health.php')===$release,'releaseparser herkent uitsluitend fysieke immutable commitrelease');
