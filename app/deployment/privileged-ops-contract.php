@@ -23,10 +23,10 @@ function privilegedOpsContract(): array
             ],
             [
                 'id' => 'github-deploy',
-                'version' => 'sha256-41114f1c3027',
+                'version' => 'sha256-df1b56ba6666',
                 'source_path' => 'ops/vps-test-deploy/verenigingsplatform-github-deploy',
                 'installed_path' => '/usr/local/sbin/verenigingsplatform-github-deploy',
-                'expected_sha256' => '41114f1c30278de0804462c70b651fb71f07e6cbd43e8a983b513af18708e879',
+                'expected_sha256' => 'df1b56ba66665424aa811e959d9199b6354f8d9018634a5ea0e510b2124997d6',
                 'expected_uid' => 0,
                 'expected_gid' => 0,
                 'expected_mode' => 0755,
