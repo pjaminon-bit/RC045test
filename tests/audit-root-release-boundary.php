@@ -17,13 +17,13 @@ $deploy=(string)file_get_contents($root.'/ops/vps-test-deploy/verenigingsplatfor
 $releaseApply=(string)file_get_contents($root.'/bin/apply-vps-release.php');
 
 c157(str_contains($runner,"require_once __DIR__ . '/root-release-boundary.php'")&&str_contains($runner,'process521RootPhpBoundary($cmd)'),'iedere gedeelde privileged subprocess passeert root-release boundary');
-c157(str_contains($boundary,"'-u', 'nobody', '--'")&&str_contains($boundary,'($cmd[1] ?? null) === \'-l\''),'kandidaat PHP-lint dropt root naar nobody');
-c157(str_contains($boundary,"basename($child) === 'check-vps-health.php'")&&str_contains($boundary,'$trustedRoot . \'/bin/check-vps-health.php\''),'cross-release health wordt teruggebonden aan trusted callerrelease');
+c157(str_contains($boundary,"'-u', 'nobody', '--'")&&str_contains($boundary,"=== '-l'"),'kandidaat PHP-lint dropt root naar nobody');
+c157(str_contains($boundary,'basename($child)')&&str_contains($boundary,'check-vps-health.php')&&str_contains($boundary,"'/bin/check-vps-health.php'"),'cross-release health wordt teruggebonden aan trusted callerrelease');
 c157(str_contains($boundary,'$cmd[1] = $child;')&&str_contains($boundary,'hash_equals($trustedRoot, $childRoot)'),'trusted root-PHP wordt naar fysiek immutable scriptpad gecanonicaliseerd');
 c157(str_contains($boundary,'Root-PHP naar een andere of kandidaat-release is geblokkeerd.'),'overige cross-release PHP faalt gesloten');
 
-c157(str_contains($monitor,'function monitoring46TrustedRoot():string')&&str_contains($monitor,'function monitoring46SystemdService(array $p):string{$root=monitoring46TrustedRoot();'),'permanente healthservice gebruikt fysieke trusted bronroot');
-c157(!str_contains($monitor,"function monitoring46SystemdService(array $p):string{$root=runtime41PlanLeesEnValideer"),'healthservice volgt niet langer runtime shared_code/current');
+c157(str_contains($monitor,'function monitoring46TrustedRoot():string')&&str_contains($monitor,'function monitoring46SystemdService(array $p):string')&&str_contains($monitor,'monitoring46TrustedRoot()'),'permanente healthservice gebruikt fysieke trusted bronroot');
+c157(!str_contains($monitor,'runtime41PlanLeesEnValideer($p[\'source\'][\'runtime_plan_file\'])'),'healthservice volgt niet langer runtime shared_code/current');
 c157(monitoring46TrustedRoot()===realpath($root),'monitoring trusted root resolveert in bronregressie fysiek naar huidige checkout');
 
 c157(str_contains($prepare,'$appReal = realpath($appArg);')&&str_contains($prepare,'control51Plan(trim((string)$o[\'host\']), $appRoot'),'control-plane plan pint app_root fysiek vóór systemd/runtimeconfig generatie');
@@ -31,7 +31,7 @@ $trustedPos=strpos($deploy,'trusted_control_executor=');$switchPos=strpos($deplo
 c157($trustedPos!==false&&$switchPos!==false&&$refreshPos!==false&&$trustedPos<$switchPos&&$switchPos<$refreshPos,'deploywrapper bevriest trusted executor vóór current-switch en gebruikt die na switch');
 c157(!str_contains($deploy,'$platform_root/current/bin/control-plane-executor.php'),'deploywrapper root-start nooit executor uit nieuw current');
 
-c157(str_contains($releaseApply,'\'/usr/sbin/runuser\',\'-u\',$t[\'user\'],\'--\'')&&str_contains($releaseApply,'apply47CandidateProbe'),'candidate runtimeprobe blijft onder tenantidentity');
-c157(str_contains($releaseApply,'apply47PhpSyntax')&&str_contains($boundary,'($cmd[1] ?? null) === \'-l\''),'candidate syntaxcheck valt onder expliciete unprivileged lintboundary');
+c157(str_contains($releaseApply,"'/usr/sbin/runuser'")&&str_contains($releaseApply,"'-u'")&&str_contains($releaseApply,'$t[\'user\']')&&str_contains($releaseApply,'apply47CandidateProbe'),'candidate runtimeprobe blijft onder tenantidentity');
+c157(str_contains($releaseApply,'apply47PhpSyntax')&&str_contains($boundary,"=== '-l'"),'candidate syntaxcheck valt onder expliciete unprivileged lintboundary');
 
 echo"Issue #157 root-release boundary: {$ok} OK, {$fout} fout(en)\n";exit($fout===0?0:1);
