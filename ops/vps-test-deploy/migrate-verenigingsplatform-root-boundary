@@ -99,22 +99,24 @@ for tenant in "${tenants[@]}"; do
   service="verenigingsplatform-health-$tenant.service"
   timer="verenigingsplatform-health-$tenant.timer"
   exec_line="$(SYSTEMD_PAGER=cat "$systemctl" --no-pager show "$service" -p ExecStart --value)"
-  [[ "$exec_line" == *"$host_launcher health --monitoring-plan=$monitoring"* ]] || {
-    echo "Healthservice $service gebruikt niet de host-launcher." >&2
+  [[ "$exec_line" == *"$host_launcher health --monitoring-plan=$monitoring --probe --write-status --alert"* ]] || {
+    echo "Healthservice $service gebruikt niet de volledige host-health invocation." >&2
     exit 69
   }
   [[ "$exec_line" != *'/srv/verenigingsplatform/current/'* && "$exec_line" != *'/srv/verenigingsplatform/releases/'* ]] || {
     echo "Healthservice $service bevat nog releasecode." >&2
     exit 69
   }
+  probe_started_epoch="$($date_bin -u +%s)"
   "$systemctl" start "$service"
   "$systemctl" is-enabled "$timer" >/dev/null
 
   status="/var/lib/verenigingsplatform/monitoring/$tenant-health.json"
   "$php" -r '
-    $f=$argv[1];$tenant=$argv[2];$raw=@file_get_contents($f);$s=is_string($raw)?json_decode($raw,true):null;
-    if(!is_array($s)||($s["phase"]??"")!=="4.6-health"||($s["state"]??"")!=="up"||!hash_equals($tenant,(string)($s["tenant_key"]??"")))exit(2);
-  ' "$status" "$tenant" || { echo "Nieuwe host-health is niet UP voor $tenant." >&2; exit 69; }
+    $f=$argv[1];$tenant=$argv[2];$min=(int)$argv[3];$raw=@file_get_contents($f);$s=is_string($raw)?json_decode($raw,true):null;
+    $checked=is_array($s)?strtotime((string)($s["checked_at_utc"]??"")):false;
+    if(!is_array($s)||($s["phase"]??"")!=="4.6-health"||($s["state"]??"")!=="up"||!hash_equals($tenant,(string)($s["tenant_key"]??""))||$checked===false||$checked<$min)exit(2);
+  ' "$status" "$tenant" "$probe_started_epoch" || { echo "Nieuwe host-health is niet vers en UP voor $tenant." >&2; exit 69; }
 done
 
 control_service='verenigingsplatform-control-plane.service'
