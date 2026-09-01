@@ -53,7 +53,7 @@ try {
             if (!isset($o['force'])) throw new RuntimeException('Bestaand control-plane artifact wijkt af; gebruik alleen bewust --force: ' . $pad);
         }
         $tmp = dirname($pad) . '/.' . basename($pad) . '.tmp.' . bin2hex(random_bytes(5));
-        if (@file_put_contents($tmp, $inhoud) === false) throw new RuntimeException('Tijdelijke write faalde: ' . $pad);
+        if (@file_put_contents($tmp, $inhoud, LOCK_EX) === false) throw new RuntimeException('Tijdelijke write faalde: ' . $pad);
         @chmod($tmp, 0640);
         if (!@rename($tmp, $pad)) { @unlink($tmp); throw new RuntimeException('Artifact kon niet atomisch worden geplaatst: ' . $pad); }
         @chmod($pad, 0640);
