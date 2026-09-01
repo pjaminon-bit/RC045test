@@ -20,12 +20,24 @@ $cert = trim((string)($o['cert-name'] ?? 'verenigingsplatform-beheer'));
 try {
     $appArg = trim((string)$o['app-root']);
     $appReal = realpath($appArg);
-    if ($appReal === false || !is_dir($appReal)) throw new RuntimeException('Control-plane app-root kon niet fysiek naar de trusted host-engine worden opgelost.');
+    if ($appReal === false || !is_dir($appReal)) throw new RuntimeException('Control-plane app-root kon niet fysiek worden opgelost.');
     $appRoot = runtime41NormPad($appReal);
-    $hostRoot = process521HostEngineRoot();
-    if ($hostRoot === null || !hash_equals($hostRoot, $appRoot)) {
-        throw new RuntimeException('Control-plane app-root moet exact de actief geïnstalleerde root-owned host-engine zijn.');
+
+    // Een control-plane bundle mag nooit een applicatierelease als toekomstig
+    // root-executorpad vastleggen. In CI/dry-run blijft een fysieke fixture
+    // buiten de releaseboom toegestaan. Vanuit de geïnstalleerde host-engine
+    // is de binding strenger: app_root moet exact die actieve engine zijn.
+    if ($appRoot === '/srv/verenigingsplatform/current'
+        || str_starts_with($appRoot, '/srv/verenigingsplatform/current/')
+        || $appRoot === '/srv/verenigingsplatform/releases'
+        || str_starts_with($appRoot, '/srv/verenigingsplatform/releases/')) {
+        throw new RuntimeException('Control-plane app-root mag nooit naar current of een applicatierelease wijzen.');
     }
+    $hostRoot = process521HostEngineRoot();
+    if ($hostRoot !== null && !hash_equals($hostRoot, $appRoot)) {
+        throw new RuntimeException('Control-plane app-root moet vanuit host-tooling exact de actief geïnstalleerde root-owned host-engine zijn.');
+    }
+
     $plan = control51Plan(trim((string)$o['host']), $appRoot, trim((string)$o['tenants-root']), $php, $cert, trim((string)$o['output']));
     if (isset($o['dry-run'])) { echo control51Json($plan); exit(0); }
     $dir = (string)$plan['bundle']['output_dir'];
@@ -41,7 +53,7 @@ try {
             if (!isset($o['force'])) throw new RuntimeException('Bestaand control-plane artifact wijkt af; gebruik alleen bewust --force: ' . $pad);
         }
         $tmp = dirname($pad) . '/.' . basename($pad) . '.tmp.' . bin2hex(random_bytes(5));
-        if (@file_put_contents($tmp, $inhoud, LOCK_EX) === false) throw new RuntimeException('Tijdelijke write faalde: ' . $pad);
+        if (@file_put_contents($tmp, $inhoud) === false) throw new RuntimeException('Tijdelijke write faalde: ' . $pad);
         @chmod($tmp, 0640);
         if (!@rename($tmp, $pad)) { @unlink($tmp); throw new RuntimeException('Artifact kon niet atomisch worden geplaatst: ' . $pad); }
         @chmod($pad, 0640);
