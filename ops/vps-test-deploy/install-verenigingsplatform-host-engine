@@ -107,6 +107,16 @@ done < <("$find_bin" "$tmp" -type d -print0)
   "$sha256sum_bin" --check --quiet .host-engine-manifest.sha256
 )
 
+# De broncheckout mag tijdens de kopie niet zijn verschoven of gewijzigd.
+# Anders zou de tijdelijke engine geldige hashes kunnen bevatten van bytes die
+# niet langer aantoonbaar bij de geselecteerde commitcheckout horen.
+head_after="$("$git" -C "$repo_root" rev-parse HEAD)"
+status_after="$("$git" -C "$repo_root" status --porcelain=v1 --untracked-files=all)"
+[[ "$head_after" == "$commit" && -z "$status_after" ]] || {
+  echo 'Broncheckout wijzigde tijdens host-engine staging; activatie geweigerd.' >&2
+  exit 65
+}
+
 if [[ -e "$engine_root" || -L "$engine_root" ]]; then
   [[ -d "$engine_root" && ! -L "$engine_root" ]] || {
     echo 'Bestaande host-engine versie is geen veilige directory.' >&2
