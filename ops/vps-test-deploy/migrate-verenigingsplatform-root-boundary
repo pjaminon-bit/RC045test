@@ -1,5 +1,6 @@
-#!/usr/bin/env bash
+#!/usr/bin/bash
 set -euo pipefail
+export PATH='/usr/sbin:/usr/bin:/sbin:/bin'
 
 if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
   echo 'Root-boundary migratie moet als root draaien.' >&2
@@ -17,14 +18,17 @@ php='/usr/bin/php8.5'
 systemctl='/usr/bin/systemctl'
 install_bin='/usr/bin/install'
 cp_bin='/usr/bin/cp'
-mkdir_bin='/usr/bin/mkdir'
 date_bin='/usr/bin/date'
 grep_bin='/usr/bin/grep'
 stat_bin='/usr/bin/stat'
 mktemp_bin='/usr/bin/mktemp'
 rm_bin='/usr/bin/rm'
+find_bin='/usr/bin/find'
+sort_bin='/usr/bin/sort'
+tr_bin='/usr/bin/tr'
+basename_bin='/usr/bin/basename'
 
-for exe in "$host_launcher" "$php" "$systemctl" "$install_bin" "$cp_bin" "$mkdir_bin" "$date_bin" "$grep_bin" "$stat_bin" "$mktemp_bin" "$rm_bin"; do
+for exe in "$host_launcher" "$php" "$systemctl" "$install_bin" "$cp_bin" "$date_bin" "$grep_bin" "$stat_bin" "$mktemp_bin" "$rm_bin" "$find_bin" "$sort_bin" "$tr_bin" "$basename_bin"; do
   [[ -x "$exe" ]] || { echo "Vereiste executable ontbreekt: $exe" >&2; exit 69; }
 done
 [[ -f "$host_config" && ! -L "$host_config" ]] || { echo 'Host-engine config ontbreekt of is onveilig.' >&2; exit 69; }
@@ -39,7 +43,7 @@ IFS= read -r host_root < "$host_config"
 # Reeds geplande transient rootjobs kunnen nog een pre-migratie helperpad hebben.
 # Die moeten eerst bewust worden afgehandeld; de migratie raadt hun semantiek niet.
 scheduled="$($systemctl --no-pager --all --no-legend list-units 'vp-control-schedule-*' 2>/dev/null || true)"
-if [[ -n "$(printf '%s' "$scheduled" | tr -d '[:space:]')" ]]; then
+if [[ -n "$(printf '%s' "$scheduled" | "$tr_bin" -d '[:space:]')" ]]; then
   echo 'Migratie geweigerd: er bestaan nog vp-control-schedule-* systemd-units.' >&2
   printf '%s\n' "$scheduled" >&2
   exit 69
@@ -49,14 +53,14 @@ stamp="$($date_bin -u +%Y%m%dT%H%M%SZ)"
 backup="/var/lib/verenigingsplatform/root-boundary-migration/$stamp"
 "$install_bin" -d -o root -g root -m 0700 "$backup"
 
-mapfile -t tenants < <(find "$tenant_base" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | LC_ALL=C sort)
+mapfile -t tenants < <("$find_bin" "$tenant_base" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | LC_ALL=C "$sort_bin")
 [[ "${#tenants[@]}" -gt 0 ]] || { echo 'Geen tenants gevonden voor monitoringmigratie.' >&2; exit 69; }
 
 for tenant in "${tenants[@]}"; do
-  [[ "$tenant" =~ ^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$ && "$tenant" != 'default' ]] || {
+  if [[ "${#tenant}" -lt 3 || "${#tenant}" -gt 63 || "$tenant" == 'default' || "$tenant" == *--* || ! "$tenant" =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?$ ]]; then
     echo "Niet-canonieke tenantdirectory: $tenant" >&2
     exit 69
-  }
+  fi
   root="$tenant_base/$tenant"
   monitoring="$root/monitoring/monitoring-plan.json"
   lifecycle="$root/lifecycle/lifecycle-plan.json"
@@ -84,7 +88,7 @@ for tenant in "${tenants[@]}"; do
     "$cp_bin" -a -- "$lifecycle" "$backup/$tenant/lifecycle-plan.before.json"
   fi
   for unit in "/etc/systemd/system/verenigingsplatform-health-$tenant.service" "/etc/systemd/system/verenigingsplatform-health-$tenant.timer"; do
-    if [[ -f "$unit" && ! -L "$unit" ]]; then "$cp_bin" -a -- "$unit" "$backup/$tenant/$(basename "$unit").before"; fi
+    if [[ -f "$unit" && ! -L "$unit" ]]; then "$cp_bin" -a -- "$unit" "$backup/$tenant/$("$basename_bin" "$unit").before"; fi
   done
 
   echo "=== MIGREER MONITORING: $tenant ==="
