@@ -5,12 +5,13 @@ if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
   echo 'Host-engine installer moet als root draaien.' >&2
   exit 77
 fi
-if [[ "$#" -ne 1 || ! "$1" =~ ^[0-9a-f]{40}$ ]]; then
-  echo 'Gebruik: install-verenigingsplatform-host-engine <40-hex-commit>' >&2
+if [[ "$#" -ne 2 || ! "$1" =~ ^[0-9a-f]{40}$ || ! "$2" =~ ^/ ]]; then
+  echo 'Gebruik: install-verenigingsplatform-host-engine <40-hex-commit> <absolute-schone-checkout>' >&2
   exit 64
 fi
 
 commit="$1"
+repo_root="${2%/}"
 git='/usr/bin/git'
 install_bin='/usr/bin/install'
 mktemp_bin='/usr/bin/mktemp'
@@ -19,15 +20,22 @@ rm_bin='/usr/bin/rm'
 sha256sum_bin='/usr/bin/sha256sum'
 sort_bin='/usr/bin/sort'
 find_bin='/usr/bin/find'
+xargs_bin='/usr/bin/xargs'
 cmp_bin='/usr/bin/cmp'
 stat_bin='/usr/bin/stat'
 
-for exe in "$git" "$install_bin" "$mktemp_bin" "$mv_bin" "$rm_bin" "$sha256sum_bin" "$sort_bin" "$find_bin" "$cmp_bin" "$stat_bin"; do
+for exe in "$git" "$install_bin" "$mktemp_bin" "$mv_bin" "$rm_bin" "$sha256sum_bin" "$sort_bin" "$find_bin" "$xargs_bin" "$cmp_bin" "$stat_bin"; do
   [[ -x "$exe" ]] || { echo "Vereiste executable ontbreekt: $exe" >&2; exit 69; }
 done
-
-script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
-repo_root="$("$git" -C "$script_dir" rev-parse --show-toplevel)"
+[[ -d "$repo_root" && ! -L "$repo_root" ]] || {
+  echo 'Broncheckout ontbreekt of is een symlink.' >&2
+  exit 65
+}
+resolved_repo="$(cd "$repo_root" && pwd -P)"
+[[ "$resolved_repo" == "$repo_root" ]] || {
+  echo 'Broncheckout moet als fysiek canoniek absoluut pad worden opgegeven.' >&2
+  exit 65
+}
 head="$("$git" -C "$repo_root" rev-parse HEAD)"
 [[ "$head" == "$commit" ]] || {
   echo "Checkout staat op $head en niet op gevraagde commit $commit." >&2
@@ -80,7 +88,7 @@ chmod 0444 "$tmp/.host-engine-commit"
   cd "$tmp"
   "$find_bin" app bin -type f -print0 \
     | "$sort_bin" -z \
-    | xargs -0 "$sha256sum_bin"
+    | "$xargs_bin" -0 "$sha256sum_bin"
   "$sha256sum_bin" .host-engine-commit
 ) > "$tmp/.host-engine-manifest.sha256"
 chown root:root "$tmp/.host-engine-manifest.sha256"
