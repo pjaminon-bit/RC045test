@@ -33,10 +33,10 @@ function privilegedOpsContract(): array
             ],
             [
                 'id' => 'host-php',
-                'version' => 'sha256-f0af2632283f',
+                'version' => 'sha256-5abae478c008',
                 'source_path' => 'ops/vps-test-deploy/verenigingsplatform-host-php',
                 'installed_path' => '/usr/local/sbin/verenigingsplatform-host-php',
-                'expected_sha256' => 'f0af2632283fac5420787f4d14901ec2001f1a5c27c77fe5083b18d72ebaaf32',
+                'expected_sha256' => '5abae478c0088f8961191b3622305af87f387eb82181ff19cd9994180e27baec',
                 'expected_uid' => 0,
                 'expected_gid' => 0,
                 'expected_mode' => 0755,
