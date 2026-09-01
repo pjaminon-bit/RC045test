@@ -16,38 +16,57 @@ platform_root='/srv/verenigingsplatform'
 tenant_base='/srv/verenigingen'
 staging_base='/var/lib/verenigingsplatform/github-staging'
 control_plane_config='/etc/verenigingsplatform/control-plane/runtime.json'
+host_launcher='/usr/local/sbin/verenigingsplatform-host-php'
 php='/usr/bin/php8.5'
 git='/usr/bin/git'
 install='/usr/bin/install'
 mktemp='/usr/bin/mktemp'
 rm='/usr/bin/rm'
 readlink_bin='/usr/bin/readlink'
+grep_bin='/usr/bin/grep'
+stat_bin='/usr/bin/stat'
 
-for exe in "$php" "$git" "$install" "$mktemp" "$rm" "$readlink_bin"; do
+for exe in "$php" "$git" "$install" "$mktemp" "$rm" "$readlink_bin" "$grep_bin" "$stat_bin" "$host_launcher"; do
   [[ -x "$exe" ]] || { echo "Vereiste executable ontbreekt: $exe" >&2; exit 69; }
 done
 [[ -d "$platform_root" && -L "$platform_root/current" ]] || { echo 'Actieve immutable platformrelease ontbreekt.' >&2; exit 69; }
 [[ -d "$tenant_base" ]] || { echo 'Tenantbasis ontbreekt.' >&2; exit 69; }
-
-# Leg de trusted release fysiek vast vóór er ook maar iets aan current wijzigt.
-# Alle privileged PHP in deze deploy blijft daarna aan deze immutable release
-# gebonden; de kandidaat wordt alleen door unprivileged probes uitgevoerd.
-trusted_root="$("$readlink_bin" -f "$platform_root/current")"
-[[ "$trusted_root" =~ ^/srv/verenigingsplatform/releases/[0-9a-f]{40}$ && -d "$trusted_root" ]] || {
-  echo 'Actieve trusted release resolveert niet naar een immutable commitrelease.' >&2
+[[ -f "$host_launcher" && ! -L "$host_launcher" && "$("$stat_bin" -c '%u:%g:%a' "$host_launcher")" == '0:0:755' ]] || {
+  echo 'Root-owned host-launcher ontbreekt of heeft onveilige metadata.' >&2
   exit 69
 }
-trusted_prepare="$trusted_root/bin/prepare-vps-release.php"
-trusted_apply="$trusted_root/bin/apply-vps-release.php"
-trusted_control_executor="$trusted_root/bin/control-plane-executor.php"
-for trusted in "$trusted_prepare" "$trusted_apply" "$trusted_control_executor"; do
-  [[ -f "$trusted" && ! -L "$trusted" ]] || { echo "Trusted release-tooling ontbreekt of is een symlink: $trusted" >&2; exit 69; }
-done
 
-# De SSH-deploycredential mag uitsluitend de actuele main-tip activeren. Een
-# willekeurige bestaande repositorycommit (of een oude geldige release) is via
-# deze gateway dus geen geldig deploydoel. Rollback blijft een aparte,
-# gecontroleerde serveractie via de vertrouwde release-tooling.
+# Een deploy mag pas plaatsvinden nadat alle permanente rootentrypoints uit de
+# applicatierelease zijn gemigreerd naar de host-launcher. Zo kan de first-hop
+# naar deze securityarchitectuur niet opnieuw via /current als root lopen.
+shopt -s nullglob
+health_units=(/etc/systemd/system/verenigingsplatform-health-*.service)
+[[ "${#health_units[@]}" -gt 0 ]] || {
+  echo 'Geen geïnstalleerde tenant-healthservices gevonden.' >&2
+  exit 69
+}
+for unit in "${health_units[@]}"; do
+  [[ -f "$unit" && ! -L "$unit" ]] || { echo "Onveilige healthservice: $unit" >&2; exit 69; }
+  "$grep_bin" -Fq "ExecStart=$host_launcher health --monitoring-plan=" "$unit" || {
+    echo "Healthservice is nog niet naar host-tooling gemigreerd: $unit" >&2
+    exit 69
+  }
+  ! "$grep_bin" -Eq 'ExecStart=.*(/srv/verenigingsplatform/(current|releases)/).*\.php' "$unit" || {
+    echo "Healthservice bevat nog root→release PHP: $unit" >&2
+    exit 69
+  }
+done
+control_service='/etc/systemd/system/verenigingsplatform-control-plane.service'
+if [[ -e "$control_service" || -L "$control_service" ]]; then
+  [[ -f "$control_service" && ! -L "$control_service" ]] || { echo 'Control-plane service is onveilig.' >&2; exit 69; }
+  "$grep_bin" -Fq "ExecStart=$host_launcher control-plane --config=$control_plane_config" "$control_service" || {
+    echo 'Control-plane service is nog niet naar host-tooling gemigreerd.' >&2
+    exit 69
+  }
+fi
+shopt -u nullglob
+
+# De SSH-deploycredential mag uitsluitend de actuele main-tip activeren.
 read -r main_commit main_ref < <("$git" ls-remote "$repo" refs/heads/main)
 [[ "$main_ref" == 'refs/heads/main' && "$main_commit" =~ ^[0-9a-f]{40}$ ]] || {
   echo 'Actuele main-tip kon niet betrouwbaar uit GitHub worden bepaald.' >&2
@@ -78,15 +97,15 @@ actual="$("$git" -C "$source_root" rev-parse HEAD)"
 [[ "$actual" == "$commit" ]] || { echo 'Git checkout wijkt af van gevraagde commit.' >&2; exit 65; }
 [[ -z "$("$git" -C "$source_root" status --porcelain=v1 --untracked-files=all)" ]] || { echo 'Stagingcheckout is niet schoon.' >&2; exit 65; }
 
-"$php" "$trusted_prepare" \
+"$host_launcher" release-prepare \
   --source="$source_root" \
   --commit="$commit" \
   --platform-root="$platform_root" \
   --tenant-base="$tenant_base" \
   --output="$plan"
 
-"$php" "$trusted_apply" --plan="$plan" --check
-"$php" "$trusted_apply" --plan="$plan" --deploy
+"$host_launcher" release-apply --plan="$plan" --check
+"$host_launcher" release-apply --plan="$plan" --deploy
 
 active="$("$readlink_bin" -f "$platform_root/current")"
 [[ "$active" == "$platform_root/releases/$commit" ]] || {
@@ -97,16 +116,13 @@ active="$("$readlink_bin" -f "$platform_root/current")"
 state_commit="$("$php" -r '$p="/srv/verenigingsplatform/release-state.json";$r=@file_get_contents($p);$d=is_string($r)?json_decode($r,true):null;echo is_array($d)?(string)($d["active"]["commit"]??""):"";')"
 [[ "$state_commit" == "$commit" ]] || { echo 'release-state.json bevestigt de nieuwe commit niet.' >&2; exit 70; }
 
-# Refresh telemetry uitsluitend met de executor uit de pre-switch trusted
-# release. De nieuw geactiveerde release krijgt hierdoor niet automatisch root
-# via de deploygateway. Een expliciete control-plane herinstallatie roteert de
-# trusted executor later gecontroleerd naar een nieuwe immutable release.
+# Control-plane refresh loopt uitsluitend via root-owned host-tooling.
 if [[ -e "$control_plane_config" || -L "$control_plane_config" ]]; then
   [[ -f "$control_plane_config" && ! -L "$control_plane_config" ]] || {
     echo 'Control-plane runtimeconfig bestaat maar is geen veilig regulier bestand.' >&2
     exit 71
   }
-  refresh_output="$("$php" "$trusted_control_executor" --config="$control_plane_config" --refresh-only)"
+  refresh_output="$("$host_launcher" control-plane --config="$control_plane_config" --refresh-only)"
   printf '%s\n' "$refresh_output"
   grep -Fqx 'REFRESH OK' <<<"$refresh_output" || {
     echo 'Control-plane snapshotrefresh gaf niet de verwachte bevestiging.' >&2
