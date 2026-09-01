@@ -1,5 +1,6 @@
-#!/usr/bin/env bash
+#!/usr/bin/bash
 set -euo pipefail
+export PATH='/usr/sbin:/usr/bin:/sbin:/bin'
 
 if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
   echo 'Host-engine installer moet als root draaien.' >&2
@@ -23,8 +24,10 @@ find_bin='/usr/bin/find'
 xargs_bin='/usr/bin/xargs'
 cmp_bin='/usr/bin/cmp'
 stat_bin='/usr/bin/stat'
+chown_bin='/usr/bin/chown'
+chmod_bin='/usr/bin/chmod'
 
-for exe in "$git" "$install_bin" "$mktemp_bin" "$mv_bin" "$rm_bin" "$sha256sum_bin" "$sort_bin" "$find_bin" "$xargs_bin" "$cmp_bin" "$stat_bin"; do
+for exe in "$git" "$install_bin" "$mktemp_bin" "$mv_bin" "$rm_bin" "$sha256sum_bin" "$sort_bin" "$find_bin" "$xargs_bin" "$cmp_bin" "$stat_bin" "$chown_bin" "$chmod_bin"; do
   [[ -x "$exe" ]] || { echo "Vereiste executable ontbreekt: $exe" >&2; exit 69; }
 done
 [[ -d "$repo_root" && ! -L "$repo_root" ]] || {
@@ -81,8 +84,8 @@ done < <("$git" -C "$repo_root" ls-files -z -- app bin)
 [[ "$count" -gt 0 ]] || { echo 'Geen app/bin bronbestanden gevonden.' >&2; exit 69; }
 
 printf '%s\n' "$commit" > "$tmp/.host-engine-commit"
-chown root:root "$tmp/.host-engine-commit"
-chmod 0444 "$tmp/.host-engine-commit"
+"$chown_bin" root:root "$tmp/.host-engine-commit"
+"$chmod_bin" 0444 "$tmp/.host-engine-commit"
 
 (
   cd "$tmp"
@@ -91,12 +94,12 @@ chmod 0444 "$tmp/.host-engine-commit"
     | "$xargs_bin" -0 "$sha256sum_bin"
   "$sha256sum_bin" .host-engine-commit
 ) > "$tmp/.host-engine-manifest.sha256"
-chown root:root "$tmp/.host-engine-manifest.sha256"
-chmod 0444 "$tmp/.host-engine-manifest.sha256"
+"$chown_bin" root:root "$tmp/.host-engine-manifest.sha256"
+"$chmod_bin" 0444 "$tmp/.host-engine-manifest.sha256"
 
 while IFS= read -r -d '' dir; do
-  chown root:root "$dir"
-  chmod 0555 "$dir"
+  "$chown_bin" root:root "$dir"
+  "$chmod_bin" 0555 "$dir"
 done < <("$find_bin" "$tmp" -type d -print0)
 
 (
@@ -139,12 +142,12 @@ fi
 
 config_tmp="$config_dir/.host-engine.path.tmp.$$"
 printf '%s\n' "$engine_root" > "$config_tmp"
-chown root:root "$config_tmp"
-chmod 0644 "$config_tmp"
+"$chown_bin" root:root "$config_tmp"
+"$chmod_bin" 0644 "$config_tmp"
 [[ ! -L "$config" ]] || { "$rm_bin" -f "$config_tmp"; echo 'Host-engine configdoel is een symlink.' >&2; exit 69; }
 "$mv_bin" "$config_tmp" "$config"
-chown root:root "$config"
-chmod 0644 "$config"
+"$chown_bin" root:root "$config"
+"$chmod_bin" 0644 "$config"
 
 echo "HOST ENGINE OK"
 echo "commit=$commit"
