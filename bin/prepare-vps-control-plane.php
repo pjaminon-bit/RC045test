@@ -35,7 +35,7 @@ try {
     }
     $hostRoot = process521HostEngineRoot();
     if ($hostRoot !== null && !hash_equals($hostRoot, $appRoot)) {
-        throw new RuntimeException('Control-plane app-root moet vanuit host-tooling exact de actief geïnstalleerde root-owned host-engine zijn.');
+        throw new RuntimeException('Control-plane app-root moet exact de actief geïnstalleerde root-owned host-engine zijn.');
     }
 
     $plan = control51Plan(trim((string)$o['host']), $appRoot, trim((string)$o['tenants-root']), $php, $cert, trim((string)$o['output']));
