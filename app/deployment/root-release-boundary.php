@@ -50,16 +50,23 @@ function process521RootPhpBoundary(array $cmd): array
             }
             return [$runuser, '-u', 'nobody', '--', (string)$cmd[0], '-l', $candidate];
         }
+        if ($candidateRoot !== null && hash_equals($trustedRoot, $candidateRoot)) $cmd[2] = $candidate;
         return $cmd;
     }
 
     // Normale PHP-scriptinvocatie: alleen dezelfde trusted release mag root
-    // krijgen. Een healthcheck op kandidaat/current wordt teruggebonden aan
-    // de healthchecker uit de trusted release; andere cross-release PHP faalt.
+    // krijgen. Een logisch current-pad naar diezelfde release wordt eerst naar
+    // het fysieke immutable pad gecanonicaliseerd. Een healthcheck op een
+    // kandidaat wordt teruggebonden aan de checker uit de trusted release;
+    // overige cross-release PHP faalt gesloten.
     if (!isset($cmd[1]) || !is_string($cmd[1]) || !str_ends_with(strtolower($cmd[1]), '.php')) return $cmd;
     $child = realpath($cmd[1]);
     $childRoot = $child === false ? null : process521ReleaseRootFromReal($child);
-    if ($childRoot === null || hash_equals($trustedRoot, $childRoot)) return $cmd;
+    if ($childRoot === null) return $cmd;
+    if (hash_equals($trustedRoot, $childRoot)) {
+        $cmd[1] = $child;
+        return $cmd;
+    }
 
     if (basename($child) === 'check-vps-health.php') {
         $trustedChecker = realpath($trustedRoot . '/bin/check-vps-health.php');
