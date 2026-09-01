@@ -58,7 +58,7 @@ done
 }
 
 [[ "$#" -ge 1 ]] || {
-  echo 'Gebruik: verenigingsplatform-host-php <health|release-prepare|release-apply|control-plane|lifecycle|provision|monitoring-prepare|monitoring-apply|control-plane-prepare|control-plane-apply> [args...]' >&2
+  echo 'Gebruik: verenigingsplatform-host-php <health|release-prepare|release-apply|control-plane|lifecycle|provision|monitoring-prepare|monitoring-apply|lifecycle-prepare|control-plane-prepare|control-plane-apply> [args...]' >&2
   exit 64
 }
 command="$1"
@@ -73,6 +73,7 @@ case "$command" in
   provision) script='bin/provision-tenant.php' ;;
   monitoring-prepare) script='bin/prepare-vps-monitoring.php' ;;
   monitoring-apply) script='bin/apply-vps-monitoring.php' ;;
+  lifecycle-prepare) script='bin/prepare-vps-lifecycle.php' ;;
   control-plane-prepare) script='bin/prepare-vps-control-plane.php' ;;
   control-plane-apply) script='bin/apply-vps-control-plane.php' ;;
   *)
