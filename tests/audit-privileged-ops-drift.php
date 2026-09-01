@@ -24,11 +24,12 @@ require_once $root . '/app/deployment/privileged-ops-contract.php';
 $contract = privilegedOpsContract();
 o134(($contract['schema'] ?? null) === 1 && ($contract['phase'] ?? '') === 'privileged-ops-integrity', 'privileged ops-contract heeft vast schema');
 $tools = is_array($contract['tools'] ?? null) ? $contract['tools'] : [];
-o134(count($tools) === 2, 'contract bewaakt entrypoint en root-deploywrapper');
+o134(count($tools) === 3, 'contract bewaakt entrypoint, root-deploywrapper en host-launcher');
 
 $verwachtePaden = [
     'github-entry' => '/usr/local/bin/verenigingsplatform-github-entry',
     'github-deploy' => '/usr/local/sbin/verenigingsplatform-github-deploy',
+    'host-php' => '/usr/local/sbin/verenigingsplatform-host-php',
 ];
 foreach ($tools as $tool) {
     $id = (string)($tool['id'] ?? '');

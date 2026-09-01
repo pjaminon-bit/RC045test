@@ -1,0 +1,99 @@
+#!/usr/bin/bash
+set -euo pipefail
+export PATH='/usr/sbin:/usr/bin:/sbin:/bin'
+
+if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
+  echo 'Host-launcher moet als root draaien.' >&2
+  exit 77
+fi
+
+config='/etc/verenigingsplatform/host-engine.path'
+php='/usr/bin/php8.5'
+readlink_bin='/usr/bin/readlink'
+sha256sum_bin='/usr/bin/sha256sum'
+stat_bin='/usr/bin/stat'
+
+for exe in "$php" "$readlink_bin" "$sha256sum_bin" "$stat_bin"; do
+  [[ -x "$exe" ]] || { echo "Vereiste executable ontbreekt: $exe" >&2; exit 69; }
+done
+
+[[ -f "$config" && ! -L "$config" ]] || {
+  echo 'Host-engine configuratie ontbreekt of is onveilig.' >&2
+  exit 69
+}
+IFS= read -r engine_root < "$config"
+[[ "$engine_root" =~ ^/usr/local/libexec/verenigingsplatform/host-engine/[0-9a-f]{40}$ ]] || {
+  echo 'Host-engine pad heeft geen toegestane vorm.' >&2
+  exit 69
+}
+resolved="$("$readlink_bin" -f "$engine_root")"
+[[ "$resolved" == "$engine_root" && -d "$engine_root" && ! -L "$engine_root" ]] || {
+  echo 'Host-engine resolveert niet naar een fysieke versie-directory.' >&2
+  exit 69
+}
+[[ "$("$stat_bin" -c '%u:%g:%a' "$engine_root")" == '0:0:555' ]] || {
+  echo 'Host-engine root wijkt af van root:root/0555.' >&2
+  exit 69
+}
+
+engine_commit="${engine_root##*/}"
+marker="$engine_root/.host-engine-commit"
+manifest="$engine_root/.host-engine-manifest.sha256"
+for file in "$marker" "$manifest"; do
+  [[ -f "$file" && ! -L "$file" ]] || { echo "Host-engine metadata ontbreekt: $file" >&2; exit 69; }
+  [[ "$("$stat_bin" -c '%u:%g:%a' "$file")" == '0:0:444' ]] || {
+    echo "Host-engine metadata heeft onveilige rechten: $file" >&2
+    exit 69
+  }
+done
+[[ "$(tr -d '\r\n' < "$marker")" == "$engine_commit" ]] || {
+  echo 'Host-engine marker hoort niet bij de versie-directory.' >&2
+  exit 69
+}
+(
+  cd "$engine_root"
+  "$sha256sum_bin" --check --quiet .host-engine-manifest.sha256
+) || {
+  echo 'Host-engine inhoud wijkt af van het geïnstalleerde manifest.' >&2
+  exit 69
+}
+
+[[ "$#" -ge 1 ]] || {
+  echo 'Gebruik: verenigingsplatform-host-php <health|release-prepare|release-apply|control-plane|lifecycle|provision|monitoring-prepare|monitoring-apply|lifecycle-prepare|control-plane-prepare|control-plane-apply> [args...]' >&2
+  exit 64
+}
+command="$1"
+shift
+
+case "$command" in
+  health) script='bin/check-vps-health.php' ;;
+  release-prepare) script='bin/prepare-vps-release.php' ;;
+  release-apply) script='bin/apply-vps-release.php' ;;
+  control-plane) script='bin/control-plane-executor.php' ;;
+  lifecycle) script='bin/apply-vps-lifecycle.php' ;;
+  provision) script='bin/provision-tenant.php' ;;
+  monitoring-prepare) script='bin/prepare-vps-monitoring.php' ;;
+  monitoring-apply) script='bin/apply-vps-monitoring.php' ;;
+  lifecycle-prepare) script='bin/prepare-vps-lifecycle.php' ;;
+  control-plane-prepare) script='bin/prepare-vps-control-plane.php' ;;
+  control-plane-apply) script='bin/apply-vps-control-plane.php' ;;
+  *)
+    echo 'Niet-toegestane host-engine actie.' >&2
+    exit 64
+    ;;
+esac
+
+target="$engine_root/$script"
+[[ -f "$target" && ! -L "$target" ]] || {
+  echo "Host-engine entrypoint ontbreekt: $script" >&2
+  exit 69
+}
+[[ "$("$stat_bin" -c '%u:%g:%a' "$target")" == '0:0:444' ]] || {
+  echo "Host-engine entrypoint heeft onveilige rechten: $script" >&2
+  exit 69
+}
+
+exec /usr/bin/env -i \
+  PATH=/usr/sbin:/usr/bin:/sbin:/bin \
+  VERENIGINGSPLATFORM_HOST_ENGINE_ROOT="$engine_root" \
+  "$php" "$target" "$@"

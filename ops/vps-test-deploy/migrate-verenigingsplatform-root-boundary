@@ -1,0 +1,178 @@
+#!/usr/bin/bash
+set -euo pipefail
+export PATH='/usr/sbin:/usr/bin:/sbin:/bin'
+
+if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
+  echo 'Root-boundary migratie moet als root draaien.' >&2
+  exit 77
+fi
+if [[ "$#" -ne 0 ]]; then
+  echo 'Gebruik: migrate-verenigingsplatform-root-boundary' >&2
+  exit 64
+fi
+
+host_launcher='/usr/local/sbin/verenigingsplatform-host-php'
+host_config='/etc/verenigingsplatform/host-engine.path'
+tenant_base='/srv/verenigingen'
+php='/usr/bin/php8.5'
+systemctl='/usr/bin/systemctl'
+install_bin='/usr/bin/install'
+cp_bin='/usr/bin/cp'
+date_bin='/usr/bin/date'
+grep_bin='/usr/bin/grep'
+stat_bin='/usr/bin/stat'
+mktemp_bin='/usr/bin/mktemp'
+rm_bin='/usr/bin/rm'
+find_bin='/usr/bin/find'
+sort_bin='/usr/bin/sort'
+tr_bin='/usr/bin/tr'
+basename_bin='/usr/bin/basename'
+
+for exe in "$host_launcher" "$php" "$systemctl" "$install_bin" "$cp_bin" "$date_bin" "$grep_bin" "$stat_bin" "$mktemp_bin" "$rm_bin" "$find_bin" "$sort_bin" "$tr_bin" "$basename_bin"; do
+  [[ -x "$exe" ]] || { echo "Vereiste executable ontbreekt: $exe" >&2; exit 69; }
+done
+[[ -f "$host_config" && ! -L "$host_config" ]] || { echo 'Host-engine config ontbreekt of is onveilig.' >&2; exit 69; }
+IFS= read -r host_root < "$host_config"
+[[ "$host_root" =~ ^/usr/local/libexec/verenigingsplatform/host-engine/[0-9a-f]{40}$ && -d "$host_root" && ! -L "$host_root" ]] || {
+  echo 'Actieve host-engine heeft geen veilig versiepad.' >&2
+  exit 69
+}
+[[ "$("$stat_bin" -c '%u:%g:%a' "$host_root")" == '0:0:555' ]] || { echo 'Host-engine metadata wijkt af.' >&2; exit 69; }
+[[ -d "$tenant_base" && ! -L "$tenant_base" ]] || { echo 'Tenantbasis ontbreekt of is onveilig.' >&2; exit 69; }
+
+# Reeds geplande transient rootjobs kunnen nog een pre-migratie helperpad hebben.
+# Die moeten eerst bewust worden afgehandeld; de migratie raadt hun semantiek niet.
+scheduled="$($systemctl --no-pager --all --no-legend list-units 'vp-control-schedule-*' 2>/dev/null || true)"
+if [[ -n "$(printf '%s' "$scheduled" | "$tr_bin" -d '[:space:]')" ]]; then
+  echo 'Migratie geweigerd: er bestaan nog vp-control-schedule-* systemd-units.' >&2
+  printf '%s\n' "$scheduled" >&2
+  exit 69
+fi
+
+stamp="$($date_bin -u +%Y%m%dT%H%M%SZ)"
+backup="/var/lib/verenigingsplatform/root-boundary-migration/$stamp"
+"$install_bin" -d -o root -g root -m 0700 "$backup"
+
+mapfile -t tenants < <("$find_bin" "$tenant_base" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | LC_ALL=C "$sort_bin")
+[[ "${#tenants[@]}" -gt 0 ]] || { echo 'Geen tenants gevonden voor monitoringmigratie.' >&2; exit 69; }
+
+for tenant in "${tenants[@]}"; do
+  if [[ "${#tenant}" -lt 3 || "${#tenant}" -gt 63 || "$tenant" == 'default' || "$tenant" == *--* || ! "$tenant" =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?$ ]]; then
+    echo "Niet-canonieke tenantdirectory: $tenant" >&2
+    exit 69
+  fi
+  root="$tenant_base/$tenant"
+  monitoring="$root/monitoring/monitoring-plan.json"
+  lifecycle="$root/lifecycle/lifecycle-plan.json"
+  [[ -f "$monitoring" && ! -L "$monitoring" ]] || { echo "Tenant $tenant mist veilig monitoring-plan.json." >&2; exit 69; }
+
+  mapfile -t source_fields < <("$php" -r '
+    $f=$argv[1];$raw=@file_get_contents($f);$p=is_string($raw)?json_decode($raw,true):null;
+    if(!is_array($p)||(int)($p["schema"]??0)!==1||($p["phase"]??"")!=="4.6")exit(2);
+    foreach(["tenant_key",["source","tls_plan_file"],["source","database_plan_file"]] as $k){
+      if(is_array($k))$v=$p[$k[0]][$k[1]]??null;else$v=$p[$k]??null;
+      if(!is_string($v)||$v===""||str_contains($v,"\n"))exit(3);echo $v,"\n";
+    }
+  ' "$monitoring") || { echo "Monitoringplan van $tenant kon niet veilig worden gelezen." >&2; exit 69; }
+  [[ "${#source_fields[@]}" -eq 3 && "${source_fields[0]}" == "$tenant" ]] || { echo "Monitoringplan tenantbinding klopt niet voor $tenant." >&2; exit 69; }
+  tls="${source_fields[1]}"
+  database="${source_fields[2]}"
+  [[ "$tls" == /* && "$database" == /* && -f "$tls" && ! -L "$tls" && -f "$database" && ! -L "$database" ]] || {
+    echo "Monitoringbronpaden zijn onveilig voor $tenant." >&2
+    exit 69
+  }
+
+  "$install_bin" -d -o root -g root -m 0700 "$backup/$tenant"
+  "$cp_bin" -a -- "$root/monitoring" "$backup/$tenant/monitoring.before"
+  if [[ -f "$lifecycle" && ! -L "$lifecycle" ]]; then
+    "$cp_bin" -a -- "$lifecycle" "$backup/$tenant/lifecycle-plan.before.json"
+  fi
+  for unit in "/etc/systemd/system/verenigingsplatform-health-$tenant.service" "/etc/systemd/system/verenigingsplatform-health-$tenant.timer"; do
+    if [[ -f "$unit" && ! -L "$unit" ]]; then "$cp_bin" -a -- "$unit" "$backup/$tenant/$("$basename_bin" "$unit").before"; fi
+  done
+
+  echo "=== MIGREER MONITORING: $tenant ==="
+  "$host_launcher" monitoring-prepare --tls-plan="$tls" --database-plan="$database" --force
+  "$host_launcher" monitoring-apply --monitoring-plan="$monitoring" --apply --force
+  "$host_launcher" lifecycle-prepare --monitoring-plan="$monitoring" --force
+
+  service="verenigingsplatform-health-$tenant.service"
+  timer="verenigingsplatform-health-$tenant.timer"
+  exec_line="$(SYSTEMD_PAGER=cat "$systemctl" --no-pager show "$service" -p ExecStart --value)"
+  [[ "$exec_line" == *"$host_launcher health --monitoring-plan=$monitoring --probe --write-status --alert"* ]] || {
+    echo "Healthservice $service gebruikt niet de volledige host-health invocation." >&2
+    exit 69
+  }
+  [[ "$exec_line" != *'/srv/verenigingsplatform/current/'* && "$exec_line" != *'/srv/verenigingsplatform/releases/'* ]] || {
+    echo "Healthservice $service bevat nog releasecode." >&2
+    exit 69
+  }
+  probe_started_epoch="$($date_bin -u +%s)"
+  "$systemctl" start "$service"
+  "$systemctl" is-enabled "$timer" >/dev/null
+
+  status="/var/lib/verenigingsplatform/monitoring/$tenant-health.json"
+  "$php" -r '
+    $f=$argv[1];$tenant=$argv[2];$min=(int)$argv[3];$raw=@file_get_contents($f);$s=is_string($raw)?json_decode($raw,true):null;
+    $checked=is_array($s)?strtotime((string)($s["checked_at_utc"]??"")):false;
+    if(!is_array($s)||($s["phase"]??"")!=="4.6-health"||($s["state"]??"")!=="up"||!hash_equals($tenant,(string)($s["tenant_key"]??""))||$checked===false||$checked<$min)exit(2);
+  ' "$status" "$tenant" "$probe_started_epoch" || { echo "Nieuwe host-health is niet vers en UP voor $tenant." >&2; exit 69; }
+done
+
+control_service='verenigingsplatform-control-plane.service'
+control_config='/etc/verenigingsplatform/control-plane/runtime.json'
+if "$systemctl" cat "$control_service" --no-pager >/dev/null 2>&1; then
+  [[ -f "$control_config" && ! -L "$control_config" ]] || { echo 'Control-plane runtimeconfig ontbreekt of is onveilig.' >&2; exit 69; }
+  "$cp_bin" -a -- "$control_config" "$backup/control-plane-runtime.before.json"
+  SYSTEMD_PAGER=cat "$systemctl" --no-pager cat "$control_service" > "$backup/control-plane-effective.before.txt"
+
+  dropin_dir='/etc/systemd/system/verenigingsplatform-control-plane.service.d'
+  dropin="$dropin_dir/10-host-engine.conf"
+  "$install_bin" -d -o root -g root -m 0755 "$dropin_dir"
+  tmp="$($mktemp_bin --tmpdir="$dropin_dir" '.10-host-engine.conf.tmp.XXXXXX')"
+  printf '%s\n' \
+    '[Service]' \
+    'ExecStart=' \
+    'ExecStart=/usr/local/sbin/verenigingsplatform-host-php control-plane --config=/etc/verenigingsplatform/control-plane/runtime.json' \
+    > "$tmp"
+  "$install_bin" -o root -g root -m 0644 "$tmp" "$dropin"
+  "$rm_bin" -f "$tmp"
+  "$systemctl" daemon-reload
+
+  control_exec="$(SYSTEMD_PAGER=cat "$systemctl" --no-pager show "$control_service" -p ExecStart --value)"
+  [[ "$control_exec" == *"$host_launcher control-plane --config=$control_config"* ]] || {
+    echo 'Effectieve control-plane ExecStart gebruikt niet de host-launcher.' >&2
+    exit 69
+  }
+  [[ "$control_exec" != *'/srv/verenigingsplatform/current/'* && "$control_exec" != *'/srv/verenigingsplatform/releases/'* ]] || {
+    echo 'Effectieve control-plane ExecStart bevat nog releasecode.' >&2
+    exit 69
+  }
+
+  refresh="$($host_launcher control-plane --config="$control_config" --refresh-only)"
+  printf '%s\n' "$refresh"
+  "$grep_bin" -Fqx 'REFRESH OK' <<<"$refresh" || { echo 'Control-plane host-engine refresh faalde.' >&2; exit 69; }
+fi
+
+# Finale bron- en effectieve checks: geen permanente root ExecStart mag nog PHP
+# uit current/releases starten.
+for unit in /etc/systemd/system/verenigingsplatform-health-*.service; do
+  [[ -f "$unit" && ! -L "$unit" ]] || continue
+  if "$grep_bin" -Eq 'ExecStart=.*(/srv/verenigingsplatform/(current|releases)/).*\.php' "$unit"; then
+    echo "Finale scan vond root→release PHP in $unit." >&2
+    exit 69
+  fi
+done
+
+if "$systemctl" cat "$control_service" --no-pager >/dev/null 2>&1; then
+  control_exec="$(SYSTEMD_PAGER=cat "$systemctl" --no-pager show "$control_service" -p ExecStart --value)"
+  [[ "$control_exec" != *'/srv/verenigingsplatform/current/'* && "$control_exec" != *'/srv/verenigingsplatform/releases/'* ]] || {
+    echo 'Finale control-plane scan vond nog root→release code.' >&2
+    exit 69
+  }
+fi
+
+echo
+echo "ROOT BOUNDARY MIGRATION OK"
+echo "host_engine=$host_root"
+echo "backup=$backup"

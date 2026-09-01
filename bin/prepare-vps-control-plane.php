@@ -1,6 +1,7 @@
 <?php
 if (PHP_SAPI !== 'cli') { http_response_code(403); exit('Alleen via CLI beschikbaar.'); }
 require_once dirname(__DIR__) . '/app/deployment/control-plane-contract.php';
+require_once dirname(__DIR__) . '/app/deployment/root-release-boundary.php';
 
 function cp51Stop(string $m, int $c = 1): never { fwrite(STDERR, "FOUT: {$m}\n"); exit($c); }
 foreach ($_SERVER['argv'] ?? [] as $a) {
@@ -10,7 +11,7 @@ foreach ($_SERVER['argv'] ?? [] as $a) {
 }
 $o = getopt('', ['host:', 'app-root:', 'tenants-root:', 'php-version::', 'cert-name::', 'output:', 'dry-run', 'force', 'help']);
 if (isset($o['help'])) {
-    echo "Gebruik: php bin/prepare-vps-control-plane.php --host=beheer.example.nl --app-root=/srv/verenigingsplatform/current --tenants-root=/srv/verenigingsplatform/tenants --output=/root/control-plane [--php-version=8.5] [--cert-name=platform-beheer] [--dry-run] [--force]\n";
+    echo "Gebruik: verenigingsplatform-host-php control-plane-prepare --host=beheer.example.nl --app-root=/usr/local/libexec/verenigingsplatform/host-engine/<commit> --tenants-root=/srv/verenigingen --output=/root/control-plane [--php-version=8.5] [--cert-name=platform-beheer] [--dry-run] [--force]\n";
     exit(0);
 }
 foreach (['host','app-root','tenants-root','output'] as $k) if (!isset($o[$k]) || trim((string)$o[$k]) === '') cp51Stop('--' . $k . ' is verplicht.');
@@ -19,8 +20,24 @@ $cert = trim((string)($o['cert-name'] ?? 'verenigingsplatform-beheer'));
 try {
     $appArg = trim((string)$o['app-root']);
     $appReal = realpath($appArg);
-    if ($appReal === false || !is_dir($appReal)) throw new RuntimeException('Control-plane app-root kon niet fysiek naar de trusted release worden opgelost.');
+    if ($appReal === false || !is_dir($appReal)) throw new RuntimeException('Control-plane app-root kon niet fysiek worden opgelost.');
     $appRoot = runtime41NormPad($appReal);
+
+    // Een control-plane bundle mag nooit een applicatierelease als toekomstig
+    // root-executorpad vastleggen. In CI/dry-run blijft een fysieke fixture
+    // buiten de releaseboom toegestaan. Vanuit de geïnstalleerde host-engine
+    // is de binding strenger: app_root moet exact die actieve engine zijn.
+    if ($appRoot === '/srv/verenigingsplatform/current'
+        || str_starts_with($appRoot, '/srv/verenigingsplatform/current/')
+        || $appRoot === '/srv/verenigingsplatform/releases'
+        || str_starts_with($appRoot, '/srv/verenigingsplatform/releases/')) {
+        throw new RuntimeException('Control-plane app-root mag nooit naar current of een applicatierelease wijzen.');
+    }
+    $hostRoot = process521HostEngineRoot();
+    if ($hostRoot !== null && !hash_equals($hostRoot, $appRoot)) {
+        throw new RuntimeException('Control-plane app-root moet exact de actief geïnstalleerde root-owned host-engine zijn.');
+    }
+
     $plan = control51Plan(trim((string)$o['host']), $appRoot, trim((string)$o['tenants-root']), $php, $cert, trim((string)$o['output']));
     if (isset($o['dry-run'])) { echo control51Json($plan); exit(0); }
     $dir = (string)$plan['bundle']['output_dir'];

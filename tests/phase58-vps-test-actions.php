@@ -9,6 +9,9 @@ $browser=(string)file_get_contents($root.'/tests/live-dev-browser.spec.js');
 $auth=(string)file_get_contents($root.'/tests/live-dev-authenticated.spec.js');
 $entry=(string)file_get_contents($root.'/ops/vps-test-deploy/verenigingsplatform-github-entry');
 $wrapper=(string)file_get_contents($root.'/ops/vps-test-deploy/verenigingsplatform-github-deploy');
+$host=(string)file_get_contents($root.'/ops/vps-test-deploy/verenigingsplatform-host-php');
+$installer=(string)file_get_contents($root.'/ops/vps-test-deploy/install-verenigingsplatform-host-engine');
+$migration=(string)file_get_contents($root.'/ops/vps-test-deploy/migrate-verenigingsplatform-root-boundary');
 $docs=(string)file_get_contents($root.'/docs/GITHUB-VPS-TEST-DEPLOYMENT.md');
 
 foreach(['rc045.nl/dev','FTP_USERNAME','FTP_SERVER','FTP_PASSWORD','SFTP-Deploy-Action','Upload testsite via SFTP'] as $oud){
@@ -70,10 +73,16 @@ c58(str_contains($deploy,'ping: ${{ vars.VPS_TEST_TAILSCALE_HOST')&&str_contains
 c58(str_contains($entry,'SSH_ORIGINAL_COMMAND')&&str_contains($entry,'^deploy[[:space:]]+([0-9a-f]{40})$'),'forced SSH entrypoint accepteert uitsluitend deploy + 40-hex commit');
 c58(str_contains($entry,'/usr/bin/sudo -n /usr/local/sbin/verenigingsplatform-github-deploy')&&str_contains($entry,'$commit'),'entrypoint kan uitsluitend vaste root-wrapper met gevalideerde commit starten');
 c58(str_contains($wrapper,"repo='https://github.com/pjaminon-bit/RC045test.git'")&&str_contains($wrapper,'rev-parse HEAD'),'root-wrapper bindt staging aan vaste repo en exacte Git-commit');
-c58(str_contains($wrapper,'trusted_root=')&&str_contains($wrapper,'"$readlink_bin" -f "$platform_root/current"')&&str_contains($wrapper,'trusted_prepare="$trusted_root/bin/prepare-vps-release.php"')&&str_contains($wrapper,'trusted_apply="$trusted_root/bin/apply-vps-release.php"')&&str_contains($wrapper,'trusted_control_executor="$trusted_root/bin/control-plane-executor.php"'),'root-wrapper bevriest actieve trusted release fysiek vóór deploy');
-c58(str_contains($wrapper,'"$php" "$trusted_control_executor" --config="$control_plane_config" --refresh-only')&&!str_contains($wrapper,'$platform_root/current/bin/control-plane-executor.php'),'post-deploy refresh blijft aan pre-switch trusted executor gebonden');
-c58(str_contains($wrapper,'$trusted_apply')&&str_contains($wrapper,'--check')&&str_contains($wrapper,'--deploy'),'root-wrapper voert bestaande check en immutable deploy uit');
+c58(str_contains($wrapper,"host_launcher='/usr/local/sbin/verenigingsplatform-host-php'")&&str_contains($wrapper,'"$host_launcher" release-prepare')&&str_contains($wrapper,'"$host_launcher" release-apply --plan="$plan" --check')&&str_contains($wrapper,'"$host_launcher" release-apply --plan="$plan" --deploy'),'root-wrapper gebruikt uitsluitend de root-owned host-engine voor privileged releaseprepare/apply');
+c58(str_contains($wrapper,'Healthservice is nog niet naar host-tooling gemigreerd')&&str_contains($wrapper,'Effectieve control-plane service is nog niet naar host-tooling gemigreerd'),'root-wrapper weigert deploy zolang permanente rootentrypoints nog releasecode volgen');
+c58(str_contains($wrapper,'"$host_launcher" control-plane --config="$control_plane_config" --refresh-only')&&!str_contains($wrapper,'trusted_control_executor=')&&!str_contains($wrapper,'trusted_apply=')&&!str_contains($wrapper,'trusted_prepare='),'post-deploy refresh en deploy bevatten geen directe root-PHP uit actieve/kandidaatrelease');
 c58(str_contains($wrapper,'release-state.json')&&str_contains($wrapper,'DEPLOYED $commit'),'root-wrapper bewijst actieve release-state vóór succesmelding');
+
+c58(str_contains($host,'/etc/verenigingsplatform/host-engine.path')&&str_contains($host,'--check --quiet .host-engine-manifest.sha256'),'host-launcher bindt iedere privileged aanroep aan een byte-gecontroleerde versioned engine');
+c58(str_contains($host,"health) script='bin/check-vps-health.php'")&&str_contains($host,"release-apply) script='bin/apply-vps-release.php'")&&str_contains($host,"control-plane) script='bin/control-plane-executor.php'"),'host-launcher heeft een vaste expliciete commandallowlist');
+c58(str_contains($installer,'status --porcelain=v1 --untracked-files=all')&&str_contains($installer,'ls-files -z -- app bin')&&str_contains($installer,'.host-engine-manifest.sha256'),'host-engine installer kopieert uitsluitend een schone exacte checkout naar een read-only manifestgebonden engine');
+c58(str_contains($migration,'ROOT BOUNDARY MIGRATION OK')&&str_contains($migration,'monitoring-prepare')&&str_contains($migration,'control-plane --config='),'first-hop migratie zet monitoring en control-plane gecontroleerd op host-tooling');
+
 c58(str_contains($docs,'RC045test` blijft de bronrepository')&&str_contains($docs,'geen algemene SSH-shell'),'documentatie borgt repobehoud en restricted deployment');
 c58(str_contains($docs,'Tailscale')&&str_contains($docs,'tag:github-rc045test')&&str_contains($docs,'TS_OAUTH_CLIENT_ID')&&str_contains($docs,'TS_AUDIENCE'),'documentatie borgt private Tailscale/OIDC deployment');
 c58(str_contains($docs,'geen publieke SSH-poort')||str_contains($docs,'publieke SSH-poort hoeft niet open'),'documentatie borgt dat SSH op internet gesloten kan blijven');
