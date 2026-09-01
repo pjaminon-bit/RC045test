@@ -1,5 +1,6 @@
-#!/usr/bin/env bash
+#!/usr/bin/bash
 set -euo pipefail
+export PATH='/usr/sbin:/usr/bin:/sbin:/bin'
 
 if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
   echo 'Deze deploywrapper moet als root draaien.' >&2
