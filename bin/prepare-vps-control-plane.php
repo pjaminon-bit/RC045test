@@ -17,7 +17,11 @@ foreach (['host','app-root','tenants-root','output'] as $k) if (!isset($o[$k]) |
 $php = trim((string)($o['php-version'] ?? '8.5'));
 $cert = trim((string)($o['cert-name'] ?? 'verenigingsplatform-beheer'));
 try {
-    $plan = control51Plan(trim((string)$o['host']), trim((string)$o['app-root']), trim((string)$o['tenants-root']), $php, $cert, trim((string)$o['output']));
+    $appArg = trim((string)$o['app-root']);
+    $appReal = realpath($appArg);
+    if ($appReal === false || !is_dir($appReal)) throw new RuntimeException('Control-plane app-root kon niet fysiek naar de trusted release worden opgelost.');
+    $appRoot = runtime41NormPad($appReal);
+    $plan = control51Plan(trim((string)$o['host']), $appRoot, trim((string)$o['tenants-root']), $php, $cert, trim((string)$o['output']));
     if (isset($o['dry-run'])) { echo control51Json($plan); exit(0); }
     $dir = (string)$plan['bundle']['output_dir'];
     if (!is_dir($dir) && !@mkdir($dir, 0750, true) && !is_dir($dir)) throw new RuntimeException('Outputmap kon niet worden aangemaakt.');

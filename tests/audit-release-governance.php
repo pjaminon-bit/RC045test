@@ -25,7 +25,7 @@ if (is_string($wrapper)) {
     rgCheck(str_contains($wrapper, '[[ "$commit" == "$main_commit" ]]'), 'rootgateway accepteert alleen de actuele main-tip');
     rgCheck(str_contains($wrapper, 'gevraagde commit is niet de actuele main-tip'), 'afwijkende commit faalt gesloten met duidelijke fout');
     rgCheck(str_contains($wrapper, "control_plane_config='/etc/verenigingsplatform/control-plane/runtime.json'"), 'deploywrapper gebruikt de vaste control-plane runtimeconfig');
-    rgCheck(str_contains($wrapper, '$platform_root/releases/$commit/bin/control-plane-executor.php'), 'snapshotrefresh bindt executor aan de zojuist geactiveerde release');
+    rgCheck(str_contains($wrapper, 'trusted_control_executor="$trusted_root/bin/control-plane-executor.php"') && str_contains($wrapper, '"$php" "$trusted_control_executor" --config="$control_plane_config" --refresh-only') && !str_contains($wrapper, '$platform_root/releases/$commit/bin/control-plane-executor.php'), 'snapshotrefresh blijft aan de pre-switch trusted release gebonden');
     rgCheck(str_contains($wrapper, '--refresh-only'), 'deploywrapper bouwt na deploy uitsluitend een control-plane refreshsnapshot');
     rgCheck(str_contains($wrapper, "grep -Fqx 'REFRESH OK'"), 'snapshotrefresh moet expliciet succesvol worden bevestigd');
     $refresh = strpos($wrapper, '--refresh-only');

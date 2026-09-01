@@ -6,6 +6,8 @@
 // - stdin wordt tegelijk geschreven zodat volle pipes geen deadlock veroorzaken;
 // - begrensde runtime en capture-output.
 
+require_once __DIR__ . '/root-release-boundary.php';
+
 function process521Command(array $cmd): array
 {
     if ($cmd === [] || !isset($cmd[0])) throw new RuntimeException('Procescommando ontbreekt.');
@@ -32,6 +34,8 @@ function process521Run(
     int $timeoutSeconds = 900,
     int $maxCapturedBytes = 2097152
 ): array {
+    $cmd = process521Command($cmd);
+    $cmd = process521RootPhpBoundary($cmd);
     $cmd = process521Command($cmd);
     if ($timeoutSeconds < 1 || $timeoutSeconds > 3600) throw new RuntimeException('Ongeldige subprocess-timeout.');
     if ($maxCapturedBytes < 65536 || $maxCapturedBytes > 16777216) throw new RuntimeException('Ongeldige subprocess-outputlimiet.');
