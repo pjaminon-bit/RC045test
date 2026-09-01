@@ -37,7 +37,7 @@ $unit=monitoring46SystemdService([
     'bundle'=>['plan_file'=>'/srv/verenigingen/test/monitoring/monitoring-plan.json'],
     'logging'=>['app_dir'=>'/srv/verenigingen/test/private/monitoring'],
 ]);
-c157(str_contains($unit,'ExecStart=/usr/local/sbin/verenigingsplatform-host-php health --monitoring-plan=/srv/verenigingen/test/monitoring/monitoring-plan.json'),'permanente healthservice start uitsluitend root-owned host-launcher');
+c157(str_contains($unit,'ExecStart=/usr/local/sbin/verenigingsplatform-host-php health --monitoring-plan=/srv/verenigingen/test/monitoring/monitoring-plan.json --probe --write-status --alert'),'permanente healthservice start volledige root-owned host-health invocation');
 c157(!str_contains($unit,'/srv/verenigingsplatform/current/')&&!str_contains($unit,'/srv/verenigingsplatform/releases/'),'gegenereerde healthservice bevat geen releasecodepad');
 c157(str_contains($monitorApply,'process521HostEngineRoot()')&&str_contains($monitorApply,'--apply mag alleen vanuit de root-owned host-engine'),'monitoring apply weigert root-uitvoering buiten host-engine');
 
@@ -54,6 +54,7 @@ c157(str_starts_with($migration,"#!/usr/bin/bash\n")&&str_contains($migration,"e
 c157(!str_contains($migration,'(?:')&&str_contains($migration,'=~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?$')&&str_contains($migration,'${#tenant}" -lt 3')&&str_contains($migration,'"$tenant" == *--*'),'live migratie gebruikt Bash-geldige canonieke tenantvalidatie');
 c157(str_contains($migration,"'vp-control-schedule-*'")&&str_contains($migration,'Migratie geweigerd: er bestaan nog vp-control-schedule-* systemd-units.'),'live migratie weigert achterblijvende pre-migratie scheduled rootjobs');
 c157(str_contains($migration,'monitoring-prepare')&&str_contains($migration,'monitoring-apply')&&str_contains($migration,'lifecycle-prepare'),'live migratie regenereert monitoring en afhankelijke lifecyclecontracten');
+c157(str_contains($migration,'--probe --write-status --alert')&&str_contains($migration,'probe_started_epoch')&&str_contains($migration,'$checked<$min'),'live migratie vereist volledige host-health en een vers statusbewijs');
 c157(str_contains($migration,'ROOT BOUNDARY MIGRATION OK')&&str_contains($migration,'root-boundary-migration'),'live migratie bewaart root-only herstelbewijs en geeft expliciet succes');
 c157(str_contains($dropin,'ExecStart=/usr/local/sbin/verenigingsplatform-host-php control-plane --config=/etc/verenigingsplatform/control-plane/runtime.json'),'control-plane override start alleen host-launcher');
 c157(str_contains($prepareControl,'process521HostEngineRoot()')&&str_contains($prepareControl,'Control-plane app-root moet exact de actief geïnstalleerde root-owned host-engine zijn.'),'nieuwe control-plane bundles kunnen geen release-app-root meer accepteren');
