@@ -53,7 +53,7 @@ c157(str_contains($migration,'monitoring-prepare')&&str_contains($migration,'mon
 c157(str_contains($migration,'ROOT BOUNDARY MIGRATION OK')&&str_contains($migration,'root-boundary-migration'),'live migratie bewaart root-only herstelbewijs en geeft expliciet succes');
 c157(str_contains($dropin,'ExecStart=/usr/local/sbin/verenigingsplatform-host-php control-plane --config=/etc/verenigingsplatform/control-plane/runtime.json'),'control-plane override start alleen host-launcher');
 c157(str_contains($prepareControl,'process521HostEngineRoot()')&&str_contains($prepareControl,'Control-plane app-root moet exact de actief geïnstalleerde root-owned host-engine zijn.'),'nieuwe control-plane bundles kunnen geen release-app-root meer accepteren');
-c157(str_contains($admin,"$script=$c['app_root'].'/bin/control-plane-scheduled-run.php'")&&str_contains($boundary,"'control-plane-scheduled-run.php'"),'legacy schedulepad wordt door host-boundary expliciet afgevangen');
+c157(str_contains($admin,'$script=$c[\'app_root\'].\'/bin/control-plane-scheduled-run.php\'')&&str_contains($boundary,"'control-plane-scheduled-run.php'"),'legacy schedulepad wordt door host-boundary expliciet afgevangen');
 
 c157(str_contains($deploy,"host_launcher='/usr/local/sbin/verenigingsplatform-host-php'")&&str_contains($deploy,'"$host_launcher" release-prepare')&&str_contains($deploy,'"$host_launcher" release-apply --plan="$plan" --deploy'),'deploy gebruikt host-engine voor prepare en release-activatie');
 c157(str_contains($deploy,'"$host_launcher" control-plane --config="$control_plane_config" --refresh-only'),'post-deploy control-plane refresh loopt via host-engine');
