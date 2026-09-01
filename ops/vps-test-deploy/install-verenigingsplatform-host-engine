@@ -1,0 +1,147 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
+  echo 'Host-engine installer moet als root draaien.' >&2
+  exit 77
+fi
+if [[ "$#" -ne 1 || ! "$1" =~ ^[0-9a-f]{40}$ ]]; then
+  echo 'Gebruik: install-verenigingsplatform-host-engine <40-hex-commit>' >&2
+  exit 64
+fi
+
+commit="$1"
+git='/usr/bin/git'
+install_bin='/usr/bin/install'
+mktemp_bin='/usr/bin/mktemp'
+mv_bin='/usr/bin/mv'
+rm_bin='/usr/bin/rm'
+sha256sum_bin='/usr/bin/sha256sum'
+sort_bin='/usr/bin/sort'
+find_bin='/usr/bin/find'
+cmp_bin='/usr/bin/cmp'
+stat_bin='/usr/bin/stat'
+
+for exe in "$git" "$install_bin" "$mktemp_bin" "$mv_bin" "$rm_bin" "$sha256sum_bin" "$sort_bin" "$find_bin" "$cmp_bin" "$stat_bin"; do
+  [[ -x "$exe" ]] || { echo "Vereiste executable ontbreekt: $exe" >&2; exit 69; }
+done
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
+repo_root="$("$git" -C "$script_dir" rev-parse --show-toplevel)"
+head="$("$git" -C "$repo_root" rev-parse HEAD)"
+[[ "$head" == "$commit" ]] || {
+  echo "Checkout staat op $head en niet op gevraagde commit $commit." >&2
+  exit 65
+}
+[[ -z "$("$git" -C "$repo_root" status --porcelain=v1 --untracked-files=all)" ]] || {
+  echo 'Checkout is niet schoon; host-engine installatie geweigerd.' >&2
+  exit 65
+}
+
+engine_parent='/usr/local/libexec/verenigingsplatform/host-engine'
+engine_root="$engine_parent/$commit"
+config_dir='/etc/verenigingsplatform'
+config="$config_dir/host-engine.path"
+launcher_source="$repo_root/ops/vps-test-deploy/verenigingsplatform-host-php"
+launcher_target='/usr/local/sbin/verenigingsplatform-host-php'
+
+[[ -f "$launcher_source" && ! -L "$launcher_source" ]] || {
+  echo 'Canonieke host-launcher ontbreekt in checkout.' >&2
+  exit 69
+}
+
+"$install_bin" -d -o root -g root -m 0755 "$engine_parent" "$config_dir"
+tmp="$("$mktemp_bin" -d --tmpdir="$engine_parent" ".${commit}.tmp.XXXXXX")"
+cleanup() {
+  if [[ -n "${tmp:-}" && "$tmp" == "$engine_parent"/.*.tmp.* && -d "$tmp" ]]; then
+    "$rm_bin" -rf --one-file-system -- "$tmp"
+  fi
+}
+trap cleanup EXIT INT TERM
+
+count=0
+while IFS= read -r -d '' rel; do
+  src="$repo_root/$rel"
+  [[ -f "$src" && ! -L "$src" ]] || {
+    echo "Host-engine bron is geen regulier bestand: $rel" >&2
+    exit 69
+  }
+  "$install_bin" -D -o root -g root -m 0444 "$src" "$tmp/$rel"
+  count=$((count + 1))
+done < <("$git" -C "$repo_root" ls-files -z -- app bin)
+
+[[ "$count" -gt 0 ]] || { echo 'Geen app/bin bronbestanden gevonden.' >&2; exit 69; }
+
+printf '%s\n' "$commit" > "$tmp/.host-engine-commit"
+chown root:root "$tmp/.host-engine-commit"
+chmod 0444 "$tmp/.host-engine-commit"
+
+(
+  cd "$tmp"
+  "$find_bin" app bin -type f -print0 \
+    | "$sort_bin" -z \
+    | xargs -0 "$sha256sum_bin"
+  "$sha256sum_bin" .host-engine-commit
+) > "$tmp/.host-engine-manifest.sha256"
+chown root:root "$tmp/.host-engine-manifest.sha256"
+chmod 0444 "$tmp/.host-engine-manifest.sha256"
+
+while IFS= read -r -d '' dir; do
+  chown root:root "$dir"
+  chmod 0555 "$dir"
+done < <("$find_bin" "$tmp" -type d -print0)
+
+(
+  cd "$tmp"
+  "$sha256sum_bin" --check --quiet .host-engine-manifest.sha256
+)
+
+if [[ -e "$engine_root" || -L "$engine_root" ]]; then
+  [[ -d "$engine_root" && ! -L "$engine_root" ]] || {
+    echo 'Bestaande host-engine versie is geen veilige directory.' >&2
+    exit 69
+  }
+  [[ "$("$stat_bin" -c '%u:%g:%a' "$engine_root")" == '0:0:555' ]] || {
+    echo 'Bestaande host-engine versie heeft onveilige metadata.' >&2
+    exit 69
+  }
+  [[ -f "$engine_root/.host-engine-manifest.sha256" && ! -L "$engine_root/.host-engine-manifest.sha256" ]] || {
+    echo 'Bestaande host-engine mist manifest.' >&2
+    exit 69
+  }
+  "$cmp_bin" -s "$tmp/.host-engine-manifest.sha256" "$engine_root/.host-engine-manifest.sha256" || {
+    echo 'Bestaande host-engine versie wijkt af; overschrijven is verboden.' >&2
+    exit 69
+  }
+  (
+    cd "$engine_root"
+    "$sha256sum_bin" --check --quiet .host-engine-manifest.sha256
+  ) || {
+    echo 'Bestaande host-engine versie bevat drift.' >&2
+    exit 69
+  }
+  "$rm_bin" -rf --one-file-system -- "$tmp"
+  tmp=''
+else
+  "$mv_bin" "$tmp" "$engine_root"
+  tmp=''
+fi
+
+"$install_bin" -o root -g root -m 0755 "$launcher_source" "$launcher_target"
+
+config_tmp="$config_dir/.host-engine.path.tmp.$$"
+printf '%s\n' "$engine_root" > "$config_tmp"
+chown root:root "$config_tmp"
+chmod 0644 "$config_tmp"
+[[ ! -L "$config" ]] || { "$rm_bin" -f "$config_tmp"; echo 'Host-engine configdoel is een symlink.' >&2; exit 69; }
+"$mv_bin" "$config_tmp" "$config"
+chown root:root "$config"
+chmod 0644 "$config"
+
+echo "HOST ENGINE OK"
+echo "commit=$commit"
+echo "path=$engine_root"
+echo "files=$count"
+"$stat_bin" -c 'launcher=%n owner=%U:%G mode=%a size=%s' "$launcher_target"
+"$sha256sum_bin" "$launcher_target"
+"$stat_bin" -c 'config=%n owner=%U:%G mode=%a size=%s' "$config"
