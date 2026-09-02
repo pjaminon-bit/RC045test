@@ -15,6 +15,22 @@ function c119(bool $conditie, string $label): void
     fwrite(STDERR, "FOUT: {$label}\n");
 }
 
+function bevatAuthRechtenCall119(string $src): bool
+{
+    $tokens = token_get_all($src);
+    $aantal = count($tokens);
+    for ($i = 0; $i < $aantal; $i++) {
+        $token = $tokens[$i];
+        if (!is_array($token) || $token[0] !== T_STRING || $token[1] !== 'authRechten') continue;
+        for ($j = $i + 1; $j < $aantal; $j++) {
+            $volgende = $tokens[$j];
+            if (is_array($volgende) && in_array($volgende[0], [T_WHITESPACE, T_COMMENT, T_DOC_COMMENT], true)) continue;
+            return $volgende === '(';
+        }
+    }
+    return false;
+}
+
 require_once $root . '/app/auth-capabilities.php';
 
 $platform = authPlatformDefinities();
@@ -23,6 +39,9 @@ $capabilities = authCapabilityDefinities();
 
 c119(authGebruikerCapabilities(['gebruikersnaam' => 'zonder-profiel']) === [], 'account zonder capabilities/tabs krijgt geen impliciete capability');
 c119(authGebruikerCapabilities(['gebruikersnaam' => 'leeg', 'tabs' => []]) === [], 'expliciet lege legacy tabs blijven fail-closed');
+
+$gedeeldeGroepenSrc = (string)file_get_contents($root . '/app/beheer/groepen-beheer.php');
+c119(str_contains($gedeeldeGroepenSrc, 'authHeeftCapability($groepCapability)'), 'gedeelde groepenbeheerlaag controleert gedelegeerde capability server-side');
 
 foreach ($beheer as $sleutel => $def) {
     if (!is_array($def)) {
@@ -41,11 +60,15 @@ foreach ($beheer as $sleutel => $def) {
     c119(is_file($bestand), "beheerroute {$sleutel} wijst naar bestaand endpoint {$pad}");
     if (!is_file($bestand)) continue;
     $src = (string)file_get_contents($bestand);
-    $heeftServerAuth = str_contains($src, 'authHeeftCapability(')
+
+    $direct = str_contains($src, 'authHeeftCapability(')
         || str_contains($src, 'authHeeftBeheerOnderdeel(')
-        || str_contains($src, 'authRechten(')
+        || bevatAuthRechtenCall119($src)
         || $pad === 'content.php';
-    c119($heeftServerAuth, "beheerendpoint {$pad} bevat server-side autorisatie");
+    $gedelegeerdGroepen = str_contains($src, "\$groepCapability='{$capability}'")
+        && str_contains($src, "app/beheer/groepen-beheer.php")
+        && str_contains($gedeeldeGroepenSrc, 'authHeeftCapability($groepCapability)');
+    c119($direct || $gedelegeerdGroepen, "beheerendpoint {$pad} bevat of delegeert server-side autorisatie voor {$capability}");
 }
 
 $legacyVerwacht = [
@@ -69,12 +92,12 @@ foreach ($iterator as $file) {
     $pad = str_replace('\\', '/', substr($file->getPathname(), strlen($root) + 1));
     if ($pad === 'auth.php' || str_starts_with($pad, 'tests/')) continue;
     $src = (string)file_get_contents($file->getPathname());
-    if (str_contains($src, 'authRechten(')) $gevonden[] = $pad;
+    if (bevatAuthRechtenCall119($src)) $gevonden[] = $pad;
 }
 sort($gevonden, SORT_STRING);
 $legacyGesorteerd = $legacyVerwacht;
 sort($legacyGesorteerd, SORT_STRING);
-c119($gevonden === $legacyGesorteerd, 'repo-brede inventaris van authRechten-callers is expliciet en compleet: ' . implode(', ', $gevonden));
+c119($gevonden === $legacyGesorteerd, 'repo-brede inventaris van echte authRechten-callers is expliciet en compleet: ' . implode(', ', $gevonden));
 
 $authSrc = (string)file_get_contents($root . '/auth.php');
 c119(str_contains($authSrc, "require_once __DIR__ . '/app/auth-capabilities.php';"), 'legacy authlaag laadt de centrale capabilitylaag');
@@ -96,13 +119,17 @@ $legacyNaarCap = [
     'media' => 'content.media.manage',
     'fotoboek' => 'content.fotoboek.manage',
     'changelog' => 'system.changelog.manage',
+    'logboek' => 'system.audit.read',
 ];
 foreach ($legacyNaarCap as $tab => $capability) {
-    c119(authBeheerCapability($tab) === $capability, "legacy beheer-tab {$tab} gebruikt capability {$capability}");
+    c119(authBeheerCapability($tab) === $capability, "beheer-tab {$tab} gebruikt capability {$capability}");
 }
 
 $contentBeheer = (string)file_get_contents($root . '/app/content/content-beheer.php');
 c119(str_contains($contentBeheer, 'authRechten([$beheerTab'), 'generieke contenteditor blijft expliciet onderdeel van de bewaakte legacy-compatibiliteitslaag');
+
+$logboek = (string)file_get_contents($root . '/beheer/logboek.php');
+c119(str_contains($logboek, "authHeeftBeheerOnderdeel('logboek')") && !str_contains($logboek, "authHeeftExplicietRecht('log')"), 'logboekendpoint gebruikt dezelfde system.audit.read capability als dashboard');
 
 $dashboard = (string)file_get_contents($root . '/beheer/index.php');
 c119(str_contains($dashboard, 'authHeeftCapability($cap'), 'dashboard controleert beheercomponenten via centrale capability');
