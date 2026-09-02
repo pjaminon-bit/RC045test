@@ -42,16 +42,8 @@ function takenLeegBestand() {
 }
 
 function takenLees() {
-  $pad = takenBestandPad();
-  if (!is_file($pad)) return takenLeegBestand();
-  $ruw = file_get_contents($pad);
-  if ($ruw === false) return takenLeegBestand();
-  $start = strpos($ruw, '{');
-  if ($start === false) return takenLeegBestand();
-  $json = json_decode(substr($ruw, $start), true);
-  if (!is_array($json) || !isset($json['taken']) || !is_array($json['taken'])) {
-    return takenLeegBestand();
-  }
+  $json = legacyPrivateJsonLees(takenBestandPad(), 'taken', ['taken']);
+  if ($json === null) return takenLeegBestand();
   $json['volgnummer'] = isset($json['volgnummer']) ? (int) $json['volgnummer'] : 0;
   return $json;
 }
