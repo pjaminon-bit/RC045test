@@ -81,13 +81,13 @@ usort($regels, static function(array $a, array $b): int {
 
 if (($_GET['export'] ?? '') === 'csv') {
     header('Content-Type: text/csv; charset=UTF-8');
-    header('Content-Disposition: attachment; filename="beheer-logboek-' . date('Ymd-His') . '.csv"');
+    header('Content-Disposition: attachment; filename="logboek-' . date('Y-m-d-His') . '.csv"');
     echo "\xEF\xBB\xBF";
-    $out = fopen('php://output', 'wb');
+    $out = fopen('php://output', 'w');
     fputcsv($out, ['Tijd', 'Gebruiker', 'Actie', 'Details'], ';');
     foreach ($regels as $r) {
         fputcsv($out, [
-            logCsvVeilig((string)($r['tijd'] ?? '')),
+            logCsvVeilig(logDatumTijd((string)($r['tijd'] ?? ''))),
             logCsvVeilig((string)($r['gebruiker'] ?? '')),
             logCsvVeilig((string)($r['actie'] ?? '')),
             logCsvVeilig((string)($r['details'] ?? '')),
@@ -97,37 +97,18 @@ if (($_GET['export'] ?? '') === 'csv') {
     exit;
 }
 
+$perPagina = 50;
+$totaal = count($regels);
+$paginas = max(1, (int)ceil($totaal / $perPagina));
+$pagina = isset($_GET['pagina']) && ctype_digit((string)$_GET['pagina']) ? max(1, min($paginas, (int)$_GET['pagina'])) : 1;
+$zichtbaar = array_slice($regels, ($pagina - 1) * $perPagina, $perPagina);
 ?><!DOCTYPE html>
-<html lang="nl">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="robots" content="noindex,nofollow">
-<title>Logboek</title>
+<html lang="nl"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Logboek</title>
 <style>
-body{margin:0;background:#f6f2e8;color:#26351d;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;line-height:1.45}.top{background:#fff;border-bottom:1px solid #ddd8c0;padding:14px 22px}.top a{color:#2d6260;text-decoration:none;font-weight:700}.wrap{max-width:1180px;margin:28px auto;padding:0 20px 60px}.card{background:#fff;border:1px solid #ddd8c0;border-radius:14px;padding:18px;margin-bottom:16px}.filters{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:10px;align-items:end}.veld label{display:block;font-size:12px;font-weight:800;color:#68705f;margin-bottom:5px}.veld input,.veld select{width:100%;box-sizing:border-box;border:1px solid #cfcab7;border-radius:8px;padding:9px;font:inherit}.acties{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.btn{display:inline-block;border:0;border-radius:8px;padding:9px 12px;background:#3a7a77;color:#fff;text-decoration:none;font:inherit;font-weight:750;cursor:pointer}.btn.sec{background:#fff;color:#2d6260;border:1px solid #cfcab7}.meta{color:#68705f;font-size:13px}.table-wrap{overflow:auto}table{width:100%;border-collapse:collapse;background:#fff}th,td{text-align:left;vertical-align:top;border-bottom:1px solid #eee9db;padding:10px;font-size:13px}th{color:#68705f;font-size:11px;text-transform:uppercase;letter-spacing:.04em;position:sticky;top:0;background:#fff}td.details{min-width:300px;white-space:pre-wrap;word-break:break-word}.empty{padding:24px;text-align:center;color:#68705f}@media(max-width:800px){.filters{grid-template-columns:1fr 1fr}.wrap{padding:0 12px 40px}}@media(max-width:520px){.filters{grid-template-columns:1fr}}
-</style>
-<link rel="stylesheet" href="ui-2026.css">
-</head>
-<body>
-<div class="top"><a href="./">← Beheer</a></div>
-<main class="wrap">
-<h1>Logboek</h1>
-<p class="meta">Audittrail van beheerhandelingen. Standaard worden de laatste 90 dagen getoond.</p>
-<section class="card">
-<form method="get">
-<div class="filters">
-<div class="veld"><label for="q">Zoeken</label><input id="q" name="q" value="<?=logEsc($zoek)?>" placeholder="gebruiker, actie of details"></div>
-<div class="veld"><label for="gebruiker">Gebruiker</label><select id="gebruiker" name="gebruiker"><option value="">Alle</option><?php foreach($gebruikers as $g):?><option value="<?=logEsc($g)?>" <?=$gebruiker===$g?'selected':''?>><?=logEsc($g)?></option><?php endforeach;?></select></div>
-<div class="veld"><label for="actie">Actie</label><select id="actie" name="actie"><option value="">Alle</option><?php foreach($acties as $a):?><option value="<?=logEsc($a)?>" <?=$actie===$a?'selected':''?>><?=logEsc($a)?></option><?php endforeach;?></select></div>
-<div class="veld"><label for="dagen">Periode</label><select id="dagen" name="dagen"><?php foreach([7=>'7 dagen',30=>'30 dagen',90=>'90 dagen',180=>'180 dagen',365=>'365 dagen',0=>'Alles'] as $d=>$label):?><option value="<?=$d?>" <?=$dagen===$d?'selected':''?>><?=logEsc($label)?></option><?php endforeach;?></select></div>
-</div>
-<div class="acties"><button class="btn" type="submit">Filteren</button><a class="btn sec" href="logboek.php">Wissen</a><a class="btn sec" href="?<?=logEsc(logQuery(['export'=>'csv']))?>">CSV exporteren</a></div>
-</form>
-</section>
-<section class="card table-wrap">
-<?php if(!$regels):?><div class="empty">Geen logregels gevonden voor deze selectie.</div><?php else:?><table><thead><tr><th>Tijd</th><th>Gebruiker</th><th>Actie</th><th>Details</th></tr></thead><tbody><?php foreach($regels as $r):?><tr><td><?=logEsc(logDatumTijd((string)($r['tijd']??'')))?></td><td><?=logEsc($r['gebruiker']??'')?></td><td><?=logEsc($r['actie']??'')?></td><td class="details"><?=logEsc($r['details']??'')?></td></tr><?php endforeach;?></tbody></table><?php endif;?>
-</section>
-</main>
-</body>
-</html>
+body{margin:0;background:#f6f2e8;color:#26351d;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.top{position:sticky;top:0;z-index:10;background:#fff;border-bottom:1px solid #ddd8c0;padding:15px 22px}.topin{max-width:1180px;margin:auto;display:flex;justify-content:space-between;gap:16px}.top a{font-weight:700;color:#2d6260;text-decoration:none}.wrap{max-width:1180px;margin:28px auto;padding:0 22px 70px}.kaart{background:#fff;border:1px solid #ddd8c0;border-radius:14px;padding:22px;margin-bottom:18px}.filters{display:grid;grid-template-columns:2fr 1fr 1fr .8fr;gap:12px;align-items:end}.veld label{display:block;font-weight:700;margin-bottom:6px}.veld input,.veld select{box-sizing:border-box;width:100%;border:1px solid #cfcab7;border-radius:8px;padding:10px;font:inherit}.acties{display:flex;gap:9px;flex-wrap:wrap;margin-top:14px}.btn{border:0;border-radius:9px;padding:10px 14px;font:inherit;font-weight:700;text-decoration:none;display:inline-block;cursor:pointer}.primair{background:#3a7a77;color:#fff}.secundair{background:#fff;border:1px solid #cfcab7;color:#26351d}.meta{color:#66705e;font-size:14px}.tabel-wrap{overflow:auto}.logtabel{width:100%;border-collapse:collapse;min-width:760px}.logtabel th,.logtabel td{text-align:left;vertical-align:top;padding:10px 9px;border-bottom:1px solid #ece8dc}.logtabel th{font-size:13px;color:#66705e}.tijd{white-space:nowrap}.actie{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:13px}.details{white-space:pre-wrap;word-break:break-word}.pager{display:flex;gap:8px;align-items:center;justify-content:flex-end;margin-top:16px}.pager a,.pager span{padding:7px 10px;border:1px solid #d8d2bf;border-radius:7px;text-decoration:none;color:#26351d}.pager .actief{background:#3a7a77;color:#fff;border-color:#3a7a77}@media(max-width:850px){.filters{grid-template-columns:1fr 1fr}.wrap{padding-left:12px;padding-right:12px}}@media(max-width:540px){.filters{grid-template-columns:1fr}}
+</style></head><body>
+<div class="top"><div class="topin"><a href="../beheer.php">← Terug naar beheer</a><span>Alleen-lezen</span></div></div>
+<main class="wrap"><h1>Logboek</h1><p class="meta">Activiteitenlogboek van beheer. Het bronbestand bewaart maximaal 90 dagen; deze pagina wijzigt of wist niets.</p>
+<section class="kaart"><form method="get"><div class="filters"><div class="veld"><label for="q">Zoeken</label><input id="q" name="q" value="<?=logEsc($zoek)?>" placeholder="Gebruiker, actie of details"></div><div class="veld"><label for="gebruiker">Gebruiker</label><select id="gebruiker" name="gebruiker"><option value="">Alle gebruikers</option><?php foreach($gebruikers as $g):?><option value="<?=logEsc($g)?>" <?=$gebruiker===$g?'selected':''?>><?=logEsc($g)?></option><?php endforeach;?></select></div><div class="veld"><label for="actie">Actie</label><select id="actie" name="actie"><option value="">Alle acties</option><?php foreach($acties as $a):?><option value="<?=logEsc($a)?>" <?=$actie===$a?'selected':''?>><?=logEsc($a)?></option><?php endforeach;?></select></div><div class="veld"><label for="dagen">Periode</label><select id="dagen" name="dagen"><option value="7" <?=$dagen===7?'selected':''?>>7 dagen</option><option value="30" <?=$dagen===30?'selected':''?>>30 dagen</option><option value="90" <?=$dagen===90?'selected':''?>>90 dagen</option><option value="0" <?=$dagen===0?'selected':''?>>Alles in bestand</option></select></div></div><div class="acties"><button class="btn primair" type="submit">Filter toepassen</button><a class="btn secundair" href="logboek.php">Filters wissen</a><a class="btn secundair" href="?<?=logEsc(logQuery(['export'=>'csv','pagina'=>null]))?>">CSV exporteren</a></div></form></section>
+<section class="kaart"><p class="meta"><strong><?=$totaal?></strong> regel(s) gevonden<?= $totaal ? ' · pagina '.$pagina.' van '.$paginas : '' ?>.</p><?php if(!$zichtbaar):?><p>Geen logregels gevonden met deze filters.</p><?php else:?><div class="tabel-wrap"><table class="logtabel"><thead><tr><th>Tijd</th><th>Gebruiker</th><th>Actie</th><th>Details</th></tr></thead><tbody><?php foreach($zichtbaar as $r):?><tr><td class="tijd"><?=logEsc(logDatumTijd((string)($r['tijd']??'')))?></td><td><?=logEsc($r['gebruiker']??'')?></td><td class="actie"><?=logEsc($r['actie']??'')?></td><td class="details"><?=logEsc($r['details']??'')?></td></tr><?php endforeach;?></tbody></table></div><?php endif;?>
+<?php if($paginas>1):?><nav class="pager" aria-label="Paginering"><?php if($pagina>1):?><a href="?<?=logEsc(logQuery(['pagina'=>$pagina-1]))?>">← Vorige</a><?php endif;?><span class="actief"><?=$pagina?> / <?=$paginas?></span><?php if($pagina<$paginas):?><a href="?<?=logEsc(logQuery(['pagina'=>$pagina+1]))?>">Volgende →</a><?php endif;?></nav><?php endif;?></section></main></body></html>
