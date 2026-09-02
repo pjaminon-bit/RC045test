@@ -44,6 +44,7 @@ try{
     $bootstrap=(string)file_get_contents($root.'/bin/bootstrap-control-plane-roles.php');$markerPos=strpos($bootstrap,"roles146Write(\$paths['roles_bootstrap_file']");$rolesPos=strpos($bootstrap,"roles146Write(\$paths['roles_file']");
     r146(str_contains($bootstrap,"posix_geteuid() !== 0")&&str_contains($bootstrap,"array_key_exists('recover', \$opt)"),'hersteltool is root-only en vereist expliciete recovermodus voor bestaande recovery-state');
     r146($markerPos!==false&&$rolesPos!==false&&$markerPos<$rolesPos,'bootstrap schrijft marker vóór privilegehoudende rollenstate en blijft bij onderbreking fail-closed');
+    r146(str_contains($bootstrap,"hash_equals((string)\$marker['owner'], \$owner)"),'onderbroken bootstrap blijft aan de eerder vastgelegde owner gebonden');
     r146(!str_contains((string)file_get_contents($root.'/app/deployment/control-plane-admin-executor.php'),"return'owner'; // pre-5.8"),'oude executor ownerfallback is aantoonbaar verwijderd');
 }finally{r146rm($tmp);}
 echo"Security #146 control-plane roles: {$ok} OK, {$fail} fout(en)\n";exit($fail===0?0:1);
