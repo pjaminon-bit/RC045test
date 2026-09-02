@@ -145,7 +145,7 @@ jobs:
     permissions:
       id-token: write
     outputs:
-      e2e_password: ${{ steps.fixture.outputs.e2e_password }}
+      e2e_password_ciphertext: ${{ steps.fixture.outputs.e2e_password_ciphertext }}
     env:
       VPS_TAILSCALE_HOST: ${{ vars.VPS_TEST_TAILSCALE_HOST || '100.104.242.66' }}
       VPS_SSH_HOST_ALIAS: vps.holox.nl
@@ -173,11 +173,13 @@ jobs:
         env:
           VPS_TEST_DEPLOY_KEY: ${{ secrets.VPS_TEST_DEPLOY_KEY }}
           VPS_TEST_SSH_KNOWN_HOSTS: ${{ secrets.VPS_TEST_SSH_KNOWN_HOSTS }}
+          E2E_CREDENTIAL_WRAP_KEY: ${{ secrets.E2E_CREDENTIAL_WRAP_KEY }}
         shell: bash
         run: |
           set -euo pipefail
           [[ -n "${VPS_TEST_DEPLOY_KEY:-}" ]] || { echo 'VPS_TEST_DEPLOY_KEY ontbreekt' >&2; exit 1; }
           [[ -n "${VPS_TEST_SSH_KNOWN_HOSTS:-}" ]] || { echo 'VPS_TEST_SSH_KNOWN_HOSTS ontbreekt' >&2; exit 1; }
+          [[ ${#E2E_CREDENTIAL_WRAP_KEY} -ge 32 && ${#E2E_CREDENTIAL_WRAP_KEY} -le 256 ]] || { echo 'E2E_CREDENTIAL_WRAP_KEY ontbreekt of is ongeldig' >&2; exit 1; }
           ssh_dir="$(mktemp -d "$RUNNER_TEMP/vps-e2e-setup-ssh.XXXXXX")"
           gateway_ready=0
           finish() {
@@ -221,6 +223,7 @@ jobs:
 
           password="$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')"
           [[ ${#password} -ge 32 && ${#password} -le 256 ]] || { echo 'Genereren ephemeral wachtwoord faalde' >&2; exit 1; }
+          echo "::add-mask::$password"
           apply="$(printf '%s\n' "$password" | ssh \
             -i "$key" -p "$VPS_SSH_PORT" \
             -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
@@ -228,8 +231,13 @@ jobs:
             "$VPS_SSH_USER@$VPS_TAILSCALE_HOST" 'e2e apply')"
           printf '%s\n' "$apply"
           grep -Fqx 'E2E APPLY OK  tenant=test accounts=2 linked_member=1 fixture=vps-authenticated-e2e-v1' <<<"$apply"
-          printf 'e2e_password=%s\n' "$password" >> "$GITHUB_OUTPUT"
-          unset password
+
+          ciphertext="$(printf '%s' "$password" | openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -a -A -pass env:E2E_CREDENTIAL_WRAP_KEY)"
+          [[ -n "$ciphertext" ]] || { echo 'Versleutelen ephemeral E2E-wachtwoord faalde' >&2; exit 1; }
+          tag="$(E2E_CIPHERTEXT="$ciphertext" python3 -c 'import hashlib,hmac,os; print(hmac.new(os.environ["E2E_CREDENTIAL_WRAP_KEY"].encode(), os.environ["E2E_CIPHERTEXT"].encode(), hashlib.sha256).hexdigest())')"
+          [[ "$tag" =~ ^[0-9a-f]{64}$ ]] || { echo 'Integriteitstag voor E2E-credential faalde' >&2; exit 1; }
+          printf 'e2e_password_ciphertext=%s.%s\n' "$tag" "$ciphertext" >> "$GITHUB_OUTPUT"
+          unset password ciphertext tag
 
   live-authenticated:
     needs: e2e-fixture-setup
@@ -261,17 +269,84 @@ jobs:
           npm ci --ignore-scripts
           npx playwright install --with-deps chromium
 
-      - name: Bewijs authenticated beheer en gekoppeld ledenportaal
+      - name: Ontsleutel ephemeral applicatiecredential vlak voor browsergebruik
+        id: credential
         env:
-          E2E_PASSWORD: ${{ needs.e2e-fixture-setup.outputs.e2e_password }}
+          E2E_CREDENTIAL_WRAP_KEY: ${{ secrets.E2E_CREDENTIAL_WRAP_KEY }}
+          E2E_PASSWORD_CIPHERTEXT: ${{ needs.e2e-fixture-setup.outputs.e2e_password_ciphertext }}
         shell: bash
         run: |
           set -euo pipefail
+          [[ ${#E2E_CREDENTIAL_WRAP_KEY} -ge 32 && ${#E2E_CREDENTIAL_WRAP_KEY} -le 256 ]] || { echo 'E2E_CREDENTIAL_WRAP_KEY ontbreekt of is ongeldig' >&2; exit 1; }
+          package="$E2E_PASSWORD_CIPHERTEXT"
+          tag="${package%%.*}"
+          ciphertext="${package#*.}"
+          [[ "$tag" =~ ^[0-9a-f]{64}$ && -n "$ciphertext" && "$ciphertext" != "$package" ]] || { echo 'Versleutelde E2E-credential is ongeldig' >&2; exit 1; }
+          E2E_TAG="$tag" E2E_CIPHERTEXT="$ciphertext" python3 -c 'import hashlib,hmac,os,sys; expected=hmac.new(os.environ["E2E_CREDENTIAL_WRAP_KEY"].encode(), os.environ["E2E_CIPHERTEXT"].encode(), hashlib.sha256).hexdigest(); sys.exit(0 if hmac.compare_digest(expected, os.environ["E2E_TAG"]) else 1)' || { echo 'Integriteitscontrole E2E-credential faalde' >&2; exit 1; }
+          password="$(printf '%s' "$ciphertext" | openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -a -A -pass env:E2E_CREDENTIAL_WRAP_KEY)"
+          [[ ${#password} -ge 32 && ${#password} -le 256 ]] || { echo 'Ontsleutelde E2E-credential is ongeldig' >&2; exit 1; }
+          echo "::add-mask::$password"
+          password_file="$RUNNER_TEMP/e2e-password-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          umask 077
+          printf '%s' "$password" > "$password_file"
+          chmod 600 "$password_file"
+          printf 'password_file=%s\n' "$password_file" >> "$GITHUB_OUTPUT"
+          unset password ciphertext tag package
+
+      - name: Bewijs authenticated beheer en gekoppeld ledenportaal
+        env:
+          E2E_PASSWORD_FILE: ${{ steps.credential.outputs.password_file }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ -f "$E2E_PASSWORD_FILE" ]] || { echo 'Ephemeral E2E-credentialbestand ontbreekt' >&2; exit 1; }
+          E2E_PASSWORD="$(cat "$E2E_PASSWORD_FILE")"
           [[ ${#E2E_PASSWORD} -ge 32 && ${#E2E_PASSWORD} -le 256 ]] || { echo 'Ephemeral E2E-wachtwoord ontbreekt of is ongeldig' >&2; exit 1; }
+          export E2E_PASSWORD
           npx playwright test tests/live-dev-authenticated.spec.js --workers=1 --reporter=line,html
 
-      - name: Bewaar authenticated screenshots en rapport
+      - name: Controleer browserartifacts op plaintextcredential
+        id: artifact-scan
+        if: ${{ always() && steps.credential.outcome == 'success' }}
+        env:
+          E2E_PASSWORD_FILE: ${{ steps.credential.outputs.password_file }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ -f "$E2E_PASSWORD_FILE" ]] || { echo 'Credentialbestand ontbreekt vóór artifactscan' >&2; exit 1; }
+          password="$(cat "$E2E_PASSWORD_FILE")"
+          echo "::add-mask::$password"
+          leak=0
+          for dir in playwright-report test-results; do
+            [[ -e "$dir" ]] || continue
+            if grep -R -a -F -l -- "$password" "$dir" >"$RUNNER_TEMP/e2e-artifact-credential-hits.txt" 2>/dev/null; then
+              leak=1
+              break
+            fi
+          done
+          if [[ "$leak" -ne 0 ]]; then
+            rm -rf playwright-report test-results
+            rm -f "$RUNNER_TEMP/e2e-artifact-credential-hits.txt"
+            echo 'Authenticated browserartifact bevatte plaintextcredential en is verwijderd; upload geweigerd.' >&2
+            exit 1
+          fi
+          rm -f "$RUNNER_TEMP/e2e-artifact-credential-hits.txt"
+          echo 'safe=true' >> "$GITHUB_OUTPUT"
+          unset password
+
+      - name: Verwijder lokaal ephemeral credentialbestand
         if: ${{ always() }}
+        env:
+          E2E_PASSWORD_FILE: ${{ steps.credential.outputs.password_file }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -n "${E2E_PASSWORD_FILE:-}" ]]; then
+            rm -f -- "$E2E_PASSWORD_FILE"
+          fi
+
+      - name: Bewaar authenticated screenshots en rapport
+        if: ${{ always() && steps.artifact-scan.outputs.safe == 'true' }}
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: authenticated-browser-acceptance-${{ github.run_id }}
