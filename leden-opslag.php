@@ -28,6 +28,7 @@ if (!defined('RC045_LEDEN')) {
 define('LEDEN_VOORLOOP', "<?php exit; ?>\n");
 
 require_once __DIR__ . '/app/data-slot.php';
+require_once __DIR__ . '/app/storage/legacy-private-json.php';
 
 function ledenBestandPad() {
   return __DIR__ . '/leden-data.php';
@@ -419,17 +420,8 @@ function ledenLeegBestand() {
 }
 
 function ledenLees() {
-  $pad = ledenBestandPad();
-  if (!is_file($pad)) return ledenLeegBestand();
-  $ruw = file_get_contents($pad);
-  if ($ruw === false) return ledenLeegBestand();
-  // De PHP-voorloopregel eraf halen: alles vanaf de eerste accolade is JSON.
-  $start = strpos($ruw, '{');
-  if ($start === false) return ledenLeegBestand();
-  $json = json_decode(substr($ruw, $start), true);
-  if (!is_array($json) || !isset($json['leden']) || !is_array($json['leden'])) {
-    return ledenLeegBestand();
-  }
+  $json = legacyPrivateJsonLees(ledenBestandPad(), 'leden', ['leden']);
+  if ($json === null) return ledenLeegBestand();
   $json['volgnummer'] = isset($json['volgnummer']) ? (int) $json['volgnummer'] : 0;
   return $json;
 }
