@@ -6,6 +6,10 @@ require_once __DIR__ . '/core/tenant-runtime.php';
 
 function authPlatformDefinities(): array{static $p=null;if($p===null){$x=require __DIR__.'/core/platform-definities.php';$p=is_array($x)?$x:[];}return$p;}
 function authCapabilityDefinities(): array{$p=authPlatformDefinities();return is_array($p['capabilities']??null)?$p['capabilities']:[];}
+function authBeheerDefinities(): array{$p=authPlatformDefinities();return is_array($p['beheer']??null)?$p['beheer']:[];}
+function authBeheerDefinitie(string $sleutel): ?array{$d=authBeheerDefinities();$x=$d[$sleutel]??null;return is_array($x)?$x:null;}
+function authBeheerCapability(string $sleutel): ?string{$d=authBeheerDefinitie($sleutel);if(!is_array($d))return null;$c=trim((string)($d['capability']??''));return$c!==''?$c:null;}
+function authHeeftBeheerOnderdeel(string $sleutel): bool{$d=authBeheerDefinitie($sleutel);if(!is_array($d))return false;$c=trim((string)($d['capability']??''));if($c==='')return false;return authHeeftCapability($c,!empty($d['gevoelig']));}
 function authCapabilityLegacyMap(): array{static $m=null;if($m!==null)return$m;$m=[];foreach(authCapabilityDefinities() as $c=>$d)foreach((array)($d['legacy']??[]) as $l){$l=trim((string)$l);if($l==='')continue;if(!isset($m[$l]))$m[$l]=[];if(!in_array((string)$c,$m[$l],true))$m[$l][]=(string)$c;}return$m;}
 function authCapabilitiesNormaliseer(array $caps): array{$g=authCapabilityDefinities();$r=[];foreach($caps as $c){$c=trim((string)$c);if($c!==''&&isset($g[$c])&&!in_array($c,$r,true))$r[]=$c;}sort($r,SORT_STRING);return$r;}
 function authCapabilitiesVanTabs(array $tabs): array{$m=authCapabilityLegacyMap();$r=[];foreach($tabs as $t)foreach((array)($m[trim((string)$t)]??[]) as $c)$r[]=$c;return authCapabilitiesNormaliseer($r);}
