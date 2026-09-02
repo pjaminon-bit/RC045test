@@ -25,16 +25,16 @@ function sljrrThrows(callable $callback): bool
 }
 
 $readers = [
-    'leden' => [ledenBestandPad(), static fn() => ledenLees(), ['leden'=>[]]],
-    'vergaderingen' => [vergaderingenBestandPad(), static fn() => vergaderingenLees(), ['vergaderingen'=>[]]],
-    'taken' => [takenBestandPad(), static fn() => takenLees(), ['taken'=>[]]],
-    'operationele_taken' => [otaakBestandPad(), static fn() => otakenLees(), ['taken'=>[]]],
-    'evenementen' => [evenementBestandPad(), static fn() => evenementenLees(), ['evenementen'=>[]]],
-    'groepen' => [groepenBestandPad(), static fn() => groepenLees(), ['rollen'=>[],'groepen'=>[]]],
-    'ledenlabels' => [ledenlabelsBestandPad(), static fn() => ledenlabelsLees(), ['labels'=>[],'toewijzingen'=>[]]],
-    'aanmeldingen' => [aanmeldingenBestandPad(), static fn() => aanmeldingenJsonLees(), ['aanmeldingen'=>[]]],
-    'contributies' => [contributiesBestandPad(), static fn() => contributiesJsonLees(), ['regels'=>[]]],
-    'contactberichten' => [contactBerichtenBestandPad(), static fn() => contactBerichtenJsonLees(), ['berichten'=>[]]],
+    'leden' => [ledenBestandPad(), 'ledenLees', ['leden'=>[]]],
+    'vergaderingen' => [vergaderingenBestandPad(), 'vergaderingenLees', ['vergaderingen'=>[]]],
+    'taken' => [takenBestandPad(), 'takenLees', ['taken'=>[]]],
+    'operationele_taken' => [otaakBestandPad(), 'otakenLees', ['taken'=>[]]],
+    'evenementen' => [evenementBestandPad(), 'evenementenLees', ['evenementen'=>[]]],
+    'groepen' => [groepenBestandPad(), 'groepenLees', ['rollen'=>[],'groepen'=>[]]],
+    'ledenlabels' => [ledenlabelsBestandPad(), 'ledenlabelsLees', ['labels'=>[],'toewijzingen'=>[]]],
+    'aanmeldingen' => [aanmeldingenBestandPad(), 'aanmeldingenJsonLees', ['aanmeldingen'=>[]]],
+    'contributies' => [contributiesBestandPad(), 'contributiesJsonLees', ['regels'=>[]]],
+    'contactberichten' => [contactBerichtenBestandPad(), 'contactBerichtenJsonLees', ['berichten'=>[]]],
 ];
 
 // Deze test mag nooit echte lokale/runtime data aanraken. CI-checkouts horen
