@@ -9,11 +9,34 @@
 // ============================================================
 require_once __DIR__ . '/tenant-runtime.php';
 
+final class TenantSettingsStorageException extends InvalidArgumentException {}
+
 function tenantSettingsPad(array $config): ?string
 {
     $privateRoot = tenantRuntimePrivateRoot($config);
     if ($privateRoot === null) return null;
     return rtrim($privateRoot, '/\\') . DIRECTORY_SEPARATOR . 'settings' . DIRECTORY_SEPARATOR . 'site.json';
+}
+
+function tenantSettingsRuntimeLeesfoutMarkeer(): void
+{
+    $GLOBALS['tenantSettingsRuntimeLeesfout'] = true;
+}
+
+function tenantSettingsRuntimeHeeftLeesfout(): bool
+{
+    return !empty($GLOBALS['tenantSettingsRuntimeLeesfout']);
+}
+
+function tenantSettingsHerstelMelding(): string
+{
+    return 'De opgeslagen tenantinstellingen kunnen niet veilig worden gelezen. Opslaan en brandinguploads zijn geblokkeerd om de bestaande gegevens te behouden. Herstel settings/site.json via serverbeheer of een gecontroleerde backup/recovery en ververs daarna deze pagina.';
+}
+
+function tenantSettingsStorageFout(string $reden, ?Throwable $vorige = null): never
+{
+    error_log('[platform] tenant settings onveilig: ' . $reden);
+    throw new TenantSettingsStorageException(tenantSettingsHerstelMelding(), 0, $vorige);
 }
 
 function tenantSettingsBevatLegacy($waarde): bool
@@ -127,14 +150,19 @@ function tenantSettingsNormaliseer(array $input, array $huidig = []): array
 function tenantSettingsLees(array $config): array
 {
     $pad = tenantSettingsPad($config);
-    if ($pad === null || !is_file($pad) || !is_readable($pad) || is_link($pad)) return [];
+    if ($pad === null) return [];
+    if (is_link($pad)) tenantSettingsStorageFout('settingsdoel is een symlink');
+    if (!file_exists($pad)) return [];
+    if (!is_file($pad)) tenantSettingsStorageFout('settingsdoel is geen regulier bestand');
+    if (!is_readable($pad)) tenantSettingsStorageFout('settingsbestand is niet leesbaar');
+
     $raw = @file_get_contents($pad);
-    if ($raw === false) return [];
+    if ($raw === false) tenantSettingsStorageFout('settingsbestand kon niet worden gelezen');
     try { $data = json_decode($raw, true, 64, JSON_THROW_ON_ERROR); }
-    catch (Throwable $e) { error_log('[platform] tenant settings onleesbaar'); return []; }
-    if (!is_array($data)) return [];
+    catch (Throwable $e) { tenantSettingsStorageFout('settingsbestand bevat ongeldige JSON', $e); }
+    if (!is_array($data)) tenantSettingsStorageFout('settingsdocument is geen array');
     try { return tenantSettingsNormaliseer($data, $data); }
-    catch (Throwable $e) { error_log('[platform] tenant settings geweigerd'); return []; }
+    catch (Throwable $e) { tenantSettingsStorageFout('settingsdocument faalt normalisatie', $e); }
 }
 
 function tenantSettingsSchrijf(array $basisConfig, array $input): bool
@@ -146,6 +174,10 @@ function tenantSettingsSchrijf(array $basisConfig, array $input): bool
         $privateRoot = tenantRuntimePrivateRoot($basisConfig);
         if ($privateRoot === null || !is_dir($privateRoot) || is_link($privateRoot)) return false;
 
+        // Bestaande state moet vóór iedere write aantoonbaar veilig leesbaar zijn.
+        // Alleen een werkelijk ontbrekend site.json mag als eerste configuratie starten.
+        $huidig = tenantSettingsLees($basisConfig);
+
         $map = dirname($pad);
         if (is_link($map)) return false;
         if (!is_dir($map) && !@mkdir($map, 0750, true)) return false;
@@ -153,7 +185,6 @@ function tenantSettingsSchrijf(array $basisConfig, array $input): bool
         if (!is_dir($map) || is_link($map)) return false;
         @chmod($map, 0750);
 
-        $huidig = tenantSettingsLees($basisConfig);
         $data = tenantSettingsNormaliseer($input, $huidig);
         $json = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
         if ($json === false) return false;

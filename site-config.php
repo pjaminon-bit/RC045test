@@ -77,8 +77,16 @@ if ($overridePad !== null) {
 // Alleen externe tenants krijgen web-bewerkbare instellingen. De server-only
 // config blijft bron van waarheid voor tenant-key, site-url, opslag en database.
 if ($externPad !== null) {
-    $bewerkbaar = tenantSettingsLees($config);
-    if ($bewerkbaar !== []) $config = array_replace_recursive($config, $bewerkbaar);
+    try {
+        $bewerkbaar = tenantSettingsLees($config);
+        if ($bewerkbaar !== []) $config = array_replace_recursive($config, $bewerkbaar);
+    } catch (TenantSettingsStorageException $e) {
+        // Publieke/read-only runtime blijft beschikbaar op de server-only
+        // basisconfig, maar de requeststate onthoudt expliciet dat site.json
+        // onveilig is. Beheer gebruikt die state om alle settings/brandingwrites
+        // fail-closed te blokkeren totdat gecontroleerde recovery is uitgevoerd.
+        tenantSettingsRuntimeLeesfoutMarkeer();
+    }
 
     // Het standalone compatibiliteitsprofiel bevat historische RC045-assets.
     // Een nieuwe externe tenant die nog geen eigen branding heeft ingesteld
