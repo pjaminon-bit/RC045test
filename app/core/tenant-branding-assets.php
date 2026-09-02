@@ -3,6 +3,7 @@
 // Veilige tenantbranding- en website-assets
 // ============================================================
 require_once __DIR__ . '/tenant-runtime.php';
+require_once __DIR__ . '/tenant-settings.php';
 require_once __DIR__ . '/atomic-file-transaction.php';
 
 function tenantBrandingAssetTypes(): array
@@ -25,6 +26,12 @@ function tenantBrandingAssetRoot(array $config): ?string
  */
 function tenantBrandingAssetTransactieBegin(array $config): void
 {
+    // Branding en site.json vormen één beheerstate. Wanneer een bestaand
+    // settingsbestand corrupt/onleesbaar is mag er vóór recovery ook geen
+    // brandingmutatie beginnen; anders zou beheer al bytes wijzigen vóór de
+    // uiteindelijke settingswrite hard faalt.
+    tenantSettingsLees($config);
+
     $root = tenantBrandingAssetRoot($config);
     if ($root === null) throw new RuntimeException('Brandingtransactie vereist private tenantopslag.');
     $actief = $GLOBALS['tenantBrandingAssetTx'] ?? null;
