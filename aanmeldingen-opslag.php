@@ -123,10 +123,15 @@ function aanmeldingenPasRetentieToe(array &$data,?int $nu=null): int
 }
 function aanmeldingenOpschonenBewaartermijn(): int
 {
-    $data=aanmeldingenLees();
-    $aantal=aanmeldingenPasRetentieToe($data);
-    if($aantal>0&&!aanmeldingenSchrijf($data)){
-        throw new RuntimeException('Verlopen aanmeldingen konden niet duurzaam uit de opslag worden verwijderd.');
+    $slot=dataSlotOpen();
+    try{
+        $data=aanmeldingenLees();
+        $aantal=aanmeldingenPasRetentieToe($data);
+        if($aantal>0&&!aanmeldingenSchrijf($data)){
+            throw new RuntimeException('Verlopen aanmeldingen konden niet duurzaam uit de opslag worden verwijderd.');
+        }
+        return$aantal;
+    }finally{
+        dataSlotDicht($slot);
     }
-    return$aantal;
 }
