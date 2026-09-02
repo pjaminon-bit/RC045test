@@ -175,6 +175,6 @@ function control58AuditDocument(mixed $input): ?array
 function control58Utc(string $value): string
 {
     $ts = strtotime($value);
-    if ($ts === false) throw new RuntimeException('UTC-tijdstip is ongeldig.');
+    if ($ts === false) throw new RuntimeException('Datum/tijd is ongeldig.');
     return gmdate('Y-m-d\TH:i:s\Z', $ts);
 }
