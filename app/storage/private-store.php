@@ -3,6 +3,7 @@
 // Tenant-aware private storage abstraction
 // ============================================================
 require_once dirname(__DIR__) . '/core/tenant-runtime.php';
+require_once dirname(__DIR__) . '/core/atomic-file-transaction.php';
 require_once __DIR__ . '/tenant-backup-store.php';
 require_once __DIR__ . '/private-store-prewrite.php';
 require_once __DIR__ . '/pdo-runtime.php';
@@ -37,6 +38,120 @@ function privateStoreLegacyFallbackToegestaan(): bool
 {
     $externConfig = trim((string)(getenv('VERENIGING_CONFIG_FILE') ?: ''));
     return $externConfig === '' && privateStoreJsonRoot() === null;
+}
+
+/**
+ * Actieve standalone/JSON-transacties bewaren per aangeraakte collectie een
+ * raw filesystem-snapshot. Daardoor kan ook de gewone privateStoreTransactie()
+ * dezelfde all-or-nothingsemantiek bieden als PDO zonder dat callers vooraf
+ * alle collecties hoeven te kennen. Batchcallers mogen daarnaast de bestaande
+ * privateStoreBatchTransactie() blijven gebruiken.
+ */
+function &privateStoreJsonTransactieContext(): array
+{
+    static $context = [];
+    return $context;
+}
+
+function privateStoreJsonTransactieActief(): bool
+{
+    $context =& privateStoreJsonTransactieContext();
+    return !empty($context['active']);
+}
+
+/**
+ * Bestaande standalone collecties hebben legacy PHP+JSON-bestanden. De
+ * storage-laag kent voor de huidige centrale repositories hun padfuncties.
+ * Nieuwe collecties kunnen hun absolute legacy-pad expliciet aan
+ * privateStoreSchrijf() meegeven; ontbreekt zo'n binding tijdens een transactie,
+ * dan faalt de write vóór de eerste mutatie gesloten.
+ */
+function privateStoreLegacyTransactiePad(string $collectie, ?string $explicietPad = null): ?string
+{
+    if($explicietPad!==null){
+        $pad=rtrim(trim($explicietPad),'/\\');
+        if($pad===''||!tenantRuntimeIsAbsoluutPad($pad))throw new RuntimeException('Standalone private-store transactie bevat een ongeldig opslagpad.');
+        return$pad;
+    }
+
+    $padFuncties=[
+        'leden'=>'ledenBestandPad',
+        'vergaderingen'=>'vergaderingenBestandPad',
+        'taken'=>'takenBestandPad',
+        'operationele_taken'=>'otaakBestandPad',
+        'evenementen'=>'evenementBestandPad',
+        'groepen'=>'groepenBestandPad',
+        'ledenlabels'=>'ledenlabelsBestandPad',
+        'contributies'=>'contributiesBestandPad',
+        'aanmeldingen'=>'aanmeldingenBestandPad',
+    ];
+    $functie=$padFuncties[$collectie]??null;
+    if(!is_string($functie)||!function_exists($functie))return null;
+    $pad=rtrim(trim((string)$functie()),'/\\');
+    if($pad===''||!tenantRuntimeIsAbsoluutPad($pad))throw new RuntimeException('Standalone private-store transactie kon het opslagpad niet veilig binden.');
+    return$pad;
+}
+
+function privateStoreJsonTransactieRegistreerWrite(string $collectie, ?string $legacyPad = null): void
+{
+    $context =& privateStoreJsonTransactieContext();
+    if(empty($context['active']))return;
+
+    $collectie=trim($collectie);
+    if($collectie==='')throw new RuntimeException('Private-store transactie mist een geldige collectie.');
+    $root=privateStoreJsonRoot();
+    $pad=$root!==null
+        ? tenantRuntimeCollectiePad($root,$collectie)
+        : privateStoreLegacyTransactiePad($collectie,$legacyPad);
+    if($pad===null){
+        throw new RuntimeException('Standalone private-store transactie mist een rollbackbinding voor collectie '.$collectie.'.');
+    }
+    if(isset($context['snapshots'][$pad]))return;
+
+    $snapshot=atomicFileTxBegin([$pad]);
+    $context['snapshots'][$pad]=$snapshot;
+    $context['order'][]=$pad;
+}
+
+function privateStoreJsonTransactieMarkeerWriteFout(): void
+{
+    $context =& privateStoreJsonTransactieContext();
+    if(!empty($context['active']))$context['write_failed']=true;
+}
+
+function privateStoreJsonTransactieRollback(): bool
+{
+    $context =& privateStoreJsonTransactieContext();
+    $ok=true;
+    foreach(array_reverse((array)($context['order']??[])) as $pad){
+        if(!isset($context['snapshots'][$pad])||!is_array($context['snapshots'][$pad]))continue;
+        try{
+            if(!atomicFileTxRollback($context['snapshots'][$pad]))$ok=false;
+        }catch(Throwable $e){
+            error_log('[platform] private JSON transaction rollback mislukt voor een opslagdoel: '.$e->getMessage());
+            $ok=false;
+        }
+    }
+    return$ok;
+}
+
+function privateStoreJsonTransactieCommit(): bool
+{
+    $context =& privateStoreJsonTransactieContext();
+    // Alle businesswrites zijn al geslaagd. Vanaf hier mag een cleanupfout
+    // nooit meer leiden tot een rollback met mogelijk deels verwijderde snapshots.
+    $context['committed']=true;
+    $ok=true;
+    foreach((array)($context['order']??[]) as $pad){
+        if(!isset($context['snapshots'][$pad])||!is_array($context['snapshots'][$pad]))continue;
+        try{
+            if(!atomicFileTxCommit($context['snapshots'][$pad]))$ok=false;
+        }catch(Throwable $e){
+            error_log('[platform] private JSON transaction stagingcleanup mislukt: '.$e->getMessage());
+            $ok=false;
+        }
+    }
+    return$ok;
 }
 
 function privateStoreJsonLees(string $collectie): array
@@ -119,8 +234,35 @@ function privateStoreEnsureSchema(PDO $pdo): void
 
 function privateStoreTransactie(callable $callback)
 {
-    if(privateStoreDriver()!=='pdo')return$callback();$pdo=privateStorePdo();$eigen=!$pdo->inTransaction();if($eigen)$pdo->beginTransaction();
-    try{$resultaat=$callback();if($eigen)$pdo->commit();return$resultaat;}catch(Throwable $e){if($eigen&&$pdo->inTransaction())$pdo->rollBack();throw$e;}
+    if(privateStoreDriver()!=='pdo'){
+        $context =& privateStoreJsonTransactieContext();
+        if(!empty($context['active']))return$callback();
+        $context=['active'=>true,'snapshots'=>[],'order'=>[],'write_failed'=>false,'committed'=>false];
+        try{
+            $resultaat=$callback();
+            if($resultaat===false||!empty($context['write_failed'])){
+                $rollbackOk=privateStoreJsonTransactieRollback();
+                $context=[];
+                if(!$rollbackOk)throw new RuntimeException('Private JSON-transactie faalde en rollback kon niet volledig worden uitgevoerd.');
+                return false;
+            }
+            $commitOk=privateStoreJsonTransactieCommit();
+            $context=[];
+            if(!$commitOk)throw new RuntimeException('Private JSON-transactie is opgeslagen maar transactiestaging kon niet volledig worden opgeruimd.');
+            return$resultaat;
+        }catch(Throwable $e){
+            $committed=!empty($context['committed']);
+            $rollbackOk=$committed?true:privateStoreJsonTransactieRollback();
+            $context=[];
+            if(!$rollbackOk){
+                error_log('[platform] private JSON transaction rollback onvolledig na '.get_class($e).': '.$e->getMessage());
+                throw new RuntimeException('Private JSON-transactie faalde en rollback kon niet volledig worden uitgevoerd.',0,$e);
+            }
+            throw$e;
+        }
+    }
+    $pdo=privateStorePdo();$eigen=!$pdo->inTransaction();if($eigen)$pdo->beginTransaction();
+    try{$resultaat=$callback();if($resultaat===false){if($eigen&&$pdo->inTransaction())$pdo->rollBack();return false;}if($eigen)$pdo->commit();return$resultaat;}catch(Throwable $e){if($eigen&&$pdo->inTransaction())$pdo->rollBack();throw$e;}
 }
 function privateStoreLees(string $collectie,callable $jsonLezer): array
 {
@@ -138,10 +280,11 @@ function privateStoreLees(string $collectie,callable $jsonLezer): array
     }
     $payload=(string)($rij['payload']??'');$data=json_decode($payload,true);if(json_last_error()!==JSON_ERROR_NONE||!is_array($data)){error_log('[platform] ongeldige private-store payload voor tenant '.privateStoreTenant().', collectie '.$collectie);throw new RuntimeException('Private verenigingsopslag bevat ongeldige data.');}return$data;
 }
-function privateStoreSchrijf(string $collectie,array $data,callable $jsonSchrijver): bool
+function privateStoreSchrijf(string $collectie,array $data,callable $jsonSchrijver,?string $legacyPad=null): bool
 {
     $collectie=trim($collectie);if($collectie==='')return false;
     if(privateStoreDriver()!=='pdo'){
+        privateStoreJsonTransactieRegistreerWrite($collectie,$legacyPad);
         if(privateStoreJsonRoot()!==null){
             $root=privateStoreJsonRoot();$pad=$root===null?null:tenantRuntimeCollectiePad($root,$collectie);
             if($pad!==null&&is_file($pad)){
@@ -152,9 +295,13 @@ function privateStoreSchrijf(string $collectie,array $data,callable $jsonSchrijv
                     throw new RuntimeException('Private verenigingsopslag kon niet veilig worden geback-upt.');
                 }
             }
-            return privateStoreJsonSchrijf($collectie,$data);
+            $ok=privateStoreJsonSchrijf($collectie,$data);
+            if(!$ok)privateStoreJsonTransactieMarkeerWriteFout();
+            return$ok;
         }
-        return(bool)$jsonSchrijver($data);
+        $ok=(bool)$jsonSchrijver($data);
+        if(!$ok)privateStoreJsonTransactieMarkeerWriteFout();
+        return$ok;
     }
     $pdo=privateStorePdo();$json=json_encode($data,JSON_UNESCAPED_UNICODE|JSON_PRETTY_PRINT);if($json===false)return false;$tenant=privateStoreTenant();$nu=date('c');$driver=strtolower((string)$pdo->getAttribute(PDO::ATTR_DRIVER_NAME));
     try{
