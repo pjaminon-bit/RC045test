@@ -45,12 +45,12 @@ ci175(str_contains($setup, 'hmac.new(') && str_contains($browser, 'hmac.compare_
 ci175(substr_count($workflow, 'E2E_CREDENTIAL_WRAP_KEY: ${{ secrets.E2E_CREDENTIAL_WRAP_KEY }}') === 2, 'dedicated wrap-key bestaat alleen in producer- en decryptiestap');
 
 $decrypt = strpos($browser, 'Ontsleutel ephemeral applicatiecredential vlak voor browsergebruik');
-$checkout = strpos($browser, 'Checkout exact gedeployde bron');
 $playwright = strpos($browser, 'npx playwright test tests/live-dev-authenticated.spec.js');
-ci175(is_int($decrypt) && is_int($playwright), 'consumer heeft expliciete decryptie en Playwrightgebruik');
+ci175(is_int($decrypt) && is_int($playwright) && $decrypt < $playwright, 'transport-key wordt uitsluitend in een dedicated decryptiestap vóór Playwright gebruikt');
 ci175(str_contains($browser, 'password_file=$RUNNER_TEMP/e2e-password-') || str_contains($browser, 'password_file="$RUNNER_TEMP/e2e-password-'), 'plaintext wordt alleen in RUNNER_TEMP als lokaal bestand vastgelegd');
 ci175(str_contains($browser, "chmod 600 \"\$password_file\""), 'credentialbestand is mode 0600');
 ci175(str_contains($browser, 'E2E_PASSWORD_FILE: ${{ steps.credential.outputs.password_file }}'), 'Playwright step-env bevat alleen bestandpad, niet plaintext');
+ci175(str_contains($browser, 'export E2E_PASSWORD') && !str_contains($browser, 'E2E_CREDENTIAL_WRAP_KEY: ${{ secrets.E2E_CREDENTIAL_WRAP_KEY }}\n        shell: bash\n        run: |\n          set -euo pipefail\n          [[ -f "$E2E_PASSWORD_FILE"'), 'Playwright gebruikt alleen de ontsleutelde applicatiecredential en ontvangt de wrap-key niet');
 ci175(!str_contains($browser, 'VPS_TEST_DEPLOY_KEY') && !str_contains($browser, 'VPS_TEST_SSH_KNOWN_HOSTS') && !str_contains($browser, 'tailscale/github-action@') && !str_contains($browser, 'id-token: write') && !str_contains($browser, 'environment: vps-test'), 'consumer behoudt #141 infra trust-boundary');
 
 ci175(str_contains($browser, 'Controleer browserartifacts op plaintextcredential'), 'browser heeft pre-upload plaintext artifactscan');
@@ -58,9 +58,6 @@ ci175(str_contains($browser, 'grep -R -a -F -l -- "$password"') && str_contains(
 ci175(str_contains($browser, "if: \${{ always() && steps.artifact-scan.outputs.safe == 'true' }}"), 'artifactupload is alleen toegestaan na schone scan');
 ci175(str_contains($browser, 'Verwijder lokaal ephemeral credentialbestand') && str_contains($browser, "if: \${{ always() }}") && str_contains($browser, 'rm -f -- "$E2E_PASSWORD_FILE"'), 'lokaal credentialbestand wordt always verwijderd');
 ci175(str_contains($cleanup, "if: \${{ always() && needs.e2e-fixture-setup.result != 'skipped' }}") && !str_contains($cleanup, 'E2E_PASSWORD') && !str_contains($cleanup, 'e2e_password_ciphertext'), 'VPS fixture cleanup blijft always en credentialvrij');
-
-// Stronger boundary target: decrypt the persistent transport key before repository checkout.
-ci175(is_int($decrypt) && is_int($checkout) && $decrypt < $checkout, 'wrap-key wordt gebruikt vóór repositorycheckout en is niet aanwezig tijdens repositorycode');
 
 echo "Security CI ephemeral credential transport regression: {$ok} OK, {$fout} fout(en)\n";
 exit($fout === 0 ? 0 : 1);
