@@ -153,8 +153,8 @@ test('aanmeldformulier slaat exact één lokaal inboxrecord op en lekt geen PII 
     }, {timeout:45000});
     await page.locator('#submit-btn').click();
     const intakeResponse = await intake;
-    const intakeBody = await intakeResponse.text();
-    expect(intakeResponse.status(), `Lokale intake gaf HTTP ${intakeResponse.status()}: ${intakeBody}`).toBe(200);
+    const intakeStatus = intakeResponse.status();
+    expect(intakeStatus, `Lokale intake gaf HTTP ${intakeStatus}`).toBe(200);
     await expect(page.locator('#bedankt-modal')).toHaveClass(/open/);
     await page.waitForTimeout(400);
     expect(formspreePosts, 'Aanmeldformulier stuurde PII naar Formspree').toEqual([]);
@@ -222,7 +222,7 @@ for (const viewport of [
     await login(page, '/leden/', MEMBER);
     await expect(page.getByText('Account nog niet gekoppeld'), 'E2E-memberaccount is niet aan het fixturelid gekoppeld').toHaveCount(0);
     await expect(page.getByRole('heading',{name:/Welkom, E2E/i})).toBeVisible();
-    await expect(page.getByText('E2E Testlid')).toBeVisible();
+    await expect(page.getByText('E2E Testlid', {exact:true})).toBeVisible();
     await expect(page.getByText('E2E Testcommissie')).toBeVisible();
     await expect(page.getByText('Deels betaald')).toBeVisible();
     await expect(page.getByText('E2E agendapunt')).toBeVisible();
