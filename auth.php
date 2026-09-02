@@ -45,6 +45,7 @@ header("Content-Security-Policy: frame-ancestors 'none'");
 // wie daar een bestuursfunctie heeft, krijgt de bestuursonderdelen erbij.
 require_once __DIR__ . '/leden-opslag.php';
 require_once __DIR__ . '/app/auth-storage.php';
+require_once __DIR__ . '/app/auth-capabilities.php';
 
 // Resolveer alle authpaden uit dezelfde tenantconfig. Bij een expliciete
 // private_root bestaat bewust geen fallback naar authdata in de projectroot.
@@ -525,9 +526,8 @@ function authGebruikerRecord() {
 }
 
 // Gevoelige beheerrechten moeten expliciet op het account staan. Voor oude
-// accounts zonder opgeslagen tabs geldt in authRechten() om compatibiliteits-
-// redenen nog een brede terugval, maar die mag nooit gebruikt worden voor
-// handelingen waarmee iemand zijn eigen autorisatie kan verhogen.
+// compatibiliteitscallers blijft deze helper alleen naar expliciete legacytabs
+// kijken; ontbrekende rechtenmetadata is nooit een grant.
 function authHeeftExplicietRecht($recht) {
   global $ingelogd, $isMaster;
 
@@ -549,35 +549,34 @@ function authMagLedenAutorisatieWijzigen() {
 }
 
 // ===== Rechten =====
-// Bepaalt welke onderdelen de ingelogde persoon mag zien en opslaan.
-//
-// $alleTabs   : sleutel => label van alle onderdelen van de pagina
-// $tabsViaRol : sleutels die niet via de vinkjes bij Gebruikers lopen maar
-//               via de bestuursfunctie in de ledenadministratie
-//
-// Geeft terug: toegestaneTabs, isBestuurslid, eigenRol, gebruikerRecord.
-//
-// Master mag alles. Een gewone gebruiker zonder 'tabs'-veld (nog nooit
-// ingesteld via Gebruikers) mag ook alles, net als voor die functie bestond,
-// zodat bestaande gebruikers niet ineens buiten de deur staan. Pas als er via
-// Gebruikers expliciet een selectie is opgeslagen, geldt die beperking.
-//
-// Voor de rol-tabbladen is de bestuursfunctie leidend, niet de checkboxlijst:
-// wie in het tabblad Leden een bestuursfunctie heeft staan (voorzitter,
-// penningmeester, secretaris of bestuurslid) en daar aan deze inlognaam is
-// gekoppeld, krijgt ze erbij. Wie die functie niet heeft, raakt ze ook weer
-// kwijt als ze per ongeluk via Gebruikers zijn aangevinkt.
+// Legacy compatibiliteitslaag. Beheeronderdelen die in platform-definities.php
+// staan gebruiken exact dezelfde capability als het dashboard. Alleen tabs
+// die géén beheeronderdeel zijn mogen nog via een expliciet opgeslagen legacy
+// tabrecht worden toegekend. Ontbrekende of ongeldige rechtenmetadata geeft
+// dus nooit meer brede toegang.
 function authRechten(array $alleTabs, array $tabsViaRol = []) {
   global $ingelogd, $isMaster, $huidigeGebruiker;
 
   $gebruikerRecord = authGebruikerRecord();
+  $toegestaneTabs = [];
 
   if ($isMaster) {
     $toegestaneTabs = array_keys($alleTabs);
-  } elseif ($gebruikerRecord && isset($gebruikerRecord['tabs']) && is_array($gebruikerRecord['tabs'])) {
-    $toegestaneTabs = array_values(array_intersect(array_keys($alleTabs), $gebruikerRecord['tabs']));
-  } else {
-    $toegestaneTabs = array_keys($alleTabs);
+  } elseif ($ingelogd) {
+    foreach (array_keys($alleTabs) as $tab) {
+      $tab = (string) $tab;
+      $beheerCapability = authBeheerCapability($tab);
+      if ($beheerCapability !== null) {
+        if (authHeeftBeheerOnderdeel($tab)) $toegestaneTabs[] = $tab;
+        continue;
+      }
+      if (is_array($gebruikerRecord)
+          && isset($gebruikerRecord['tabs'])
+          && is_array($gebruikerRecord['tabs'])
+          && in_array($tab, $gebruikerRecord['tabs'], true)) {
+        $toegestaneTabs[] = $tab;
+      }
+    }
   }
 
   $eigenRol = ($ingelogd && !$isMaster)
@@ -604,7 +603,7 @@ function authRechten(array $alleTabs, array $tabsViaRol = []) {
 }
 
 // Het inlogscherm. Staat hier zodat elke afgeschermde pagina hetzelfde
-// formulier toont; de opmaak komt van de pagina die het insluit.
+// formulier toont; de opmaak komt van de pagina die dit insluit.
 // $titel is de regel onder "Inloggen" (bijv. "RC045 beheer").
 function authInlogFormulier($titel) {
   global $csrfToken, $inlogFout;
