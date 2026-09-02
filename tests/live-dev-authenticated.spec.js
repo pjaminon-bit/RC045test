@@ -69,6 +69,35 @@ async function cleanupAanmelding(page, email) {
   }
 }
 
+async function geldigeGeboortedatumVoorTenant(page) {
+  const resultaat = await page.evaluate(async () => {
+    const response = await fetch('public-content.php?key=lidmaatschapstypen', {
+      method: 'GET',
+      credentials: 'same-origin',
+      headers: {'Accept':'application/json'},
+    });
+    const tekst = await response.text();
+    let data = null;
+    try { data = tekst === '' ? null : JSON.parse(tekst); } catch (_) {}
+    return {status: response.status, data, tekst};
+  });
+  expect(resultaat.status, `Publieke lidmaatschapstypen gaven HTTP ${resultaat.status}: ${resultaat.tekst}`).toBe(200);
+  const types = Array.isArray(resultaat.data?.types)
+    ? resultaat.data.types.filter(type => type && type.actief !== false)
+    : [];
+  expect(types.length, 'Testtenant heeft geen actief lidmaatschapstype; geldige aanmeld-E2E is dan onmogelijk').toBeGreaterThan(0);
+
+  const type = types.find(item => item.leeftijd_min != null || item.leeftijd_max != null) || types[0];
+  const min = Number.isInteger(type.leeftijd_min) ? type.leeftijd_min : null;
+  const max = Number.isInteger(type.leeftijd_max) ? type.leeftijd_max : null;
+  let leeftijd = 30;
+  if (min !== null && max !== null) leeftijd = Math.floor((min + max) / 2);
+  else if (min !== null) leeftijd = min;
+  else if (max !== null) leeftijd = Math.max(0, max);
+  const jaar = new Date().getUTCFullYear() - leeftijd;
+  return `${String(jaar).padStart(4,'0')}-01-01`;
+}
+
 test('aanmeldformulier slaat exact één lokaal inboxrecord op en lekt geen PII naar Formspree', async ({page}) => {
   test.setTimeout(120000);
   const token = `${Date.now()}-${Math.random().toString(16).slice(2,10)}`;
@@ -103,9 +132,10 @@ test('aanmeldformulier slaat exact één lokaal inboxrecord op en lekt geen PII 
     expect(new URL(action, page.url()).pathname).toMatch(/\/aanmelden-ontvangst\.php$/);
     expect((await page.content()).toLowerCase()).not.toContain('formspree.io');
 
+    const geboortedatum = await geldigeGeboortedatumVoorTenant(page);
     await page.locator('#voornaam').fill('E2E');
     await page.locator('#achternaam').fill(achternaam);
-    await page.locator('#geboortedatum').fill('1990-01-01');
+    await page.locator('#geboortedatum').fill(geboortedatum);
     await page.locator('#straat').fill('Teststraat');
     await page.locator('#huisnummer').fill('159');
     await page.locator('#postcode').fill('1234AB');
@@ -123,7 +153,8 @@ test('aanmeldformulier slaat exact één lokaal inboxrecord op en lekt geen PII 
     }, {timeout:45000});
     await page.locator('#submit-btn').click();
     const intakeResponse = await intake;
-    expect(intakeResponse.status()).toBe(200);
+    const intakeBody = await intakeResponse.text();
+    expect(intakeResponse.status(), `Lokale intake gaf HTTP ${intakeResponse.status()}: ${intakeBody}`).toBe(200);
     await expect(page.locator('#bedankt-modal')).toHaveClass(/open/);
     await page.waitForTimeout(400);
     expect(formspreePosts, 'Aanmeldformulier stuurde PII naar Formspree').toEqual([]);
