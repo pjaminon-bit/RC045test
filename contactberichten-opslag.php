@@ -24,6 +24,25 @@ function contactBerichtenBewaardagen(): int
     return max(30,min(730,$dagen));
 }
 
+function contactBerichtNormaliseer(array $invoer): array
+{
+    $nu=date('c');
+    return [
+        'id'=>contactBerichtNieuwId(),
+        'status'=>'nieuw',
+        'naam'=>contactBerichtKort($invoer['naam']??'',100),
+        'email'=>contactBerichtKort($invoer['email']??'',120),
+        'telefoon'=>contactBerichtKort($invoer['telefoon']??'',50),
+        'onderwerp'=>contactBerichtKort($invoer['onderwerp']??'',120),
+        'bericht'=>contactBerichtKort($invoer['bericht']??'',5000),
+        'aangemaakt'=>$nu,
+        'gewijzigd'=>$nu,
+        'afgehandeld_op'=>'',
+        'afgehandeld_door'=>'',
+        'notitie'=>'',
+    ];
+}
+
 function contactBerichtenJsonLees(): array
 {
     $data=legacyPrivateJsonLees(contactBerichtenBestandPad(),'contactberichten',['berichten']);
