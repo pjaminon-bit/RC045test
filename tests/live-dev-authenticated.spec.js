@@ -1,6 +1,7 @@
 const { test, expect } = require('@playwright/test');
 const BASE = process.env.PLAYWRIGHT_TEST_BASE_URL || 'https://test.vps.holox.nl';
-const BASE_HOST = new URL(BASE).hostname;
+const BASE_URL = new URL(BASE.endsWith('/') ? BASE : BASE + '/');
+const BASE_HOST = BASE_URL.hostname;
 const ADMIN = process.env.E2E_ADMIN_USER;
 const MEMBER = process.env.E2E_MEMBER_USER;
 const PASSWORD = process.env.E2E_PASSWORD;
@@ -28,6 +29,135 @@ async function login(page, path, user){
 async function screenshot(page, testInfo, name){
   await page.screenshot({path:testInfo.outputPath(name), fullPage:true});
 }
+
+async function openAanmeldingenAlsAdmin(page, status='alles') {
+  await page.goto(url(`/beheer/aanmeldingen.php?status=${encodeURIComponent(status)}`), {waitUntil:'domcontentloaded', timeout:45000});
+  if (await page.locator('#login-wachtwoord').count()) {
+    await login(page, '/beheer/', ADMIN);
+    await page.goto(url(`/beheer/aanmeldingen.php?status=${encodeURIComponent(status)}`), {waitUntil:'domcontentloaded', timeout:45000});
+  }
+  await expect(page.getByRole('heading',{name:'Aanmeldingen'})).toBeVisible();
+}
+
+async function cleanupAanmelding(page, email) {
+  try {
+    await openAanmeldingenAlsAdmin(page, 'alles');
+    let kaart = page.locator('.kaart').filter({hasText:email});
+    if (await kaart.count() === 0) return;
+
+    const afwijzen = kaart.locator('form:has(input[name="actie"][value="afwijzen"])');
+    if (await afwijzen.count()) {
+      await Promise.all([
+        page.waitForNavigation({waitUntil:'domcontentloaded', timeout:45000}),
+        afwijzen.getByRole('button',{name:/Afwijzen/i}).click(),
+      ]);
+    }
+
+    await openAanmeldingenAlsAdmin(page, 'afgewezen');
+    kaart = page.locator('.kaart').filter({hasText:email});
+    if (await kaart.count() === 0) return;
+    const verwijderen = kaart.locator('form:has(input[name="actie"][value="verwijderen"])');
+    if (await verwijderen.count()) {
+      page.once('dialog', dialog => dialog.accept());
+      await Promise.all([
+        page.waitForNavigation({waitUntil:'domcontentloaded', timeout:45000}),
+        verwijderen.getByRole('button',{name:/Inboxrecord verwijderen/i}).click(),
+      ]);
+    }
+  } catch (e) {
+    console.error(`E2E cleanup aanmelding ${email} faalde: ${String(e)}`);
+  }
+}
+
+test('aanmeldformulier slaat exact één lokaal inboxrecord op en lekt geen PII naar Formspree', async ({page}) => {
+  test.setTimeout(120000);
+  const token = `${Date.now()}-${Math.random().toString(16).slice(2,10)}`;
+  const email = `e2e-aanmelding-${token}@example.test`;
+  const achternaam = `Aanmelding-${token}`;
+  const formspreePosts = [];
+  const intakeResponses = [];
+
+  page.on('request', req => {
+    if (req.method() !== 'POST') return;
+    try {
+      const u = new URL(req.url());
+      if (u.hostname === 'formspree.io' || u.hostname.endsWith('.formspree.io')) formspreePosts.push(req.url());
+    } catch (_) {}
+  });
+  page.on('response', res => {
+    if (res.request().method() !== 'POST') return;
+    try {
+      const u = new URL(res.url());
+      if (u.origin === BASE_URL.origin && u.pathname.endsWith('/aanmelden-ontvangst.php')) intakeResponses.push(res);
+    } catch (_) {}
+  });
+
+  try {
+    const start = await page.goto(url('/aanmelden.html'), {waitUntil:'domcontentloaded', timeout:45000});
+    expect(start.status()).toBeLessThan(400);
+    const form = page.locator('#aanmeld-form');
+    await expect(form).toHaveCount(1);
+    const action = await form.getAttribute('action');
+    expect(action).toBeTruthy();
+    expect(new URL(action, page.url()).origin).toBe(BASE_URL.origin);
+    expect(new URL(action, page.url()).pathname).toMatch(/\/aanmelden-ontvangst\.php$/);
+    expect((await page.content()).toLowerCase()).not.toContain('formspree.io');
+
+    await page.locator('#voornaam').fill('E2E');
+    await page.locator('#achternaam').fill(achternaam);
+    await page.locator('#geboortedatum').fill('1990-01-01');
+    await page.locator('#straat').fill('Teststraat');
+    await page.locator('#huisnummer').fill('159');
+    await page.locator('#postcode').fill('1234AB');
+    await page.locator('#stad').fill('Teststad');
+    await page.locator('#email').fill(email);
+    await page.locator('#akkoord-reglement').check();
+    await page.locator('#akkoord-betaling').check();
+
+    const intake = page.waitForResponse(res => {
+      if (res.request().method() !== 'POST') return false;
+      try {
+        const u = new URL(res.url());
+        return u.origin === BASE_URL.origin && u.pathname.endsWith('/aanmelden-ontvangst.php');
+      } catch (_) { return false; }
+    }, {timeout:45000});
+    await page.locator('#submit-btn').click();
+    const intakeResponse = await intake;
+    expect(intakeResponse.status()).toBe(200);
+    await expect(page.locator('#bedankt-modal')).toHaveClass(/open/);
+    await page.waitForTimeout(400);
+    expect(formspreePosts, 'Aanmeldformulier stuurde PII naar Formspree').toEqual([]);
+    expect(intakeResponses.length, 'Een submit moet exact één lokale intake-POST doen').toBe(1);
+
+    await openAanmeldingenAlsAdmin(page, 'open');
+    let kaart = page.locator('.kaart').filter({hasText:email});
+    await expect(kaart, 'Lokale intake ontbreekt in beheerinbox').toHaveCount(1);
+    await expect(kaart).toContainText(achternaam);
+
+    const afwijzen = kaart.locator('form:has(input[name="actie"][value="afwijzen"])');
+    await expect(afwijzen).toHaveCount(1);
+    await Promise.all([
+      page.waitForNavigation({waitUntil:'domcontentloaded', timeout:45000}),
+      afwijzen.getByRole('button',{name:/Afwijzen/i}).click(),
+    ]);
+
+    await openAanmeldingenAlsAdmin(page, 'afgewezen');
+    kaart = page.locator('.kaart').filter({hasText:email});
+    await expect(kaart).toHaveCount(1);
+    const verwijderen = kaart.locator('form:has(input[name="actie"][value="verwijderen"])');
+    await expect(verwijderen).toHaveCount(1);
+    page.once('dialog', dialog => dialog.accept());
+    await Promise.all([
+      page.waitForNavigation({waitUntil:'domcontentloaded', timeout:45000}),
+      verwijderen.getByRole('button',{name:/Inboxrecord verwijderen/i}).click(),
+    ]);
+
+    await openAanmeldingenAlsAdmin(page, 'alles');
+    await expect(page.locator('.kaart').filter({hasText:email}), 'E2E inboxrecord is niet opgeruimd').toHaveCount(0);
+  } finally {
+    await cleanupAanmelding(page, email);
+  }
+});
 
 for (const viewport of [
   {name:'desktop', width:1440, height:1000},
