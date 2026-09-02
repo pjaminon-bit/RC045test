@@ -151,6 +151,8 @@ try {
         $marker['last_recovered_at_utc'] = $now;
     } elseif ($rolesExists) {
         throw new RuntimeException('Rollenstate is al eerder geïnitialiseerd; gebruik --recover voor een ownerloze/corrupte hersteltoestand.');
+    } elseif (!hash_equals((string)$marker['owner'], $owner)) {
+        throw new RuntimeException('Onvoltooide eerdere bootstrap is aan een andere owner gebonden; gebruik expliciet --recover voor wijziging.');
     }
     if (control58RolesBootstrapDocument($marker) === null) throw new RuntimeException('Bootstrapmarker kon niet veilig worden opgebouwd.');
     $roles = control58InitialRolesDocument($users, $owner, $now);
