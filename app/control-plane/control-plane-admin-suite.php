@@ -23,14 +23,12 @@ function cpSuiteRolesState(?string $operator = null): array
     $operator ??= cp51Operator();
     $path = cpSuitePaths()['roles_file'];
     if (!file_exists($path) && !is_link($path)) {
-        // Migration compatibility: before explicit roles exist, authenticated
-        // operators keep the same mutation rights they had before phase 5.8.
-        return ['initialized'=>false,'valid'=>true,'role'=>'owner','roles'=>[$operator=>'owner'],'updated_at_utc'=>null];
+        return ['initialized'=>true,'valid'=>false,'state'=>'missing','role'=>'viewer','roles'=>[],'updated_at_utc'=>null];
     }
     $doc = control58RolesDocument(cpSuiteReadJson($path));
-    if ($doc === null) return ['initialized'=>true,'valid'=>false,'role'=>'viewer','roles'=>[],'updated_at_utc'=>null];
+    if ($doc === null) return ['initialized'=>true,'valid'=>false,'state'=>'invalid','role'=>'viewer','roles'=>[],'updated_at_utc'=>null];
     return [
-        'initialized'=>true,'valid'=>true,
+        'initialized'=>true,'valid'=>true,'state'=>'valid',
         'role'=>(string)($doc['roles'][$operator] ?? 'viewer'),
         'roles'=>$doc['roles'],'updated_at_utc'=>$doc['updated_at_utc'],
     ];
