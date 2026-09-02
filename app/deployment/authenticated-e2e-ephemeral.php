@@ -1,5 +1,7 @@
 <?php
 require_once __DIR__ . '/authenticated-e2e-fixture.php';
+require_once __DIR__ . '/authenticated-e2e-membership-fixture.php';
+e2e159MembershipFixtureRegisterShutdown();
 
 function e2e511MarkerRecord(array $record, string $tenant): bool
 {
