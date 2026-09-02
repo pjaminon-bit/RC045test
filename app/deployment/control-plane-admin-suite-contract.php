@@ -44,6 +44,7 @@ function control58StatePaths(array $config): array
     return [
         'root' => $root,
         'roles_file' => $root . '/operators.json',
+        'roles_bootstrap_file' => $root . '/operators-bootstrap.json',
         'audit_view_file' => $root . '/audit-view.json',
         'schedules_dir' => $root . '/schedules',
     ];
@@ -66,6 +67,50 @@ function control58RolesDocument(mixed $input): ?array
     ksort($roles, SORT_STRING);
     if ($roles !== [] && !in_array('owner', $roles, true)) return null;
     return ['schema'=>1,'phase'=>'5.8-operators','updated_at_utc'=>(string)$input['updated_at_utc'],'roles'=>$roles];
+}
+
+function control58InitialRolesDocument(array $users, string $owner, ?string $timestamp = null): array
+{
+    if (!control58OperatorValid($owner)) throw new RuntimeException('Bootstrap-owner is ongeldig.');
+    $roles = [];
+    foreach ($users as $user) {
+        if (!is_string($user) || !control58OperatorValid($user)) throw new RuntimeException('Bootstrap bevat ongeldige operator.');
+        $roles[$user] = 'viewer';
+    }
+    if (!array_key_exists($owner, $roles)) throw new RuntimeException('Bootstrap-owner staat niet in het Basic-Auth operatorbestand.');
+    $roles[$owner] = 'owner';
+    ksort($roles, SORT_STRING);
+    $doc = [
+        'schema'=>1,
+        'phase'=>'5.8-operators',
+        'updated_at_utc'=>$timestamp ?? gmdate('Y-m-d\TH:i:s\Z'),
+        'roles'=>$roles,
+    ];
+    if (control58RolesDocument($doc) === null) throw new RuntimeException('Bootstrap-rollen konden niet veilig worden opgebouwd.');
+    return $doc;
+}
+
+function control58RolesBootstrapDocument(mixed $input): ?array
+{
+    if (!is_array($input)
+        || (int)($input['schema'] ?? 0) !== 1
+        || ($input['phase'] ?? '') !== '5.8-roles-bootstrap'
+        || !control58OperatorValid((string)($input['owner'] ?? ''))
+        || strtotime((string)($input['initialized_at_utc'] ?? '')) === false
+        || !is_int($input['recovery_count'] ?? null)
+        || (int)$input['recovery_count'] < 0) {
+        return null;
+    }
+    $recovered = $input['last_recovered_at_utc'] ?? null;
+    if ($recovered !== null && (!is_string($recovered) || strtotime($recovered) === false)) return null;
+    return [
+        'schema'=>1,
+        'phase'=>'5.8-roles-bootstrap',
+        'owner'=>(string)$input['owner'],
+        'initialized_at_utc'=>(string)$input['initialized_at_utc'],
+        'recovery_count'=>(int)$input['recovery_count'],
+        'last_recovered_at_utc'=>$recovered,
+    ];
 }
 
 function control58ScheduleActions(): array
@@ -130,6 +175,6 @@ function control58AuditDocument(mixed $input): ?array
 function control58Utc(string $value): string
 {
     $ts = strtotime($value);
-    if ($ts === false) throw new RuntimeException('Datum/tijd is ongeldig.');
+    if ($ts === false) throw new RuntimeException('UTC-tijdstip is ongeldig.');
     return gmdate('Y-m-d\TH:i:s\Z', $ts);
 }
