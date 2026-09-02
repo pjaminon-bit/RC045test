@@ -40,23 +40,39 @@ function control58ReadRoles(array $c): ?array
     if($doc===null)throw new RuntimeException('Operatorrollenbestand heeft ongeldig schema.');return$doc;
 }
 
+function control58RolesWarning(array $c): ?string
+{
+    $file=control58ExecutorPaths($c)['roles_file'];
+    if(!file_exists($file)&&!is_link($file))return'Operatorrollenstate ontbreekt; alle beheeroperators zijn fail-closed alleen-lezen totdat root de rollen expliciet bootstrapt.';
+    try{$doc=control58ReadRoles($c);}catch(Throwable$e){return'Operatorrollenstate is ongeldig of onveilig; alle beheeroperators zijn fail-closed alleen-lezen totdat root herstel uitvoert.';}
+    if($doc===null||$doc['roles']===[])return'Operatorrollenstate bevat geen actieve owner; alle beheeroperators zijn fail-closed alleen-lezen totdat root herstel uitvoert.';
+    try{$users=control58HtpasswdUsers($c);}catch(Throwable$e){return'Basic-Auth operatorstate is ongeldig; rollen kunnen niet veilig worden gesynchroniseerd.';}
+    if($users!==[]){$hasOwner=false;foreach($users as$user)if(($doc['roles'][$user]??null)==='owner'){$hasOwner=true;break;}if(!$hasOwner)return'Geen huidige Basic-Auth operator heeft de ownerrol; beheer is fail-closed totdat root herstel uitvoert.';}
+    return null;
+}
+
 function control58SyncRoles(array $c): ?array
 {
-    $users=control58HtpasswdUsers($c);if($users===[])return control58ReadRoles($c);
-    $paths=control58ExecutorPaths($c);$existing=control58ReadRoles($c);$roles=[];
-    if($existing===null){foreach($users as$user)$roles[$user]='owner';}
-    else{
-        foreach($users as$user)$roles[$user]=(string)($existing['roles'][$user]??'viewer');
-        if(!in_array('owner',$roles,true))$roles[$users[0]]='owner';
+    $paths=control58ExecutorPaths($c);
+    try{$existing=control58ReadRoles($c);}catch(Throwable$e){error_log('[control-plane security] '.$e->getMessage().' Automatische rollenreconstructie is geweigerd.');return null;}
+    if($existing===null){error_log('[control-plane security] Operatorrollenstate ontbreekt; automatische owner-toekenning is geweigerd.');return null;}
+    $users=control58HtpasswdUsers($c);if($users===[])return$existing;
+    $roles=[];foreach($users as$user)$roles[$user]=(string)($existing['roles'][$user]??'viewer');
+    if(!in_array('owner',$roles,true)){
+        $doc=['schema'=>1,'phase'=>'5.8-operators','updated_at_utc'=>gmdate('Y-m-d\TH:i:s\Z'),'roles'=>[]];
+        if($existing['roles']!==[])cpeWrite($paths['roles_file'],$doc,0640,$c['runtime_user']);
+        error_log('[control-plane security] Geen geauthenticeerde owner resteert; rollen zijn fail-closed en root-herstel is vereist.');
+        return$existing['roles']===[]?$existing:$doc;
     }
     ksort($roles,SORT_STRING);$doc=['schema'=>1,'phase'=>'5.8-operators','updated_at_utc'=>gmdate('Y-m-d\TH:i:s\Z'),'roles'=>$roles];
-    if($existing!==null&&$existing['roles']===$roles)return$existing;
+    if($existing['roles']===$roles)return$existing;
     cpeWrite($paths['roles_file'],$doc,0640,$c['runtime_user']);return$doc;
 }
 
 function control58ExecutorRole(array $c,string $operator): string
 {
-    $doc=control58ReadRoles($c);if($doc===null)return'owner'; // pre-5.8 compatibility until first sync
+    try{$doc=control58ReadRoles($c);}catch(Throwable$e){return'viewer';}
+    if($doc===null)return'viewer';
     return(string)($doc['roles'][$operator]??'viewer');
 }
 
@@ -224,7 +240,7 @@ function control58ScheduleCancel(array $c,array $r): string
 
 function control58RoleSet(array $c,array $r): string
 {
-    $doc=control58SyncRoles($c);if($doc===null)throw new RuntimeException('Operatorrollen konden niet worden geïnitialiseerd.');$target=(string)$r['admin']['target_operator'];$role=(string)$r['admin']['role'];if(!array_key_exists($target,$doc['roles']))throw new RuntimeException('Operator staat niet in het Basic-Auth operatorbestand.');
+    $doc=control58SyncRoles($c);if($doc===null||$doc['roles']===[])throw new RuntimeException('Operatorrollen zijn niet veilig geïnitialiseerd; gebruik de root-only rollenbootstrap voor herstel.');$target=(string)$r['admin']['target_operator'];$role=(string)$r['admin']['role'];if(!array_key_exists($target,$doc['roles']))throw new RuntimeException('Operator staat niet in het Basic-Auth operatorbestand.');
     $roles=$doc['roles'];$before=$roles[$target];$roles[$target]=$role;if($before==='owner'&&$role!=='owner'&&count(array_filter($roles,static fn($x)=>$x==='owner'))<1)throw new RuntimeException('De laatste Eigenaar kan niet worden gedegradeerd.');ksort($roles,SORT_STRING);cpeWrite(control58ExecutorPaths($c)['roles_file'],['schema'=>1,'phase'=>'5.8-operators','updated_at_utc'=>gmdate('Y-m-d\TH:i:s\Z'),'roles'=>$roles],0640,$c['runtime_user']);return'Rol van '.$target.' gewijzigd naar '.control58RoleLabel($role).'.';
 }
 
@@ -252,14 +268,19 @@ function control58AuditRefresh(array $c,int $limit=500): void
 
 function control58ExecutorRefresh(array $c): void
 {
-    control58SyncRoles($c);control58AuditRefresh($c);$paths=control58ExecutorPaths($c);cpeDir($paths['schedules_dir'],0750,0,$c['runtime_user']);
+    control58SyncRoles($c);$warning=control58RolesWarning($c);if($warning!==null)error_log('[control-plane security] '.$warning);control58AuditRefresh($c);$paths=control58ExecutorPaths($c);cpeDir($paths['schedules_dir'],0750,0,$c['runtime_user']);
+}
+
+function control58AdminRefreshMessage(array $c): string
+{
+    $warning=control58RolesWarning($c);return$warning===null?'Platformstatus, rollen en auditweergave vernieuwd.':'Platformstatus en auditweergave vernieuwd. SECURITY: '.$warning;
 }
 
 function control58ExecuteAdminAction(array $c,array $r): ?array
 {
     $action=(string)$r['action'];if(!in_array($action,control58PlatformActions(),true))return null;
     $message=match($action){
-        'admin-refresh'=>'Platformstatus, rollen en auditweergave vernieuwd.',
+        'admin-refresh'=>control58AdminRefreshMessage($c),
         'operator-role-set'=>control58RoleSet($c,$r),
         'schedule-create'=>control58ScheduleCreate($c,$r),
         'schedule-cancel'=>control58ScheduleCancel($c,$r),

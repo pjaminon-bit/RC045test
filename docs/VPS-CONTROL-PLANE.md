@@ -98,6 +98,29 @@ printf '%s\n' 'EEN-STERK-UNIEK-WACHTWOORD' | \
 
 Minimale wachtwoordlengte is 14 tekens. Het bestand wordt root:www-data `0640` en staat buiten Git.
 
+Basic Auth bepaalt alleen **wie zich kan aanmelden** en kent nooit zelfstandig een platformrol toe. De rollenstore moet bij de eerste inrichting afzonderlijk en expliciet als root worden geïnitialiseerd. Kies daarbij exact één bestaande Basic-Auth-operator als owner:
+
+```bash
+sudo php bin/bootstrap-control-plane-roles.php \
+  --config=/etc/verenigingsplatform/control-plane/runtime.json \
+  --owner=operator
+```
+
+De bootstrap schrijft `/var/lib/verenigingsplatform/control-plane/operators-bootstrap.json` als root-only herkomst/recovery-marker en `/var/lib/verenigingsplatform/control-plane/operators.json` als rollenstore. De gekozen operator wordt `owner`; alle overige bestaande Basic-Auth-operators worden `viewer`. Een geldige bestaande rollenstore met owner wordt door deze bootstrap niet overschreven.
+
+Ontbreekt de rollenstore, is deze corrupt/onveilig of is na synchronisatie geen geauthenticeerde owner meer over, dan vallen zowel web-runtime als root-executor **fail-closed terug naar `viewer`**. Er wordt nooit automatisch een nieuwe owner gekozen. De executor schrijft hierover een securitymelding naar de server-side logging en een `admin-refresh` neemt de waarschuwing mee in het auditresultaat.
+
+Voor een corrupte of ownerloze bestaande reguliere rollenstore is een bewuste root-recovery nodig:
+
+```bash
+sudo php bin/bootstrap-control-plane-roles.php \
+  --config=/etc/verenigingsplatform/control-plane/runtime.json \
+  --owner=operator \
+  --recover
+```
+
+Een symlink of ander onveilig statepad wordt ook met `--recover` niet overschreven; dat vereist eerst handmatig root-onderzoek. Nieuwe accounts die later aan `operators.htpasswd` worden toegevoegd, krijgen bij synchronisatie uitsluitend `viewer` totdat een owner hun rol via het normale rollenbeheer wijzigt.
+
 ## TLS-voorwaarde in 5.1
 
 Fase 5.1 zelf schrijft geen DNS-providerrecords en vraagt niet zelfstandig het eerste platformcertificaat aan. Vóór een losse `--apply` moet de genoemde Certbot-lineage al bestaan en minimaal 24 uur geldig zijn. De lineage wordt exact gecontroleerd onder `/etc/letsencrypt/archive/<cert-name>/`.
