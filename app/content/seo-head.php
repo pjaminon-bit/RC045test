@@ -73,6 +73,46 @@ function siteSeoDefinitiesVoorRuntime(): array
   return is_array($override) ? array_replace_recursive($basis, $override) : $basis;
 }
 
+// Issue #159: de legacy standalone-template bevat nog een Formspree-action en
+// een tweede, best-effort lokale POST. De centrale publieke runtime maakt de
+// daadwerkelijke browseroutput fail-closed same-origin: één POST, naar de
+// lokale intake. Dit geldt bewust voor standalone én tenants, zodat browser-PII
+// nooit rechtstreeks naar een vaste third-party endpoint kan vertrekken.
+function siteAanmeldenSameOriginOutput(string $html): string
+{
+  $html = str_replace(
+    'https://formspree.io/f/mgobjlkl',
+    'aanmelden-ontvangst.php',
+    $html
+  );
+
+  $legacyComment = <<<'TXT'
+        // Daarnaast naar onze eigen server, zodat de aanmelding meteen in het
+        // ledenbestand komt met de status "in verificatie". Bewust pas hier,
+        // na Formspree: gaat dit mis, dan staat de aanmelding nog steeds in de
+        // mail aan het bestuur en merkt de bezoeker er niets van.
+TXT;
+  $html = str_replace($legacyComment, '', $html);
+
+  $legacyFetch = <<<'TXT'
+        fetch('aanmelden-ontvangst.php', {
+          method: 'POST',
+          body: new FormData(form)
+        }).catch(function() { /* stil falen, de mail is al onderweg */ });
+TXT;
+  $html = str_replace($legacyFetch, '', $html);
+
+  return $html;
+}
+
+function siteAanmeldenSameOriginOutputStart(): void
+{
+  static $gestart = false;
+  if ($gestart) return;
+  $gestart = true;
+  ob_start('siteAanmeldenSameOriginOutput');
+}
+
 $RC045_SITE = siteUrl();
 $RC045_TALEN = siteTalen();
 $RC045_PAGINAS = siteSeoDefinitiesVoorRuntime();
@@ -98,6 +138,8 @@ function rc045SeoHead($pagina, $indexeerbaar = true) {
   if (contentPaginaBestaat((string) $pagina)) {
     $pagina = contentPaginaSeoSleutel((string) $pagina);
   }
+
+  if ($pagina === 'aanmelden') siteAanmeldenSameOriginOutputStart();
 
   if (!isset($RC045_PAGINAS[$pagina])) return;
   $taal = rc045Taal();
