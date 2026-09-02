@@ -32,21 +32,23 @@ c58(str_contains($deploy,"      - Full regression acceptance"),'privileged deplo
 c58(!str_contains($deploy,"      - Validate RC045test"),'privileged deploy wacht niet langer alleen op de beperkte Validate-workflow');
 c58(str_contains($deploy,"github.event.workflow_run.event == 'push'")&&str_contains($deploy,"github.event.workflow_run.head_branch == 'main'")&&str_contains($deploy,"github.event.workflow_run.conclusion == 'success'"),'automatische deploy accepteert uitsluitend succesvolle main-push full regression');
 c58(
-    str_contains($deploy,"  live-authenticated:\n")
-    && str_contains($deploy,'needs: deploy-vps-test')
+    str_contains($deploy,"  e2e-fixture-setup:\n")
+    && str_contains($deploy,"  live-authenticated:\n")
+    && str_contains($deploy,"  e2e-fixture-cleanup:\n")
+    && str_contains($deploy,'needs: e2e-fixture-setup')
     && str_contains($deploy,'E2E_ADMIN_USER: vps-e2e-admin')
     && str_contains($deploy,'E2E_MEMBER_USER: vps-e2e-member')
     && str_contains($deploy,'secrets.token_urlsafe(48)')
-    && str_contains($deploy,"ssh vps-test-private 'e2e check'")
-    && str_contains($deploy,"ssh vps-test-private 'e2e apply'")
-    && str_contains($deploy,"ssh vps-test-private 'e2e cleanup'")
+    && str_contains($deploy,"'e2e check'")
+    && str_contains($deploy,"'e2e apply'")
+    && str_contains($deploy,"'e2e cleanup'")
     && !str_contains($deploy,'VPS_TEST_AUTH_E2E_ENABLED')
     && !str_contains($full,'VPS_TEST_AUTH_E2E_ENABLED')
     && !str_contains($deploy,'VPS_TEST_E2E_PASSWORD')
     && !str_contains($full,'VPS_TEST_E2E_PASSWORD')
     && !str_contains($deploy,'VPS_TEST_ADMIN_USER')
     && !str_contains($deploy,'VPS_TEST_MEMBER_USER'),
-    'authenticated VPS-E2E volgt deploy verplicht met per-run credentials en vaste gateway-allowlist'
+    'authenticated VPS-E2E volgt deploy verplicht via gescheiden fixture-, browser- en cleanupjobs met per-run credentials'
 );
 
 c58(str_contains($security,'https://test.vps.holox.nl')&&!str_contains($security,'https://rc045.nl/dev'),'live security default is VPS-test');

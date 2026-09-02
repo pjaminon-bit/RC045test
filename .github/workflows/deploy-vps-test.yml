@@ -10,8 +10,6 @@ on:
 
 permissions:
   contents: read
-  pull-requests: read
-  id-token: write
 
 concurrency:
   group: rc045test-vps-test-deploy
@@ -28,6 +26,10 @@ jobs:
         github.event.workflow_run.conclusion == 'success'))
     runs-on: ubuntu-latest
     environment: vps-test
+    permissions:
+      contents: read
+      pull-requests: read
+      id-token: write
     env:
       DEPLOY_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
       VPS_TAILSCALE_HOST: ${{ vars.VPS_TEST_TAILSCALE_HOST || '100.104.242.66' }}
@@ -35,10 +37,6 @@ jobs:
       VPS_SSH_USER: ${{ vars.VPS_TEST_SSH_USER || 'vst-deploy' }}
       VPS_SSH_PORT: ${{ vars.VPS_TEST_SSH_PORT || '22' }}
       VPS_TEST_BASE_URL: https://test.vps.holox.nl
-      VPS_TEST_DEPLOY_KEY: ${{ secrets.VPS_TEST_DEPLOY_KEY }}
-      VPS_TEST_SSH_KNOWN_HOSTS: ${{ secrets.VPS_TEST_SSH_KNOWN_HOSTS }}
-      TS_OAUTH_CLIENT_ID: ${{ secrets.TS_OAUTH_CLIENT_ID }}
-      TS_AUDIENCE: ${{ secrets.TS_AUDIENCE }}
     steps:
       - name: Valideer gemergde PR-lineage voor iedere deploy
         env:
@@ -60,10 +58,6 @@ jobs:
         run: |
           set -euo pipefail
           [[ "$DEPLOY_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'Ongeldige release-SHA' >&2; exit 1; }
-          [[ -n "${VPS_TEST_DEPLOY_KEY:-}" ]] || { echo 'VPS_TEST_DEPLOY_KEY ontbreekt' >&2; exit 1; }
-          [[ -n "${VPS_TEST_SSH_KNOWN_HOSTS:-}" ]] || { echo 'VPS_TEST_SSH_KNOWN_HOSTS ontbreekt' >&2; exit 1; }
-          [[ -n "${TS_OAUTH_CLIENT_ID:-}" ]] || { echo 'TS_OAUTH_CLIENT_ID ontbreekt' >&2; exit 1; }
-          [[ -n "${TS_AUDIENCE:-}" ]] || { echo 'TS_AUDIENCE ontbreekt' >&2; exit 1; }
           [[ "$VPS_SSH_PORT" =~ ^[0-9]{1,5}$ ]] || { echo 'Ongeldige SSH-poort' >&2; exit 1; }
           [[ "$VPS_TAILSCALE_HOST" =~ ^100\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]] || { echo 'VPS_TEST_TAILSCALE_HOST moet een Tailscale IPv4-adres zijn' >&2; exit 1; }
 
@@ -76,27 +70,37 @@ jobs:
           version: 1.94.2
           ping: ${{ vars.VPS_TEST_TAILSCALE_HOST || '100.104.242.66' }}
 
-      - name: Configureer gepinde SSH-hosttrust
-        shell: bash
-        run: |
-          set -euo pipefail
-          install -d -m 700 "$HOME/.ssh"
-          umask 077
-          printf '%s\n' "$VPS_TEST_DEPLOY_KEY" > "$HOME/.ssh/vps-test-deploy"
-          printf '%s\n' "$VPS_TEST_SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
-          chmod 600 "$HOME/.ssh/vps-test-deploy" "$HOME/.ssh/known_hosts"
-
       - name: Activeer immutable release op VPS-test via Tailscale
+        env:
+          VPS_TEST_DEPLOY_KEY: ${{ secrets.VPS_TEST_DEPLOY_KEY }}
+          VPS_TEST_SSH_KNOWN_HOSTS: ${{ secrets.VPS_TEST_SSH_KNOWN_HOSTS }}
         shell: bash
         run: |
           set -euo pipefail
+          [[ -n "${VPS_TEST_DEPLOY_KEY:-}" ]] || { echo 'VPS_TEST_DEPLOY_KEY ontbreekt' >&2; exit 1; }
+          [[ -n "${VPS_TEST_SSH_KNOWN_HOSTS:-}" ]] || { echo 'VPS_TEST_SSH_KNOWN_HOSTS ontbreekt' >&2; exit 1; }
+          ssh_dir="$(mktemp -d "$RUNNER_TEMP/vps-deploy-ssh.XXXXXX")"
+          finish() {
+            rc=$?
+            trap - EXIT
+            rm -rf "$ssh_dir"
+            exit "$rc"
+          }
+          trap finish EXIT
+          chmod 700 "$ssh_dir"
+          umask 077
+          key="$ssh_dir/deploy-key"
+          known_hosts="$ssh_dir/known_hosts"
+          printf '%s\n' "$VPS_TEST_DEPLOY_KEY" > "$key"
+          printf '%s\n' "$VPS_TEST_SSH_KNOWN_HOSTS" > "$known_hosts"
+          chmod 600 "$key" "$known_hosts"
           output="$(ssh \
-            -i "$HOME/.ssh/vps-test-deploy" \
+            -i "$key" \
             -p "$VPS_SSH_PORT" \
             -o BatchMode=yes \
             -o IdentitiesOnly=yes \
             -o StrictHostKeyChecking=yes \
-            -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
+            -o UserKnownHostsFile="$known_hosts" \
             -o HostKeyAlias="$VPS_SSH_HOST_ALIAS" \
             -o ConnectTimeout=15 \
             "$VPS_SSH_USER@$VPS_TAILSCALE_HOST" \
@@ -133,60 +137,29 @@ jobs:
           wacht_op_status "$VPS_TEST_BASE_URL/healthz.php" 204 nee
           wacht_op_status "$VPS_TEST_BASE_URL/bin/apply-vps-release.php" 403 nee
 
-  live-authenticated:
+  e2e-fixture-setup:
     needs: deploy-vps-test
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 15
     environment: vps-test
+    permissions:
+      id-token: write
+    outputs:
+      e2e_password: ${{ steps.fixture.outputs.e2e_password }}
     env:
-      DEPLOY_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
-      PLAYWRIGHT_TEST_BASE_URL: https://test.vps.holox.nl
-      E2E_ADMIN_USER: vps-e2e-admin
-      E2E_MEMBER_USER: vps-e2e-member
       VPS_TAILSCALE_HOST: ${{ vars.VPS_TEST_TAILSCALE_HOST || '100.104.242.66' }}
       VPS_SSH_HOST_ALIAS: vps.holox.nl
       VPS_SSH_USER: ${{ vars.VPS_TEST_SSH_USER || 'vst-deploy' }}
       VPS_SSH_PORT: ${{ vars.VPS_TEST_SSH_PORT || '22' }}
-      VPS_TEST_DEPLOY_KEY: ${{ secrets.VPS_TEST_DEPLOY_KEY }}
-      VPS_TEST_SSH_KNOWN_HOSTS: ${{ secrets.VPS_TEST_SSH_KNOWN_HOSTS }}
-      TS_OAUTH_CLIENT_ID: ${{ secrets.TS_OAUTH_CLIENT_ID }}
-      TS_AUDIENCE: ${{ secrets.TS_AUDIENCE }}
     steps:
-      - name: Checkout exact gedeployde bron
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
-
-      - name: Valideer private E2E-configuratie
+      - name: Valideer private E2E-route
         shell: bash
         run: |
           set -euo pipefail
-          [[ "$DEPLOY_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'Ongeldige release-SHA' >&2; exit 1; }
-          [[ -n "${VPS_TEST_DEPLOY_KEY:-}" ]] || { echo 'VPS_TEST_DEPLOY_KEY ontbreekt' >&2; exit 1; }
-          [[ -n "${VPS_TEST_SSH_KNOWN_HOSTS:-}" ]] || { echo 'VPS_TEST_SSH_KNOWN_HOSTS ontbreekt' >&2; exit 1; }
-          [[ -n "${TS_OAUTH_CLIENT_ID:-}" ]] || { echo 'TS_OAUTH_CLIENT_ID ontbreekt' >&2; exit 1; }
-          [[ -n "${TS_AUDIENCE:-}" ]] || { echo 'TS_AUDIENCE ontbreekt' >&2; exit 1; }
           [[ "$VPS_SSH_PORT" =~ ^[0-9]{1,5}$ ]] || { echo 'Ongeldige SSH-poort' >&2; exit 1; }
           [[ "$VPS_TAILSCALE_HOST" =~ ^100\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]] || { echo 'VPS_TEST_TAILSCALE_HOST moet een Tailscale IPv4-adres zijn' >&2; exit 1; }
-          [[ "$E2E_ADMIN_USER" == 'vps-e2e-admin' && "$E2E_MEMBER_USER" == 'vps-e2e-member' ]] || { echo 'Onverwachte E2E-identiteiten' >&2; exit 1; }
 
-      - name: Installeer gelockte browsertooling
-        run: |
-          set -euo pipefail
-          npm ci --ignore-scripts
-          npx playwright install --with-deps chromium
-
-      - name: Genereer eenmalig E2E-wachtwoord
-        shell: bash
-        run: |
-          set -euo pipefail
-          password="$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')"
-          [[ ${#password} -ge 32 && ${#password} -le 256 ]] || { echo 'Genereren ephemeral wachtwoord faalde' >&2; exit 1; }
-          echo "::add-mask::$password"
-          printf 'E2E_PASSWORD=%s\n' "$password" >> "$GITHUB_ENV"
-          unset password
-
-      - name: Verbind E2E-runner met private tailnet
+      - name: Verbind fixture-runner met private tailnet
         uses: tailscale/github-action@306e68a486fd2350f2bfc3b19fcd143891a4a2d8 # v4
         with:
           oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
@@ -195,56 +168,107 @@ jobs:
           version: 1.94.2
           ping: ${{ vars.VPS_TEST_TAILSCALE_HOST || '100.104.242.66' }}
 
-      - name: Configureer gepinde private SSH-route
+      - name: Controleer gateway en maak ephemeral authenticated fixture
+        id: fixture
+        env:
+          VPS_TEST_DEPLOY_KEY: ${{ secrets.VPS_TEST_DEPLOY_KEY }}
+          VPS_TEST_SSH_KNOWN_HOSTS: ${{ secrets.VPS_TEST_SSH_KNOWN_HOSTS }}
         shell: bash
         run: |
           set -euo pipefail
-          install -d -m 700 "$HOME/.ssh"
+          [[ -n "${VPS_TEST_DEPLOY_KEY:-}" ]] || { echo 'VPS_TEST_DEPLOY_KEY ontbreekt' >&2; exit 1; }
+          [[ -n "${VPS_TEST_SSH_KNOWN_HOSTS:-}" ]] || { echo 'VPS_TEST_SSH_KNOWN_HOSTS ontbreekt' >&2; exit 1; }
+          ssh_dir="$(mktemp -d "$RUNNER_TEMP/vps-e2e-setup-ssh.XXXXXX")"
+          gateway_ready=0
+          finish() {
+            rc=$?
+            trap - EXIT
+            if [[ "$rc" -ne 0 && "$gateway_ready" -eq 1 ]]; then
+              ssh \
+                -i "$key" -p "$VPS_SSH_PORT" \
+                -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
+                -o UserKnownHostsFile="$known_hosts" -o HostKeyAlias="$VPS_SSH_HOST_ALIAS" -o ConnectTimeout=15 \
+                "$VPS_SSH_USER@$VPS_TAILSCALE_HOST" 'e2e cleanup' >/dev/null 2>&1 || true
+            fi
+            rm -rf "$ssh_dir"
+            exit "$rc"
+          }
+          trap finish EXIT
+          chmod 700 "$ssh_dir"
           umask 077
-          printf '%s\n' "$VPS_TEST_DEPLOY_KEY" > "$HOME/.ssh/vps-test-deploy"
-          printf '%s\n' "$VPS_TEST_SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
-          printf '%s\n' \
-            'Host vps-test-private' \
-            "  HostName $VPS_TAILSCALE_HOST" \
-            "  HostKeyAlias $VPS_SSH_HOST_ALIAS" \
-            "  User $VPS_SSH_USER" \
-            "  Port $VPS_SSH_PORT" \
-            "  IdentityFile $HOME/.ssh/vps-test-deploy" \
-            '  BatchMode yes' \
-            '  IdentitiesOnly yes' \
-            '  StrictHostKeyChecking yes' \
-            "  UserKnownHostsFile $HOME/.ssh/known_hosts" \
-            '  ConnectTimeout 15' > "$HOME/.ssh/config"
-          chmod 600 "$HOME/.ssh/vps-test-deploy" "$HOME/.ssh/known_hosts" "$HOME/.ssh/config"
+          key="$ssh_dir/deploy-key"
+          known_hosts="$ssh_dir/known_hosts"
+          printf '%s\n' "$VPS_TEST_DEPLOY_KEY" > "$key"
+          printf '%s\n' "$VPS_TEST_SSH_KNOWN_HOSTS" > "$known_hosts"
+          chmod 600 "$key" "$known_hosts"
 
-      - name: Bewijs beperkte E2E-gateway
-        id: gateway
+          check="$(ssh \
+            -i "$key" -p "$VPS_SSH_PORT" \
+            -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$known_hosts" -o HostKeyAlias="$VPS_SSH_HOST_ALIAS" -o ConnectTimeout=15 \
+            "$VPS_SSH_USER@$VPS_TAILSCALE_HOST" 'e2e check')"
+          printf '%s\n' "$check"
+          grep -Fqx 'E2E EPHEMERAL CHECK OK  tenant=test storage=pdo fixture=vps-authenticated-e2e-v1' <<<"$check"
+          gateway_ready=1
+
+          stale="$(ssh \
+            -i "$key" -p "$VPS_SSH_PORT" \
+            -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$known_hosts" -o HostKeyAlias="$VPS_SSH_HOST_ALIAS" -o ConnectTimeout=15 \
+            "$VPS_SSH_USER@$VPS_TAILSCALE_HOST" 'e2e cleanup')"
+          printf '%s\n' "$stale"
+          grep -Eq '^E2E CLEANUP OK  tenant=test removed=[0-9]+ fixture=vps-authenticated-e2e-v1$' <<<"$stale"
+
+          password="$(python3 -c 'import secrets; print(secrets.token_urlsafe(48))')"
+          [[ ${#password} -ge 32 && ${#password} -le 256 ]] || { echo 'Genereren ephemeral wachtwoord faalde' >&2; exit 1; }
+          apply="$(printf '%s\n' "$password" | ssh \
+            -i "$key" -p "$VPS_SSH_PORT" \
+            -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$known_hosts" -o HostKeyAlias="$VPS_SSH_HOST_ALIAS" -o ConnectTimeout=15 \
+            "$VPS_SSH_USER@$VPS_TAILSCALE_HOST" 'e2e apply')"
+          printf '%s\n' "$apply"
+          grep -Fqx 'E2E APPLY OK  tenant=test accounts=2 linked_member=1 fixture=vps-authenticated-e2e-v1' <<<"$apply"
+          printf 'e2e_password=%s\n' "$password" >> "$GITHUB_OUTPUT"
+          unset password
+
+  live-authenticated:
+    needs: e2e-fixture-setup
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      DEPLOY_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+      PLAYWRIGHT_TEST_BASE_URL: https://test.vps.holox.nl
+      E2E_ADMIN_USER: vps-e2e-admin
+      E2E_MEMBER_USER: vps-e2e-member
+    steps:
+      - name: Checkout exact gedeployde bron
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Valideer browseracceptatieconfiguratie
         shell: bash
         run: |
           set -euo pipefail
-          output="$(ssh vps-test-private 'e2e check')"
-          printf '%s\n' "$output"
-          grep -Fqx 'E2E EPHEMERAL CHECK OK  tenant=test storage=pdo fixture=vps-authenticated-e2e-v1' <<<"$output"
-          printf 'ready=true\n' >> "$GITHUB_OUTPUT"
+          [[ "$DEPLOY_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo 'Ongeldige release-SHA' >&2; exit 1; }
+          [[ "$E2E_ADMIN_USER" == 'vps-e2e-admin' && "$E2E_MEMBER_USER" == 'vps-e2e-member' ]] || { echo 'Onverwachte E2E-identiteiten' >&2; exit 1; }
 
-      - name: Ruim eventueel achtergebleven fixture op
-        shell: bash
+      - name: Installeer gelockte browsertooling
         run: |
           set -euo pipefail
-          output="$(ssh vps-test-private 'e2e cleanup')"
-          printf '%s\n' "$output"
-          grep -Eq '^E2E CLEANUP OK  tenant=test removed=[0-9]+ fixture=vps-authenticated-e2e-v1$' <<<"$output"
-
-      - name: Maak ephemeral authenticated fixture
-        shell: bash
-        run: |
-          set -euo pipefail
-          output="$(printf '%s\n' "$E2E_PASSWORD" | ssh vps-test-private 'e2e apply')"
-          printf '%s\n' "$output"
-          grep -Fqx 'E2E APPLY OK  tenant=test accounts=2 linked_member=1 fixture=vps-authenticated-e2e-v1' <<<"$output"
+          npm ci --ignore-scripts
+          npx playwright install --with-deps chromium
 
       - name: Bewijs authenticated beheer en gekoppeld ledenportaal
-        run: npx playwright test tests/live-dev-authenticated.spec.js --workers=1 --reporter=line,html
+        env:
+          E2E_PASSWORD: ${{ needs.e2e-fixture-setup.outputs.e2e_password }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ ${#E2E_PASSWORD} -ge 32 && ${#E2E_PASSWORD} -le 256 ]] || { echo 'Ephemeral E2E-wachtwoord ontbreekt of is ongeldig' >&2; exit 1; }
+          npx playwright test tests/live-dev-authenticated.spec.js --workers=1 --reporter=line,html
 
       - name: Bewaar authenticated screenshots en rapport
         if: ${{ always() }}
@@ -257,11 +281,66 @@ jobs:
           if-no-files-found: warn
           retention-days: 30
 
-      - name: Verwijder ephemeral authenticated fixture
-        if: ${{ always() && steps.gateway.outputs.ready == 'true' }}
+  e2e-fixture-cleanup:
+    needs:
+      - e2e-fixture-setup
+      - live-authenticated
+    if: ${{ always() && needs.e2e-fixture-setup.result != 'skipped' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: vps-test
+    permissions:
+      id-token: write
+    env:
+      VPS_TAILSCALE_HOST: ${{ vars.VPS_TEST_TAILSCALE_HOST || '100.104.242.66' }}
+      VPS_SSH_HOST_ALIAS: vps.holox.nl
+      VPS_SSH_USER: ${{ vars.VPS_TEST_SSH_USER || 'vst-deploy' }}
+      VPS_SSH_PORT: ${{ vars.VPS_TEST_SSH_PORT || '22' }}
+    steps:
+      - name: Valideer private cleanup-route
         shell: bash
         run: |
           set -euo pipefail
-          output="$(ssh vps-test-private 'e2e cleanup')"
+          [[ "$VPS_SSH_PORT" =~ ^[0-9]{1,5}$ ]] || { echo 'Ongeldige SSH-poort' >&2; exit 1; }
+          [[ "$VPS_TAILSCALE_HOST" =~ ^100\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]] || { echo 'VPS_TEST_TAILSCALE_HOST moet een Tailscale IPv4-adres zijn' >&2; exit 1; }
+
+      - name: Verbind cleanup-runner met private tailnet
+        uses: tailscale/github-action@306e68a486fd2350f2bfc3b19fcd143891a4a2d8 # v4
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          audience: ${{ secrets.TS_AUDIENCE }}
+          tags: tag:github-rc045test
+          version: 1.94.2
+          ping: ${{ vars.VPS_TEST_TAILSCALE_HOST || '100.104.242.66' }}
+
+      - name: Verwijder ephemeral authenticated fixture
+        env:
+          VPS_TEST_DEPLOY_KEY: ${{ secrets.VPS_TEST_DEPLOY_KEY }}
+          VPS_TEST_SSH_KNOWN_HOSTS: ${{ secrets.VPS_TEST_SSH_KNOWN_HOSTS }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ -n "${VPS_TEST_DEPLOY_KEY:-}" ]] || { echo 'VPS_TEST_DEPLOY_KEY ontbreekt' >&2; exit 1; }
+          [[ -n "${VPS_TEST_SSH_KNOWN_HOSTS:-}" ]] || { echo 'VPS_TEST_SSH_KNOWN_HOSTS ontbreekt' >&2; exit 1; }
+          ssh_dir="$(mktemp -d "$RUNNER_TEMP/vps-e2e-cleanup-ssh.XXXXXX")"
+          finish() {
+            rc=$?
+            trap - EXIT
+            rm -rf "$ssh_dir"
+            exit "$rc"
+          }
+          trap finish EXIT
+          chmod 700 "$ssh_dir"
+          umask 077
+          key="$ssh_dir/deploy-key"
+          known_hosts="$ssh_dir/known_hosts"
+          printf '%s\n' "$VPS_TEST_DEPLOY_KEY" > "$key"
+          printf '%s\n' "$VPS_TEST_SSH_KNOWN_HOSTS" > "$known_hosts"
+          chmod 600 "$key" "$known_hosts"
+          output="$(ssh \
+            -i "$key" -p "$VPS_SSH_PORT" \
+            -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$known_hosts" -o HostKeyAlias="$VPS_SSH_HOST_ALIAS" -o ConnectTimeout=15 \
+            "$VPS_SSH_USER@$VPS_TAILSCALE_HOST" 'e2e cleanup')"
           printf '%s\n' "$output"
           grep -Eq '^E2E CLEANUP OK  tenant=test removed=[0-9]+ fixture=vps-authenticated-e2e-v1$' <<<"$output"
