@@ -3,13 +3,14 @@
 // Aparte contributie-administratie per lid / jaar
 // ============================================================
 require_once dirname(__DIR__) . '/storage/private-store.php';
+require_once dirname(__DIR__) . '/storage/legacy-private-json.php';
 require_once dirname(__DIR__) . '/storage/domein-repositories.php';
 require_once __DIR__ . '/lidmaatschap.php';
 
 function contributiesBestandPad(): string{return dirname(__DIR__,2).'/contributies-data.php';}
 function contributiesLeeg(): array{return['updated'=>date('c'),'regels'=>[]];}
 function contributieStatussen(): array{return['open'=>'Open','deels_betaald'=>'Deels betaald','betaald'=>'Betaald','kwijtgescholden'=>'Kwijtgescholden / vrijgesteld','vervallen'=>'Vervallen'];}
-function contributiesJsonLees(): array{$pad=contributiesBestandPad();if(!is_file($pad))return contributiesLeeg();$raw=@file_get_contents($pad);if($raw===false)return contributiesLeeg();$start=strpos($raw,'{');if($start===false)return contributiesLeeg();$data=json_decode(substr($raw,$start),true);return is_array($data)&&isset($data['regels'])&&is_array($data['regels'])?$data:contributiesLeeg();}
+function contributiesJsonLees(): array{$data=legacyPrivateJsonLees(contributiesBestandPad(),'contributies',['regels']);return $data===null?contributiesLeeg():$data;}
 function contributiesJsonSchrijf(array $data): bool{$data['updated']=date('c');$json=json_encode($data,JSON_UNESCAPED_UNICODE|JSON_PRETTY_PRINT);if($json===false)return false;$pad=contributiesBestandPad();if(function_exists('maakDataBackup')){global$dataBackupMap,$dataBackupBewaardagen,$dataBackupMaxPerBestand;maakDataBackup($pad,$dataBackupMap,$dataBackupBewaardagen,$dataBackupMaxPerBestand);}try{$suffix=bin2hex(random_bytes(5));}catch(Throwable $e){$suffix=str_replace('.','',(string)microtime(true));}$tmp=$pad.'.tmp.'.$suffix;if(@file_put_contents($tmp,"<?php exit; ?>\n".$json,LOCK_EX)===false)return false;if(!@rename($tmp,$pad)){@unlink($tmp);return false;}return true;}
 function contributieId(string $lidId,int $jaar): string{return'contrib_'.substr(hash('sha256',$lidId.'|'.$jaar),0,24);}
 function contributieKort($v,int $max): string{$s=trim(is_scalar($v)?(string)$v:'');return function_exists('mb_substr')?mb_substr($s,0,$max,'UTF-8'):substr($s,0,$max);}
