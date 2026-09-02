@@ -58,7 +58,11 @@ $seo = (string) file_get_contents($root . '/app/content/seo-head.php');
 c159(str_contains($seo, "if (\$pagina === 'aanmelden') siteAanmeldenSameOriginOutputStart();"), 'aanmeldpagina activeert centrale outputhardening');
 
 $siteConfig = (string) file_get_contents($root . '/site-config.php');
-c159(str_contains($siteConfig, "form-action 'self'"), 'CSP form-action blijft same-origin');
+c159(
+    str_contains($siteConfig, '$formAction = "\'self\'";')
+    && str_contains($siteConfig, 'form-action {$formAction}'),
+    'CSP form-action blijft same-origin'
+);
 c159(!preg_match("/connect-src[^;]*formspree/i", $siteConfig), 'CSP krijgt geen Formspree-workaround');
 
 echo "Issue #159 same-origin aanmeldflow: {$ok} OK, {$fout} fout(en)\n";
