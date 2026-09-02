@@ -81,16 +81,8 @@ function otakenLeegBestand() {
 }
 
 function otakenLees() {
-  $pad = otaakBestandPad();
-  if (!is_file($pad)) return otakenLeegBestand();
-  $ruw = file_get_contents($pad);
-  if ($ruw === false) return otakenLeegBestand();
-  $start = strpos($ruw, '{');
-  if ($start === false) return otakenLeegBestand();
-  $json = json_decode(substr($ruw, $start), true);
-  if (!is_array($json) || !isset($json['taken']) || !is_array($json['taken'])) {
-    return otakenLeegBestand();
-  }
+  $json = legacyPrivateJsonLees(otaakBestandPad(), 'operationele_taken', ['taken']);
+  if ($json === null) return otakenLeegBestand();
   $json['volgnummer'] = isset($json['volgnummer']) ? (int) $json['volgnummer'] : 0;
   return $json;
 }
