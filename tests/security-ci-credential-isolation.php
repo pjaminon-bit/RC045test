@@ -45,7 +45,6 @@ ci141(str_contains($browser, "permissions:\n      contents: read") && !str_conta
 ci141(!str_contains($browser, 'environment: vps-test'), 'browserjob is niet gekoppeld aan het secret-bearing vps-test environment');
 
 $verbodenBrowser = [
-    'secrets.' => 'GitHub secrets',
     'VPS_TEST_DEPLOY_KEY' => 'deploykey',
     'VPS_TEST_SSH_KNOWN_HOSTS' => 'SSH hosttrust-secret',
     'TS_OAUTH_CLIENT_ID' => 'Tailscale client-id',
@@ -57,13 +56,13 @@ $verbodenBrowser = [
 foreach ($verbodenBrowser as $needle => $label) {
     ci141(!str_contains($browser, $needle), "browserjob bevat geen {$label}");
 }
-ci141(str_contains($browser, 'actions/checkout@11d5960a326750d5838078e36cf38b85af677262'), 'alle repositorycheckout blijft uitsluitend in de unprivileged browserjob');
-ci141(str_contains($browser, 'npm ci --ignore-scripts') && str_contains($browser, 'npx playwright install --with-deps chromium'), 'browsertooling wordt geïnstalleerd zonder privileged credentials');
-ci141(str_contains($browser, 'E2E_PASSWORD: ${{ needs.e2e-fixture-setup.outputs.e2e_password }}'), 'browser ontvangt uitsluitend de ephemeral applicatiecredential van fixture-setup');
-$playwrightPos = strpos($browser, 'npx playwright test tests/live-dev-authenticated.spec.js');
-$passwordPos = strpos($browser, 'E2E_PASSWORD: ${{ needs.e2e-fixture-setup.outputs.e2e_password }}');
-$npmPos = strpos($browser, 'npm ci --ignore-scripts');
-ci141(is_int($npmPos) && is_int($passwordPos) && is_int($playwrightPos) && $npmPos < $passwordPos && $passwordPos < $playwrightPos, 'ephemeral wachtwoord wordt pas aan de Playwright-stap beschikbaar gemaakt');
+ci141(substr_count($browser, 'secrets.') === 1 && substr_count($browser, 'secrets.E2E_CREDENTIAL_WRAP_KEY') === 1, 'browserjob krijgt uitsluitend de dedicated E2E-transportkey en geen infra-secrets');
+ci141(str_contains($browser, 'actions/checkout@11d5960a326750d5838078e36cf38b85af677262'), 'repositorycheckout blijft uitsluitend in de unprivileged browserjob');
+ci141(str_contains($browser, 'npm ci --ignore-scripts') && str_contains($browser, 'npx playwright install --with-deps chromium'), 'browsertooling wordt geïnstalleerd zonder privileged infra-credentials');
+ci141(str_contains($browser, 'E2E_PASSWORD_CIPHERTEXT: ${{ needs.e2e-fixture-setup.outputs.e2e_password_ciphertext }}'), 'browser ontvangt cross-job uitsluitend ciphertext van de ephemeral applicatiecredential');
+ci141(!str_contains($browser, 'E2E_PASSWORD: ${{ needs.e2e-fixture-setup.outputs.'), 'plaintext applicatiecredential wordt niet als gewone needs-output in step-env gerenderd');
+ci141(str_contains($browser, 'E2E_PASSWORD_FILE: ${{ steps.credential.outputs.password_file }}'), 'Playwright-stap ontvangt alleen een lokaal credentialbestandpad via runnermetadata');
+ci141(str_contains($browser, 'export E2E_PASSWORD') && str_contains($browser, 'npx playwright test tests/live-dev-authenticated.spec.js'), 'alleen de Playwright shell exporteert plaintextcredential naar het testproces');
 
 ci141(!str_contains($setup, 'actions/checkout@') && !str_contains($setup, 'npm ') && !str_contains($setup, 'npx ') && !str_contains($setup, 'node '), 'fixture-setup voert geen repositorygestuurde Node/Playwright-code uit');
 ci141(!str_contains($cleanup, 'actions/checkout@') && !str_contains($cleanup, 'npm ') && !str_contains($cleanup, 'npx ') && !str_contains($cleanup, 'node '), 'fixture-cleanup voert geen repositorygestuurde Node/Playwright-code uit');
@@ -83,8 +82,8 @@ $apply = strpos($setup, "'e2e apply'");
 ci141(is_int($check) && is_int($stale) && is_int($apply) && $check < $stale && $stale < $apply, 'fixture-setup behoudt check → stale cleanup → apply');
 ci141(str_contains($setup, 'gateway_ready=1') && str_contains($setup, 'if [[ "$rc" -ne 0 && "$gateway_ready" -eq 1 ]]'), 'fixture-setup ruimt een gedeeltelijke fixture fail-safe op bij latere fouten');
 ci141(str_contains($cleanup, "if: \${{ always() && needs.e2e-fixture-setup.result != 'skipped' }}") && str_contains($cleanup, "'e2e cleanup'"), 'aparte cleanupjob draait ook na browserfouten');
-ci141(str_contains($setup, 'secrets.token_urlsafe(48)') && str_contains($setup, "printf 'e2e_password=%s\\n' \"\$password\" >> \"\$GITHUB_OUTPUT\""), 'fixture-setup genereert een eenmalige applicatiecredential en geeft alleen die door');
-ci141(!str_contains($workflow, 'VPS_TEST_E2E_PASSWORD') && !str_contains($workflow, 'VPS_TEST_ADMIN_USER') && !str_contains($workflow, 'VPS_TEST_MEMBER_USER'), 'geen permanente authenticated E2E-credentials zijn opnieuw geïntroduceerd');
+ci141(str_contains($setup, 'secrets.token_urlsafe(48)') && str_contains($setup, 'e2e_password_ciphertext='), 'fixture-setup genereert een eenmalige applicatiecredential en geeft alleen versleutelde transportdata door');
+ci141(!str_contains($workflow, 'VPS_TEST_E2E_PASSWORD') && !str_contains($workflow, 'VPS_TEST_ADMIN_USER') && !str_contains($workflow, 'VPS_TEST_MEMBER_USER'), 'geen permanente authenticated E2E-applicatiecredentials zijn opnieuw geïntroduceerd');
 
 echo "Security CI credential isolation regression: {$ok} OK, {$fout} fout(en)\n";
 exit($fout === 0 ? 0 : 1);
