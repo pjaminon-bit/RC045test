@@ -105,16 +105,8 @@ function vergaderingenLeegBestand() {
 }
 
 function vergaderingenLees() {
-  $pad = vergaderingenBestandPad();
-  if (!is_file($pad)) return vergaderingenLeegBestand();
-  $ruw = file_get_contents($pad);
-  if ($ruw === false) return vergaderingenLeegBestand();
-  $start = strpos($ruw, '{');
-  if ($start === false) return vergaderingenLeegBestand();
-  $json = json_decode(substr($ruw, $start), true);
-  if (!is_array($json) || !isset($json['vergaderingen']) || !is_array($json['vergaderingen'])) {
-    return vergaderingenLeegBestand();
-  }
+  $json = legacyPrivateJsonLees(vergaderingenBestandPad(), 'vergaderingen', ['vergaderingen']);
+  if ($json === null) return vergaderingenLeegBestand();
   $json['volgnummer'] = isset($json['volgnummer']) ? (int) $json['volgnummer'] : 0;
   return $json;
 }

@@ -49,16 +49,8 @@ function evenementenLeegBestand() {
 }
 
 function evenementenLees() {
-  $pad = evenementBestandPad();
-  if (!is_file($pad)) return evenementenLeegBestand();
-  $ruw = file_get_contents($pad);
-  if ($ruw === false) return evenementenLeegBestand();
-  $start = strpos($ruw, '{');
-  if ($start === false) return evenementenLeegBestand();
-  $json = json_decode(substr($ruw, $start), true);
-  if (!is_array($json) || !isset($json['evenementen']) || !is_array($json['evenementen'])) {
-    return evenementenLeegBestand();
-  }
+  $json = legacyPrivateJsonLees(evenementBestandPad(), 'evenementen', ['evenementen']);
+  if ($json === null) return evenementenLeegBestand();
   $json['volgnummer'] = isset($json['volgnummer']) ? (int) $json['volgnummer'] : 0;
   return $json;
 }

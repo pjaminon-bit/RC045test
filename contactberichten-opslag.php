@@ -8,6 +8,7 @@
 // ============================================================
 require_once __DIR__ . '/app/data-slot.php';
 require_once __DIR__ . '/app/storage/private-store.php';
+require_once __DIR__ . '/app/storage/legacy-private-json.php';
 
 define('CONTACTBERICHTEN_VOORLOOP', "<?php exit; ?>\n");
 
@@ -44,15 +45,8 @@ function contactBerichtNormaliseer(array $invoer): array
 
 function contactBerichtenJsonLees(): array
 {
-    $pad=contactBerichtenBestandPad();
-    if(!is_file($pad))return contactBerichtenLeeg();
-    $ruw=@file_get_contents($pad);
-    if($ruw===false)throw new RuntimeException('Contactberichten konden niet worden gelezen.');
-    $start=strpos($ruw,'{');
-    if($start===false)throw new RuntimeException('Contactberichtenopslag bevat geen geldig document.');
-    $data=json_decode(substr($ruw,$start),true);
-    if(!is_array($data)||!isset($data['berichten'])||!is_array($data['berichten']))throw new RuntimeException('Contactberichtenopslag bevat ongeldige data.');
-    return $data;
+    $data=legacyPrivateJsonLees(contactBerichtenBestandPad(),'contactberichten',['berichten']);
+    return $data===null?contactBerichtenLeeg():$data;
 }
 
 function contactBerichtenJsonSchrijf(array $data): bool
@@ -78,7 +72,7 @@ function contactBerichtenLees(): array
     return $data;
 }
 function contactBerichtenSchrijf(array $data): bool{return privateStoreSchrijf('contactberichten',$data,'contactBerichtenJsonSchrijf');}
-function contactBerichtenVindIndex(array $data,string $id): ?int{foreach((array)($data['berichten']??[]) as $i=>$b)if(is_array($b)&&hash_equals((string)($b['id']??''),$id))return $i;return null;}
+function contactBerichtenVindIndex(array $data,string $id): ?int{foreach((array)($data['berichten']??[]) as $i=>$b)if(is_array($b)&&hash_equals((string)($b['id']??''),$id))return$i;return null;}
 
 function contactBerichtenPasRetentieToe(array &$data,?int $nu=null): int
 {
@@ -90,7 +84,7 @@ function contactBerichtenPasRetentieToe(array &$data,?int $nu=null): int
         $moment=strtotime((string)$bron);
         return $moment!==false&&$moment>=$grens;
     }));
-    return $voor-count($data['berichten']);
+    return$voor-count($data['berichten']);
 }
 
 function contactBerichtenOpschonenBewaartermijn(): int
@@ -100,7 +94,7 @@ function contactBerichtenOpschonenBewaartermijn(): int
         $data=contactBerichtenLees();
         $aantal=contactBerichtenPasRetentieToe($data);
         if($aantal>0&&!contactBerichtenSchrijf($data))throw new RuntimeException('Contactberichten konden niet veilig worden opgeschoond.');
-        return $aantal;
+        return$aantal;
     }finally{
         dataSlotDicht($slot);
     }
