@@ -14,8 +14,9 @@
 //   ingetrokken door sessie_versie in beheer-users.json te verhogen;
 // - beheerpagina's worden server-side tegen hetzelfde centrale
 //   capabilitycontract gecontroleerd als de beheer-shell;
-// - een account zonder geldig capabilities- of tabs-profiel krijgt geen
-//   beheerrechten; externe tenants behouden die fail-closed eis overal.
+// - beheerrequests vereisen minimaal een geldig capabilities- of tabs-profiel;
+// - externe tenants behouden tijdens de autorisatiemigratie de bestaande,
+//   strengere eis van een expliciet legacy-tabprofiel.
 // ============================================================
 
 require_once __DIR__ . '/auth-session-tenant.php';
@@ -69,9 +70,12 @@ if (!$accountActief) {
     return;
 }
 
+$heeftExplicietTabprofiel = array_key_exists('tabs', $sessionAccount) && is_array($sessionAccount['tabs']);
 $heeftGeldigRechtenprofiel = authBeheerRechtenprofielGeldig($sessionAccount);
 $beheerRequest = $authBeheerContract !== null;
-if ((!empty($authPaden['tenant_private']) || $beheerRequest) && !$heeftGeldigRechtenprofiel) {
+$mistVereistProfiel = (!empty($authPaden['tenant_private']) && !$heeftExplicietTabprofiel)
+    || ($beheerRequest && !$heeftGeldigRechtenprofiel);
+if ($mistVereistProfiel) {
     unset($_SESSION['gebruiker'], $_SESSION['is_master'], $_SESSION['user_session_version']);
     $ingelogd = false;
     $huidigeGebruiker = '';
