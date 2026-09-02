@@ -5,45 +5,60 @@ function c511ci(bool $conditie, string $label): void {
     if ($conditie) { $ok++; echo "OK: {$label}\n"; }
     else { $fout++; fwrite(STDERR, "FOUT: {$label}\n"); }
 }
+function c511job(string $workflow, string $naam): string {
+    $marker = "\n  {$naam}:\n";
+    $start = strpos($workflow, $marker);
+    if ($start === false) return '';
+    $start += 1;
+    $rest = substr($workflow, $start);
+    if (preg_match('/\n  [a-z0-9][a-z0-9-]*:\n/', $rest, $match, PREG_OFFSET_CAPTURE, strlen("  {$naam}:\n")) === 1) {
+        return substr($rest, 0, $match[0][1]);
+    }
+    return $rest;
+}
 $deploy = (string)file_get_contents($root . '/.github/workflows/deploy-vps-test.yml');
 $full = (string)file_get_contents($root . '/.github/workflows/full-regression.yml');
 $authSpec = (string)file_get_contents($root . '/tests/live-dev-authenticated.spec.js');
 $ephemeralCli = (string)file_get_contents($root . '/bin/vps-authenticated-e2e-ephemeral.php');
+$deployJob = c511job($deploy, 'deploy-vps-test');
+$setupJob = c511job($deploy, 'e2e-fixture-setup');
+$browserJob = c511job($deploy, 'live-authenticated');
+$cleanupJob = c511job($deploy, 'e2e-fixture-cleanup');
 $tailHost = <<<'TXT'
 VPS_TAILSCALE_HOST: ${{ vars.VPS_TEST_TAILSCALE_HOST || '100.104.242.66' }}
 TXT;
-$passwordExport = <<<'TXT'
-printf 'E2E_PASSWORD=%s\n' "$password" >> "$GITHUB_ENV"
+$passwordOutput = <<<'TXT'
+printf 'e2e_password=%s\n' "$password" >> "$GITHUB_OUTPUT"
 TXT;
-$passwordStdin = <<<'TXT'
-printf '%s\n' "$E2E_PASSWORD" | ssh vps-test-private 'e2e apply'
-TXT;
-$cleanupCondition = <<<'TXT'
-if: ${{ always() && steps.gateway.outputs.ready == 'true' }}
-TXT;
-$gatewayReady = <<<'TXT'
-printf 'ready=true\n' >> "$GITHUB_OUTPUT"
+$passwordInput = <<<'TXT'
+E2E_PASSWORD: ${{ needs.e2e-fixture-setup.outputs.e2e_password }}
 TXT;
 
-c511ci(str_contains($deploy, "  live-authenticated:\n") && str_contains($deploy, 'needs: deploy-vps-test'), 'authenticated E2E is een verplichte tweede job na succesvolle VPS-deploy');
-c511ci(str_contains($deploy, 'environment: vps-test') && str_contains($deploy, 'id-token: write'), 'authenticated E2E blijft binnen vps-test environment en OIDC-permission');
-c511ci(substr_count($deploy, 'tailscale/github-action@306e68a486fd2350f2bfc3b19fcd143891a4a2d8') === 2 && substr_count($deploy, 'version: 1.94.2') === 2, 'deploy en E2E gebruiken dezelfde gepinde Tailscale action en clientversie');
-c511ci(str_contains($deploy, 'TS_OAUTH_CLIENT_ID: ${{ secrets.TS_OAUTH_CLIENT_ID }}') && str_contains($deploy, 'TS_AUDIENCE: ${{ secrets.TS_AUDIENCE }}'), 'E2E hergebruikt uitsluitend de bestaande WIF-instellingen');
-c511ci(str_contains($deploy, $tailHost) && str_contains($deploy, 'HostKeyAlias $VPS_SSH_HOST_ALIAS') && str_contains($deploy, 'StrictHostKeyChecking yes'), 'E2E gebruikt private Tailscale-host met gepinde SSH-hosttrust');
-c511ci(str_contains($deploy, 'E2E_ADMIN_USER: vps-e2e-admin') && str_contains($deploy, 'E2E_MEMBER_USER: vps-e2e-member'), 'workflowidentiteiten zijn dezelfde server-side allowlist-identiteiten');
+c511ci($deployJob !== '' && $setupJob !== '' && $browserJob !== '' && $cleanupJob !== '', 'authenticated E2E is opgesplitst in deploy, fixture-setup, browser en cleanup');
+c511ci(str_contains($setupJob, 'needs: deploy-vps-test') && str_contains($browserJob, 'needs: e2e-fixture-setup'), 'authenticated E2E blijft verplicht na succesvolle VPS-deploy en fixture-setup');
+c511ci(str_contains($cleanupJob, "if: \${{ always() && needs.e2e-fixture-setup.result != 'skipped' }}"), 'fixture-cleanup blijft fail-safe actief na browserfouten');
+c511ci(substr_count($deploy, 'tailscale/github-action@306e68a486fd2350f2bfc3b19fcd143891a4a2d8') === 3 && substr_count($deploy, 'version: 1.94.2') === 3, 'alleen deploy, fixture-setup en cleanup gebruiken de gepinde Tailscale action');
+c511ci(str_contains($setupJob, $tailHost) && str_contains($cleanupJob, $tailHost) && str_contains($deployJob, $tailHost), 'privileged jobs gebruiken dezelfde private Tailscale-host');
+c511ci(str_contains($browserJob, 'E2E_ADMIN_USER: vps-e2e-admin') && str_contains($browserJob, 'E2E_MEMBER_USER: vps-e2e-member'), 'browseridentiteiten zijn dezelfde server-side allowlist-identiteiten');
 c511ci(!str_contains($deploy, 'VPS_TEST_ADMIN_USER') && !str_contains($deploy, 'VPS_TEST_MEMBER_USER') && !str_contains($deploy, 'VPS_TEST_E2E_PASSWORD') && !str_contains($full, 'VPS_TEST_E2E_PASSWORD'), 'geen permanente authenticated E2E-credentials blijven in workflows');
-c511ci(str_contains($deploy, 'secrets.token_urlsafe(48)') && str_contains($deploy, '::add-mask::$password') && str_contains($deploy, $passwordExport), 'wachtwoord wordt per hosted run cryptografisch gegenereerd en gemaskeerd');
-c511ci(str_contains($deploy, "ssh vps-test-private 'e2e check'") && str_contains($deploy, "ssh vps-test-private 'e2e apply'") && substr_count($deploy, "ssh vps-test-private 'e2e cleanup'") === 2, 'CI kan via SSH uitsluitend check, apply en cleanup voor de fixture aanroepen');
-c511ci(str_contains($deploy, $passwordStdin), 'ephemeral wachtwoord bereikt de VPS uitsluitend via stdin');
-$stale = strpos($deploy, 'Ruim eventueel achtergebleven fixture op');
-$apply = strpos($deploy, 'Maak ephemeral authenticated fixture');
-$browser = strpos($deploy, 'Bewijs authenticated beheer en gekoppeld ledenportaal');
-$final = strpos($deploy, 'Verwijder ephemeral authenticated fixture');
-c511ci(is_int($stale) && is_int($apply) && is_int($browser) && is_int($final) && $stale < $apply && $apply < $browser && $browser < $final, 'lifecycle is stale-cleanup → apply → browseracceptatie → cleanup');
-c511ci(str_contains($deploy, $cleanupCondition) && str_contains($deploy, $gatewayReady), 'fail-safe cleanup draait na iedere latere fout zodra gateway bewezen bereikbaar is');
-c511ci(str_contains($deploy, 'authenticated-browser-acceptance-${{ github.run_id }}') && str_contains($deploy, 'retention-days: 30'), 'authenticated browserdiagnose wordt als begrensd artifact bewaard');
-c511ci(!str_contains($full, "  live-authenticated:\n") && str_contains($full, 'workflows:') && str_contains($full, '- Deploy RC045test to VPS test'), 'full regression wacht op de volledige deployworkflow inclusief authenticated E2E');
-c511ci(!str_contains($deploy, 'VPS_TEST_AUTH_E2E_ENABLED') && !str_contains($full, 'VPS_TEST_AUTH_E2E_ENABLED'), 'authenticated E2E is na gateway-installatie niet meer afhankelijk van een handmatige enable-flag');
+c511ci(str_contains($setupJob, 'secrets.token_urlsafe(48)') && str_contains($setupJob, $passwordOutput), 'wachtwoord wordt per hosted run cryptografisch gegenereerd en als ephemeral joboutput doorgegeven');
+c511ci(str_contains($browserJob, $passwordInput), 'alleen de authenticated Playwright-stap ontvangt het ephemeral wachtwoord');
+c511ci(str_contains($setupJob, "'e2e check'") && str_contains($setupJob, "'e2e apply'") && str_contains($setupJob, "'e2e cleanup'") && str_contains($cleanupJob, "'e2e cleanup'"), 'fixturejobs gebruiken uitsluitend check, apply en cleanup via de beperkte gateway');
+$check = strpos($setupJob, "'e2e check'");
+$stale = strpos($setupJob, "'e2e cleanup'", is_int($check) ? $check : 0);
+$apply = strpos($setupJob, "'e2e apply'");
+$browser = strpos($browserJob, 'npx playwright test tests/live-dev-authenticated.spec.js');
+$final = strpos($cleanupJob, "'e2e cleanup'");
+c511ci(is_int($check) && is_int($stale) && is_int($apply) && is_int($browser) && is_int($final) && $check < $stale && $stale < $apply, 'fixture lifecycle behoudt check → stale-cleanup → apply vóór browseracceptatie en aparte cleanup daarna');
+c511ci(str_contains($setupJob, 'gateway_ready=1') && str_contains($setupJob, 'if [[ "$rc" -ne 0 && "$gateway_ready" -eq 1 ]]'), 'setup ruimt een gedeeltelijke fixture direct fail-safe op bij een fout');
+c511ci(str_contains($browserJob, 'authenticated-browser-acceptance-${{ github.run_id }}') && str_contains($browserJob, 'retention-days: 30'), 'authenticated browserdiagnose wordt als begrensd artifact bewaard');
+c511ci(!str_contains($full, "  live-authenticated:\n") && str_contains($full, 'workflows:') && str_contains($full, '- Deploy RC045test to VPS test'), 'full regression wacht op de volledige deployworkflow inclusief cleanup');
+c511ci(!str_contains($deploy, 'VPS_TEST_AUTH_E2E_ENABLED') && !str_contains($full, 'VPS_TEST_AUTH_E2E_ENABLED'), 'authenticated E2E blijft zonder handmatige enable-flag verplicht');
+
+c511ci(!str_contains($browserJob, 'environment: vps-test') && !str_contains($browserJob, 'secrets.') && !str_contains($browserJob, 'id-token: write'), 'repositorygestuurde browserjob heeft geen vps-test secrets of OIDC-recht');
+c511ci(!str_contains($browserJob, 'tailscale/github-action@') && !str_contains($browserJob, 'VPS_TEST_DEPLOY_KEY') && !str_contains($browserJob, 'ssh '), 'browserjob heeft geen Tailscale-, deploykey- of SSH-pad');
+c511ci(!str_contains($setupJob, 'actions/checkout@') && !str_contains($cleanupJob, 'actions/checkout@'), 'privileged fixturejobs checken repositorycode niet uit');
+c511ci(substr_count($deploy, 'mktemp -d "$RUNNER_TEMP/') === 3 && substr_count($deploy, 'rm -rf "$ssh_dir"') === 3, 'alle tijdelijke SSH-keybestanden worden in iedere privileged SSH-stap opgeruimd');
 
 c511ci(str_contains($ephemeralCli, 'function e2e511LidKoppelingOk') && str_contains($ephemeralCli, 'Ephemeral E2E-lidkoppeling ontbreekt na apply.'), 'apply verifieert na PDO-write de vaste user_id- en accountkoppeling van het fixturelid');
 c511ci(str_contains($ephemeralCli, 'function e2e511PortalRuntimeProbe') && str_contains($ephemeralCli, 'Portalprobe ') && str_contains($ephemeralCli, 'portaalVergaderingenVoorLid') && str_contains($ephemeralCli, 'contributieVoorLidJaar'), 'apply traceert server-side portaldata per veilige fasenaam zonder extra SSH- of logrechten');
