@@ -1,0 +1,3 @@
+vst-deploy ALL=(root) NOPASSWD: /usr/local/sbin/verenigingsplatform-github-e2e check
+vst-deploy ALL=(root) NOPASSWD: /usr/local/sbin/verenigingsplatform-github-e2e apply
+vst-deploy ALL=(root) NOPASSWD: /usr/local/sbin/verenigingsplatform-github-e2e cleanup
