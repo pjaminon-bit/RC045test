@@ -23,8 +23,9 @@ function privilegedOpsStructuralDefinitions(): array
             'expected_mode' => 0755,
             'expected_executable' => true,
         ],
-        // #137: de dynamische deploy-SHA wordt ook in sudoers fail-closed
-        // begrensd; dit root-only policybestand valt onder dezelfde driftbewaking.
+        // #137: sudoers staat de deploywrapper uitsluitend argumentloos toe;
+        // de dynamische SHA loopt via stdin en wordt in de rootwrapper opnieuw
+        // fail-closed gevalideerd. Dit root-only policybestand blijft bewaakt.
         'github-deploy-sudoers' => [
             'source_path' => 'ops/vps-test-deploy/verenigingsplatform-github-deploy.sudoers',
             'installed_path' => '/etc/sudoers.d/verenigingsplatform-github-deploy',
@@ -75,9 +76,9 @@ function privilegedOpsStructuralDefinitions(): array
 function privilegedOpsContract(): array
 {
     $hashes = [
-        'github-entry' => '48bdaaa5e9cd3a23987b3dd996c641a9a16f278a64623fbf1108cb4c237e5324',
-        'github-deploy' => 'b51529d46bc65088c180caa0fba85b13328b44f653d5aa897287883862d0f12f',
-        'github-deploy-sudoers' => '5427a4f760eecaacc36ab1cb53ac1d87d19097ec1fdf53da4499473f584e5a25',
+        'github-entry' => 'db27ea9809705497a7a1d95a291719e0c3f7666374f7bed49da0f655dc4af53d',
+        'github-deploy' => 'c97ee1941d56d53be69ea7bef4d773f5c1acbfff890562f501a0fd91d1f65092',
+        'github-deploy-sudoers' => 'e158079d31e9aa16b68f6db09356519f0639d0958e7e11fd347ff7671cee9271',
         'github-e2e' => 'a416e4cb44a680f20c9bf924ddde2cefec49f715ea542c7c706b4d46db46e32e',
         'github-e2e-sudoers' => '4e74398220aeef8c1307ef8931e726a6e375c911ef4fb6f813673a470199f59d',
         'github-sshd-policy' => '58764f1f024a1b21ab582e71f083125d04900c5aa884fb5382cb3e4f98a14cc7',
