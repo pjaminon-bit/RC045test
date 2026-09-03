@@ -184,7 +184,14 @@ PHP);
     $siteConfigSrc = (string)file_get_contents($root . '/site-config.php');
     $contactRuntimeSrc = (string)file_get_contents($root . '/app/core/contact-inbox-runtime.php');
     c54(str_contains($siteConfigSrc, "if (PHP_SAPI !== 'cli' && !headers_sent())"), 'CSP wordt voor webresponses centraal gezet');
-    c54(str_contains($siteConfigSrc, "default-src 'self'") && str_contains($siteConfigSrc, "script-src 'self' 'unsafe-inline'") && str_contains($siteConfigSrc, "object-src 'none'"), 'centrale CSP bevat afdwingbare basis- en scriptgrenzen');
+    c54(
+        str_contains($siteConfigSrc, "default-src 'self'")
+        && str_contains($siteConfigSrc, 'script-src \'self\' \'nonce-{$cspNonce}\'')
+        && str_contains($siteConfigSrc, "script-src-attr 'none'")
+        && !str_contains($siteConfigSrc, "script-src 'self' 'unsafe-inline'")
+        && str_contains($siteConfigSrc, "object-src 'none'"),
+        'centrale CSP bevat afdwingbare nonce-gebonden basis- en scriptgrenzen'
+    );
     c54(str_contains($siteConfigSrc, '$formAction = "\'self\'"') && !str_contains($siteConfigSrc, 'formspree.io'), 'CSP houdt formulieracties voor alle installaties uitsluitend same-origin');
     c54(str_contains($siteConfigSrc, "'self' https://api.open-meteo.com") && !str_contains($siteConfigSrc, 'https://formspree.io'), 'connect-src bevat geen externe formulierprovider meer');
     c54(str_contains($contactRuntimeSrc, 'contact-ontvangst.php') && str_contains($contactRuntimeSrc, 'RuntimeException'), 'contactruntime forceert de gedeelde contactvorm fail-closed naar eigen endpoint');
