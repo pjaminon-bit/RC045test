@@ -24,12 +24,13 @@ OpenSSH behandelt een server-side `ForceCommand` als de administratieve forced c
 
 ## Gecontroleerde live-installatie
 
-Voer dit uitsluitend uit vanuit een bestaande root/VPS-console of een andere reeds geverifieerde root-sessie. Gebruik een schone checkout van de exact gemergde `main`-commit als `$REPO`. Houd de bestaande rootconsole open totdat de post-checks én een aparte restricted SSH-test groen zijn.
+Voer dit uitsluitend uit vanuit een bestaande root/VPS-console of een andere reeds geverifieerde root-sessie. Gebruik een schone checkout van de exact gemergde `main`-commit als `$REPO` en vul die gemergde SHA in als `$EXPECTED_SHA`. Houd de bestaande rootconsole open totdat de post-checks én een aparte restricted SSH-test groen zijn.
 
 ```bash
 set -euo pipefail
 
 REPO=/pad/naar/schone/RC045test-checkout
+EXPECTED_SHA=<40-lowercase-hex-gemergde-main-sha>
 SRC="$REPO/ops/vps-test-deploy/00-verenigingsplatform-vst-deploy.conf"
 DST=/etc/ssh/sshd_config.d/00-verenigingsplatform-vst-deploy.conf
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
@@ -38,14 +39,13 @@ HAD_OLD=0
 
 # PRE-FLIGHT
 [[ "$(id -u)" -eq 0 ]]
+[[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]
 [[ -f "$SRC" && ! -L "$SRC" ]]
 [[ -d /etc/ssh/sshd_config.d && ! -L /etc/ssh/sshd_config.d ]]
+[[ "$(git -C "$REPO" rev-parse HEAD)" == "$EXPECTED_SHA" ]]
+[[ -z "$(git -C "$REPO" status --porcelain=v1 --untracked-files=all)" ]]
 /usr/sbin/sshd -t
 sha256sum "$SRC"
-git -C "$REPO" status --porcelain=v1 --untracked-files=all | grep -qx '' || {
-  echo 'FOUT: checkout is niet schoon.' >&2
-  exit 1
-}
 
 if [[ -e "$DST" || -L "$DST" ]]; then
   [[ -f "$DST" && ! -L "$DST" ]]
