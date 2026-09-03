@@ -70,6 +70,9 @@ function siteCspEventBridge(string $nonce): string
 })();
 </script>
 JS;
+    // Nowdoc bewaart backslashes letterlijk; normaliseer uitsluitend de twee
+    // vaste HTML-attributen van onze eigen bridge naar gewone quotes.
+    $script = str_replace(['nonce=\\"__NONCE__\\"', 'id=\\"site-csp-event-bridge\\"'], ['nonce="__NONCE__"', 'id="site-csp-event-bridge"'], $script);
     return str_replace('__NONCE__', $n, $script);
 }
 
@@ -119,6 +122,16 @@ function siteCspHardenHtml(string $html): string
         $html
     ) ?? $html;
 
+    // Bovenstaande PHP single-quoted strings houden \" letterlijk. Dat is
+    // bewust één centrale normalisatie in plaats van vier foutgevoelige mixes
+    // van PHP-, HTML- en regexquotes.
+    $html = str_replace(
+        ['data-csp-confirm=\\"', 'data-csp-submit-form=\\"1\\"', 'data-csp-scroll-top=\\"1\\"', 'data-csp-lang=\\"'],
+        ['data-csp-confirm="', 'data-csp-submit-form="1"', 'data-csp-scroll-top="1"', 'data-csp-lang="'],
+        $html
+    );
+    $html = preg_replace('~(data-csp-(?:confirm|lang)="[^"]*)\\"~', '$1"', $html) ?? $html;
+
     // De bestaande paginascripts zoeken de actieve taalknop nog op via het
     // voormalige onclick-attribuut. Bind die selector aan dezelfde inert data-
     // semantiek zonder de paginascripts verder te herschrijven.
@@ -144,6 +157,8 @@ function siteCspHardenHtml(string $html): string
         },
         $html
     ) ?? $html;
+    $html = str_replace('<script nonce=\\"', '<script nonce="', $html);
+    $html = preg_replace('~(<script nonce="[^"]*)\\"~', '$1"', $html) ?? $html;
 
     if ($bridgeNodig && strpos($html, 'id="site-csp-event-bridge"') === false) {
         $bridge = siteCspEventBridge($nonce);
