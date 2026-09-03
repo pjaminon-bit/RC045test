@@ -28,10 +28,11 @@ foreach ($it as $info) {
         }
     }
 
-    if (preg_match_all('/\son[a-z][a-z0-9_-]*\s*=\s*[\"\']/i', $raw, $handlers, PREG_OFFSET_CAPTURE)) {
-        foreach ($handlers[0] as $match) {
-            $line = substr_count(substr($raw, 0, (int)$match[1]), "\n") + 1;
-            $violations[] = "{$rel}:{$line}: inline eventhandler";
+    if (preg_match_all('/\s(on[a-z][a-z0-9_-]*)\s*=\s*([\"\'])(.*?)\2/is', $raw, $handlers, PREG_SET_ORDER | PREG_OFFSET_CAPTURE)) {
+        foreach ($handlers as $match) {
+            $line = substr_count(substr($raw, 0, (int)$match[0][1]), "\n") + 1;
+            $attribuut = preg_replace('/\s+/', ' ', trim((string)$match[0][0]));
+            $violations[] = "{$rel}:{$line}: inline eventhandler {$attribuut}";
         }
     }
 
@@ -63,8 +64,11 @@ if (!is_string($siteConfig)) {
     if (preg_match("/script-src[^;]*'unsafe-inline'/", $siteConfig) === 1) {
         $violations[] = "site-config.php: script-src bevat nog 'unsafe-inline'";
     }
-    foreach (["base-uri 'self'", "object-src 'none'", "frame-ancestors 'none'", "form-action 'self'"] as $required) {
+    foreach (["base-uri 'self'", "object-src 'none'", "frame-ancestors 'none'"] as $required) {
         if (!str_contains($siteConfig, $required)) $violations[] = "site-config.php: vereiste CSP-directive ontbreekt: {$required}";
+    }
+    if (!str_contains($siteConfig, '$formAction = "\'self\'"') || !str_contains($siteConfig, 'form-action {$formAction}')) {
+        $violations[] = "site-config.php: form-action is niet aantoonbaar same-origin";
     }
 }
 
