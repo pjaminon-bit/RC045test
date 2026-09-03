@@ -72,8 +72,22 @@ c58(str_contains($deploy,'HostKeyAlias="$VPS_SSH_HOST_ALIAS"')&&str_contains($de
 c58(str_contains($deploy,"github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'"),'handmatige privileged deploy kan uitsluitend vanaf main');
 c58(str_contains($deploy,'ping: ${{ vars.VPS_TEST_TAILSCALE_HOST')&&str_contains($deploy,'100.104.242.66'),'Tailscale peerconnectiviteit wordt vóór SSH geverifieerd');
 
-c58(str_contains($entry,'SSH_ORIGINAL_COMMAND')&&str_contains($entry,'^deploy[[:space:]]+([0-9a-f]{40})$'),'forced SSH entrypoint accepteert uitsluitend deploy + 40-hex commit');
-c58(str_contains($entry,'/usr/bin/sudo -n /usr/local/sbin/verenigingsplatform-github-deploy')&&str_contains($entry,'$commit'),'entrypoint kan uitsluitend vaste root-wrapper met gevalideerde commit starten');
+c58(
+    str_contains($entry,'SSH_ORIGINAL_COMMAND')
+    && str_contains($entry,'^deploy[[:space:]]+([0-9a-f]{40})$')
+    && str_contains($entry,"'e2e check'")
+    && str_contains($entry,"'e2e apply'")
+    && str_contains($entry,"'e2e cleanup'")
+    && str_contains($entry,"exit 64"),
+    'forced SSH entrypoint accepteert uitsluitend exact deploy + drie vaste E2E-acties'
+);
+c58(
+    str_contains($entry,'/usr/bin/sudo -n /usr/local/sbin/verenigingsplatform-github-deploy "${BASH_REMATCH[1]}"')
+    && substr_count($entry,'/usr/bin/sudo -n /usr/local/sbin/verenigingsplatform-github-e2e ') === 3
+    && !str_contains($entry,'eval ')
+    && !str_contains($entry,'bash -c'),
+    'entrypoint kan uitsluitend vaste root-wrappers met gevalideerde deploycommit of exacte E2E-actie starten'
+);
 c58(str_contains($wrapper,"repo='https://github.com/pjaminon-bit/RC045test.git'")&&str_contains($wrapper,'rev-parse HEAD'),'root-wrapper bindt staging aan vaste repo en exacte Git-commit');
 c58(str_contains($wrapper,"host_launcher='/usr/local/sbin/verenigingsplatform-host-php'")&&str_contains($wrapper,'"$host_launcher" release-prepare')&&str_contains($wrapper,'"$host_launcher" release-apply --plan="$plan" --check')&&str_contains($wrapper,'"$host_launcher" release-apply --plan="$plan" --deploy'),'root-wrapper gebruikt uitsluitend de root-owned host-engine voor privileged releaseprepare/apply');
 c58(str_contains($wrapper,'Healthservice is nog niet naar host-tooling gemigreerd')&&str_contains($wrapper,'Effectieve control-plane service is nog niet naar host-tooling gemigreerd'),'root-wrapper weigert deploy zolang permanente rootentrypoints nog releasecode volgen');
@@ -81,7 +95,15 @@ c58(str_contains($wrapper,'"$host_launcher" control-plane --config="$control_pla
 c58(str_contains($wrapper,'release-state.json')&&str_contains($wrapper,'DEPLOYED $commit'),'root-wrapper bewijst actieve release-state vóór succesmelding');
 
 c58(str_contains($host,'/etc/verenigingsplatform/host-engine.path')&&str_contains($host,'--check --quiet .host-engine-manifest.sha256'),'host-launcher bindt iedere privileged aanroep aan een byte-gecontroleerde versioned engine');
-c58(str_contains($host,"health) script='bin/check-vps-health.php'")&&str_contains($host,"release-apply) script='bin/apply-vps-release.php'")&&str_contains($host,"control-plane) script='bin/control-plane-executor.php'"),'host-launcher heeft een vaste expliciete commandallowlist');
+c58(
+    str_contains($host,"health) script='bin/check-vps-health.php'")
+    && str_contains($host,"release-prepare) script='bin/prepare-vps-release.php'")
+    && str_contains($host,"release-apply) script='bin/apply-vps-release.php'")
+    && str_contains($host,"control-plane) script='bin/control-plane-integrity-wrapper.php'")
+    && str_contains($host,"control-plane-apply) script='bin/apply-vps-control-plane.php'")
+    && str_contains($host,"*)\n    echo 'Niet-toegestane host-engine actie.'"),
+    'host-launcher heeft een vaste expliciete commandallowlist en routeert control-plane via de integriteitswrapper'
+);
 c58(str_contains($installer,'status --porcelain=v1 --untracked-files=all')&&str_contains($installer,'ls-files -z -- app bin')&&str_contains($installer,'.host-engine-manifest.sha256'),'host-engine installer kopieert uitsluitend een schone exacte checkout naar een read-only manifestgebonden engine');
 c58(str_contains($migration,'ROOT BOUNDARY MIGRATION OK')&&str_contains($migration,'monitoring-prepare')&&str_contains($migration,'control-plane --config='),'first-hop migratie zet monitoring en control-plane gecontroleerd op host-tooling');
 
