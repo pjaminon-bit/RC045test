@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+set -euo pipefail
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+export PATH
+[[ "${EUID:-$(/usr/bin/id -u)}" -eq 0 ]] || { echo 'FOUT: E2E-wrapper vereist root.' >&2; exit 77; }
+[[ "$#" -eq 1 ]] || { echo 'FOUT: exact één E2E-actie vereist.' >&2; exit 64; }
+action="$1"
+case "$action" in check|apply|cleanup) ;; *) echo 'FOUT: ongeldige E2E-actie.' >&2; exit 64 ;; esac
+
+current="$(/usr/bin/readlink -f /srv/verenigingsplatform/current)"
+[[ "$current" =~ ^/srv/verenigingsplatform/releases/[0-9a-f]{40}$ ]] || { echo 'FOUT: ongeldige current release.' >&2; exit 70; }
+runtime_plan=/srv/verenigingen/test/runtime/runtime-plan.json
+config=/srv/verenigingen/test/config.php
+[[ -f "$runtime_plan" && ! -L "$runtime_plan" && -r "$runtime_plan" ]] || { echo 'FOUT: runtime-plan testtenant ongeldig.' >&2; exit 70; }
+[[ -f "$config" && ! -L "$config" && -r "$config" ]] || { echo 'FOUT: tenantconfig testtenant ongeldig.' >&2; exit 70; }
+
+runtime_user="$(/usr/bin/python3 - "$runtime_plan" <<'PY'
+import json, re, sys
+p=sys.argv[1]
+with open(p, encoding='utf-8') as f:
+    d=json.load(f)
+u=str(d.get('os',{}).get('user',''))
+if re.fullmatch(r'vst[0-9a-f]{16}',u) is None:
+    raise SystemExit(2)
+print(u)
+PY
+)" || { echo 'FOUT: runtime-user kon niet veilig worden bepaald.' >&2; exit 70; }
+/usr/bin/id "$runtime_user" >/dev/null 2>&1 || { echo 'FOUT: runtime-user bestaat niet.' >&2; exit 70; }
+script="$current/bin/vps-authenticated-e2e-ephemeral.php"
+[[ -f "$script" && ! -L "$script" && -r "$script" ]] || { echo 'FOUT: E2E-script ontbreekt in actieve release.' >&2; exit 70; }
+
+args=(
+  "$script"
+  --config="$config"
+  --expected-tenant=test
+  --expected-site=https://test.vps.holox.nl
+  --admin-user=vps-e2e-admin
+  --member-user=vps-e2e-member
+)
+case "$action" in
+  check) exec /usr/sbin/runuser -u "$runtime_user" -- /usr/bin/php8.5 "${args[@]}" --check ;;
+  apply) exec /usr/sbin/runuser -u "$runtime_user" -- /usr/bin/php8.5 "${args[@]}" --password-stdin --apply ;;
+  cleanup) exec /usr/sbin/runuser -u "$runtime_user" -- /usr/bin/php8.5 "${args[@]}" --cleanup ;;
+esac
