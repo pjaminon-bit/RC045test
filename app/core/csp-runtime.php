@@ -161,6 +161,13 @@ function siteCspHardenHtml(string $html): string
 
 function siteCspRuntimeStart(): void
 {
+    // CLI-regressies hebben geen browseroutput. De public-assetgateway streamt
+    // binaire/range-responses en moet die streamingsemantiek uit #143 behouden;
+    // daarvoor is een HTML-rewritebuffer niet nodig of gewenst.
+    if (PHP_SAPI === 'cli') return;
+    $script = strtolower(basename((string) ($_SERVER['SCRIPT_FILENAME'] ?? $_SERVER['SCRIPT_NAME'] ?? '')));
+    if ($script === 'public-asset.php') return;
+
     static $gestart = false;
     if ($gestart) return;
     $gestart = true;
