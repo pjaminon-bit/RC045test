@@ -2,7 +2,7 @@
 // Platformbeheer observability — uitsluitend niet-root, read-only diagnose.
 // Deze laag gebruikt alleen bestaande control-plane runtimeconfig, server-side
 // state en niet-gevoelige Linux capaciteitsinformatie. Er worden bewust geen
-// processen gestart en geen tenant-private bestanden geopend.
+// processen gestart en geen tenant-private of root-only bestanden geopend.
 
 require_once dirname(__DIR__) . '/deployment/privileged-ops-contract.php';
 
@@ -53,7 +53,12 @@ function cpAdminPercentage(?int $used, ?int $total): ?float
     return round(min(100, max(0, ($used / $total) * 100)), 1);
 }
 
-function cpAdminSysteemStatus(): array
+function cpAdminPrivilegedOpsUitSnapshot(array $snapshot): array
+{
+    return privilegedOpsPublishedSnapshot($snapshot['privileged_ops'] ?? null);
+}
+
+function cpAdminSysteemStatus(array $snapshot = []): array
 {
     $c = cp51Config();
     $realApp = realpath($c['app_root']);
@@ -119,7 +124,7 @@ function cpAdminSysteemStatus(): array
             'used_bytes'=>$diskUsed,
             'used_percent'=>cpAdminPercentage($diskUsed, $diskTotal),
         ],
-        'privileged_ops'=>privilegedOpsSnapshot(),
+        'privileged_ops'=>cpAdminPrivilegedOpsUitSnapshot($snapshot),
     ];
 }
 
@@ -138,7 +143,7 @@ function cpAdminPlatformStatus(array $snapshot): array
     $pendingCount = count(cpAdminVeiligeJsonBestanden($c['pending_dir']));
     $processingCount = $processing['ok'] ? count(cpAdminVeiligeJsonBestanden($c['processing_dir'])) : null;
     $resultCount = count(cpAdminVeiligeJsonBestanden($c['results_dir']));
-    $system = cpAdminSysteemStatus();
+    $system = cpAdminSysteemStatus($snapshot);
 
     $critical = [];
     $warnings = [];
@@ -163,6 +168,9 @@ function cpAdminPlatformStatus(array $snapshot): array
     }
 
     $ops = is_array($system['privileged_ops'] ?? null) ? $system['privileged_ops'] : [];
+    if (($ops['status'] ?? '') === 'unknown') {
+        $warnings[] = 'Integriteitsstatus van privileged deploytooling ontbreekt of is verouderd in de root-snapshot.';
+    }
     foreach ($ops['tools'] ?? [] as $tool) {
         if (!is_array($tool)) continue;
         $id = (string)($tool['id'] ?? 'onbekend');
