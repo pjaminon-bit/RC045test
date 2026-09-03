@@ -45,19 +45,21 @@ sudo install -o root -g root -m 0755 \
   /usr/local/sbin/verenigingsplatform-github-deploy
 ```
 
-De entrypoint accepteert uitsluitend `SSH_ORIGINAL_COMMAND` in de vorm `deploy <40-hex-commit>`. De root-wrapper valideert dezelfde commit opnieuw.
+De entrypoint accepteert uitsluitend `SSH_ORIGINAL_COMMAND` in de vorm `deploy <40-hex-commit>`. Hij geeft de gevalideerde SHA als exact één newline-afgesloten stdin-payload door aan `sudo`; de rootwrapper accepteert geen command-line argumenten en valideert de stdin-SHA opnieuw.
 
 ### 3. Minimale sudo-regel
 
 Installeer de canonieke policy `ops/vps-test-deploy/verenigingsplatform-github-deploy.sudoers` als `/etc/sudoers.d/verenigingsplatform-github-deploy`:
 
 ```text
-vst-deploy ALL=(root) NOPASSWD: /usr/local/sbin/verenigingsplatform-github-deploy ^[0-9a-f]{40}$
+vst-deploy ALL=(root) NOPASSWD: /usr/local/sbin/verenigingsplatform-github-deploy ""
 ```
 
-De argumentbeperking is bewust een **geankerde POSIX extended regular expression**, geen sudoers-glob. Argumentregex wordt door sudo ondersteund vanaf 1.9.10. Shell-style sudoers-wildcards zijn hier ongeschikt omdat commandoregelargumenten als één samengevoegde string worden gematcht en `*` daarbij ook whitespace kan matchen; een glob zou daardoor meerdere argumenten kunnen omvatten.
+`""` betekent in sudoers dat de wrapper uitsluitend **zonder command-line argumenten** mag worden gestart. Dit ontwerp is bewust compatibel met de actuele Ubuntu 26.04 VPS, waar `/usr/bin/sudo` door **sudo-rs 0.2.13** wordt geleverd. sudo-rs ondersteunt exacte command-argumentmatching en de expliciete argumentloze vorm, maar geen klassieke sudo-argumentregex. Daarom wordt de dynamische SHA niet in sudoers gematcht en ook niet als argv naar root doorgegeven.
 
-Controleer op de doelhost eerst de daadwerkelijk geïnstalleerde sudo/sudoers-versie en valideer de policy vóór installatie én de volledige sudoersconfiguratie erna:
+De restricted SSH-entry valideert eerst exact `deploy <lowercase-40-hex>`, transporteert daarna alleen die SHA via stdin en start de rootwrapper zonder argumenten. De rootwrapper leest maximaal 42 bytes en accepteert uitsluitend exact 41 bytes: 40 lowercase hextekens gevolgd door één newline. Lege input, ontbrekende newline, korte/lange SHA, uppercase/non-hex, extra regels, whitespace, quotes, globtekens en shellachtige suffixen falen gesloten. Daarna blijft de bestaande binding aan de actuele `main`-tip gelden.
+
+Controleer de daadwerkelijk actieve sudo-implementatie en valideer de policy vóór installatie én de volledige sudoersconfiguratie erna:
 
 ```bash
 sudo --version
@@ -67,8 +69,6 @@ sudo install -o root -g root -m 0440 \
   /etc/sudoers.d/verenigingsplatform-github-deploy
 sudo visudo -cf /etc/sudoers
 ```
-
-De policy laat uitsluitend de root-owned deploywrapper toe wanneer de complete argumentstring exact één lowercase 40-hex SHA is. Lege, korte/lange, uppercase/non-hex en whitespace/meerdere-argumentvarianten matchen niet. De rootwrapper blijft daarnaast onafhankelijk exact één lowercase 40-hex argument eisen en bindt de SHA daarna nog aan de actuele `main`-tip.
 
 ### 4. Deploy-key genereren
 
@@ -216,8 +216,9 @@ Daarna kan `VPS_TEST_AUTH_E2E_ENABLED=true` worden gezet. Tot dat moment blijft 
 - geen dynamische hosttrust via `ssh-keyscan`;
 - deploy alleen na groene bronvalidatie op `main`;
 - handmatige deploy alleen vanaf `main`;
-- sudoers autoriseert de deploywrapper alleen voor exact één lowercase 40-hex argumentstring;
-- de rootwrapper valideert die 40-hex binding onafhankelijk opnieuw en eist daarna de actuele `main`-tip;
+- sudoers autoriseert de deploywrapper uitsluitend zonder command-line argumenten;
+- de gevalideerde deploy-SHA loopt alleen via stdin naar root en wordt daar exact opnieuw gevalideerd;
+- de rootwrapper bindt die SHA daarna nog aan de actuele `main`-tip;
 - candidate checkout moet schoon zijn;
 - privileged releasehandelingen gebruiken de reeds actieve vertrouwde release-tooling;
 - fase-4.7 blijft verantwoordelijk voor immutable staging, atomische switch, health en rollback.
