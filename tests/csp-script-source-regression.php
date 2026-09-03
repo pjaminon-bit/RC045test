@@ -112,7 +112,7 @@ if (!is_string($siteConfig)) {
     cspOk(false, 'centrale CSP is leesbaar');
 } else {
     cspOk(preg_match("/script-src[^;]*'unsafe-inline'/", $siteConfig) !== 1, "script-src bevat geen brede 'unsafe-inline'");
-    cspOk(str_contains($siteConfig, "script-src 'self' 'nonce-{$cspNonce}'"), 'script-src gebruikt uitsluitend self plus response-nonce');
+    cspOk(str_contains($siteConfig, 'script-src \'self\' \'nonce-{$cspNonce}\''), 'script-src gebruikt uitsluitend self plus response-nonce');
     cspOk(str_contains($siteConfig, "script-src-attr 'none'"), 'inline eventattributen zijn CSP-technisch fail-closed geblokkeerd');
     cspOk(str_contains($siteConfig, "base-uri 'self'"), 'base-uri blijft strikt same-origin');
     cspOk(str_contains($siteConfig, "object-src 'none'"), 'object-src blijft none');
@@ -124,6 +124,9 @@ if (!is_string($siteConfig)) {
     cspOk(str_contains($siteConfig, "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com"), "style-src blijft bewust ongewijzigd voor apart hardeningtraject");
     cspOk(!str_contains($siteConfig, "'unsafe-eval'"), "CSP voegt geen 'unsafe-eval' toe");
     cspOk(!str_contains($siteConfig, "'unsafe-hashes'"), "CSP voegt geen 'unsafe-hashes' toe");
+    $cspBufferPos = strpos($siteConfig, 'siteCspRuntimeStart();');
+    $tenantBufferPos = strpos($siteConfig, 'tenantPublicRuntimeStart($config, $externPad);');
+    cspOk($cspBufferPos !== false && $tenantBufferPos !== false && $cspBufferPos < $tenantBufferPos, 'CSP hardener is buitenste responsebuffer en ziet definitieve tenantoutput');
 }
 
 echo "CSP script regressie: {$ok} OK, {$fout} fout(en)\n";
