@@ -98,9 +98,11 @@ function health46Alert(array $plan, array $status): array
         return health46AlertSamenvatting($nieuw)+['failed'=>true];
     }
 
+    $adapter=(string)$alerts['adapter'];
     $payload=['schema'=>1,'tenant_key'=>$plan['tenant_key'],'state'=>$nu,'previous_state'=>$beslissing['previous_delivered_state'],'reason'=>$beslissing['reason'],'checked_at_utc'=>$status['checked_at_utc'],'failed_checks'=>array_keys(array_filter($status['checks'],static fn($v)=>$v==='fail'))];
     $json=json_encode($payload,JSON_UNESCAPED_SLASHES);if(!is_string($json))health46Stop('Alert-payload kon niet veilig worden opgebouwd.');
-    [$code]=health46Run([(string)$alerts['adapter']],$json."\n");
+    [$code,,$err]=health46Run([$adapter],$json."\n");
+    unset($err);
     if($code!==0){
         $nieuw=monitoring46AlertNieuweState($oud,$nu,$epoch,$beslissing,'pending','adapter_exit');health46AtomicJson($statePad,$nieuw);
         return health46AlertSamenvatting($nieuw)+['failed'=>true];
