@@ -28,13 +28,14 @@ try {
         'nummer' => 1,
         'omschrijving' => 'PDO relatie',
         'commissie_id' => $groepId,
+        'commissie_bron' => 'groep',
     ]]];
     if (!repoTakenSchrijf($taken, false)) throw new RuntimeException('PDO takenwrite gaf false');
 
     $groepenLees = taakCommissieDocument(repoGroepenLees());
     $takenLees = repoTakenLees();
     if (!isset(taakCommissieActieveKeuzes($groepenLees)[$groepId])) throw new RuntimeException('persistente PDO commissie niet selecteerbaar');
-    if (($takenLees['taken'][0]['commissie_id'] ?? '') !== $groepId) throw new RuntimeException('PDO roundtrip verloor commissie groep-id');
+    if (($takenLees['taken'][0]['commissie_id'] ?? '') !== $groepId || ($takenLees['taken'][0]['commissie_bron'] ?? '') !== 'groep') throw new RuntimeException('PDO roundtrip verloor commissie groep-id/provenance');
 
     // Rename raakt uitsluitend de naam; de taak blijft aan dezelfde stabiele
     // group-id hangen.
@@ -42,7 +43,7 @@ try {
     if (!repoGroepenSchrijf($groepen, false)) throw new RuntimeException('PDO rename write gaf false');
     $groepenLees = taakCommissieDocument(repoGroepenLees());
     $takenLees = repoTakenLees();
-    $ctx = taakCommissieContext($groepenLees, ['commissies' => []], (string) $takenLees['taken'][0]['commissie_id']);
+    $ctx = taakCommissieContext($groepenLees, ['commissies' => []], (string) $takenLees['taken'][0]['commissie_id'], (string) $takenLees['taken'][0]['commissie_bron']);
     if (($ctx['label'] ?? '') !== 'PDO commissie hernoemd') throw new RuntimeException('rename werd niet via stabiele id gevolgd');
 
     // Archiveren blokkeert een nieuwe relatie maar laat de bestaande relatie
@@ -54,9 +55,9 @@ try {
     $takenLees = repoTakenLees();
     if (isset(taakCommissieActieveKeuzes($groepenLees)[$groepId])) throw new RuntimeException('gearchiveerde PDO commissie bleef nieuw selecteerbaar');
     $bestaand = taakCommissieValideerVoorOpslag($groepId, $takenLees['taken'][0], $groepenLees, ['commissies' => []]);
-    if (!$bestaand['geldig'] || $bestaand['id'] !== $groepId) throw new RuntimeException('bestaande PDO archiefrelatie werd niet behouden');
+    if (!$bestaand['geldig'] || $bestaand['id'] !== $groepId || $bestaand['bron'] !== 'groep') throw new RuntimeException('bestaande PDO archiefrelatie werd niet behouden');
 
-    echo "OK: #151 PDO groepen/taken stable-id + rename + archive contract\n";
+    echo "OK: #151 PDO groepen/taken stable-id + provenance + rename + archive contract\n";
 } finally {
     @unlink($local);
     @unlink($db);
