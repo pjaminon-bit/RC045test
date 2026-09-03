@@ -30,7 +30,7 @@ function siteCspHtmlWaarde(string $waarde): string
 function siteCspEventBridge(string $nonce): string
 {
     $n = siteCspHtmlWaarde($nonce);
-    return <<<'JS'
+    $script = <<<'JS'
 <script nonce="__NONCE__" id="site-csp-event-bridge">
 (function () {
   'use strict';
@@ -69,8 +69,8 @@ function siteCspEventBridge(string $nonce): string
   });
 })();
 </script>
-JS
-    |> str_replace('__NONCE__', $n, $value);
+JS;
+    return str_replace('__NONCE__', $n, $script);
 }
 
 function siteCspHardenHtml(string $html): string
