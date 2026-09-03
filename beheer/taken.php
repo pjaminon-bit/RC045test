@@ -4,6 +4,7 @@ require_once dirname(__DIR__) . '/app/auth-capabilities.php';
 require_once dirname(__DIR__) . '/app/data-slot.php';
 require_once dirname(__DIR__) . '/app/leden/service.php';
 require_once dirname(__DIR__) . '/app/taken-commissies.php';
+require_once dirname(__DIR__) . '/app/data-integriteit.php';
 if(!$ingelogd){header('Location: ./');exit;}
 if(!authHeeftCapability('tasks.manage')){http_response_code(403);echo'Geen toegang tot Taken.';exit;}
 function tkEsc($v):string{return htmlspecialchars((string)$v,ENT_QUOTES,'UTF-8');}
@@ -48,9 +49,12 @@ if(($_SERVER['REQUEST_METHOD']??'')==='POST'){
    }
   }
   elseif($actie==='verwijderen'){
-   // Alleen het primaire taakrecord verwijderen. Het generieke groepenrelatie-
-   // delete/cascadecontract wordt afzonderlijk opgelost in finding #152.
-   $id=trim((string)($_POST['id']??''));$idx=tkVind($data,$id);if($idx===null)tkFlash('Taak niet gevonden.','fout');else{array_splice($data['taken'],$idx,1);if(repoTakenSchrijf($data)){schrijfLog($logBestand,$huidigeGebruiker,'taak_verwijderd',$id);tkFlash('Taak verwijderd.');}else tkFlash('Verwijderen mislukt.','fout');}
+   $id=trim((string)($_POST['id']??''));
+   try{
+    $resultaat=dataIntegriteitVerwijderTaak($id);
+    if(empty($resultaat['gevonden']))tkFlash('Taak niet gevonden.','fout');
+    else{schrijfLog($logBestand,$huidigeGebruiker,'taak_verwijderd',$id);tkFlash('Taak verwijderd.');}
+   }catch(Throwable $e){error_log('[platform] taakdelete transactioneel mislukt: '.get_class($e));tkFlash('Verwijderen mislukt.','fout');}
   }
  }finally{dataSlotDicht($slot);}
  tkRedirect();
