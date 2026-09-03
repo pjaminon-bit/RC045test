@@ -190,11 +190,12 @@ function taakNormaliseer($invoer, $bestaand = null) {
   }
   if ($t['vergadering_soort'] === '') $t['vergadering_id'] = '';
 
-  // Koppeling met een commissie: alleen de sleutel, of de commissie ooit
-  // echt bestaat controleert de aanroeper (die de commissielijst al bij de
-  // hand heeft).
+  // Primaire commissie van de taak. Nieuwe waarden zijn stabiele groep-ID's
+  // uit het groepenmodel. Groep-ID's mogen maximaal 80 tekens zijn; de oude
+  // legacy commissiesleutels waren maximaal 40 tekens en blijven daardoor
+  // ongewijzigd leesbaar als historische compatibiliteitswaarde.
   if (array_key_exists('commissie_id', $invoer)) {
-    $t['commissie_id'] = ledenKort($invoer['commissie_id'], 40);
+    $t['commissie_id'] = ledenKort($invoer['commissie_id'], 80);
   } elseif (!isset($t['commissie_id'])) {
     $t['commissie_id'] = '';
   }
