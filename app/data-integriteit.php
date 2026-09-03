@@ -47,7 +47,6 @@ function dataIntegriteitRepoSchrijf(string $store, array $data, array $writers =
     if ($writer !== null && !is_callable($writer)) {
         throw new InvalidArgumentException('Ongeldige testwriter voor ' . $store . '.');
     }
-
     if ($writer === null) {
         $writer = match ($store) {
             'taken' => static fn(array $doc): bool => repoTakenSchrijf($doc),
@@ -57,16 +56,15 @@ function dataIntegriteitRepoSchrijf(string $store, array $data, array $writers =
             default => throw new InvalidArgumentException('Onbekende integriteitsstore: ' . $store),
         };
     }
-
     if ($writer($data) !== true) {
         throw new RuntimeException('Schrijven van integriteitsstore ' . $store . ' is mislukt.');
     }
 }
 
 /**
- * Verwijdert uitsluitend exacte object-ID's uit het opgegeven relatietype.
- * Het document wordt bewust NIET volledig genormaliseerd: repair mag geen
- * andere, mogelijk historische of afwijkende data als neveneffect wijzigen.
+ * Verwijder uitsluitend exacte object-ID's uit het gevraagde relatietype.
+ * Normaliseer het document hier bewust niet volledig: repair mag geen
+ * historische of afwijkende data als neveneffect wijzigen.
  */
 function dataIntegriteitGroepRelatiesVerwijder(array &$groepen, string $type, string $objectId): int
 {
@@ -155,8 +153,8 @@ function dataIntegriteitVerwijderVergadering(string $id, array $writers = []): a
             $taakAantal = dataIntegriteitTakenOntkoppelVergadering($taken, $id);
             $groepAantal = dataIntegriteitGroepRelatiesVerwijder($groepen, 'vergaderingen', $id);
 
-            // Primaire delete eerst, daarna afhankelijke stores. Iedere latere
-            // fout moet de eerdere write via de batchtransactie terugrollen.
+            // Primaire delete eerst; elke latere writefout moet deze write
+            // aantoonbaar via de centrale batchtransactie terugrollen.
             dataIntegriteitRepoSchrijf('vergaderingen', $vergaderingen, $writers);
             if ($taakAantal > 0) dataIntegriteitRepoSchrijf('taken', $taken, $writers);
             if ($groepAantal > 0) dataIntegriteitRepoSchrijf('groepen', $groepen, $writers);
@@ -178,7 +176,7 @@ function dataIntegriteitVerwijderEvenement(string $id, array $writers = []): arr
 
     return privateStoreBatchTransactie(
         ['evenementen', 'groepen'],
-        [evenementenBestandPad(), groepenBestandPad()],
+        [evenementBestandPad(), groepenBestandPad()],
         static function () use ($id, $writers): array {
             $evenementen = repoEvenementenLees();
             $idx = dataIntegriteitVindIndex($evenementen, 'evenementen', $id);
@@ -202,7 +200,6 @@ function dataIntegriteitDetecteerSnapshot(array $taken, array $vergaderingen, ar
     $geldigeTaken = dataIntegriteitIdSet($taken, 'taken');
     $geldigeVergaderingen = dataIntegriteitIdSet($vergaderingen, 'vergaderingen');
     $geldigeEvenementen = dataIntegriteitIdSet($evenementen, 'evenementen');
-
     $rapport = [
         'taak_vergaderingen' => [],
         'groepen' => ['taken' => [], 'vergaderingen' => [], 'evenementen' => []],
@@ -269,13 +266,13 @@ function dataIntegriteitDetecteer(): array
 /**
  * Conservatieve repair: alleen IDs die in de huidige snapshot ondubbelzinnig
  * naar een ontbrekend primair object wijzen worden verwijderd/ontkoppeld.
- * Geldige relaties, commissiekoppelingen en andere velden blijven onaangeraakt.
+ * Geldige relaties, commissieprovenance en andere velden blijven ongemoeid.
  */
 function dataIntegriteitHerstelDangling(array $writers = []): array
 {
     return privateStoreBatchTransactie(
         ['taken', 'vergaderingen', 'evenementen', 'groepen'],
-        [takenBestandPad(), vergaderingenBestandPad(), evenementenBestandPad(), groepenBestandPad()],
+        [takenBestandPad(), vergaderingenBestandPad(), evenementBestandPad(), groepenBestandPad()],
         static function () use ($writers): array {
             $taken = repoTakenLees();
             $vergaderingen = repoVergaderingenLees();
@@ -289,8 +286,8 @@ function dataIntegriteitHerstelDangling(array $writers = []): array
                 if (!is_array($taak)) continue;
                 $taakId = dataIntegriteitId($taak['id'] ?? '');
                 $vergaderingId = dataIntegriteitId($taak['vergadering_id'] ?? '');
-                // Record zonder eigen ID behandelen we als malformed, niet als
-                // veilige repairkandidaat binnen finding #152.
+                // Zonder eigen taak-ID is het record malformed en geen veilige
+                // automatische repairkandidaat binnen finding #152.
                 if ($taakId === '' || $vergaderingId === '' || isset($geldigeVergaderingen[$vergaderingId])) continue;
                 $taken['taken'][$i]['vergadering_id'] = '';
                 $taken['taken'][$i]['vergadering_soort'] = '';
