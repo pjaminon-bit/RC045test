@@ -98,7 +98,7 @@ function health46Alert(array $plan, array $status): array
         return health46AlertSamenvatting($nieuw)+['failed'=>true];
     }
 
-    $payload=['schema'=>2,'tenant_key'=>$plan['tenant_key'],'state'=>$nu,'previous_state'=>$beslissing['previous_delivered_state'],'reason'=>$beslissing['reason'],'checked_at_utc'=>$status['checked_at_utc'],'failed_checks'=>array_keys(array_filter($status['checks'],static fn($v)=>$v==='fail'))];
+    $payload=['schema'=>1,'tenant_key'=>$plan['tenant_key'],'state'=>$nu,'previous_state'=>$beslissing['previous_delivered_state'],'reason'=>$beslissing['reason'],'checked_at_utc'=>$status['checked_at_utc'],'failed_checks'=>array_keys(array_filter($status['checks'],static fn($v)=>$v==='fail'))];
     $json=json_encode($payload,JSON_UNESCAPED_SLASHES);if(!is_string($json))health46Stop('Alert-payload kon niet veilig worden opgebouwd.');
     [$code]=health46Run([(string)$alerts['adapter']],$json."\n");
     if($code!==0){
@@ -135,7 +135,7 @@ health46Check($cc===0&&$co==='204','app:https-health',$checks);
 $free=@disk_free_space((string)$ctx['context']['tenant_root']); $total=@disk_total_space((string)$ctx['context']['tenant_root']);
 $diskOk=is_float($free)||is_int($free); $diskOk=$diskOk&&(is_float($total)||is_int($total))&&$total>0&&$free>=(int)$plan['health']['disk_minimum_free_bytes']&&(($free/$total)*100)>=(int)$plan['health']['disk_minimum_free_percent'];
 health46Check($diskOk,'disk:free-space',$checks);
-$status=['schema'=>2,'phase'=>'4.6-health','tenant_key'=>$plan['tenant_key'],'state'=>in_array('fail',$checks,true)?'down':'up','checked_at_utc'=>gmdate('Y-m-d\TH:i:s\Z'),'checks'=>$checks];
+$status=['schema'=>1,'phase'=>'4.6-health','tenant_key'=>$plan['tenant_key'],'state'=>in_array('fail',$checks,true)?'down':'up','checked_at_utc'=>gmdate('Y-m-d\TH:i:s\Z'),'checks'=>$checks];
 $alertFailed=false;
 if(isset($opt['alert'])){$delivery=health46Alert($plan,$status);$alertFailed=(bool)($delivery['failed']??false);unset($delivery['failed']);$status['alert_delivery']=$delivery;}
 else{$status['alert_delivery']=['enabled'=>monitoring46AlertsEnabled((array)$plan['alerts']),'status'=>'not_requested','reason'=>null,'error_code'=>null];}
