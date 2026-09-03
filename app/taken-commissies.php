@@ -7,7 +7,10 @@
 // gelezen om een reeds opgeslagen legacy koppeling begrijpelijk te tonen.
 //
 // taak.commissie_id is de ENIGE bron voor de primaire commissie van een
-// taak. groepen['relaties']['taken'] is het generieke many-to-many
+// taak. commissie_bron bewaart alleen provenance ('groep', 'legacy' of
+// 'historisch') zodat een oude legacy-sleutel die toevallig exact gelijk is
+// aan een nieuwe groep-ID niet stil van betekenis verandert.
+// groepen['relaties']['taken'] is het generieke many-to-many
 // groepsrelatiecontract en is bewust niet dezelfde relatie; delete/cascade
 // daarvan valt onder auditfinding #152.
 // ============================================================
@@ -56,12 +59,39 @@ function taakCommissieLegacyNamen(array $ledenData): array
     return $uit;
 }
 
-function taakCommissieContext(array $groepenDoc, array $ledenData, string $id): array
+function taakCommissieBron($bron): string
+{
+    $bron = trim((string) $bron);
+    return in_array($bron, ['groep', 'legacy', 'historisch'], true) ? $bron : '';
+}
+
+function taakCommissieContext(array $groepenDoc, array $ledenData, string $id, string $bron = ''): array
 {
     $id = groepenKort($id, 80);
+    $bron = taakCommissieBron($bron);
     if ($id === '') return ['id' => '', 'soort' => 'geen', 'label' => '', 'status' => ''];
 
     $groepen = taakCommissieGroepen($groepenDoc, true);
+    $legacy = taakCommissieLegacyNamen($ledenData);
+
+    if ($bron === 'legacy') {
+        $label = $legacy[$id] ?? ('Legacy commissie · ' . $id);
+        return ['id' => $id, 'soort' => 'legacy', 'label' => $label . ' (legacy-koppeling)', 'status' => 'historisch'];
+    }
+    if ($bron === 'historisch') {
+        $label = $legacy[$id] ?? ('Historische/onbekende commissie · ' . $id);
+        return ['id' => $id, 'soort' => 'historisch', 'label' => $label . ' (historische koppeling)', 'status' => 'historisch'];
+    }
+
+    if ($bron === '' && isset($groepen[$id]) && isset($legacy[$id])) {
+        return [
+            'id' => $id,
+            'soort' => 'ambigu',
+            'label' => $legacy[$id] . ' (ambigue legacy/groep-koppeling)',
+            'status' => 'historisch',
+        ];
+    }
+
     if (isset($groepen[$id])) {
         $groep = $groepen[$id];
         $status = (string) ($groep['status'] ?? 'actief');
@@ -71,33 +101,46 @@ function taakCommissieContext(array $groepenDoc, array $ledenData, string $id): 
         return ['id' => $id, 'soort' => 'groep', 'label' => $label, 'status' => $status];
     }
 
-    $legacy = taakCommissieLegacyNamen($ledenData);
     if (isset($legacy[$id])) {
         return ['id' => $id, 'soort' => 'legacy', 'label' => $legacy[$id] . ' (legacy-koppeling)', 'status' => 'historisch'];
     }
 
+    if ($bron === 'groep') {
+        return ['id' => $id, 'soort' => 'groep', 'label' => 'Historische groep · ' . $id, 'status' => 'historisch'];
+    }
     return ['id' => $id, 'soort' => 'onbekend', 'label' => 'Historische/onbekende commissie · ' . $id, 'status' => 'historisch'];
 }
 
 function taakCommissieValideerVoorOpslag(string $gevraagdId, ?array $bestaand, array $groepenDoc, array $ledenData): array
 {
-    $gevraagdId = groepenKort($gevraagdId, 80);
-    if ($gevraagdId === '') return ['geldig' => true, 'id' => '', 'reden' => ''];
+    $rauw = trim($gevraagdId);
+    $lengte = function_exists('mb_strlen') ? mb_strlen($rauw, 'UTF-8') : strlen($rauw);
+    if ($lengte > 80) return ['geldig' => false, 'id' => '', 'bron' => '', 'reden' => 'Commissie-id is ongeldig.'];
+    $gevraagdId = groepenKort($rauw, 80);
+    if ($gevraagdId === '') return ['geldig' => true, 'id' => '', 'bron' => '', 'reden' => ''];
 
-    // Iedere nieuwe/gewijzigde relatie moet naar een werkelijk persistente,
-    // actieve commissie-groep wijzen.
-    $actief = taakCommissieActieveKeuzes($groepenDoc);
-    if (isset($actief[$gevraagdId])) return ['geldig' => true, 'id' => $gevraagdId, 'reden' => ''];
-
-    // Historie mag bij een edit niet stil verdwijnen. Een bestaande relatie
-    // naar een gearchiveerde groep, legacy-id of onbekende historische id mag
-    // ongewijzigd blijven. Dat maakt een oude id NIET selecteerbaar voor een
-    // nieuwe taak of voor een andere taak.
+    // Een ongewijzigde bestaande relatie wordt eerst beoordeeld. Daardoor
+    // kan een pre-#151 legacy-id die exact gelijk is aan een huidige groep-ID
+    // nooit stil als groep worden geclaimd.
     $bestaandId = groepenKort($bestaand['commissie_id'] ?? '', 80);
     if ($bestaand !== null && $bestaandId !== '' && hash_equals($bestaandId, $gevraagdId)) {
-        $context = taakCommissieContext($groepenDoc, $ledenData, $bestaandId);
-        return ['geldig' => true, 'id' => $bestaandId, 'reden' => $context['soort']];
+        $bestaandBron = taakCommissieBron($bestaand['commissie_bron'] ?? '');
+        $context = taakCommissieContext($groepenDoc, $ledenData, $bestaandId, $bestaandBron);
+        $bron = $bestaandBron;
+        if ($bron === '') {
+            if ($context['soort'] === 'groep') $bron = 'groep';
+            elseif ($context['soort'] === 'legacy') $bron = 'legacy';
+            else $bron = 'historisch';
+        }
+        return ['geldig' => true, 'id' => $bestaandId, 'bron' => $bron, 'reden' => $context['soort']];
     }
 
-    return ['geldig' => false, 'id' => '', 'reden' => 'Commissie is niet actief of bestaat niet in het groepenmodel.'];
+    // Iedere nieuwe/gewijzigde relatie moet naar een werkelijk persistente,
+    // actieve commissie-groep wijzen. Dit is ook het gecontroleerde
+    // migratiepad voor een bestaande legacy-id: de gebruiker kiest expliciet
+    // de stabiele groep-ID.
+    $actief = taakCommissieActieveKeuzes($groepenDoc);
+    if (isset($actief[$gevraagdId])) return ['geldig' => true, 'id' => $gevraagdId, 'bron' => 'groep', 'reden' => ''];
+
+    return ['geldig' => false, 'id' => '', 'bron' => '', 'reden' => 'Commissie is niet actief of bestaat niet in het groepenmodel.'];
 }
