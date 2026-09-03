@@ -42,10 +42,11 @@ $gateway = [
     'github-deploy' => ['/usr/local/sbin/verenigingsplatform-github-deploy', 0755, true],
     'github-e2e' => ['/usr/local/sbin/verenigingsplatform-github-e2e', 0755, true],
     'github-e2e-sudoers' => ['/etc/sudoers.d/verenigingsplatform-github-e2e', 0440, false],
+    'github-sshd-policy' => ['/etc/ssh/sshd_config.d/00-verenigingsplatform-vst-deploy.conf', 0644, false],
 ];
-o135(count(array_intersect(array_keys($gateway), array_keys($byId))) === 4, 'alle vier GitHub/E2E gateway-artifacts zitten in hetzelfde contract');
+o135(count(array_intersect(array_keys($gateway), array_keys($byId))) === 5, 'alle vijf GitHub/E2E gateway-artifacts zitten in hetzelfde contract');
 o135(isset($byId['host-php']), '#157 host-launcher blijft in hetzelfde privileged hostcontract bewaakt');
-o135(count($tools) === 5, 'contract bevat vier gateway-artifacts plus de #157 host-launcher');
+o135(count($tools) === 6, 'contract bevat vijf gateway-artifacts plus de #157 host-launcher');
 
 foreach ($tools as $tool) {
     if (!is_array($tool)) { o135(false, 'contracttool is een array'); continue; }
@@ -72,6 +73,9 @@ o135(!privilegedOpsDefinitionValid($ongeldig), 'sudoersvertrouwen is uitsluitend
 $ongeldig = $byId['github-e2e-sudoers'] ?? [];
 $ongeldig['installed_path'] = '/etc/verenigingsplatform/verenigingsplatform-github-e2e';
 o135(!privilegedOpsDefinitionValid($ongeldig), 'contract accepteert geen brede /etc-directorytrust');
+$ongeldig = $byId['github-sshd-policy'] ?? [];
+$ongeldig['installed_path'] = '/etc/ssh/sshd_config.d/99-anders.conf';
+o135(!privilegedOpsDefinitionValid($ongeldig), 'sshd-policyvertrouwen is uitsluitend exact het #136 drop-inpad');
 $ongeldig = $byId['github-entry'] ?? [];
 $ongeldig['expected_mode'] = 0777;
 o135(!privilegedOpsDefinitionValid($ongeldig), 'contract weigert verruimde artifactrechten');
@@ -159,7 +163,7 @@ foreach ($tools as $tool) {
 }
 $published = ['schema'=>1,'status'=>'ok','tools'=>$publishedTools];
 $validated = privilegedOpsPublishedSnapshot($published);
-o135(($validated['status'] ?? '') === 'ok' && count($validated['tools'] ?? []) === 5, 'volledige root-gepubliceerde artifactset valideert als ok');
+o135(($validated['status'] ?? '') === 'ok' && count($validated['tools'] ?? []) === 6, 'volledige root-gepubliceerde artifactset valideert als ok');
 $missingPublished = $published;
 array_pop($missingPublished['tools']);
 o135((privilegedOpsPublishedSnapshot($missingPublished)['status'] ?? '') === 'unknown', 'root-snapshot die één artifact mist faalt als unknown');
