@@ -190,6 +190,21 @@ test('aanmeldformulier slaat exact één lokaal inboxrecord op en lekt geen PII 
   }
 });
 
+test('actuele tenantdata bevat geen dangling taak-, vergadering- of evenementrelaties', async ({page}, testInfo) => {
+  await login(page, '/beheer/', ADMIN);
+  const response = await page.goto(url('/beheer/data-integriteit.php'), {waitUntil:'domcontentloaded', timeout:45000});
+  expect(response, 'Geen HTTP-response voor data-integriteitscontrole').toBeTruthy();
+  expect(response.status(), `Data-integriteitscontrole gaf HTTP ${response.status()}`).toBe(200);
+  const status = page.locator('#data-integriteit-status');
+  await expect(status, 'Data-integriteitsstatus ontbreekt').toHaveCount(1);
+  await expect(status, 'Actuele tenantdata bevat dangling relaties').toHaveAttribute('data-dangling-total', '0');
+  await expect(status).toHaveAttribute('data-task-meeting', '0');
+  await expect(status).toHaveAttribute('data-group-task', '0');
+  await expect(status).toHaveAttribute('data-group-meeting', '0');
+  await expect(status).toHaveAttribute('data-group-event', '0');
+  await screenshot(page, testInfo, 'beheer-data-integriteit.png');
+});
+
 for (const viewport of [
   {name:'desktop', width:1440, height:1000},
   {name:'tablet', width:820, height:1180},
