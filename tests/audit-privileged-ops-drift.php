@@ -40,13 +40,14 @@ foreach ($tools as $tool) if (is_array($tool)) $byId[(string)($tool['id'] ?? '')
 $gateway = [
     'github-entry' => ['/usr/local/bin/verenigingsplatform-github-entry', 0755, true],
     'github-deploy' => ['/usr/local/sbin/verenigingsplatform-github-deploy', 0755, true],
+    'github-deploy-sudoers' => ['/etc/sudoers.d/verenigingsplatform-github-deploy', 0440, false],
     'github-e2e' => ['/usr/local/sbin/verenigingsplatform-github-e2e', 0755, true],
     'github-e2e-sudoers' => ['/etc/sudoers.d/verenigingsplatform-github-e2e', 0440, false],
     'github-sshd-policy' => ['/etc/ssh/sshd_config.d/00-verenigingsplatform-vst-deploy.conf', 0644, false],
 ];
-o135(count(array_intersect(array_keys($gateway), array_keys($byId))) === 5, 'alle vijf GitHub/E2E gateway-artifacts zitten in hetzelfde contract');
+o135(count(array_intersect(array_keys($gateway), array_keys($byId))) === 6, 'alle zes GitHub/E2E gateway-artifacts zitten in hetzelfde contract');
 o135(isset($byId['host-php']), '#157 host-launcher blijft in hetzelfde privileged hostcontract bewaakt');
-o135(count($tools) === 6, 'contract bevat vijf gateway-artifacts plus de #157 host-launcher');
+o135(count($tools) === 7, 'contract bevat zes gateway-artifacts plus de #157 host-launcher');
 
 foreach ($tools as $tool) {
     if (!is_array($tool)) { o135(false, 'contracttool is een array'); continue; }
@@ -67,6 +68,9 @@ foreach ($gateway as $id => [$pad, $mode, $executable]) {
 $ongeldig = $byId['github-entry'] ?? [];
 $ongeldig['installed_path'] = '/tmp/onveilig';
 o135(!privilegedOpsDefinitionValid($ongeldig), 'contract weigert installatiepad buiten de exacte allowlist');
+$ongeldig = $byId['github-deploy-sudoers'] ?? [];
+$ongeldig['installed_path'] = '/etc/sudoers.d/ander-deploy-bestand';
+o135(!privilegedOpsDefinitionValid($ongeldig), 'deploy-sudoersvertrouwen is uitsluitend exact /etc/sudoers.d/verenigingsplatform-github-deploy');
 $ongeldig = $byId['github-e2e-sudoers'] ?? [];
 $ongeldig['installed_path'] = '/etc/sudoers.d/ander-bestand';
 o135(!privilegedOpsDefinitionValid($ongeldig), 'sudoersvertrouwen is uitsluitend exact /etc/sudoers.d/verenigingsplatform-github-e2e');
@@ -163,7 +167,7 @@ foreach ($tools as $tool) {
 }
 $published = ['schema'=>1,'status'=>'ok','tools'=>$publishedTools];
 $validated = privilegedOpsPublishedSnapshot($published);
-o135(($validated['status'] ?? '') === 'ok' && count($validated['tools'] ?? []) === 6, 'volledige root-gepubliceerde artifactset valideert als ok');
+o135(($validated['status'] ?? '') === 'ok' && count($validated['tools'] ?? []) === 7, 'volledige root-gepubliceerde artifactset valideert als ok');
 $missingPublished = $published;
 array_pop($missingPublished['tools']);
 o135((privilegedOpsPublishedSnapshot($missingPublished)['status'] ?? '') === 'unknown', 'root-snapshot die één artifact mist faalt als unknown');
@@ -172,6 +176,7 @@ $tamperedPublished['tools'][0]['expected_sha256'] = str_repeat('0', 64);
 o135((privilegedOpsPublishedSnapshot($tamperedPublished)['status'] ?? '') === 'unknown', 'root-snapshot met verouderde/onjuiste contracthash faalt als unknown');
 
 $entryBron = (string)file_get_contents($root . '/ops/vps-test-deploy/verenigingsplatform-github-entry');
+$deploySudoersBron = (string)file_get_contents($root . '/ops/vps-test-deploy/verenigingsplatform-github-deploy.sudoers');
 $e2eBron = (string)file_get_contents($root . '/ops/vps-test-deploy/verenigingsplatform-github-e2e');
 $sudoersBron = (string)file_get_contents($root . '/ops/vps-test-deploy/verenigingsplatform-github-e2e.sudoers');
 $installer = (string)file_get_contents($root . '/bin/install-vps-authenticated-e2e-gateway.sh');
@@ -185,12 +190,19 @@ o135($regels === [
     'vst-deploy ALL=(root) NOPASSWD: /usr/local/sbin/verenigingsplatform-github-e2e apply',
     'vst-deploy ALL=(root) NOPASSWD: /usr/local/sbin/verenigingsplatform-github-e2e cleanup',
 ], 'sudoers laat uitsluitend exact check/apply/cleanup op de E2E-wrapper toe');
-o135(!str_contains($sudoersBron, '*') && !str_contains($sudoersBron, '/etc/') && !str_contains($sudoersBron, 'ALL=(ALL)'), 'sudoers bevat geen wildcard, /etc-padtrust of brede ALL-rootregel');
+o135(!str_contains($sudoersBron, '*') && !str_contains($sudoersBron, '/etc/') && !str_contains($sudoersBron, 'ALL=(ALL)'), 'E2E-sudoers bevat geen wildcard, /etc-padtrust of brede ALL-rootregel');
+o135(trim($deploySudoersBron) === 'vst-deploy ALL=(root) NOPASSWD: /usr/local/sbin/verenigingsplatform-github-deploy ^[0-9a-f]{40}$', '#137 deploy-sudoers bevat uitsluitend de geankerde lowercase 40-hex argumentregex');
+o135(!str_contains($deploySudoersBron, '*') && !str_contains($deploySudoersBron, 'ALL=(ALL)') && !str_contains($deploySudoersBron, '/etc/'), '#137 deploy-sudoers gebruikt geen argumentwildcard of bredere root/padtrust');
 o135(str_contains($installer, '/usr/sbin/visudo -cf "$tmp_sudoers"') && str_contains($installer, '/usr/sbin/visudo -cf /etc/sudoers'), 'installer valideert sudoerssyntax vóór en na installatie via visudo');
 if (is_executable('/usr/sbin/visudo')) {
-    $cmd = '/usr/sbin/visudo -cf ' . escapeshellarg($root . '/ops/vps-test-deploy/verenigingsplatform-github-e2e.sudoers') . ' 2>&1';
-    exec($cmd, $visudoOut, $visudoCode);
-    o135($visudoCode === 0, 'canonieke E2E-sudoers is rechtstreeks visudo-valideerbaar');
+    foreach ([
+        'verenigingsplatform-github-deploy.sudoers',
+        'verenigingsplatform-github-e2e.sudoers',
+    ] as $sudoersFile) {
+        $cmd = '/usr/sbin/visudo -cf ' . escapeshellarg($root . '/ops/vps-test-deploy/' . $sudoersFile) . ' 2>&1';
+        exec($cmd, $visudoOut, $visudoCode);
+        o135($visudoCode === 0, 'canonieke sudoers is rechtstreeks visudo-valideerbaar: ' . $sudoersFile);
+    }
 }
 
 $wrapper = (string)file_get_contents($root . '/bin/control-plane-integrity-wrapper.php');
