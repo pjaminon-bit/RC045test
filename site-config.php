@@ -8,6 +8,7 @@
 // ============================================================
 require_once __DIR__ . '/app/core/tenant-runtime.php';
 require_once __DIR__ . '/app/core/tenant-settings.php';
+require_once __DIR__ . '/app/core/csp-runtime.php';
 
 $config = [
     'vereniging' => [
@@ -119,18 +120,26 @@ if ($timezone !== '' && in_array($timezone, timezone_identifiers_list(), true)) 
 
 // Eén afdwingbare browserpolicy. Publieke formulieren blijven volledig
 // same-origin; persoonsgegevens gaan niet meer naar een externe formprovider.
+// Scripts mogen inline uitsluitend met de cryptografisch willekeurige nonce van
+// deze response. Eventattributen zijn daarnaast expliciet volledig geblokkeerd.
+$cspNonce = siteCspNonce();
 if (PHP_SAPI !== 'cli' && !headers_sent()) {
     $formAction = "'self'";
     $connectSrc = "'self' https://api.open-meteo.com";
     header(
         "Content-Security-Policy: default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; "
-        . "form-action {$formAction}; script-src 'self' 'unsafe-inline'; "
+        . "form-action {$formAction}; script-src 'self' 'nonce-{$cspNonce}'; script-src-attr 'none'; "
         . "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
         . "font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; "
         . "connect-src {$connectSrc}; media-src 'self' blob:; worker-src 'self' blob:; "
         . "frame-src https://www.openstreetmap.org; upgrade-insecure-requests"
     );
 }
+
+// Deze buffer start vóór alle bestaande tenant-/contentbuffers en is daardoor
+// de buitenste laag: hij ziet de uiteindelijke HTML-response nadat alle andere
+// server-side outputtransformaties klaar zijn.
+siteCspRuntimeStart();
 
 require_once __DIR__ . '/app/operational-log.php';
 vpOps46RegisterFatalLogger($config);
