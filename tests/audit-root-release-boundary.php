@@ -17,6 +17,7 @@ $monitorApply=(string)file_get_contents($root.'/bin/apply-vps-monitoring.php');
 $prepareControl=(string)file_get_contents($root.'/bin/prepare-vps-control-plane.php');
 $admin=(string)file_get_contents($root.'/app/deployment/control-plane-admin-executor.php');
 $launcher=(string)file_get_contents($root.'/ops/vps-test-deploy/verenigingsplatform-host-php');
+$integrityWrapper=(string)file_get_contents($root.'/bin/control-plane-integrity-wrapper.php');
 $installer=(string)file_get_contents($root.'/ops/vps-test-deploy/install-verenigingsplatform-host-engine');
 $migration=(string)file_get_contents($root.'/ops/vps-test-deploy/migrate-verenigingsplatform-root-boundary');
 $dropin=(string)file_get_contents($root.'/ops/vps-test-deploy/verenigingsplatform-control-plane-host-engine.conf');
@@ -44,7 +45,8 @@ c157(str_contains($monitorApply,'process521HostEngineRoot()')&&str_contains($mon
 c157(str_starts_with($launcher,"#!/usr/bin/bash\n")&&str_contains($launcher,"export PATH='/usr/sbin:/usr/bin:/sbin:/bin'"),'permanente host-launcher pint Bash en systeem-PATH');
 c157(str_contains($launcher,'sha256sum_bin')&&str_contains($launcher,'--check --quiet .host-engine-manifest.sha256'),'host-launcher verifieert volledige host-engine manifest vóór iedere uitvoer');
 c157(str_contains($launcher,'exec /usr/bin/env -i')&&str_contains($launcher,'VERENIGINGSPLATFORM_HOST_ENGINE_ROOT='),'host-launcher start met minimale schone environment en expliciete enginebinding');
-c157(str_contains($launcher,"health) script='bin/check-vps-health.php'")&&str_contains($launcher,"control-plane) script='bin/control-plane-executor.php'")&&str_contains($launcher,"release-apply) script='bin/apply-vps-release.php'"),'host-launcher heeft vaste privileged commandallowlist');
+c157(str_contains($launcher,"health) script='bin/check-vps-health.php'")&&str_contains($launcher,"control-plane) script='bin/control-plane-integrity-wrapper.php'")&&str_contains($launcher,"release-apply) script='bin/apply-vps-release.php'"),'host-launcher heeft vaste privileged commandallowlist inclusief root-owned integriteitswrapper');
+c157(str_contains($integrityWrapper,"$engineRoot . '/bin/control-plane-executor.php'")&&str_contains($integrityWrapper,'process521Run($cmd')&&!str_contains($integrityWrapper,'/srv/verenigingsplatform/current')&&!str_contains($integrityWrapper,'/srv/verenigingsplatform/releases/'),'integriteitswrapper start uitsluitend de executor uit dezelfde root-owned host-engine');
 c157(str_contains($installer,'status --porcelain=v1 --untracked-files=all')&&str_contains($installer,'rev-parse HEAD'),'host-engine installer vereist schone exact gebonden checkout');
 c157(str_starts_with($installer,"#!/usr/bin/bash\n")&&str_contains($installer,"export PATH='/usr/sbin:/usr/bin:/sbin:/bin'"),'host-engine installer pint Bash en systeem-PATH');
 c157(str_contains($installer,'-m 0444')&&str_contains($installer,'"$chmod_bin" 0555')&&str_contains($installer,'.host-engine-manifest.sha256'),'host-engine installer maakt files read-only, dirs immutable-intent en schrijft manifest');
