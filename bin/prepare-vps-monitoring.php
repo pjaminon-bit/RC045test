@@ -6,7 +6,8 @@ function prep46Stop(string $melding, int $code = 1): void { fwrite(STDERR, "FOUT
 function prep46Help(): void
 {
     echo "Gebruik:\n";
-    echo "  php bin/prepare-vps-monitoring.php --tls-plan=/srv/.../tls/tls-plan.json --database-plan=/srv/.../database/database-plan.json [--dry-run] [--force]\n";
+    echo "  php bin/prepare-vps-monitoring.php --tls-plan=/srv/.../tls/tls-plan.json --database-plan=/srv/.../database/database-plan.json [--alerts=enabled|disabled] [--dry-run] [--force]\n";
+    echo "Alerting staat standaard enabled; kies alleen expliciet disabled wanneer deze installatie bewust geen externe alert-adapter gebruikt.\n";
 }
 function prep46Write(string $pad, string $inhoud, int $mode, bool $force): string
 {
@@ -27,12 +28,14 @@ function prep46Write(string $pad, string $inhoud, int $mode, bool $force): strin
 foreach ($_SERVER['argv'] ?? [] as $arg) {
     if (preg_match('/^--(?:password|secret|token|key|dsn|webhook|email)(?:=|$)/i', (string)$arg) === 1) prep46Stop('Secrets/contactdata horen niet in fase-4.6 CLI-argumenten.');
 }
-$opt = getopt('', ['tls-plan:', 'database-plan:', 'dry-run', 'force', 'help']);
+$opt = getopt('', ['tls-plan:', 'database-plan:', 'alerts:', 'dry-run', 'force', 'help']);
 if (isset($opt['help'])) { prep46Help(); exit(0); }
 $tls = trim((string)($opt['tls-plan'] ?? ''));
 $db = trim((string)($opt['database-plan'] ?? ''));
 if ($tls === '' || $db === '') prep46Stop('--tls-plan en --database-plan zijn verplicht.');
-try { $context = monitoring46Context($tls, $db); $plan = monitoring46Plan($context); }
+$alerts = strtolower(trim((string)($opt['alerts'] ?? 'enabled')));
+if (!in_array($alerts, ['enabled', 'disabled'], true)) prep46Stop('--alerts accepteert alleen enabled of disabled.');
+try { $context = monitoring46Context($tls, $db); $plan = monitoring46Plan($context, $alerts === 'enabled'); }
 catch (Throwable $e) { prep46Stop($e->getMessage()); }
 if (isset($opt['dry-run'])) { echo monitoring46Json($plan); exit(0); }
 $out = (string)$plan['bundle']['output_dir'];
@@ -42,4 +45,4 @@ if (!is_dir($out) && !@mkdir($out, 0750, true) && !is_dir($out)) prep46Stop('Mon
 $force = isset($opt['force']);
 prep46Write((string)$plan['bundle']['plan_file'], monitoring46Json($plan), 0640, $force);
 foreach (monitoring46Artifacts($plan) as $pad => $inhoud) prep46Write((string)$pad, $inhoud, 0640, $force);
-echo 'OK  fase 4.6 monitoringbundle tenant=' . $plan['tenant_key'] . "\n";
+echo 'OK  fase 4.6 monitoringbundle tenant=' . $plan['tenant_key'] . ' alerts=' . ($plan['alerts']['enabled'] ? 'enabled' : 'disabled') . "\n";
