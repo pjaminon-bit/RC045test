@@ -191,8 +191,8 @@ o135($regels === [
     'vst-deploy ALL=(root) NOPASSWD: /usr/local/sbin/verenigingsplatform-github-e2e cleanup',
 ], 'sudoers laat uitsluitend exact check/apply/cleanup op de E2E-wrapper toe');
 o135(!str_contains($sudoersBron, '*') && !str_contains($sudoersBron, '/etc/') && !str_contains($sudoersBron, 'ALL=(ALL)'), 'E2E-sudoers bevat geen wildcard, /etc-padtrust of brede ALL-rootregel');
-o135(trim($deploySudoersBron) === 'vst-deploy ALL=(root) NOPASSWD: /usr/local/sbin/verenigingsplatform-github-deploy ^[0-9a-f]{40}$', '#137 deploy-sudoers bevat uitsluitend de geankerde lowercase 40-hex argumentregex');
-o135(!str_contains($deploySudoersBron, '*') && !str_contains($deploySudoersBron, 'ALL=(ALL)') && !str_contains($deploySudoersBron, '/etc/'), '#137 deploy-sudoers gebruikt geen argumentwildcard of bredere root/padtrust');
+o135(trim($deploySudoersBron) === 'vst-deploy ALL=(root) NOPASSWD: /usr/local/sbin/verenigingsplatform-github-deploy ""', '#137 deploy-sudoers staat de rootwrapper uitsluitend zonder argv-argumenten toe');
+o135(!str_contains($deploySudoersBron, '*') && !str_contains($deploySudoersBron, '?') && !str_contains($deploySudoersBron, '^[0-9') && !str_contains($deploySudoersBron, 'ALL=(ALL)') && !str_contains($deploySudoersBron, '/etc/'), '#137 deploy-sudoers gebruikt geen wildcard, regex of bredere root/padtrust');
 o135(str_contains($installer, '/usr/sbin/visudo -cf "$tmp_sudoers"') && str_contains($installer, '/usr/sbin/visudo -cf /etc/sudoers'), 'installer valideert sudoerssyntax vóór en na installatie via visudo');
 if (is_executable('/usr/sbin/visudo')) {
     foreach ([
