@@ -113,10 +113,13 @@ try {
         $status = privilegedOpsMeasureFile($fixture, $hash, $uid, $gid, $mode, !$expectedExecutable);
         o135(($status['status'] ?? '') === 'unsafe' && ($status['reason'] ?? '') === 'metadata', $id . ': executable-bit/eigenschap afwijking wordt gedetecteerd');
 
+        chmod($fixture, 0600);
         file_put_contents($fixture, $inhoud . "drift\n");
+        chmod($fixture, $mode);
         clearstatcache(true, $fixture);
         $status = privilegedOpsMeasureFile($fixture, $hash, $uid, $gid, $mode, $expectedExecutable);
         o135(($status['status'] ?? '') === 'drift' && ($status['reason'] ?? '') === 'hash_mismatch', $id . ': verkeerde hash/content wordt gedetecteerd');
+        chmod($fixture, 0600);
         file_put_contents($fixture, $inhoud);
         chmod($fixture, $mode);
         clearstatcache(true, $fixture);
