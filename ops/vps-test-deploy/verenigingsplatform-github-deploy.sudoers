@@ -1,0 +1,1 @@
+vst-deploy ALL=(root) NOPASSWD: /usr/local/sbin/verenigingsplatform-github-deploy ^[0-9a-f]{40}$
