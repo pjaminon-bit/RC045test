@@ -53,12 +53,28 @@ if ($pad === null && $scope === 'sponsors' && $devSponsorRoute) {
 }
 if ($pad === null) publicAssetHttpFout(404);
 
-$grootte = @filesize($pad);
-$mtime = @filemtime($pad);
-if ($grootte === false || $grootte < 0) publicAssetHttpFout(404);
-$grootte = (int) $grootte;
-$mtime = $mtime === false ? 0 : (int) $mtime;
-$etag = '"' . dechex($mtime) . '-' . dechex($grootte) . '"';
+// Open eenmaal en gebruik dezelfde filehandle voor validator én responsebody.
+// Daarmee blijft de sterke ETag inhoudsgebonden, ook wanneer het pad tijdens
+// een request atomair door een nieuwe upload wordt vervangen.
+$handle = @fopen($pad, 'rb');
+if ($handle === false) publicAssetHttpFout(404);
+$stat = @fstat($handle);
+$grootte = is_array($stat) && isset($stat['size']) ? (int) $stat['size'] : -1;
+if ($grootte < 0) {
+    fclose($handle);
+    publicAssetHttpFout(404);
+}
+$hashContext = hash_init('sha256');
+$hashBytes = @hash_update_stream($hashContext, $handle);
+if ($hashBytes !== $grootte) {
+    fclose($handle);
+    publicAssetHttpFout(404);
+}
+$etag = '"sha256-' . hash_final($hashContext) . '"';
+if (!rewind($handle)) {
+    fclose($handle);
+    publicAssetHttpFout(404);
+}
 
 header('Content-Type: ' . $mime);
 header('X-Content-Type-Options: nosniff');
@@ -70,6 +86,7 @@ header('Content-Disposition: inline; filename="' . basename($pad) . '"');
 
 $ifNoneMatch = trim((string) ($_SERVER['HTTP_IF_NONE_MATCH'] ?? ''));
 if ($ifNoneMatch !== '' && hash_equals($etag, $ifNoneMatch)) {
+    fclose($handle);
     http_response_code(304);
     exit;
 }
@@ -80,6 +97,7 @@ $status = 200;
 $range = trim((string) ($_SERVER['HTTP_RANGE'] ?? ''));
 if ($range !== '') {
     if ($grootte === 0 || preg_match('/^bytes=(\d*)-(\d*)$/D', $range, $m) !== 1 || ($m[1] === '' && $m[2] === '')) {
+        fclose($handle);
         header('Content-Range: bytes */' . $grootte);
         http_response_code(416);
         exit;
@@ -88,6 +106,7 @@ if ($range !== '') {
     if ($m[1] === '') {
         $suffix = (int) $m[2];
         if ($suffix < 1) {
+            fclose($handle);
             header('Content-Range: bytes */' . $grootte);
             http_response_code(416);
             exit;
@@ -98,6 +117,7 @@ if ($range !== '') {
         $start = (int) $m[1];
         $einde = $m[2] === '' ? ($grootte - 1) : (int) $m[2];
         if ($start >= $grootte || $einde < $start) {
+            fclose($handle);
             header('Content-Range: bytes */' . $grootte);
             http_response_code(416);
             exit;
@@ -113,10 +133,11 @@ if ($status === 206) {
     header('Content-Range: bytes ' . $start . '-' . $einde . '/' . $grootte);
 }
 header('Content-Length: ' . $lengte);
-if ($methode === 'HEAD' || $lengte === 0) exit;
+if ($methode === 'HEAD' || $lengte === 0) {
+    fclose($handle);
+    exit;
+}
 
-$handle = @fopen($pad, 'rb');
-if ($handle === false) publicAssetHttpFout(404);
 if ($start > 0 && fseek($handle, $start) !== 0) {
     fclose($handle);
     publicAssetHttpFout(404);
