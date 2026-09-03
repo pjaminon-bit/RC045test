@@ -49,21 +49,26 @@ De entrypoint accepteert uitsluitend `SSH_ORIGINAL_COMMAND` in de vorm `deploy <
 
 ### 3. Minimale sudo-regel
 
-Maak `/etc/sudoers.d/verenigingsplatform-github-deploy` met:
+Installeer de canonieke policy `ops/vps-test-deploy/verenigingsplatform-github-deploy.sudoers` als `/etc/sudoers.d/verenigingsplatform-github-deploy`:
 
 ```text
-vst-deploy ALL=(root) NOPASSWD: /usr/local/sbin/verenigingsplatform-github-deploy *
+vst-deploy ALL=(root) NOPASSWD: /usr/local/sbin/verenigingsplatform-github-deploy ^[0-9a-f]{40}$
 ```
 
-Daarna:
+De argumentbeperking is bewust een **geankerde POSIX extended regular expression**, geen sudoers-glob. Argumentregex wordt door sudo ondersteund vanaf 1.9.10. Shell-style sudoers-wildcards zijn hier ongeschikt omdat commandoregelargumenten als één samengevoegde string worden gematcht en `*` daarbij ook whitespace kan matchen; een glob zou daardoor meerdere argumenten kunnen omvatten.
+
+Controleer op de doelhost eerst de daadwerkelijk geïnstalleerde sudo/sudoers-versie en valideer de policy vóór installatie én de volledige sudoersconfiguratie erna:
 
 ```bash
-sudo chown root:root /etc/sudoers.d/verenigingsplatform-github-deploy
-sudo chmod 0440 /etc/sudoers.d/verenigingsplatform-github-deploy
-sudo visudo -cf /etc/sudoers.d/verenigingsplatform-github-deploy
+sudo --version
+sudo visudo -cf ops/vps-test-deploy/verenigingsplatform-github-deploy.sudoers
+sudo install -o root -g root -m 0440 \
+  ops/vps-test-deploy/verenigingsplatform-github-deploy.sudoers \
+  /etc/sudoers.d/verenigingsplatform-github-deploy
+sudo visudo -cf /etc/sudoers
 ```
 
-De wildcard geeft niet vrij toegang tot andere programma's: alleen deze root-owned wrapper kan via sudo worden gestart en de wrapper accepteert exact één 40-hex commitargument. De SSH-key zelf wordt bovendien door een forced command beperkt.
+De policy laat uitsluitend de root-owned deploywrapper toe wanneer de complete argumentstring exact één lowercase 40-hex SHA is. Lege, korte/lange, uppercase/non-hex en whitespace/meerdere-argumentvarianten matchen niet. De rootwrapper blijft daarnaast onafhankelijk exact één lowercase 40-hex argument eisen en bindt de SHA daarna nog aan de actuele `main`-tip.
 
 ### 4. Deploy-key genereren
 
@@ -211,7 +216,8 @@ Daarna kan `VPS_TEST_AUTH_E2E_ENABLED=true` worden gezet. Tot dat moment blijft 
 - geen dynamische hosttrust via `ssh-keyscan`;
 - deploy alleen na groene bronvalidatie op `main`;
 - handmatige deploy alleen vanaf `main`;
-- exacte 40-hex commitbinding;
+- sudoers autoriseert de deploywrapper alleen voor exact één lowercase 40-hex argumentstring;
+- de rootwrapper valideert die 40-hex binding onafhankelijk opnieuw en eist daarna de actuele `main`-tip;
 - candidate checkout moet schoon zijn;
 - privileged releasehandelingen gebruiken de reeds actieve vertrouwde release-tooling;
 - fase-4.7 blijft verantwoordelijk voor immutable staging, atomische switch, health en rollback.
