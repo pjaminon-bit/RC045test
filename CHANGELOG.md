@@ -2,6 +2,31 @@
 
 Belangrijke platformwijzigingen en acceptatiemijlpalen worden hier chronologisch vastgelegd. Historische technische details blijven daarnaast beschikbaar in `docs/migratie-log/` en de fasegerichte documentatie.
 
+## 2026-08-30 — Fase 5.13 plaintext masterfallback verwijderd
+
+### Hash-only masterauthenticatie
+
+- issue #62 is opgelost via PR #111;
+- masterlogin accepteert uitsluitend een geldige `BEHEER_WACHTWOORD_HASH` en verifieert uitsluitend met `password_verify`;
+- een niet-lege legacy `$BEHEER_WACHTWOORD` maakt de runtimeconfig fail-closed ongeldig;
+- voor standalone-installaties is `bin/migrate-standalone-master-hash.php` toegevoegd als begrensde eenmalige migrator;
+- de migrator accepteert geen wachtwoord op de commandline, weigert symlinks en ambigue/berekende/conditionele assignments en laat na succesvolle migratie geen plaintext rollbackbestand achter;
+- regressietest `tests/phase513-standalone-master-hash.php` eindigde met **20/20 controles groen**;
+- de volledige bronregressie op de PR eindigde met **79 PHP-tests groen**;
+- Security supply-chain, Validate RC045test, PHP 8.5 compatibility en Full regression acceptance waren op PR #111 groen.
+
+### Live VPS-testbewijs
+
+- gemergede en gevalideerde `main`-release: `fa0388ccf5f5cc30a2f6e0ca3b77e68973ea13e4`;
+- Validate RC045test run **#686**, `33309983232`, volledig succesvol inclusief `verify-vps-current`;
+- VPS-test deploy run **#40**, `33310038992`, volledig succesvol met private Tailscale/SSH-route, immutable release-activatie en publieke smoke test;
+- automatische authenticated E2E job `99253348491` volledig succesvol, inclusief ephemeral fixture-aanmaak, beheer- en ledenportaalacceptatie en cleanup;
+- post-deploy Full regression acceptance **#368**, run `33310087494`, `completed/success`;
+- source-regression job `99253441174`, live-security job `99253520891` en live-browser job `99253520907` alle drie groen;
+- issue #62 is na deze volledige live bewijs-keten gesloten als `completed`.
+
+Daarmee is de legacy plaintext mastercredential uit het runtime-authenticatiepad verwijderd en is de hash-only grens zowel in bronregressies als op de actuele VPS-testrelease bewezen.
+
 ## 2026-08-30 — Fase 5.10/5.11 authenticated VPS-testacceptatie groen
 
 ### Ephemeral authenticated E2E
