@@ -1,6 +1,7 @@
 <?php
 if (PHP_SAPI !== 'cli') { http_response_code(403); exit('Alleen via CLI beschikbaar.'); }
 require_once dirname(__DIR__) . '/app/deployment/monitoring-contract.php';
+require_once dirname(__DIR__) . '/app/deployment/monitoring-alert.php';
 require_once dirname(__DIR__) . '/app/deployment/process-runner.php';
 
 function health46Stop(string $m, int $c = 1): void { fwrite(STDERR, "FOUT: {$m}\n"); exit($c); }
@@ -61,25 +62,51 @@ function health46CertBinnenEigenLineage(string $pad): bool
     $real=realpath($pad); if($real===false) return false;
     return str_starts_with($real,'/etc/letsencrypt/archive/'.$certName.'/');
 }
-function health46Alert(array $plan, array $status): void
+function health46AlertOudeState(string $statePad): array
 {
-    $statePad=(string)$plan['alerts']['state_file']; health46SafeDir(dirname($statePad));
-    $oud=[]; if(is_file($statePad)&&!is_link($statePad)){ $r=@file_get_contents($statePad); $j=is_string($r)?json_decode($r,true):null; if(is_array($j))$oud=$j; }
-    $nu=(string)$status['state']; $vorig=(string)($oud['state']??'unknown'); $laatst=(int)($oud['last_alert_epoch']??0); $epoch=time();
-    $stuur=$vorig!==$nu || ($nu==='down' && $epoch-$laatst >= (int)$plan['alerts']['reminder_seconds']);
-    $nieuw=['state'=>$nu,'last_alert_epoch'=>$stuur?$epoch:$laatst,'updated_at_utc'=>gmdate('Y-m-d\TH:i:s\Z',$epoch)];
-    if($stuur){
-        $adapter=(string)$plan['alerts']['adapter'];
-        if(is_file($adapter)&&!is_link($adapter)){
-            $st=@stat($adapter); $mode=is_array($st)?((int)$st['mode']&0777):-1;
-            if(!is_array($st)||(int)$st['uid']!==0||($mode&0022)!==0||!is_executable($adapter)||!str_starts_with($adapter,'/')) health46Stop('Alert-adapter bestaat maar is niet veilig root-owned/absoluut/executable.');
-            $payload=['schema'=>1,'tenant_key'=>$plan['tenant_key'],'state'=>$nu,'previous_state'=>$vorig,'checked_at_utc'=>$status['checked_at_utc'],'failed_checks'=>array_keys(array_filter($status['checks'],static fn($v)=>$v==='fail'))];
-            $json=json_encode($payload,JSON_UNESCAPED_SLASHES);if(!is_string($json))health46Stop('Alert-payload kon niet veilig worden opgebouwd.');
-            [$code,,$err]=health46Run([$adapter],$json."\n");
-            if($code!==0) health46Stop('Alert-adapter meldde een fout'.($err!==''?': '.trim($err):'.'));
-        }
+    if(!is_file($statePad)||is_link($statePad))return[];
+    $raw=@file_get_contents($statePad);if(!is_string($raw))return[];
+    $json=json_decode($raw,true);return is_array($json)?$json:[];
+}
+function health46AlertSamenvatting(array $state): array
+{
+    $delivery=is_array($state['delivery']??null)?$state['delivery']:[];
+    return[
+        'enabled'=>(bool)($delivery['enabled']??false),
+        'status'=>(string)($delivery['status']??'unknown'),
+        'reason'=>$delivery['reason']??null,
+        'error_code'=>$delivery['error_code']??null,
+    ];
+}
+function health46Alert(array $plan, array $status): array
+{
+    $alerts=(array)$plan['alerts'];$statePad=(string)$alerts['state_file'];health46SafeDir(dirname($statePad));
+    $oud=health46AlertOudeState($statePad);$nu=(string)$status['state'];$epoch=time();$beslissing=monitoring46AlertBeslissing($alerts,$oud,$nu,$epoch);
+
+    if(!$beslissing['enabled']){
+        $nieuw=monitoring46AlertNieuweState($oud,$nu,$epoch,$beslissing,'disabled');health46AtomicJson($statePad,$nieuw);
+        return health46AlertSamenvatting($nieuw)+['failed'=>false];
     }
-    health46AtomicJson($statePad,$nieuw);
+    if(!$beslissing['send']){
+        $nieuw=monitoring46AlertNieuweState($oud,$nu,$epoch,$beslissing,'idle');health46AtomicJson($statePad,$nieuw);
+        return health46AlertSamenvatting($nieuw)+['failed'=>false];
+    }
+
+    $adapterFout=monitoring46AlertAdapterFout($alerts);
+    if($adapterFout!==null){
+        $nieuw=monitoring46AlertNieuweState($oud,$nu,$epoch,$beslissing,'pending',$adapterFout);health46AtomicJson($statePad,$nieuw);
+        return health46AlertSamenvatting($nieuw)+['failed'=>true];
+    }
+
+    $payload=['schema'=>2,'tenant_key'=>$plan['tenant_key'],'state'=>$nu,'previous_state'=>$beslissing['previous_delivered_state'],'reason'=>$beslissing['reason'],'checked_at_utc'=>$status['checked_at_utc'],'failed_checks'=>array_keys(array_filter($status['checks'],static fn($v)=>$v==='fail'))];
+    $json=json_encode($payload,JSON_UNESCAPED_SLASHES);if(!is_string($json))health46Stop('Alert-payload kon niet veilig worden opgebouwd.');
+    [$code]=health46Run([(string)$alerts['adapter']],$json."\n");
+    if($code!==0){
+        $nieuw=monitoring46AlertNieuweState($oud,$nu,$epoch,$beslissing,'pending','adapter_exit');health46AtomicJson($statePad,$nieuw);
+        return health46AlertSamenvatting($nieuw)+['failed'=>true];
+    }
+    $nieuw=monitoring46AlertNieuweState($oud,$nu,$epoch,$beslissing,'delivered');health46AtomicJson($statePad,$nieuw);
+    return health46AlertSamenvatting($nieuw)+['failed'=>false];
 }
 
 foreach($_SERVER['argv']??[]as$arg){if(preg_match('/^--(?:password|secret|token|key|dsn|webhook)(?:=|$)/i',(string)$arg)===1)health46Stop('Secrets horen niet in health CLI-argumenten.');}
@@ -108,8 +135,11 @@ health46Check($cc===0&&$co==='204','app:https-health',$checks);
 $free=@disk_free_space((string)$ctx['context']['tenant_root']); $total=@disk_total_space((string)$ctx['context']['tenant_root']);
 $diskOk=is_float($free)||is_int($free); $diskOk=$diskOk&&(is_float($total)||is_int($total))&&$total>0&&$free>=(int)$plan['health']['disk_minimum_free_bytes']&&(($free/$total)*100)>=(int)$plan['health']['disk_minimum_free_percent'];
 health46Check($diskOk,'disk:free-space',$checks);
-$status=['schema'=>1,'phase'=>'4.6-health','tenant_key'=>$plan['tenant_key'],'state'=>in_array('fail',$checks,true)?'down':'up','checked_at_utc'=>gmdate('Y-m-d\TH:i:s\Z'),'checks'=>$checks];
+$status=['schema'=>2,'phase'=>'4.6-health','tenant_key'=>$plan['tenant_key'],'state'=>in_array('fail',$checks,true)?'down':'up','checked_at_utc'=>gmdate('Y-m-d\TH:i:s\Z'),'checks'=>$checks];
+$alertFailed=false;
+if(isset($opt['alert'])){$delivery=health46Alert($plan,$status);$alertFailed=(bool)($delivery['failed']??false);unset($delivery['failed']);$status['alert_delivery']=$delivery;}
+else{$status['alert_delivery']=['enabled'=>monitoring46AlertsEnabled((array)$plan['alerts']),'status'=>'not_requested','reason'=>null,'error_code'=>null];}
 if(isset($opt['write-status'])){health46SafeDir(dirname((string)$plan['logging']['health_status']));health46AtomicJson((string)$plan['logging']['health_status'],$status);}
-if(isset($opt['alert']))health46Alert($plan,$status);
-echo strtoupper($status['state']).'  tenant='.$plan['tenant_key'].' checks='.count($checks)."\n";
+echo strtoupper($status['state']).'  tenant='.$plan['tenant_key'].' checks='.count($checks).' alert='.$status['alert_delivery']['status']."\n";
+if($alertFailed)exit(3);
 exit($status['state']==='up'?0:2);
