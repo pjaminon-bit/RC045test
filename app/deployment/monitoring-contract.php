@@ -30,7 +30,7 @@ function monitoring46Context(string $tlsPlanPad, string $databasePlanPad): array
 }
 function monitoring46OutputDir(string $tenantRoot):string{$pad=runtime41NormPad($tenantRoot.'/monitoring');if(!runtime41Binnen($pad,$tenantRoot)||$pad===runtime41NormPad($tenantRoot))throw new RuntimeException('Monitoringbundle valt niet veilig binnen de tenantroot.');$link=runtime41SymlinkInPad($pad);if($link!==null)throw new RuntimeException("Monitoringbundle mag geen symlink bevatten: {$link}");return$pad;}
 function monitoring46HostLauncher():string{return'/usr/local/sbin/verenigingsplatform-host-php';}
-function monitoring46Plan(array $c):array
+function monitoring46Plan(array $c, bool $alertsEnabled=true):array
 {
     $tenant=$c['tenant_key'];$output=monitoring46OutputDir($c['tenant_root']);$php=$c['php_version'];if(!runtime41PhpVersie($php))throw new RuntimeException('Monitoring vereist een geldige runtime PHP-versie.');
     $service='verenigingsplatform-health-'.$tenant.'.service';$timer='verenigingsplatform-health-'.$tenant.'.timer';$privateMonitoring=$c['private_root'].'/monitoring';
@@ -42,7 +42,7 @@ function monitoring46Plan(array $c):array
       'database'=>['database'=>$c['database'],'user'=>$c['database_user'],'peer_only'=>true],
       'certificate'=>['fullchain'=>$c['certificate_fullchain'],'private_key'=>$c['certificate_privkey']],
       'logging'=>['root'=>'/var/log/verenigingsplatform','apache_access'=>'/var/log/verenigingsplatform/apache-access.log','apache_error'=>'/var/log/verenigingsplatform/apache-error.log','fpm_journal_unit'=>'php'.$php.'-fpm.service','app_dir'=>$privateMonitoring,'app_operations'=>$privateMonitoring.'/operations.jsonl','health_status'=>'/var/lib/verenigingsplatform/monitoring/'.$tenant.'-health.json','retention_days'=>14,'apache_access_excludes_ip'=>true,'apache_access_excludes_path'=>true,'apache_access_excludes_query'=>true,'apache_access_excludes_user_agent'=>true,'apache_access_excludes_referrer'=>true,'apache_access_excludes_auth_and_cookies'=>true],
-      'alerts'=>['adapter'=>'/etc/verenigingsplatform/monitoring/alert-command','adapter_must_be_root_owned'=>true,'adapter_must_not_be_group_or_world_writable'=>true,'payload_via_stdin'=>true,'secret_in_plan_forbidden'=>true,'reminder_seconds'=>3600,'state_file'=>'/var/lib/verenigingsplatform/monitoring/'.$tenant.'-alert.json','alert_on_failure_transition'=>true,'alert_on_recovery_transition'=>true],
+      'alerts'=>['enabled'=>$alertsEnabled,'adapter'=>'/etc/verenigingsplatform/monitoring/alert-command','adapter_must_be_root_owned'=>true,'adapter_must_not_be_group_or_world_writable'=>true,'payload_via_stdin'=>true,'secret_in_plan_forbidden'=>true,'reminder_seconds'=>3600,'state_file'=>'/var/lib/verenigingsplatform/monitoring/'.$tenant.'-alert.json','alert_on_failure_transition'=>true,'alert_on_recovery_transition'=>true],
       'systemd'=>['service_filename'=>$service,'timer_filename'=>$timer,'unit_dir'=>'/etc/systemd/system','host_launcher'=>monitoring46HostLauncher()],
       'apache'=>['config_available'=>'/etc/apache2/conf-available/90-verenigingsplatform-monitoring.conf','config_enabled'=>'/etc/apache2/conf-enabled/90-verenigingsplatform-monitoring.conf','control_binary'=>'/usr/sbin/apache2ctl'],
       'logrotate'=>['global_file'=>'/etc/logrotate.d/verenigingsplatform-apache','tenant_file'=>'/etc/logrotate.d/verenigingsplatform-'.$tenant],
@@ -60,8 +60,11 @@ function monitoring46Artifacts(array $p):array{return[$p['bundle']['apache_confi
 function monitoring46PlanLeesEnValideer(string $pad):array
 {
  $pad=runtime41BestaandPad($pad,'monitoring-plan.json');$raw=@file_get_contents($pad);if(!is_string($raw))throw new RuntimeException('monitoring-plan.json kon niet worden gelezen.');try{$p=json_decode($raw,true,512,JSON_THROW_ON_ERROR);}catch(JsonException$e){throw new RuntimeException('monitoring-plan.json bevat ongeldige JSON.');}
- if(!is_array($p)||(int)($p['schema']??0)!==1||($p['phase']??'')!=='4.6')throw new RuntimeException('monitoring-plan.json heeft een onbekend schema/fase.');$c=monitoring46Context((string)($p['source']['tls_plan_file']??''),(string)($p['source']['database_plan_file']??''));$verwacht=monitoring46Plan($c);
+ if(!is_array($p)||(int)($p['schema']??0)!==1||($p['phase']??'')!=='4.6')throw new RuntimeException('monitoring-plan.json heeft een onbekend schema/fase.');
+ $alerts=(array)($p['alerts']??[]);$legacy=!array_key_exists('enabled',$alerts);if(!$legacy&&!is_bool($alerts['enabled']))throw new RuntimeException('monitoring-plan.json alerts.enabled moet boolean zijn.');$alertsEnabled=$legacy?true:(bool)$alerts['enabled'];
+ $c=monitoring46Context((string)($p['source']['tls_plan_file']??''),(string)($p['source']['database_plan_file']??''));$verwacht=monitoring46Plan($c,$alertsEnabled);if($legacy)unset($verwacht['alerts']['enabled']);
  if(!hash_equals(monitoring46Json($verwacht),monitoring46Json($p)))throw new RuntimeException('monitoring-plan.json wijkt af van het actuele 4.4/4.5/runtimecontract.');if(!hash_equals(runtime41NormPad(dirname($pad)),runtime41NormPad($p['bundle']['output_dir'])))throw new RuntimeException('monitoring-plan.json staat niet in de vaste tenant monitoringbundle.');
  foreach(monitoring46Artifacts($p)as$f=>$inh){$real=runtime41BestaandPad($f,'monitoringartifact');$h=@file_get_contents($real);if(!is_string($h)||!hash_equals(hash('sha256',$inh),hash('sha256',$h)))throw new RuntimeException('Monitoringartifact wijkt af van monitoring-plan.json.');}
+ if($legacy)$p['alerts']['enabled']=true;
  return['path'=>$pad,'sha256'=>hash('sha256',$raw),'plan'=>$p,'context'=>$c];
 }
