@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
-
-origineel="${SSH_ORIGINAL_COMMAND:-}"
-if [[ ! "$origineel" =~ ^deploy[[:space:]]+([0-9a-f]{40})$ ]]; then
-  echo 'Alleen deploy <40-hex-commit> is toegestaan.' >&2
-  exit 64
+command="${SSH_ORIGINAL_COMMAND:-}"
+if [[ "$command" =~ ^deploy[[:space:]]+([0-9a-f]{40})$ ]]; then
+  exec /usr/bin/sudo -n /usr/local/sbin/verenigingsplatform-github-deploy "${BASH_REMATCH[1]}"
 fi
-
-commit="${BASH_REMATCH[1]}"
-exec /usr/bin/sudo -n /usr/local/sbin/verenigingsplatform-github-deploy "$commit"
+case "$command" in
+  'e2e check') exec /usr/bin/sudo -n /usr/local/sbin/verenigingsplatform-github-e2e check ;;
+  'e2e apply') exec /usr/bin/sudo -n /usr/local/sbin/verenigingsplatform-github-e2e apply ;;
+  'e2e cleanup') exec /usr/bin/sudo -n /usr/local/sbin/verenigingsplatform-github-e2e cleanup ;;
+esac
+echo 'Alleen deploy <40-hex-commit> of e2e check|apply|cleanup is toegestaan.' >&2
+exit 64
