@@ -49,29 +49,79 @@ function otaakZichtbaarheden() {
   ];
 }
 
-// Aantal dagen dat bij elke frequentie hoort, om de volgende uitvoerdatum
-// mee te berekenen. 'naar_behoefte' staat er bewust niet in: die heeft
-// geen vaste volgende datum.
-function otaakFrequentieDagen() {
+// Alleen dagelijks en wekelijks zijn vaste datumstappen. Kalenderfrequenties
+// blijven bewust gekoppeld aan kalendermaanden in plaats van dagenaantallen.
+function otaakVasteDagFrequenties() {
   return [
-    'dagelijks'     => 1,
-    'wekelijks'     => 7,
-    'maandelijks'   => 30,
-    'per_kwartaal'  => 91,
-    'halfjaarlijks' => 182,
-    'jaarlijks'     => 365,
+    'dagelijks' => 1,
+    'wekelijks' => 7,
   ];
 }
 
-// Volgende uitvoerdatum (ISO) op basis van de frequentie, vanaf een
-// gegeven datum (ISO, meestal vandaag). Lege string als de frequentie
-// geen vaste datum kent of ongeldig is.
-function otaakVolgendeUitvoering($frequentie, $vanafIso) {
-  $dagen = otaakFrequentieDagen();
-  if (!isset($dagen[$frequentie])) return '';
-  $tijd = strtotime((string) $vanafIso);
-  if ($tijd === false) return '';
-  return date('Y-m-d', strtotime('+' . $dagen[$frequentie] . ' days', $tijd));
+function otaakKalenderFrequentieMaanden() {
+  return [
+    'maandelijks'   => 1,
+    'per_kwartaal'  => 3,
+    'halfjaarlijks' => 6,
+    'jaarlijks'     => 12,
+  ];
+}
+
+function otaakIsoDatumDelen($iso) {
+  $iso = trim((string) $iso);
+  if (!preg_match('/^(\d{4})-(\d{2})-(\d{2})$/D', $iso, $m)) return null;
+  $jaar = (int) $m[1];
+  $maand = (int) $m[2];
+  $dag = (int) $m[3];
+  if (!checkdate($maand, $dag, $jaar)) return null;
+  return [$jaar, $maand, $dag];
+}
+
+// Volgende uitvoerdatum (ISO) op basis van een kalenderdatum. Dagelijks en
+// wekelijks gebruiken vaste datumstappen; maand/kwartaal/halfjaar/jaar voegen
+// echte kalendermaanden toe. Het anker bewaart de oorspronkelijke dag van de
+// maand: 31 januari -> laatste dag februari -> 31 maart, dus geen permanente
+// drift door een korte doelmaand. Datumrekenen gebeurt in UTC op date-only
+// waarden zodat server-timezone en DST geen invloed hebben.
+function otaakVolgendeUitvoering($frequentie, $vanafIso, $kalenderAnkerDag = null) {
+  $frequentie = (string) $frequentie;
+  $vanafIso = trim((string) $vanafIso);
+  $frequenties = otaakFrequenties();
+  if (!array_key_exists($frequentie, $frequenties)) {
+    throw new InvalidArgumentException('Ongeldige frequentie voor operationele taak.');
+  }
+  if ($frequentie === 'naar_behoefte') return '';
+
+  $delen = otaakIsoDatumDelen($vanafIso);
+  if ($delen === null) throw new InvalidArgumentException('Ongeldige uitvoerdatum voor operationele taak.');
+
+  $vasteDagen = otaakVasteDagFrequenties();
+  if (isset($vasteDagen[$frequentie])) {
+    $datum = DateTimeImmutable::createFromFormat('!Y-m-d', $vanafIso, new DateTimeZone('UTC'));
+    if ($datum === false) throw new InvalidArgumentException('Ongeldige uitvoerdatum voor operationele taak.');
+    return $datum->modify('+' . $vasteDagen[$frequentie] . ' days')->format('Y-m-d');
+  }
+
+  $kalenderMaanden = otaakKalenderFrequentieMaanden();
+  if (!isset($kalenderMaanden[$frequentie])) {
+    throw new InvalidArgumentException('Ongeldige kalenderfrequentie voor operationele taak.');
+  }
+
+  $ankerDag = $kalenderAnkerDag === null ? $delen[2] : (int) $kalenderAnkerDag;
+  if ($ankerDag < 1 || $ankerDag > 31) {
+    throw new InvalidArgumentException('Ongeldig kalenderanker voor operationele taak.');
+  }
+
+  [$jaar, $maand] = $delen;
+  $maandIndex = ($jaar * 12) + ($maand - 1) + $kalenderMaanden[$frequentie];
+  $doelJaar = intdiv($maandIndex, 12);
+  $doelMaand = ($maandIndex % 12) + 1;
+  $doelDag = $ankerDag;
+  while ($doelDag > 1 && !checkdate($doelMaand, $doelDag, $doelJaar)) $doelDag--;
+  if (!checkdate($doelMaand, $doelDag, $doelJaar)) {
+    throw new InvalidArgumentException('Kalenderdatum kon niet veilig worden berekend.');
+  }
+  return sprintf('%04d-%02d-%02d', $doelJaar, $doelMaand, $doelDag);
 }
 
 // ===== Lezen en schrijven =====
@@ -171,17 +221,58 @@ function otakenGesorteerd($data) {
   return $lijst;
 }
 
+function otaakKalenderAnkerDagVoorUitvoering($t, $uitgevoerdOp) {
+  if (array_key_exists('kalender_anker_dag', $t)) {
+    $anker = $t['kalender_anker_dag'];
+    if (!is_int($anker) && !(is_string($anker) && preg_match('/^\d{1,2}$/D', $anker))) {
+      throw new InvalidArgumentException('Ongeldig opgeslagen kalenderanker voor operationele taak.');
+    }
+    $anker = (int) $anker;
+    if ($anker < 1 || $anker > 31) {
+      throw new InvalidArgumentException('Ongeldig opgeslagen kalenderanker voor operationele taak.');
+    }
+    return $anker;
+  }
+
+  // Bestaande records hebben nog geen ankermetadata. Gebruik conservatief de
+  // vorige echte uitvoering als anker wanneer die geldig is; anders de eerste
+  // uitvoering na de upgrade. Historie en bestaande volgende datum blijven
+  // onaangeraakt totdat de taak opnieuw wordt uitgevoerd.
+  $vorige = otaakIsoDatumDelen($t['laatst_uitgevoerd'] ?? '');
+  if ($vorige !== null) return $vorige[2];
+  $huidige = otaakIsoDatumDelen($uitgevoerdOp);
+  if ($huidige === null) throw new InvalidArgumentException('Ongeldige uitvoerdatum voor operationele taak.');
+  return $huidige[2];
+}
+
 // Een taak afmelden: logt de uitvoering en berekent (indien van toepassing)
 // meteen de volgende datum. Geschiedenis blijft beperkt tot de laatste 20
 // regels, nieuwste eerst, anders groeit het bestand ongelimiteerd door.
-function otaakMarkeerUitgevoerd($t, $door) {
-  $vandaag = date('Y-m-d');
+// De optionele datumparameter is uitsluitend voor deterministische tests en
+// interne callers; de beheeractie laat hem weg en gebruikt dus vandaag.
+function otaakMarkeerUitgevoerd($t, $door, $uitgevoerdOp = null) {
+  $frequentie = (string) ($t['frequentie'] ?? '');
+  if (!array_key_exists($frequentie, otaakFrequenties())) {
+    throw new InvalidArgumentException('Ongeldige frequentie voor operationele taak.');
+  }
+
+  $vandaag = $uitgevoerdOp === null ? date('Y-m-d') : trim((string) $uitgevoerdOp);
+  if (otaakIsoDatumDelen($vandaag) === null) {
+    throw new InvalidArgumentException('Ongeldige uitvoerdatum voor operationele taak.');
+  }
+
+  $ankerDag = null;
+  if (array_key_exists($frequentie, otaakKalenderFrequentieMaanden())) {
+    $ankerDag = otaakKalenderAnkerDagVoorUitvoering($t, $vandaag);
+    $t['kalender_anker_dag'] = $ankerDag;
+  }
+
   if (!isset($t['geschiedenis']) || !is_array($t['geschiedenis'])) $t['geschiedenis'] = [];
   array_unshift($t['geschiedenis'], ['datum' => $vandaag, 'door' => $door]);
   $t['geschiedenis'] = array_slice($t['geschiedenis'], 0, 20);
   $t['laatst_uitgevoerd'] = $vandaag;
   $t['laatst_uitgevoerd_door'] = $door;
-  $t['volgende_uitvoering'] = otaakVolgendeUitvoering($t['frequentie'] ?? '', $vandaag);
+  $t['volgende_uitvoering'] = otaakVolgendeUitvoering($frequentie, $vandaag, $ankerDag);
   $t['gewijzigd'] = date('c');
   return $t;
 }
@@ -212,10 +303,18 @@ function otaakNormaliseer($invoer, $bestaand = null) {
   }
 
   $frequenties = otaakFrequenties();
-  if (array_key_exists('frequentie', $invoer) && isset($frequenties[$invoer['frequentie']])) {
-    $t['frequentie'] = $invoer['frequentie'];
-  } elseif (!isset($t['frequentie']) || !isset($frequenties[$t['frequentie']])) {
+  if (array_key_exists('frequentie', $invoer)) {
+    $nieuw = (string) $invoer['frequentie'];
+    if (!array_key_exists($nieuw, $frequenties)) {
+      throw new InvalidArgumentException('Ongeldige frequentie voor operationele taak.');
+    }
+    $oud = isset($t['frequentie']) ? (string) $t['frequentie'] : null;
+    $t['frequentie'] = $nieuw;
+    if ($oud !== null && $oud !== $nieuw) unset($t['kalender_anker_dag']);
+  } elseif (!isset($t['frequentie'])) {
     $t['frequentie'] = 'maandelijks';
+  } elseif (!array_key_exists((string) $t['frequentie'], $frequenties)) {
+    throw new InvalidArgumentException('Bestaande operationele taak heeft een ongeldige frequentie.');
   }
 
   $zichtbaarheden = otaakZichtbaarheden();
