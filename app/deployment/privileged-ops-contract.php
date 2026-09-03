@@ -55,11 +55,11 @@ function privilegedOpsStructuralDefinitions(): array
 function privilegedOpsContract(): array
 {
     $hashes = [
-        'github-entry' => '48bdaaa5e9cd3a23987b3dd996c641a9a16f278a64623fbf1108cb4c237e5324',
+        'github-entry' => '48bdaaa5e9cd3a23987b3dd996c641a9a16f278a64623c7ba279f7988fd2b8b',
         'github-deploy' => 'b51529d46bc65088c180caa0fba85b13328b44f653d5aa897287883862d0f12f',
         'github-e2e' => 'a416e4cb44a680f20c9bf924ddde2cefec49f715ea542c7c706b4d46db46e32e',
         'github-e2e-sudoers' => '4e74398220aeef8c1307ef8931e726a6e375c911ef4fb6f813673a470199f59d',
-        'host-php' => '5abae478c0088f8961191b3622305af87f387eb82181ff19cd9994180e27baec',
+        'host-php' => '2c796b58fd10e47093099d7d3b5a5b74f0b0f0ff9224930aa598e11fc0ff42a0',
     ];
 
     $tools = [];
