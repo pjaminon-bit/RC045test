@@ -12,12 +12,15 @@
 //   verzoek toegang;
 // - na een rechten- of wachtwoordwijziging kan de bestaande sessie worden
 //   ingetrokken door sessie_versie in beheer-users.json te verhogen;
-// - een externe tenant accepteert nooit een beheeraccount zonder expliciet
-//   tabs-array. Zolang legacy beheerpagina's authRechten() gebruiken is dit
-//   veld de fail-closed brug tussen capability- en tabautorisatie.
+// - beheerpagina's worden server-side tegen hetzelfde centrale
+//   capabilitycontract gecontroleerd als de beheer-shell;
+// - beheerrequests vereisen minimaal een geldig capabilities- of tabs-profiel;
+// - externe tenants behouden tijdens de autorisatiemigratie de bestaande,
+//   strengere eis van een expliciet legacy-tabprofiel.
 // ============================================================
 
 require_once __DIR__ . '/auth-session-tenant.php';
+require_once __DIR__ . '/auth-beheer-guard.php';
 
 $authSessionTenantKey = authSessionTenantSleutel($authSiteConfig ?? []);
 $authSessionInstallatieBinding = (string)($authPaden['session_binding'] ?? '');
@@ -35,7 +38,14 @@ if (!$authSessionTenantOk) {
     return;
 }
 
-if (!$ingelogd || $isMaster) {
+if (!$ingelogd) {
+    return;
+}
+
+$authBeheerContract = authBeheerRouteContract();
+
+if ($isMaster) {
+    authBeheerEndpointHandhaaf($authBeheerContract);
     return;
 }
 
@@ -60,12 +70,12 @@ if (!$accountActief) {
     return;
 }
 
-// Op een externe tenant mag de oude standalone-terugval "geen tabs-array =
-// brede toegang" nooit gelden. Ook een capabilities-only record is voorlopig
-// onvoldoende: oudere beheerpagina's lezen nog rechtstreeks het tabs-profiel.
-$heeftExplicietTabprofiel = array_key_exists('tabs', $sessionAccount)
-    && is_array($sessionAccount['tabs']);
-if (!empty($authPaden['tenant_private']) && !$heeftExplicietTabprofiel) {
+$heeftExplicietTabprofiel = array_key_exists('tabs', $sessionAccount) && is_array($sessionAccount['tabs']);
+$heeftGeldigRechtenprofiel = authBeheerRechtenprofielGeldig($sessionAccount);
+$beheerRequest = $authBeheerContract !== null;
+$mistVereistProfiel = (!empty($authPaden['tenant_private']) && !$heeftExplicietTabprofiel)
+    || ($beheerRequest && !$heeftGeldigRechtenprofiel);
+if ($mistVereistProfiel) {
     unset($_SESSION['gebruiker'], $_SESSION['is_master'], $_SESSION['user_session_version']);
     $ingelogd = false;
     $huidigeGebruiker = '';
@@ -85,4 +95,7 @@ if ((int)$_SESSION['user_session_version'] !== $actueleVersie) {
     $huidigeGebruiker = '';
     $isMaster = false;
     $inlogFout = 'Je sessie is beëindigd. Log opnieuw in.';
+    return;
 }
+
+authBeheerEndpointHandhaaf($authBeheerContract);
