@@ -151,15 +151,25 @@ function evenementIsVol($e) {
   return evenementAantalDeelnemers($e) >= $capaciteit;
 }
 
-// Staat de inschrijving op dit moment open? Los van vol of niet, dat is een
-// aparte vraag. Geen einddatum ingevuld betekent: open tot het evenement
-// geweest is.
-function evenementInschrijvingOpen($e) {
-  if (!evenementZichtbaarVoorLeden($e)) return false;
+// De inschrijfperiode staat los van zichtbaarheid en capaciteit. Dat is
+// nodig omdat een bestaande deelnemer zijn deelname na de deadline nog mag
+// intrekken, terwijl nieuwe inschrijvingen gesloten blijven. Bestuursleden
+// kunnen bovendien een bestuursevenement zien zonder dat die zichtbaarheid
+// de inschrijfdata mag omzeilen.
+function evenementInschrijfperiodeOpen($e) {
   if (evenementStatus($e) !== 'aankomend') return false;
+  $vandaag = date('Y-m-d');
+  $begin = trim((string) ($e['inschrijving_begin'] ?? ''));
+  if ($begin !== '' && $begin > $vandaag) return false;
   $eind = trim((string) ($e['inschrijving_eind'] ?? ''));
-  if ($eind !== '' && $eind < date('Y-m-d')) return false;
+  if ($eind !== '' && $eind < $vandaag) return false;
   return true;
+}
+
+// Staat een nieuwe inschrijving voor een gewoon lid op dit moment open?
+// Capaciteit blijft bewust een aparte vraag.
+function evenementInschrijvingOpen($e) {
+  return evenementZichtbaarVoorLeden($e) && evenementInschrijfperiodeOpen($e);
 }
 
 // Is dit lid ingeschreven?
@@ -167,6 +177,32 @@ function evenementHeeftDeelnemer($e, $lidId) {
   $lidId = trim((string) $lidId);
   if ($lidId === '') return false;
   return in_array($lidId, is_array($e['deelnemers'] ?? null) ? $e['deelnemers'] : [], true);
+}
+
+// Eén centraal deelnamecontract voor UI en services. Een bestaand deelnemer
+// mag een toekomstig, toegankelijk evenement altijd verlaten, ook na de
+// inschrijfdeadline of wanneer de capaciteit inmiddels is bereikt. Een
+// nieuwe deelname vereist daarnaast een open inschrijfperiode en capaciteit.
+// Afgelopen of niet-toegankelijke evenementen krijgen nooit een actie.
+function evenementDeelnameMogelijkheden($e, $lidId, $toegankelijk = true) {
+  $toegankelijk = (bool) $toegankelijk;
+  $ingeschreven = evenementHeeftDeelnemer($e, $lidId);
+  $aankomend = evenementStatus($e) === 'aankomend';
+  $periodeOpen = evenementInschrijfperiodeOpen($e);
+  $vol = evenementIsVol($e);
+  $actie = '';
+  if ($toegankelijk && $aankomend) {
+    if ($ingeschreven) $actie = 'uitschrijven';
+    elseif ($periodeOpen && !$vol) $actie = 'inschrijven';
+  }
+  return [
+    'toegankelijk' => $toegankelijk,
+    'ingeschreven' => $ingeschreven,
+    'aankomend' => $aankomend,
+    'inschrijfperiode_open' => $periodeOpen,
+    'vol' => $vol,
+    'actie' => $actie,
+  ];
 }
 
 // ===== Zelf in- en uitschrijven =====
@@ -208,23 +244,28 @@ function evenementDeelnameWijzigen($evenementId, $lidId, $aanmelden, &$fout = nu
     }
 
     $e = $data['evenementen'][$index];
-    if (!evenementZichtbaarVoorLeden($e)) {
+    $mogelijk = evenementDeelnameMogelijkheden($e, $lidId, evenementZichtbaarVoorLeden($e));
+    if (!$mogelijk['toegankelijk']) {
       $fout = 'Dit evenement is niet voor jou beschikbaar.';
       return false;
     }
-    if (!evenementInschrijvingOpen($e)) {
-      $fout = 'De inschrijving voor dit evenement is gesloten.';
+    if (!$mogelijk['aankomend']) {
+      $fout = 'Dit evenement is al afgelopen.';
       return false;
     }
 
-    $stondIngeschreven = evenementHeeftDeelnemer($e, $lidId);
+    $stondIngeschreven = $mogelijk['ingeschreven'];
     if ($aanmelden && $stondIngeschreven) return true;  // al goed, niets te doen
     if (!$aanmelden && !$stondIngeschreven) return true;
 
     if ($aanmelden) {
+      if (!$mogelijk['inschrijfperiode_open']) {
+        $fout = 'De inschrijving voor dit evenement is gesloten.';
+        return false;
+      }
       // Pas hier controleren, met het bestand onder de lock: tussen het
       // tonen van de pagina en deze klik kan de laatste plek weg zijn.
-      if (evenementIsVol($e)) {
+      if ($mogelijk['vol']) {
         $fout = 'Dit evenement zit vol.';
         return false;
       }
