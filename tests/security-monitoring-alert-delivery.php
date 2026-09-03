@@ -63,11 +63,11 @@ $health=(string)file_get_contents($root.'/bin/check-vps-health.php');
 $apply=(string)file_get_contents($root.'/bin/apply-vps-monitoring.php');
 $prepare=(string)file_get_contents($root.'/bin/prepare-vps-monitoring.php');
 $contract=(string)file_get_contents($root.'/app/deployment/monitoring-contract.php');
-c154(str_contains($health,"'pending',$adapterFout")&&str_contains($health,"'pending','adapter_exit'")&&str_contains($health,"if($alertFailed)exit(3)"),'runtime bewaart delivery failure als pending en faalt observably');
-c154(str_contains($health,"$status['alert_delivery']")&&strpos($health,"health46Alert($plan,$status)")<strpos($health,"health46AtomicJson((string)$plan['logging']['health_status'],$status)"),'healthstatus bevat afzonderlijke alert-deliverystatus na deliverypoging');
-c154(str_contains($apply,'monitoring46AlertAdapterFout((array)$p[\'alerts\'])')&&strpos($apply,'monitoring46AlertAdapterFout((array)$p[\'alerts\'])')<strpos($apply,"apply46SafeDir('/var/log/verenigingsplatform'"),'provisioning valideert enabled adapter vóór monitoringmutaties');
+c154(str_contains($health,"monitoring46AlertNieuweState(\$oud,\$nu,\$epoch,\$beslissing,'pending',\$adapterFout)")&&str_contains($health,"'pending','adapter_exit'")&&str_contains($health,'if($alertFailed)exit(3)'),'runtime bewaart delivery failure als pending en faalt observably');
+c154(str_contains($health,"\$status['alert_delivery']")&&strpos($health,'health46Alert($plan,$status)')<strpos($health,"health46AtomicJson((string)\$plan['logging']['health_status'],\$status)"),'healthstatus bevat afzonderlijke alert-deliverystatus na deliverypoging');
+c154(str_contains($apply,"monitoring46AlertAdapterFout((array)\$p['alerts'])")&&strpos($apply,"monitoring46AlertAdapterFout((array)\$p['alerts'])")<strpos($apply,"apply46SafeDir('/var/log/verenigingsplatform'"),'provisioning valideert enabled adapter vóór monitoringmutaties');
 c154(str_contains($apply,"'--probe','--write-status','--alert'")&&strpos($apply,"'--probe','--write-status','--alert'")<strpos($apply,"'enable','--now'"),'eerste provisioningprobe bewijst health én delivery vóór timeractivatie');
-c154(str_contains($prepare,"'alerts:'")&&str_contains($prepare,"['enabled', 'disabled']")&&str_contains($contract,"'enabled'=>$alertsEnabled"),'monitoringconfig heeft expliciete enabled/disabled alertmodus');
-c154(str_contains($contract,'$legacy=!array_key_exists(\'enabled\',$alerts)')&&str_contains($contract,"if($legacy)$p['alerts']['enabled']=true"),'bestaande schema-1 monitoringplannen migreren compatibel als fail-closed enabled');
+c154(str_contains($prepare,"'alerts:'")&&str_contains($prepare,"['enabled', 'disabled']")&&str_contains($contract,"'enabled'=>\$alertsEnabled"),'monitoringconfig heeft expliciete enabled/disabled alertmodus');
+c154(str_contains($contract,"\$legacy=!array_key_exists('enabled',\$alerts)")&&str_contains($contract,"if(\$legacy)\$p['alerts']['enabled']=true"),'bestaande schema-1 monitoringplannen migreren compatibel als fail-closed enabled');
 
 echo"Issue #154 monitoring alert delivery: {$ok} OK, {$fout} fout(en)\n";exit($fout===0?0:1);
