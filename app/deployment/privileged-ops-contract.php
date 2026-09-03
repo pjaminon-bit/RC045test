@@ -39,6 +39,16 @@ function privilegedOpsStructuralDefinitions(): array
             'expected_mode' => 0440,
             'expected_executable' => false,
         ],
+        // #136: server-side SSH-policy blijft onderdeel van hetzelfde exacte
+        // GitHub/E2E gatewaycontract en mag niet buiten driftbewaking vallen.
+        'github-sshd-policy' => [
+            'source_path' => 'ops/vps-test-deploy/00-verenigingsplatform-vst-deploy.conf',
+            'installed_path' => '/etc/ssh/sshd_config.d/00-verenigingsplatform-vst-deploy.conf',
+            'expected_uid' => 0,
+            'expected_gid' => 0,
+            'expected_mode' => 0644,
+            'expected_executable' => false,
+        ],
         // #157 root/release trust-boundary: deze launcher blijft onderdeel van
         // hetzelfde immutable hostcontract en mag door #135 niet verdwijnen.
         'host-php' => [
@@ -59,6 +69,7 @@ function privilegedOpsContract(): array
         'github-deploy' => 'b51529d46bc65088c180caa0fba85b13328b44f653d5aa897287883862d0f12f',
         'github-e2e' => 'a416e4cb44a680f20c9bf924ddde2cefec49f715ea542c7c706b4d46db46e32e',
         'github-e2e-sudoers' => '4e74398220aeef8c1307ef8931e726a6e375c911ef4fb6f813673a470199f59d',
+        'github-sshd-policy' => '58764f1f024a1b21ab582e71f083125d04900c5aa884fb5382cb3e4f98a14cc7',
         'host-php' => '2c796b58fd10e47093099d7d3b5a5b74f0b0f0ff9224930aa598e11fc0ff42a0',
     ];
 
