@@ -82,11 +82,18 @@ c58(
     'forced SSH entrypoint accepteert uitsluitend exact deploy + drie vaste E2E-acties'
 );
 c58(
-    str_contains($entry,'/usr/bin/sudo -n /usr/local/sbin/verenigingsplatform-github-deploy "${BASH_REMATCH[1]}"')
+    str_contains($entry,'printf \'%s\\n\' "${BASH_REMATCH[1]}" | /usr/bin/sudo -n /usr/local/sbin/verenigingsplatform-github-deploy')
+    && !str_contains($entry,'/usr/local/sbin/verenigingsplatform-github-deploy "${BASH_REMATCH[1]}"')
     && substr_count($entry,'/usr/bin/sudo -n /usr/local/sbin/verenigingsplatform-github-e2e ') === 3
     && !str_contains($entry,'eval ')
     && !str_contains($entry,'bash -c'),
-    'entrypoint kan uitsluitend vaste root-wrappers met gevalideerde deploycommit of exacte E2E-actie starten'
+    'entrypoint start uitsluitend vaste root-wrappers en transporteert de gevalideerde deploycommit alleen via stdin'
+);
+c58(
+    str_contains($wrapper,'if [[ "$#" -ne 0 ]]')
+    && str_contains($wrapper,'data=sys.stdin.buffer.read(42)')
+    && str_contains($wrapper,'re.fullmatch(rb"[0-9a-f]{40}\\n", data)'),
+    'root-wrapper accepteert geen argv en valideert exact één lowercase 40-hex stdinregel'
 );
 c58(str_contains($wrapper,"repo='https://github.com/pjaminon-bit/RC045test.git'")&&str_contains($wrapper,'rev-parse HEAD'),'root-wrapper bindt staging aan vaste repo en exacte Git-commit');
 c58(str_contains($wrapper,"host_launcher='/usr/local/sbin/verenigingsplatform-host-php'")&&str_contains($wrapper,'"$host_launcher" release-prepare')&&str_contains($wrapper,'"$host_launcher" release-apply --plan="$plan" --check')&&str_contains($wrapper,'"$host_launcher" release-apply --plan="$plan" --deploy'),'root-wrapper gebruikt uitsluitend de root-owned host-engine voor privileged releaseprepare/apply');

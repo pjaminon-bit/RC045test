@@ -6,12 +6,21 @@ if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
   echo 'Deze deploywrapper moet als root draaien.' >&2
   exit 77
 fi
-if [[ "$#" -ne 1 || ! "$1" =~ ^[0-9a-f]{40}$ ]]; then
-  echo 'Gebruik: verenigingsplatform-github-deploy <40-hex-commit>' >&2
+if [[ "$#" -ne 0 ]]; then
+  echo 'Gebruik: verenigingsplatform-github-deploy < SHA via stdin' >&2
   exit 64
 fi
 
-commit="$1"
+python='/usr/bin/python3'
+commit="$("$python" -c 'import re,sys
+data=sys.stdin.buffer.read(42)
+if len(data) != 41 or re.fullmatch(rb"[0-9a-f]{40}\n", data) is None:
+    raise SystemExit(64)
+sys.stdout.write(data[:40].decode("ascii"))')" || {
+  echo 'Ongeldige deploy-SHA op stdin; exact één lowercase 40-hex regel vereist.' >&2
+  exit 64
+}
+
 repo='https://github.com/pjaminon-bit/RC045test.git'
 platform_root='/srv/verenigingsplatform'
 tenant_base='/srv/verenigingen'
@@ -28,7 +37,7 @@ grep_bin='/usr/bin/grep'
 stat_bin='/usr/bin/stat'
 systemctl='/usr/bin/systemctl'
 
-for exe in "$php" "$git" "$install" "$mktemp" "$rm" "$readlink_bin" "$grep_bin" "$stat_bin" "$systemctl" "$host_launcher"; do
+for exe in "$python" "$php" "$git" "$install" "$mktemp" "$rm" "$readlink_bin" "$grep_bin" "$stat_bin" "$systemctl" "$host_launcher"; do
   [[ -x "$exe" ]] || { echo "Vereiste executable ontbreekt: $exe" >&2; exit 69; }
 done
 [[ -d "$platform_root" && -L "$platform_root/current" ]] || { echo 'Actieve immutable platformrelease ontbreekt.' >&2; exit 69; }
