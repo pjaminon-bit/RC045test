@@ -138,7 +138,7 @@ try {
     $legacyBron = (string)file_get_contents($root . '/evenementen-opslag.php');
     c116(str_contains($uiBron, 'portaalEvenementDeelnameMogelijkheden($e,$lid)') && !str_contains($uiBron, 'evenementInschrijvingOpen($e)||$ingeschreven'), 'UI gebruikt centrale deelnamepolicy in plaats van eigen deadlinevoorwaarde');
     c116(str_contains($serviceBron, 'portaalEvenementDeelnameMogelijkheden($e,$lid)') && str_contains($serviceBron, 'portaalActiefLidVoorDeelname'), 'service gebruikt dezelfde policy en valideert actuele lidbinding');
-    c116(str_contains($legacyBron, 'evenementDeelnameMogelijkheden($e, $lidId, evenementZichtbaarVoorLeden($e))') && str_contains($legacyBron, "if (!$mogelijk['inschrijfperiode_open'])"), 'legacy helper onderscheidt uitschrijven van nieuwe inschrijving');
+    c116(str_contains($legacyBron, 'evenementDeelnameMogelijkheden($e, $lidId, evenementZichtbaarVoorLeden($e))') && str_contains($legacyBron, "if (!\$mogelijk['inschrijfperiode_open'])"), 'legacy helper onderscheidt uitschrijven van nieuwe inschrijving');
 } finally {
     putenv('VERENIGING_CONFIG_FILE');
     wis116($tmp);
