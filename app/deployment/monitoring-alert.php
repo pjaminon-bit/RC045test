@@ -78,6 +78,15 @@ function monitoring46AlertBeslissing(array $alerts, array $oud, string $huidig, 
     if (!$enabled) {
         return ['enabled'=>false,'send'=>false,'reason'=>null,'previous_delivered_state'=>$laatstAfgeleverd,'last_alert_epoch'=>$laatsteEpoch];
     }
+
+    // Als een eerdere transition/reminder pending bleef en de healthstate
+    // intussen weer veranderde, moet ook die nieuwe transition aantoonbaar
+    // afgeleverd worden. Anders kan een volledige outage+recovery stil blijven.
+    $vorigeDelivery = is_array($oud['delivery'] ?? null) ? $oud['delivery'] : [];
+    $pendingState = (($vorigeDelivery['status'] ?? '') === 'pending' && in_array(($oud['state'] ?? ''), ['up','down'], true)) ? (string)$oud['state'] : null;
+    if ($pendingState !== null && $pendingState !== $huidig) {
+        return ['enabled'=>true,'send'=>true,'reason'=>$huidig === 'down' ? 'failure_transition' : 'recovery_transition','previous_delivered_state'=>$laatstAfgeleverd,'last_alert_epoch'=>$laatsteEpoch];
+    }
     if ($laatstAfgeleverd !== $huidig) {
         return ['enabled'=>true,'send'=>true,'reason'=>$huidig === 'down' ? 'failure_transition' : 'recovery_transition','previous_delivered_state'=>$laatstAfgeleverd,'last_alert_epoch'=>$laatsteEpoch];
     }
