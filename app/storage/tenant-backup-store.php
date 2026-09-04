@@ -295,7 +295,7 @@ function tenantBackupLeesArray(string $sleutel, string $bestandsnaam, ?string &$
             $fout = 'Legacy back-up is niet cryptografisch geauthenticeerd en kan na activatie niet worden hersteld.';
             return null;
         }
-        if (!backupAttestatieVerifieerData($realPad, tenantBackupTenantKey(), $sleutel)) {
+        if (!backupAttestatieVerifieerDataRaw($realPad, $raw, tenantBackupTenantKey(), $sleutel)) {
             $fout = 'Cryptografische authenticatie van de back-up is ongeldig of ontbreekt.';
             return null;
         }
@@ -525,6 +525,11 @@ function tenantBackupHerstelAssetSnapshot(string $scope, string $naam, ?string &
 
     // Eerst de gekozen restorebron veiligstellen; daarna mag pruning optreden.
     if (!tenantBackupKopieerMap($payload, $stage)) { tenantBackupVerwijderMap($stage); $fout='Assetsnapshot kon niet naar staging worden gekopieerd.'; return false; }
+    if (backupAttestatieActief() && !backupAttestatieVerifieerAssetStaging(dirname($payload), $stage, tenantBackupTenantKey(), $scope)) {
+        tenantBackupVerwijderMap($stage);
+        $fout='Cryptografische authenticatie van de gestagede assetsnapshot is ongeldig; herstel is vóór mutatie afgebroken.';
+        return false;
+    }
 
     $hadDoel = is_dir($doel);
     if ($hadDoel) {
