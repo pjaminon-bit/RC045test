@@ -91,14 +91,16 @@ spvCheck(
 $siteConfig = spvBron($root . '/site-config.php');
 spvCheck(
     str_contains($siteConfig, "default-src 'self'")
-    && str_contains($siteConfig, "script-src 'self' 'unsafe-inline'")
+    && str_contains($siteConfig, 'script-src \'self\' \'nonce-{$cspNonce}\'')
+    && str_contains($siteConfig, "script-src-attr 'none'")
+    && !str_contains($siteConfig, "script-src 'self' 'unsafe-inline'")
     && str_contains($siteConfig, "object-src 'none'")
     && str_contains($siteConfig, "frame-ancestors 'none'"),
-    'PHP-responses krijgen een afdwingbare basis-CSP zonder externe scriptorigin'
+    'PHP-responses krijgen een afdwingbare nonce-CSP zonder brede inline scriptrechten'
 );
 spvCheck(
     str_contains($siteConfig, 'frame-src https://www.openstreetmap.org')
-    && !str_contains($siteConfig, "script-src 'self' 'unsafe-inline' https://www.openstreetmap.org"),
+    && substr_count($siteConfig, 'https://www.openstreetmap.org') === 1,
     'OpenStreetMap is uitsluitend als frame toegestaan en krijgt geen scriptrechten'
 );
 spvCheck(
