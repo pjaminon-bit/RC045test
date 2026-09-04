@@ -30,6 +30,7 @@ putenv('VERENIGING_BACKUP_ATTESTATION_TEST_PUBLIC_KEY=' . $pubPath);
 putenv('VERENIGING_BACKUP_ATTESTATION_TEST_SOCKET=' . $tmp . '/missing-attestor.sock');
 
 require_once $root . '/app/storage/tenant-backup-store.php';
+require_once $root . '/app/storage/private-store-prewrite.php';
 
 function attestBA(array $statement, $privateKey, string $publicPem): array
 {
