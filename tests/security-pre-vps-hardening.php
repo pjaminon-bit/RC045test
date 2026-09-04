@@ -187,14 +187,20 @@ spvCheck(
 );
 
 $supply = spvBron($root . '/.github/workflows/security-supply-chain.yml');
+$bulkAudit = spvBron($root . '/scripts/security-npm-bulk-audit.js');
 spvCheck(
     str_contains($supply, 'fetch-depth: 0')
     && str_contains($supply, "versie='8.30.1'")
     && str_contains($supply, '551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb')
     && str_contains($supply, 'sha256sum --check --strict')
     && str_contains($supply, 'git --redact --verbose .')
-    && str_contains($supply, 'npm audit --audit-level=high'),
-    'CI scant volledige historie en controleert dependencykwetsbaarheden'
+    && str_contains($supply, 'npm ci --ignore-scripts --no-audit')
+    && str_contains($supply, 'node scripts/security-npm-bulk-audit.js package-lock.json')
+    && !str_contains($supply, 'npm audit --audit-level=high')
+    && str_contains($bulkAudit, 'https://registry.npmjs.org/-/npm/v1/security/advisories/bulk')
+    && str_contains($bulkAudit, "new Set(['high', 'critical'])")
+    && str_contains($bulkAudit, 'AUDIT-SERVICEFOUT:'),
+    'CI scant volledige historie en controleert dependencykwetsbaarheden fail-closed via Bulk Advisory'
 );
 
 echo "Pre-VPS security hardening: {$ok} OK, {$fout} fout(en)\n";
