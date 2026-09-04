@@ -193,8 +193,13 @@ spvCheck(
     && str_contains($supply, '551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb')
     && str_contains($supply, 'sha256sum --check --strict')
     && str_contains($supply, 'git --redact --verbose .')
-    && str_contains($supply, 'npm audit --audit-level=high'),
-    'CI scant volledige historie en controleert dependencykwetsbaarheden'
+    && str_contains($supply, 'npm ci --ignore-scripts --no-audit')
+    && !str_contains($supply, 'npm audit --audit-level=high')
+    && str_contains($supply, "versie='2.5.1'")
+    && str_contains($supply, 'f9f25499a2c8cc367b3af45df2ea7eeca7fbccceab9c35079968f4b3652194be')
+    && str_contains($supply, 'google/osv-scanner/releases/download/v${versie}/osv-scanner_linux_amd64')
+    && str_contains($supply, '"$OSV_SCANNER_BIN" scan -L package-lock.json --format=vertical'),
+    'CI scant volledige historie en controleert gelockte dependencies met checksum-gepinde OSV-Scanner'
 );
 
 echo "Pre-VPS security hardening: {$ok} OK, {$fout} fout(en)\n";
