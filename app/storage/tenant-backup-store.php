@@ -7,9 +7,14 @@
 // assets worden per scope als volledige directorysnapshot opgeslagen, eveneens
 // met tenantgebonden manifest. Standalone RC045 gebruikt voorlopig de bestaande
 // data-backups-compatibiliteitslaag.
+//
+// Zodra de root-owned backup-attestor zijn publieke sleutel heeft gepubliceerd,
+// schrijft deze laag uitsluitend schema-2 snapshots met een detached signature.
+// De private signing key is nooit beschikbaar voor de tenant-webruntime.
 // ============================================================
 
 require_once dirname(__DIR__) . '/core/site.php';
+require_once __DIR__ . '/backup-attestation.php';
 
 function tenantBackupActief(): bool
 {
@@ -143,6 +148,12 @@ function tenantBackupDataMap(string $sleutel): ?string
     return $root . DIRECTORY_SEPARATOR . $sleutel;
 }
 
+function tenantBackupVerwijderDataSnapshot(string $file): void
+{
+    @unlink(backupAttestatieSidecarData($file));
+    @unlink($file);
+}
+
 function tenantBackupPruneData(string $sleutel): void
 {
     $map = tenantBackupDataMap($sleutel);
@@ -156,10 +167,10 @@ function tenantBackupPruneData(string $sleutel): void
     $over = [];
     foreach ($files as $file) {
         $tijd = @filemtime($file);
-        if ($tijd !== false && $tijd < $grens) @unlink($file); else $over[] = $file;
+        if ($tijd !== false && $tijd < $grens) tenantBackupVerwijderDataSnapshot($file); else $over[] = $file;
     }
     $teveel = count($over) - tenantBackupMaxPerItem();
-    for ($i = 0; $i < $teveel; $i++) @unlink($over[$i]);
+    for ($i = 0; $i < $teveel; $i++) tenantBackupVerwijderDataSnapshot($over[$i]);
 }
 
 /** Schrijft een tenantgebonden JSON-envelope en retourneert het pad. */
@@ -170,8 +181,9 @@ function tenantBackupMaakArray(string $sleutel, array $data): ?string
     $map = $sleutel === null ? null : tenantBackupDataMap($sleutel);
     if ($sleutel === null || $map === null || !tenantBackupMaakMap($map)) return null;
 
+    $attestatieActief = backupAttestatieActief();
     $envelope = [
-        'schema' => 1,
+        'schema' => $attestatieActief ? 2 : 1,
         'tenant_key' => tenantBackupTenantKey(),
         'backup_key' => $sleutel,
         'created_at' => date('c'),
@@ -190,6 +202,13 @@ function tenantBackupMaakArray(string $sleutel, array $data): ?string
     @chmod($tmp, 0640);
     if (!tenantBackupPadVeilig($pad) || !@rename($tmp, $pad)) { @unlink($tmp); return null; }
     @chmod($pad, 0640);
+
+    if ($attestatieActief && !backupAttestatieMaakData($pad, tenantBackupTenantKey(), $sleutel)) {
+        tenantBackupVerwijderDataSnapshot($pad);
+        error_log('[platform] tenantbackup niet geattesteerd; snapshot verwijderd en write moet fail-closed stoppen');
+        return null;
+    }
+
     tenantBackupPruneData($sleutel);
     return $pad;
 }
@@ -266,9 +285,25 @@ function tenantBackupLeesArray(string $sleutel, string $bestandsnaam, ?string &$
     if ($raw === false) { $fout = 'Back-up kon niet worden gelezen.'; return null; }
     try { $env = json_decode($raw, true, 512, JSON_THROW_ON_ERROR); }
     catch (JsonException $e) { $fout = 'Back-up bevat beschadigde JSON.'; return null; }
-    if (!is_array($env) || (int)($env['schema'] ?? 0) !== 1 || !is_array($env['data'] ?? null)) {
+    $schema = is_array($env) ? (int)($env['schema'] ?? 0) : 0;
+    if (!is_array($env) || !in_array($schema, [1, 2], true) || !is_array($env['data'] ?? null)) {
         $fout = 'Back-up heeft een onbekend formaat.'; return null;
     }
+
+    if (backupAttestatieActief()) {
+        if ($schema !== 2) {
+            $fout = 'Legacy back-up is niet cryptografisch geauthenticeerd en kan na activatie niet worden hersteld.';
+            return null;
+        }
+        if (!backupAttestatieVerifieerData($realPad, tenantBackupTenantKey(), $sleutel)) {
+            $fout = 'Cryptografische authenticatie van de back-up is ongeldig of ontbreekt.';
+            return null;
+        }
+    } elseif ($schema !== 1) {
+        $fout = 'Geauthenticeerde back-up kan niet worden hersteld zolang de verificatiesleutel niet actief is.';
+        return null;
+    }
+
     if (!hash_equals(tenantBackupTenantKey(), (string)($env['tenant_key'] ?? '')) || !hash_equals($sleutel, (string)($env['backup_key'] ?? ''))) {
         $fout = 'Back-up hoort niet bij deze tenant of dit onderdeel.'; return null;
     }
@@ -405,8 +440,9 @@ function tenantBackupMaakAssetSnapshot(string $scope): ?string
     $payload = $snapshot . DIRECTORY_SEPARATOR . 'payload';
     if (!tenantBackupKopieerMap($bron, $payload)) { tenantBackupVerwijderMap($snapshot); return null; }
 
+    $attestatieActief = backupAttestatieActief();
     $manifest = [
-        'schema' => 1,
+        'schema' => $attestatieActief ? 2 : 1,
         'tenant_key' => tenantBackupTenantKey(),
         'asset_scope' => $scope,
         'created_at' => date('c'),
@@ -415,6 +451,13 @@ function tenantBackupMaakAssetSnapshot(string $scope): ?string
     $manifestPad = $snapshot . DIRECTORY_SEPARATOR . 'manifest.json';
     if ($json === false || @file_put_contents($manifestPad, $json, LOCK_EX) === false) { tenantBackupVerwijderMap($snapshot); return null; }
     @chmod($manifestPad, 0640);
+
+    if ($attestatieActief && !backupAttestatieMaakAsset($snapshot, tenantBackupTenantKey(), $scope)) {
+        tenantBackupVerwijderMap($snapshot);
+        error_log('[platform] assetsnapshot niet geattesteerd; snapshot verwijderd en write/restore moet fail-closed stoppen');
+        return null;
+    }
+
     tenantBackupPruneAssets();
     return is_dir($snapshot) ? $snapshot : null;
 }
@@ -434,7 +477,24 @@ function tenantBackupLeesAssetSnapshot(string $scope, string $naam, ?string &$fo
     $raw = @file_get_contents($manifestPad);
     if ($raw === false || !is_dir($payload) || is_link($payload)) { $fout='Assetsnapshot is onvolledig.'; return null; }
     $manifest = json_decode($raw, true);
-    if (!is_array($manifest) || (int)($manifest['schema'] ?? 0)!==1 || !hash_equals(tenantBackupTenantKey(), (string)($manifest['tenant_key']??'')) || !hash_equals($scope, (string)($manifest['asset_scope']??''))) {
+    $schema = is_array($manifest) ? (int)($manifest['schema'] ?? 0) : 0;
+    if (!is_array($manifest) || !in_array($schema, [1, 2], true)) { $fout='Assetsnapshot heeft een onbekend formaat.'; return null; }
+
+    if (backupAttestatieActief()) {
+        if ($schema !== 2) {
+            $fout='Legacy assetsnapshot is niet cryptografisch geauthenticeerd en kan na activatie niet worden hersteld.';
+            return null;
+        }
+        if (!backupAttestatieVerifieerAsset($real, tenantBackupTenantKey(), $scope)) {
+            $fout='Cryptografische authenticatie van de assetsnapshot is ongeldig of ontbreekt.';
+            return null;
+        }
+    } elseif ($schema !== 1) {
+        $fout='Geauthenticeerde assetsnapshot kan niet worden hersteld zolang de verificatiesleutel niet actief is.';
+        return null;
+    }
+
+    if (!hash_equals(tenantBackupTenantKey(), (string)($manifest['tenant_key']??'')) || !hash_equals($scope, (string)($manifest['asset_scope']??''))) {
         $fout='Assetsnapshot hoort niet bij deze tenant of scope.'; return null;
     }
     return $payload;
