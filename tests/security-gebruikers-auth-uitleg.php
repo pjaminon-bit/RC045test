@@ -58,6 +58,13 @@ c147(
     authGebruikerCapabilities(['gebruikersnaam' => 'caps-verkeerd-type', 'capabilities' => 'content.homepage.manage']) === [],
     'ongeldig capabilityprofiel zonder geldig legacyprofiel faalt gesloten'
 );
+
+$gemigreerdZonderRechten = authGebruikerMigreerRecord(['gebruikersnaam' => 'zonder-rechten']);
+c147(
+    ($gemigreerdZonderRechten['capabilities'] ?? null) === []
+        && ($gemigreerdZonderRechten['tabs'] ?? null) === [],
+    'migratie van account zonder geldig rechtenprofiel schrijft expliciet lege rechten en kent niets breed toe'
+);
 c147(
     authGebruikerCapabilities(['gebruikersnaam' => 'legacy-geldig', 'tabs' => ['homepage']]) === ['content.homepage.manage'],
     'geldig legacy tabrecht behoudt uitsluitend de gekoppelde centrale capability'
@@ -70,7 +77,7 @@ c147(
 c147(
     str_contains($authSrc, 'authBeheerCapability($tab)')
         && str_contains($authSrc, 'authHeeftBeheerOnderdeel($tab)')
-        && !str_contains($authSrc, '$toegestaneTabs = array_keys($alleTabs);\n  } else {'),
+        && !str_contains($authSrc, "} else {\n    \$toegestaneTabs = array_keys(\$alleTabs);\n  }"),
     'legacy directe beheerchecks gebruiken het centrale fail-closed capabilitycontract'
 );
 c147(
