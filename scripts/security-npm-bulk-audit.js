@@ -4,8 +4,10 @@
 const fs = require('node:fs');
 const assert = require('node:assert/strict');
 const zlib = require('node:zlib');
+const { spawnSync } = require('node:child_process');
 
 const BULK_AUDIT_URL = 'https://registry.npmjs.org/-/npm/v1/security/advisories/bulk';
+const CURL_BIN = '/usr/bin/curl';
 const BLOKKERENDE_ERNS = new Set(['high', 'critical']);
 const GELDIGE_ERNS = new Set(['info', 'low', 'moderate', 'high', 'critical']);
 
@@ -62,9 +64,8 @@ function bouwBulkPayload(lock) {
 function decodeAuditBody(buffer) {
   let inhoud = Buffer.from(buffer);
 
-  // npm registry heeft in 2026 tijdelijk gzip-body's zonder Content-Encoding
-  // teruggegeven. Detecteer daarom de gzip magic bytes in plaats van alleen
-  // op de responseheader te vertrouwen.
+  // npm registry heeft in 2026 gzip-body's zonder Content-Encoding teruggegeven.
+  // Detecteer daarom de gzip magic bytes en pak de body zelf uit.
   if (inhoud.length >= 2 && inhoud[0] === 0x1f && inhoud[1] === 0x8b) {
     try {
       inhoud = zlib.gunzipSync(inhoud);
@@ -122,53 +123,59 @@ function verzamelBlokkerendeAdvisories(rapport) {
   return blokkerend;
 }
 
-function slaap(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function bouwCurlArgumenten() {
+  return [
+    '--silent',
+    '--show-error',
+    '--fail-with-body',
+    '--http2',
+    '--proto', '=https',
+    '--tlsv1.2',
+    '--request', 'POST',
+    '--header', 'Content-Type: application/json',
+    '--header', 'Accept: application/json',
+    '--user-agent', 'rc045test-security-bulk-audit/1.0',
+    '--data-binary', '@-',
+    '--connect-timeout', '10',
+    '--max-time', '30',
+    '--retry', '2',
+    '--retry-all-errors',
+    '--retry-delay', '1',
+    '--retry-max-time', '75',
+    BULK_AUDIT_URL,
+  ];
 }
 
-async function haalBulkAuditOp(payload, pogingen = 3, timeoutMs = 20000) {
-  const body = JSON.stringify(payload);
-  let laatsteFout = null;
+function haalBulkAuditOp(payload) {
+  const body = Buffer.from(JSON.stringify(payload), 'utf8');
+  const resultaat = spawnSync(CURL_BIN, bouwCurlArgumenten(), {
+    input: body,
+    encoding: null,
+    maxBuffer: 5 * 1024 * 1024,
+    timeout: 90000,
+    shell: false,
+  });
 
-  for (let poging = 1; poging <= pogingen; poging += 1) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
-
-    try {
-      const response = await fetch(BULK_AUDIT_URL, {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          accept: 'application/json',
-          'user-agent': 'rc045test-security-bulk-audit/1.0',
-        },
-        body,
-        signal: controller.signal,
-      });
-
-      if (!response.ok) {
-        throw new AuditServiceError(`Bulk Advisory endpoint gaf HTTP ${response.status} ${response.statusText}`);
-      }
-
-      const buffer = Buffer.from(await response.arrayBuffer());
-      return decodeAuditBody(buffer);
-    } catch (fout) {
-      laatsteFout = fout instanceof AuditServiceError
-        ? fout
-        : new AuditServiceError(fout.name === 'AbortError'
-          ? `Bulk Advisory endpoint gaf binnen ${timeoutMs} ms geen antwoord.`
-          : `Bulk Advisory request faalde: ${fout.message}`);
-
-      if (poging < pogingen) {
-        console.error(`WAARSCHUWING: dependency-audit poging ${poging}/${pogingen} faalde: ${laatsteFout.message}`);
-        await slaap(1000 * poging);
-      }
-    } finally {
-      clearTimeout(timer);
-    }
+  if (resultaat.error) {
+    const melding = resultaat.error.code === 'ETIMEDOUT'
+      ? 'Bulk Advisory curl-proces overschreed de maximale looptijd.'
+      : `Bulk Advisory curl-proces kon niet worden uitgevoerd: ${resultaat.error.message}`;
+    throw new AuditServiceError(melding);
   }
 
-  throw laatsteFout ?? new AuditServiceError('Bulk Advisory audit is zonder resultaat beëindigd.');
+  if (resultaat.status !== 0) {
+    const stderr = Buffer.isBuffer(resultaat.stderr)
+      ? resultaat.stderr.toString('utf8').trim()
+      : '';
+    const suffix = stderr ? `: ${stderr}` : '';
+    throw new AuditServiceError(`Bulk Advisory curl eindigde met exitcode ${resultaat.status}${suffix}`);
+  }
+
+  if (!Buffer.isBuffer(resultaat.stdout) || resultaat.stdout.length === 0) {
+    throw new AuditServiceError('Bulk Advisory endpoint gaf een lege respons.');
+  }
+
+  return decodeAuditBody(resultaat.stdout);
 }
 
 function voerZelftestUit() {
@@ -202,10 +209,17 @@ function voerZelftestUit() {
     AuditServiceError
   );
 
+  const curlArgs = bouwCurlArgumenten();
+  assert.equal(CURL_BIN, '/usr/bin/curl');
+  assert.ok(curlArgs.includes('--http2'));
+  assert.ok(curlArgs.includes('--fail-with-body'));
+  assert.ok(curlArgs.includes('--retry-all-errors'));
+  assert.equal(curlArgs.at(-1), BULK_AUDIT_URL);
+
   console.log('Bulk dependency audit zelftest: OK');
 }
 
-async function main() {
+function main() {
   const argument = process.argv[2] ?? 'package-lock.json';
   if (argument === '--self-test') {
     voerZelftestUit();
@@ -237,7 +251,7 @@ async function main() {
   }
 
   try {
-    const rapport = await haalBulkAuditOp(payload);
+    const rapport = haalBulkAuditOp(payload);
     const blokkerend = verzamelBlokkerendeAdvisories(rapport);
 
     if (blokkerend.length > 0) {
@@ -259,7 +273,9 @@ async function main() {
   }
 }
 
-main().catch((fout) => {
+try {
+  main();
+} catch (fout) {
   console.error(`FOUT: onverwachte dependency-auditfout: ${fout.stack || fout}`);
   process.exitCode = 2;
-});
+}
