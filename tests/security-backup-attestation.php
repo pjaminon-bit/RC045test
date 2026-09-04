@@ -133,7 +133,17 @@ try {
     $attestorSource = file_get_contents($root . '/ops/vps-test-deploy/verenigingsplatform-backup-attestor');
     checkBA(is_string($attestorSource) && str_contains($attestorSource, 'SO_PEERCRED') && str_contains($attestorSource, "deployment.json") && str_contains($attestorSource, "private.pem") && str_contains($attestorSource, "schema', 0)) != 2"), 'root-attestor bindt peer-UID/deployment en accepteert alleen schema 2');
     $installer = file_get_contents($root . '/ops/vps-test-deploy/install-backup-attestation');
-    checkBA(is_string($installer) && str_contains($installer, '0600') && str_contains($installer, 'NoNewPrivileges=true') && str_contains($installer, 'ProtectSystem=strict') && str_contains($installer, 'ReadOnlyPaths=/srv/verenigingen'), 'root-installer borgt keymetadata en systemd sandbox');
+    checkBA(
+        is_string($installer)
+        && str_contains($installer, '0:0:711')
+        && str_contains($installer, '-m 0711')
+        && str_contains($installer, '0600')
+        && str_contains($installer, '0644')
+        && str_contains($installer, 'NoNewPrivileges=true')
+        && str_contains($installer, 'ProtectSystem=strict')
+        && str_contains($installer, 'ReadOnlyPaths=/srv/verenigingen'),
+        'root-installer borgt traverse-only keydirectory, keymetadata en systemd sandbox'
+    );
 
     $cmd = 'python3 -c ' . escapeshellarg('import pathlib,sys; p=pathlib.Path(sys.argv[1]); compile(p.read_text(encoding="utf-8"), str(p), "exec")') . ' ' . escapeshellarg($root . '/ops/vps-test-deploy/verenigingsplatform-backup-attestor');
     exec($cmd . ' 2>&1', $pyOut, $pyCode);
