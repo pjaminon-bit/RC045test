@@ -61,16 +61,20 @@ c194(
     'tijdelijke registryfouten krijgen begrensde retries en timeout'
 );
 
-$sourcePos = strpos($workflow, '- name: Controleer eigen security source policy');
-$preVpsPos = strpos($workflow, '- name: Controleer pre-VPS securitycontract');
+$always = '${{ always() }}';
+$sourceBlok = "- name: Controleer eigen security source policy\n"
+    . "        if: {$always}\n"
+    . "        run: php tests/security-source-regression.php";
+$preVpsBlok = "- name: Controleer pre-VPS securitycontract\n"
+    . "        if: {$always}\n"
+    . "        run: php tests/security-pre-vps-hardening.php";
+
 c194(
-    $sourcePos !== false
-        && strpos(substr($workflow, $sourcePos, 180), 'if: ${{ always() }}') !== false,
+    str_contains($workflow, $sourceBlok),
     'eigen security source policy draait ook wanneer dependency-audit faalt'
 );
 c194(
-    $preVpsPos !== false
-        && strpos(substr($workflow, $preVpsPos, 180), 'if: ${{ always() }}') !== false,
+    str_contains($workflow, $preVpsBlok),
     'pre-VPS securitycontract draait ook wanneer dependency-audit faalt'
 );
 
