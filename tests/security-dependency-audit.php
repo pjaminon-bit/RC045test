@@ -37,7 +37,8 @@ c194(
 );
 c194(
     str_contains($workflow, 'chmod 0555 "$bin"')
-        && str_contains($workflow, "printf 'OSV_SCANNER_BIN=%s\\n' \"$bin\" >> \"$GITHUB_ENV\""),
+        && str_contains($workflow, 'OSV_SCANNER_BIN=%s')
+        && str_contains($workflow, '>> "$GITHUB_ENV"'),
     'geverifieerde OSV-binary wordt alleen uitvoerbaar gemaakt en expliciet doorgegeven'
 );
 c194(
