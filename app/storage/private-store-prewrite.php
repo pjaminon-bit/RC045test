@@ -6,6 +6,11 @@
 // tenantbackupnamespace niet schrijfbaar is (bijvoorbeeld door legacy owner-
 // drift op een bestaande VPS). De write mag pas doorgaan nadat ook deze route
 // aantoonbaar een tenantgebonden snapshot heeft geplaatst.
+//
+// Zodra cryptografische backupattestatie actief is, mag deze legacy noodroute
+// niet langer als voldoende herstelbewijs gelden: hij heeft bewust geen root-
+// owned signature. De caller moet dan fail-closed stoppen wanneer de normale,
+// geattesteerde tenantbackup niet kan worden gemaakt.
 // ============================================================
 
 function privatePrewriteNormPad(string $pad): string
@@ -105,6 +110,11 @@ function privatePrewritePrune(string $map, string $privateRoot, string $behouden
  */
 function privatePrewriteMaak(string $privateRoot, string $tenantKey, string $backupKey, array $data): ?string
 {
+    if (function_exists('backupAttestatieActief') && backupAttestatieActief()) {
+        error_log('[platform] legacy private prewrite-fallback geweigerd: cryptografische backupattestatie is actief');
+        return null;
+    }
+
     $tenantKey = privatePrewriteVeiligeSleutel($tenantKey, 80);
     $backupKey = privatePrewriteVeiligeSleutel($backupKey, 120);
     if ($tenantKey === null || $backupKey === null) return null;
