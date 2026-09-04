@@ -51,13 +51,18 @@ jobs:
           "$GITLEAKS_BIN" git --redact --verbose .
 
       - name: Installeer uitsluitend gelockte Node dependencies
-        run: npm ci --ignore-scripts
+        run: npm ci --ignore-scripts --no-audit
+
+      - name: Zelftest dependency-audit parser
+        run: node scripts/security-npm-bulk-audit.js --self-test
 
       - name: Controleer Node dependencies op hoge/critical kwetsbaarheden
-        run: npm audit --audit-level=high
+        run: node scripts/security-npm-bulk-audit.js package-lock.json
 
       - name: Controleer eigen security source policy
+        if: ${{ always() }}
         run: php tests/security-source-regression.php
 
       - name: Controleer pre-VPS securitycontract
+        if: ${{ always() }}
         run: php tests/security-pre-vps-hardening.php
