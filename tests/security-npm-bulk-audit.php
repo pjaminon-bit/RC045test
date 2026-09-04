@@ -57,12 +57,14 @@ c194(
 c194(
     str_contains($auditor, "const CURL_BIN = '/usr/bin/curl'")
         && str_contains($auditor, "'--http2'")
+        && str_contains($auditor, "'--fail'")
+        && !str_contains($auditor, "'--fail-with-body'")
         && str_contains($auditor, "'--retry', '2'")
         && str_contains($auditor, "'--retry-all-errors'")
         && str_contains($auditor, "'--connect-timeout', '10'")
         && str_contains($auditor, "'--max-time', '30'")
         && str_contains($auditor, 'shell: false'),
-    'Bulk-audit gebruikt shellvrije HTTP/2 curl met begrensde retries en timeouts'
+    'Bulk-audit gebruikt shellvrije HTTP/2 curl met parse-veilige retries en timeouts'
 );
 
 $always = '${{ always() }}';
