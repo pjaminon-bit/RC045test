@@ -55,10 +55,14 @@ c194(
     'service- en parsefouten blijven fail-closed en herkenbaar'
 );
 c194(
-    str_contains($auditor, 'pogingen = 3')
-        && str_contains($auditor, 'AbortController')
-        && str_contains($auditor, 'await slaap(1000 * poging)'),
-    'tijdelijke registryfouten krijgen begrensde retries en timeout'
+    str_contains($auditor, "const CURL_BIN = '/usr/bin/curl'")
+        && str_contains($auditor, "'--http2'")
+        && str_contains($auditor, "'--retry', '2'")
+        && str_contains($auditor, "'--retry-all-errors'")
+        && str_contains($auditor, "'--connect-timeout', '10'")
+        && str_contains($auditor, "'--max-time', '30'")
+        && str_contains($auditor, 'shell: false'),
+    'Bulk-audit gebruikt shellvrije HTTP/2 curl met begrensde retries en timeouts'
 );
 
 $always = '${{ always() }}';
