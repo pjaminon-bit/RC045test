@@ -74,14 +74,11 @@ function backupAttestatieVeiligeTenant(string $waarde): bool
         && preg_match('/^[a-z0-9][a-z0-9-]*$/D', $waarde) === 1;
 }
 
-function backupAttestatieStatementData(string $pad, string $tenantKey, string $binding): ?array
+function backupAttestatieStatementDataRaw(string $pad, string $raw, string $tenantKey, string $binding): ?array
 {
     if (!backupAttestatieVeiligeTenant($tenantKey) || !backupAttestatieVeiligeBinding($binding)) return null;
-    if (!is_file($pad) || is_link($pad)) return null;
     $naam = basename($pad);
     if (!preg_match('/^[A-Za-z0-9_.-]+\.json$/D', $naam)) return null;
-    $raw = @file_get_contents($pad);
-    if (!is_string($raw)) return null;
     return [
         'version' => 1,
         'kind' => 'data',
@@ -90,6 +87,13 @@ function backupAttestatieStatementData(string $pad, string $tenantKey, string $b
         'snapshot' => $naam,
         'content_sha256' => hash('sha256', $raw),
     ];
+}
+
+function backupAttestatieStatementData(string $pad, string $tenantKey, string $binding): ?array
+{
+    if (!is_file($pad) || is_link($pad)) return null;
+    $raw = @file_get_contents($pad);
+    return is_string($raw) ? backupAttestatieStatementDataRaw($pad, $raw, $tenantKey, $binding) : null;
 }
 
 function backupAttestatieBestanden(string $payload): ?array
@@ -174,25 +178,31 @@ function backupAttestatiePublicKey(): array
     return [$key, hash('sha256', $raw)];
 }
 
-function backupAttestatieVerifieerObject(array $attestatie, array $verwacht): bool
+function backupAttestatieOndertekendeStatement(array $attestatie): ?array
 {
     if ((int) ($attestatie['schema'] ?? 0) !== 1
         || (string) ($attestatie['algorithm'] ?? '') !== 'rsa-sha256'
         || !is_string($attestatie['signed'] ?? null)
         || !is_string($attestatie['signature'] ?? null)
-        || !is_string($attestatie['key_id'] ?? null)) return false;
+        || !is_string($attestatie['key_id'] ?? null)) return null;
 
     $signed = base64_decode((string) $attestatie['signed'], true);
     $signature = base64_decode((string) $attestatie['signature'], true);
-    if (!is_string($signed) || $signed === '' || !is_string($signature) || $signature === '') return false;
+    if (!is_string($signed) || $signed === '' || !is_string($signature) || $signature === '') return null;
 
     [$key, $keyId] = backupAttestatiePublicKey();
-    if ($key === null || !is_string($keyId) || !hash_equals($keyId, (string) $attestatie['key_id'])) return false;
-    if (@openssl_verify($signed, $signature, $key, OPENSSL_ALGO_SHA256) !== 1) return false;
+    if ($key === null || !is_string($keyId) || !hash_equals($keyId, (string) $attestatie['key_id'])) return null;
+    if (@openssl_verify($signed, $signature, $key, OPENSSL_ALGO_SHA256) !== 1) return null;
 
     try { $statement = json_decode($signed, true, 128, JSON_THROW_ON_ERROR); }
-    catch (Throwable $e) { return false; }
-    if (!is_array($statement)) return false;
+    catch (Throwable $e) { return null; }
+    return is_array($statement) ? $statement : null;
+}
+
+function backupAttestatieVerifieerObject(array $attestatie, array $verwacht): bool
+{
+    $statement = backupAttestatieOndertekendeStatement($attestatie);
+    if ($statement === null) return false;
     $a = backupAttestatieCanoniek($statement);
     $b = backupAttestatieCanoniek($verwacht);
     return is_string($a) && is_string($b) && hash_equals($b, $a);
@@ -208,12 +218,19 @@ function backupAttestatieLeesSidecar(string $pad): ?array
     return is_array($data) ? $data : null;
 }
 
-function backupAttestatieVerifieerData(string $pad, string $tenantKey, string $binding): bool
+function backupAttestatieVerifieerDataRaw(string $pad, string $raw, string $tenantKey, string $binding): bool
 {
     if (!backupAttestatieActief()) return false;
-    $statement = backupAttestatieStatementData($pad, $tenantKey, $binding);
+    $statement = backupAttestatieStatementDataRaw($pad, $raw, $tenantKey, $binding);
     $att = backupAttestatieLeesSidecar(backupAttestatieSidecarData($pad));
     return $statement !== null && $att !== null && backupAttestatieVerifieerObject($att, $statement);
+}
+
+function backupAttestatieVerifieerData(string $pad, string $tenantKey, string $binding): bool
+{
+    if (!is_file($pad) || is_link($pad)) return false;
+    $raw = @file_get_contents($pad);
+    return is_string($raw) && backupAttestatieVerifieerDataRaw($pad, $raw, $tenantKey, $binding);
 }
 
 function backupAttestatieVerifieerAsset(string $snapshot, string $tenantKey, string $scope): bool
@@ -222,6 +239,33 @@ function backupAttestatieVerifieerAsset(string $snapshot, string $tenantKey, str
     $statement = backupAttestatieStatementAsset($snapshot, $tenantKey, $scope);
     $att = backupAttestatieLeesSidecar(backupAttestatieSidecarAsset($snapshot));
     return $statement !== null && $att !== null && backupAttestatieVerifieerObject($att, $statement);
+}
+
+/**
+ * Controleert na het kopiëren naar restore-staging opnieuw de ondertekende
+ * payloadfilelijst. Daardoor kan een runtime-writer niet tussen bronverificatie
+ * en de atomische swap ongemerkt andere assetbytes in staging krijgen.
+ */
+function backupAttestatieVerifieerAssetStaging(string $snapshot, string $stagePayload, string $tenantKey, string $scope): bool
+{
+    if (!backupAttestatieActief() || !backupAttestatieVeiligeTenant($tenantKey) || !in_array($scope, ['fotoboek', 'sponsors'], true)) return false;
+    $att = backupAttestatieLeesSidecar(backupAttestatieSidecarAsset($snapshot));
+    if ($att === null) return false;
+    $statement = backupAttestatieOndertekendeStatement($att);
+    if (!is_array($statement)
+        || (int)($statement['version'] ?? 0) !== 1
+        || (string)($statement['kind'] ?? '') !== 'asset'
+        || !hash_equals($tenantKey, (string)($statement['tenant_key'] ?? ''))
+        || !hash_equals($scope, (string)($statement['binding'] ?? ''))
+        || !hash_equals(basename($snapshot), (string)($statement['snapshot'] ?? ''))
+        || !is_string($statement['manifest_sha256'] ?? null)
+        || preg_match('/^[a-f0-9]{64}$/D', (string)$statement['manifest_sha256']) !== 1
+        || !is_array($statement['files'] ?? null)) return false;
+    $stageFiles = backupAttestatieBestanden($stagePayload);
+    if ($stageFiles === null) return false;
+    $a = backupAttestatieCanoniek($statement['files']);
+    $b = backupAttestatieCanoniek($stageFiles);
+    return is_string($a) && is_string($b) && hash_equals($a, $b);
 }
 
 function backupAttestatieVraag(string $snapshot, string $kind, string $binding): ?array
