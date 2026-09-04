@@ -187,7 +187,6 @@ spvCheck(
 );
 
 $supply = spvBron($root . '/.github/workflows/security-supply-chain.yml');
-$bulkAudit = spvBron($root . '/scripts/security-npm-bulk-audit.js');
 spvCheck(
     str_contains($supply, 'fetch-depth: 0')
     && str_contains($supply, "versie='8.30.1'")
@@ -195,12 +194,12 @@ spvCheck(
     && str_contains($supply, 'sha256sum --check --strict')
     && str_contains($supply, 'git --redact --verbose .')
     && str_contains($supply, 'npm ci --ignore-scripts --no-audit')
-    && str_contains($supply, 'node scripts/security-npm-bulk-audit.js package-lock.json')
     && !str_contains($supply, 'npm audit --audit-level=high')
-    && str_contains($bulkAudit, 'https://registry.npmjs.org/-/npm/v1/security/advisories/bulk')
-    && str_contains($bulkAudit, "new Set(['high', 'critical'])")
-    && str_contains($bulkAudit, 'AUDIT-SERVICEFOUT:'),
-    'CI scant volledige historie en controleert dependencykwetsbaarheden fail-closed via Bulk Advisory'
+    && str_contains($supply, "versie='2.5.1'")
+    && str_contains($supply, 'f9f25499a2c8cc367b3af45df2ea7eeca7fbccceab9c35079968f4b3652194be')
+    && str_contains($supply, 'google/osv-scanner/releases/download/v${versie}/osv-scanner_linux_amd64')
+    && str_contains($supply, '"$OSV_SCANNER_BIN" scan -L package-lock.json --format=vertical'),
+    'CI scant volledige historie en controleert gelockte dependencies met checksum-gepinde OSV-Scanner'
 );
 
 echo "Pre-VPS security hardening: {$ok} OK, {$fout} fout(en)\n";
