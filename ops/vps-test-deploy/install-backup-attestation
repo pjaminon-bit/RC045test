@@ -1,0 +1,151 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ "${EUID}" -ne 0 ]]; then
+  echo "FOUT: install-backup-attestation moet als root worden uitgevoerd." >&2
+  exit 1
+fi
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+SOURCE_ATTESTOR="${SCRIPT_DIR}/verenigingsplatform-backup-attestor"
+TARGET_DIR="/usr/local/libexec/verenigingsplatform"
+TARGET_ATTESTOR="${TARGET_DIR}/backup-attestor"
+KEY_DIR="/etc/verenigingsplatform/backup-attestation"
+PRIVATE_KEY="${KEY_DIR}/private.pem"
+PUBLIC_KEY="${KEY_DIR}/public.pem"
+UNIT="/etc/systemd/system/verenigingsplatform-backup-attestor.service"
+RUNTIME_DIR="/run/verenigingsplatform"
+
+check_source() {
+  [[ -f "${SOURCE_ATTESTOR}" && ! -L "${SOURCE_ATTESTOR}" ]] || {
+    echo "FOUT: canonieke backup-attestor ontbreekt of is een symlink." >&2
+    exit 1
+  }
+  /usr/bin/python3 -c 'import pathlib,sys; p=pathlib.Path(sys.argv[1]); compile(p.read_text(encoding="utf-8"), str(p), "exec")' "${SOURCE_ATTESTOR}"
+}
+
+check_keys() {
+  [[ -f "${PRIVATE_KEY}" && ! -L "${PRIVATE_KEY}" && -f "${PUBLIC_KEY}" && ! -L "${PUBLIC_KEY}" ]] || return 1
+  [[ "$(stat -c '%u:%g:%a' "${PRIVATE_KEY}")" == "0:0:600" ]] || return 1
+  [[ "$(stat -c '%u:%g:%a' "${PUBLIC_KEY}")" == "0:0:644" ]] || return 1
+  local tmp
+  tmp="$(mktemp)"
+  trap 'rm -f "${tmp:-}"' RETURN
+  /usr/bin/openssl pkey -in "${PRIVATE_KEY}" -pubout -out "${tmp}" >/dev/null 2>&1
+  cmp -s "${tmp}" "${PUBLIC_KEY}"
+}
+
+check_install() {
+  check_source
+  [[ -f "${TARGET_ATTESTOR}" && ! -L "${TARGET_ATTESTOR}" ]] || {
+    echo "FOUT: geïnstalleerde backup-attestor ontbreekt." >&2
+    exit 1
+  }
+  [[ "$(stat -c '%u:%g:%a' "${TARGET_ATTESTOR}")" == "0:0:555" ]] || {
+    echo "FOUT: backup-attestor metadata wijkt af." >&2
+    exit 1
+  }
+  cmp -s "${SOURCE_ATTESTOR}" "${TARGET_ATTESTOR}" || {
+    echo "FOUT: geïnstalleerde backup-attestor wijkt af van de canonieke bron." >&2
+    exit 1
+  }
+  check_keys || {
+    echo "FOUT: backup-attestation keypair ontbreekt, wijkt af of heeft onveilige metadata." >&2
+    exit 1
+  }
+  [[ -f "${UNIT}" && ! -L "${UNIT}" && "$(stat -c '%u:%g:%a' "${UNIT}")" == "0:0:644" ]] || {
+    echo "FOUT: systemd-unit ontbreekt of heeft onveilige metadata." >&2
+    exit 1
+  }
+  systemctl is-enabled verenigingsplatform-backup-attestor.service >/dev/null
+  systemctl is-active verenigingsplatform-backup-attestor.service >/dev/null
+  [[ -S "${RUNTIME_DIR}/backup-attestor.sock" && ! -L "${RUNTIME_DIR}/backup-attestor.sock" ]] || {
+    echo "FOUT: backup-attestor socket is niet actief." >&2
+    exit 1
+  }
+  echo "OK: backup-attestation actief"
+  echo "attestor_sha256=$(sha256sum "${TARGET_ATTESTOR}" | awk '{print $1}')"
+  echo "public_key_sha256=$(sha256sum "${PUBLIC_KEY}" | awk '{print $1}')"
+}
+
+if [[ "${1:-}" == "--check" ]]; then
+  check_install
+  exit 0
+fi
+if [[ $# -ne 0 ]]; then
+  echo "Gebruik: $0 [--check]" >&2
+  exit 2
+fi
+
+check_source
+install -d -o root -g root -m 0755 "${TARGET_DIR}"
+install -d -o root -g root -m 0700 "${KEY_DIR}"
+
+if [[ -e "${PRIVATE_KEY}" || -e "${PUBLIC_KEY}" ]]; then
+  check_keys || {
+    echo "FOUT: bestaand backup-attestation keypair is onvolledig of onveilig; niet automatisch roteren." >&2
+    exit 1
+  }
+else
+  umask 077
+  private_tmp="$(mktemp "${KEY_DIR}/private.pem.tmp.XXXXXX")"
+  public_tmp="$(mktemp "${KEY_DIR}/public.pem.tmp.XXXXXX")"
+  cleanup_key_tmp() { rm -f "${private_tmp:-}" "${public_tmp:-}"; }
+  trap cleanup_key_tmp EXIT
+  /usr/bin/openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:3072 -out "${private_tmp}" >/dev/null 2>&1
+  /usr/bin/openssl pkey -in "${private_tmp}" -pubout -out "${public_tmp}" >/dev/null 2>&1
+  install -o root -g root -m 0600 "${private_tmp}" "${PRIVATE_KEY}"
+  install -o root -g root -m 0644 "${public_tmp}" "${PUBLIC_KEY}"
+  cleanup_key_tmp
+  trap - EXIT
+fi
+
+install -o root -g root -m 0555 "${SOURCE_ATTESTOR}" "${TARGET_ATTESTOR}"
+
+unit_tmp="$(mktemp)"
+cleanup_unit_tmp() { rm -f "${unit_tmp:-}"; }
+trap cleanup_unit_tmp EXIT
+cat >"${unit_tmp}" <<'UNITEOF'
+[Unit]
+Description=Verenigingsplatform tenant backup attestor
+After=local-fs.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+ExecStart=/usr/local/libexec/verenigingsplatform/backup-attestor
+Restart=on-failure
+RestartSec=2s
+RuntimeDirectory=verenigingsplatform
+RuntimeDirectoryMode=0755
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+RestrictAddressFamilies=AF_UNIX
+ReadOnlyPaths=/srv/verenigingen
+ReadWritePaths=/run/verenigingsplatform
+
+[Install]
+WantedBy=multi-user.target
+UNITEOF
+install -o root -g root -m 0644 "${unit_tmp}" "${UNIT}"
+cleanup_unit_tmp
+trap - EXIT
+
+systemctl daemon-reload
+systemctl enable --now verenigingsplatform-backup-attestor.service
+
+check_install
