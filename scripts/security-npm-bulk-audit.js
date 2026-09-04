@@ -127,7 +127,7 @@ function bouwCurlArgumenten() {
   return [
     '--silent',
     '--show-error',
-    '--fail-with-body',
+    '--fail',
     '--http2',
     '--proto', '=https',
     '--tlsv1.2',
@@ -212,7 +212,7 @@ function voerZelftestUit() {
   const curlArgs = bouwCurlArgumenten();
   assert.equal(CURL_BIN, '/usr/bin/curl');
   assert.ok(curlArgs.includes('--http2'));
-  assert.ok(curlArgs.includes('--fail-with-body'));
+  assert.ok(curlArgs.includes('--fail'));
   assert.ok(curlArgs.includes('--retry-all-errors'));
   assert.equal(curlArgs.at(-1), BULK_AUDIT_URL);
 
