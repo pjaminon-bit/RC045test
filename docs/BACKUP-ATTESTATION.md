@@ -12,6 +12,7 @@ Na activatie van dit contract worden nieuwe tenantbackups daarom cryptografisch 
 
 De tenant-webruntime krijgt **nooit** de private signing key.
 
+- keydirectory: `/etc/verenigingsplatform/backup-attestation`, `root:root 0711`; niet-root kan de directory niet listen maar wel het vaste publieke sleutelpad traverseren;
 - private key: `/etc/verenigingsplatform/backup-attestation/private.pem`, `root:root 0600`;
 - publieke verificatiesleutel: `/etc/verenigingsplatform/backup-attestation/public.pem`, `root:root 0644`;
 - root-owned attestor: `/usr/local/libexec/verenigingsplatform/backup-attestor`, `root:root 0555`;
@@ -63,7 +64,7 @@ Een gewijzigd, toegevoegd, verwijderd of hernoemd assetbestand maakt de attestat
 
 ## Schema en legacybeleid
 
-De activatiestatus wordt uitsluitend bepaald door de aanwezigheid van de root-gepubliceerde publieke sleutel.
+De activatiestatus wordt uitsluitend bepaald door de aanwezigheid van de root-gepubliceerde publieke sleutel die voor de tenant-runtime leesbaar is.
 
 ### Vóór activatie
 
@@ -97,10 +98,11 @@ De installer:
 - compileert/controleert de Python-attestorbron;
 - maakt één RSA-3072 keypair wanneer nog geen keypair bestaat;
 - roteert bestaande keymaterialen nooit stil;
-- installeert private/public key met vaste rootmetadata;
+- installeert de keydirectory als `root:root 0711`, zodat de vaste public-keylocatie door de tenant-runtime traverseerbaar is zonder directorylisting;
+- installeert private/public key met vaste rootmetadata (`0600` / `0644`);
 - installeert de attestor buiten `current`/`releases`;
 - installeert een geharde systemd-service met onder andere `NoNewPrivileges`, `ProtectSystem=strict`, `ProtectHome` en read-only `/srv/verenigingen`;
-- activeert de service en controleert socket, service en geïnstalleerde bron;
+- activeert de service en controleert socket, service, keydirectory en geïnstalleerde bron;
 - toont attestor- en public-key-SHA-256 voor live evidence.
 
 Herverificatie zonder wijziging:
@@ -133,4 +135,4 @@ De private key is onderdeel van de recovery trust boundary. Verwijder of roteer 
 - uitschakelen van de unauthenticated prewrite-fallback na activatie;
 - geen privileged exec/private-keypad in de tenant PHP-client;
 - peer-UID/deploymentbinding en schema-2-eis in de root-attestor;
-- root-keymetadata en systemd-sandbox in de installer.
+- root-keydirectory/keymetadata en systemd-sandbox in de installer.
