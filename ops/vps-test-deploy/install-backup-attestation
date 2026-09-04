@@ -25,6 +25,8 @@ check_source() {
 }
 
 check_keys() {
+  [[ -d "${KEY_DIR}" && ! -L "${KEY_DIR}" ]] || return 1
+  [[ "$(stat -c '%u:%g:%a' "${KEY_DIR}")" == "0:0:711" ]] || return 1
   [[ -f "${PRIVATE_KEY}" && ! -L "${PRIVATE_KEY}" && -f "${PUBLIC_KEY}" && ! -L "${PUBLIC_KEY}" ]] || return 1
   [[ "$(stat -c '%u:%g:%a' "${PRIVATE_KEY}")" == "0:0:600" ]] || return 1
   [[ "$(stat -c '%u:%g:%a' "${PUBLIC_KEY}")" == "0:0:644" ]] || return 1
@@ -50,7 +52,7 @@ check_install() {
     exit 1
   }
   check_keys || {
-    echo "FOUT: backup-attestation keypair ontbreekt, wijkt af of heeft onveilige metadata." >&2
+    echo "FOUT: backup-attestation keydirectory/keypair ontbreekt, wijkt af of heeft onveilige metadata." >&2
     exit 1
   }
   [[ -f "${UNIT}" && ! -L "${UNIT}" && "$(stat -c '%u:%g:%a' "${UNIT}")" == "0:0:644" ]] || {
@@ -79,7 +81,10 @@ fi
 
 check_source
 install -d -o root -g root -m 0755 "${TARGET_DIR}"
-install -d -o root -g root -m 0700 "${KEY_DIR}"
+# De directory is bewust alleen traverseerbaar voor niet-root. Daardoor kan de
+# tenant-runtime het vaste public.pem-pad lezen zonder de directory te kunnen
+# listen, terwijl private.pem door root:root 0600 onleesbaar blijft.
+install -d -o root -g root -m 0711 "${KEY_DIR}"
 
 if [[ -e "${PRIVATE_KEY}" || -e "${PUBLIC_KEY}" ]]; then
   check_keys || {
