@@ -1,0 +1,18 @@
+{
+  "foo": [
+    {
+      "id": 1,
+      "severity": "high",
+      "title": "fixture high",
+      "url": "https://example.invalid/high"
+    }
+  ],
+  "bar": [
+    {
+      "id": 2,
+      "severity": "moderate",
+      "title": "fixture moderate",
+      "url": "https://example.invalid/moderate"
+    }
+  ]
+}
