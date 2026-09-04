@@ -1,0 +1,423 @@
+#!/usr/bin/env python3
+"""Root-owned tenant backup attestor for RC045test (#148).
+
+The service owns the private signing key and accepts requests only from a
+provisioned tenant runtime UID over a local Unix socket. It never executes
+application/release code and signs only a fresh schema-2 snapshot physically
+inside the requesting peer's deployment-bound private backup root.
+"""
+
+import base64
+import hashlib
+import json
+import os
+import pwd
+import signal
+import socket
+import stat
+import struct
+import subprocess
+import sys
+from pathlib import Path
+from typing import Any
+
+TENANT_BASE = Path('/srv/verenigingen')
+RUNTIME_DIR = Path('/run/verenigingsplatform')
+SOCKET_PATH = RUNTIME_DIR / 'backup-attestor.sock'
+KEY_DIR = Path('/etc/verenigingsplatform/backup-attestation')
+PRIVATE_KEY = KEY_DIR / 'private.pem'
+PUBLIC_KEY = KEY_DIR / 'public.pem'
+OPENSSL = '/usr/bin/openssl'
+MAX_REQUEST = 8192
+MAX_RESPONSE = 1024 * 1024
+MAX_FRESH_SECONDS = 900
+
+
+def fail(message: str) -> None:
+    print(f'[backup-attestor] {message}', file=sys.stderr, flush=True)
+
+
+def safe_key(value: Any, max_len: int = 120) -> str | None:
+    if not isinstance(value, str) or not value or len(value) > max_len:
+        return None
+    allowed = 'abcdefghijklmnopqrstuvwxyz0123456789_-'
+    if value[0] not in 'abcdefghijklmnopqrstuvwxyz0123456789':
+        return None
+    return value if all(ch in allowed for ch in value) else None
+
+
+def safe_tenant(value: Any) -> str | None:
+    if not isinstance(value, str) or not value or len(value) > 80:
+        return None
+    allowed = 'abcdefghijklmnopqrstuvwxyz0123456789-'
+    if value[0] not in 'abcdefghijklmnopqrstuvwxyz0123456789':
+        return None
+    return value if all(ch in allowed for ch in value) else None
+
+
+def no_symlink_components(path: Path) -> bool:
+    try:
+        current = Path(path.anchor or '/')
+        for part in path.parts[1:]:
+            current = current / part
+            st = os.lstat(current)
+            if stat.S_ISLNK(st.st_mode):
+                return False
+        return True
+    except OSError:
+        return False
+
+
+def regular_root_file(path: Path, mode_mask: int | None = None) -> bool:
+    try:
+        st = os.lstat(path)
+    except OSError:
+        return False
+    if not stat.S_ISREG(st.st_mode) or st.st_uid != 0 or stat.S_ISLNK(st.st_mode):
+        return False
+    if st.st_mode & 0o022:
+        return False
+    if mode_mask is not None and stat.S_IMODE(st.st_mode) != mode_mask:
+        return False
+    return no_symlink_components(path)
+
+
+def deployment_for_uid(peer_uid: int) -> dict[str, Any] | None:
+    if peer_uid <= 0 or not TENANT_BASE.is_dir() or TENANT_BASE.is_symlink():
+        return None
+    matches: list[dict[str, Any]] = []
+    try:
+        tenant_dirs = list(TENANT_BASE.iterdir())
+    except OSError:
+        return None
+    for tenant_dir in tenant_dirs:
+        deployment_file = tenant_dir / 'deployment.json'
+        if not regular_root_file(deployment_file):
+            continue
+        try:
+            doc = json.loads(deployment_file.read_text(encoding='utf-8'))
+        except (OSError, ValueError, UnicodeError):
+            continue
+        if not isinstance(doc, dict) or int(doc.get('schema', 0)) != 1:
+            continue
+        tenant_key = safe_tenant(doc.get('tenant_key'))
+        tenant = doc.get('tenant')
+        fpm = doc.get('php_fpm')
+        if tenant_key is None or not isinstance(tenant, dict) or not isinstance(fpm, dict):
+            continue
+        tenant_root_raw = tenant.get('tenant_root')
+        private_root_raw = tenant.get('private_root')
+        os_user = fpm.get('recommended_os_user')
+        if not all(isinstance(v, str) and v.startswith('/') for v in (tenant_root_raw, private_root_raw)):
+            continue
+        if not isinstance(os_user, str) or not os_user:
+            continue
+        try:
+            account = pwd.getpwnam(os_user)
+        except KeyError:
+            continue
+        if account.pw_uid != peer_uid:
+            continue
+        tenant_root = Path(tenant_root_raw)
+        private_root = Path(private_root_raw)
+        try:
+            if tenant_root.resolve(strict=True) != tenant_dir.resolve(strict=True):
+                continue
+            if private_root.resolve(strict=True) != (tenant_root / 'private').resolve(strict=True):
+                continue
+        except OSError:
+            continue
+        if tenant_root.is_symlink() or private_root.is_symlink() or not no_symlink_components(private_root):
+            continue
+        matches.append({
+            'tenant_key': tenant_key,
+            'tenant_root': tenant_root,
+            'private_root': private_root,
+            'peer_uid': peer_uid,
+        })
+    return matches[0] if len(matches) == 1 else None
+
+
+def inside(path: Path, root: Path) -> bool:
+    try:
+        return os.path.commonpath([str(path), str(root)]) == str(root)
+    except ValueError:
+        return False
+
+
+def fresh(path: Path) -> bool:
+    try:
+        age = max(0.0, __import__('time').time() - path.stat().st_mtime)
+        return age <= MAX_FRESH_SECONDS
+    except OSError:
+        return False
+
+
+def load_json_file(path: Path) -> tuple[dict[str, Any] | None, bytes | None]:
+    try:
+        raw = path.read_bytes()
+        parsed = json.loads(raw.decode('utf-8'))
+    except (OSError, UnicodeError, ValueError):
+        return None, None
+    return (parsed if isinstance(parsed, dict) else None), raw
+
+
+def resolve_snapshot(request: dict[str, Any], deployment: dict[str, Any]) -> tuple[str, Path, str] | None:
+    kind = request.get('kind')
+    binding = safe_key(request.get('binding'))
+    snapshot_raw = request.get('snapshot')
+    if kind not in ('data', 'asset') or binding is None or not isinstance(snapshot_raw, str) or not snapshot_raw.startswith('/'):
+        return None
+    requested = Path(snapshot_raw)
+    if requested.is_symlink() or not no_symlink_components(requested):
+        return None
+    try:
+        resolved = requested.resolve(strict=True)
+        backup_root = (deployment['private_root'] / 'backups' / 'tenant').resolve(strict=True)
+    except OSError:
+        return None
+    if not inside(resolved, backup_root):
+        return None
+    return kind, resolved, binding
+
+
+def file_owner(path: Path, uid: int) -> bool:
+    try:
+        st = os.lstat(path)
+        return st.st_uid == uid and not stat.S_ISLNK(st.st_mode)
+    except OSError:
+        return False
+
+
+def data_statement(path: Path, binding: str, deployment: dict[str, Any]) -> dict[str, Any] | None:
+    expected_parent = deployment['private_root'] / 'backups' / 'tenant' / 'records' / binding
+    try:
+        if path.parent.resolve(strict=True) != expected_parent.resolve(strict=True):
+            return None
+    except OSError:
+        return None
+    if not path.is_file() or not file_owner(path, deployment['peer_uid']) or not fresh(path):
+        return None
+    if not path.name.endswith('.json') or len(path.name) > 180:
+        return None
+    env, raw = load_json_file(path)
+    if env is None or raw is None:
+        return None
+    if int(env.get('schema', 0)) != 2 or not isinstance(env.get('data'), list) and not isinstance(env.get('data'), dict):
+        return None
+    if env.get('tenant_key') != deployment['tenant_key'] or env.get('backup_key') != binding:
+        return None
+    return {
+        'version': 1,
+        'kind': 'data',
+        'tenant_key': deployment['tenant_key'],
+        'binding': binding,
+        'snapshot': path.name,
+        'content_sha256': hashlib.sha256(raw).hexdigest(),
+    }
+
+
+def payload_files(payload: Path, uid: int) -> list[dict[str, Any]] | None:
+    if not payload.is_dir() or payload.is_symlink() or not no_symlink_components(payload):
+        return None
+    try:
+        root = payload.resolve(strict=True)
+    except OSError:
+        return None
+    result: list[dict[str, Any]] = []
+    for current, dirs, files in os.walk(root, topdown=True, followlinks=False):
+        current_path = Path(current)
+        for name in dirs:
+            p = current_path / name
+            if p.is_symlink() or not file_owner(p, uid):
+                return None
+        for name in files:
+            p = current_path / name
+            if p.is_symlink() or not p.is_file() or not file_owner(p, uid):
+                return None
+            try:
+                real = p.resolve(strict=True)
+                if not inside(real, root):
+                    return None
+                rel = real.relative_to(root).as_posix()
+                size = real.stat().st_size
+                digest = hashlib.sha256(real.read_bytes()).hexdigest()
+            except (OSError, ValueError):
+                return None
+            result.append({'path': rel, 'size': int(size), 'sha256': digest})
+    result.sort(key=lambda item: item['path'])
+    return result
+
+
+def asset_statement(snapshot: Path, scope: str, deployment: dict[str, Any]) -> dict[str, Any] | None:
+    if scope not in ('fotoboek', 'sponsors'):
+        return None
+    expected_parent = deployment['private_root'] / 'backups' / 'tenant' / 'assets' / scope
+    try:
+        if snapshot.parent.resolve(strict=True) != expected_parent.resolve(strict=True):
+            return None
+    except OSError:
+        return None
+    if not snapshot.is_dir() or not file_owner(snapshot, deployment['peer_uid']) or not fresh(snapshot):
+        return None
+    manifest = snapshot / 'manifest.json'
+    payload = snapshot / 'payload'
+    if not file_owner(manifest, deployment['peer_uid']) or not fresh(manifest):
+        return None
+    doc, raw = load_json_file(manifest)
+    if doc is None or raw is None:
+        return None
+    if int(doc.get('schema', 0)) != 2 or doc.get('tenant_key') != deployment['tenant_key'] or doc.get('asset_scope') != scope:
+        return None
+    files = payload_files(payload, deployment['peer_uid'])
+    if files is None:
+        return None
+    return {
+        'version': 1,
+        'kind': 'asset',
+        'tenant_key': deployment['tenant_key'],
+        'binding': scope,
+        'snapshot': snapshot.name,
+        'manifest_sha256': hashlib.sha256(raw).hexdigest(),
+        'files': files,
+    }
+
+
+def canonical(statement: dict[str, Any]) -> bytes:
+    return json.dumps(statement, ensure_ascii=False, sort_keys=True, separators=(',', ':')).encode('utf-8')
+
+
+def sign(statement: dict[str, Any]) -> dict[str, Any] | None:
+    if not regular_root_file(PRIVATE_KEY, 0o600) or not regular_root_file(PUBLIC_KEY, 0o644) or not os.path.isfile(OPENSSL):
+        return None
+    signed = canonical(statement)
+    try:
+        proc = subprocess.run(
+            [OPENSSL, 'dgst', '-sha256', '-sign', str(PRIVATE_KEY)],
+            input=signed,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            check=False,
+            timeout=5,
+        )
+        public_raw = PUBLIC_KEY.read_bytes()
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if proc.returncode != 0 or not proc.stdout:
+        return None
+    return {
+        'schema': 1,
+        'algorithm': 'rsa-sha256',
+        'key_id': hashlib.sha256(public_raw).hexdigest(),
+        'signed': base64.b64encode(signed).decode('ascii'),
+        'signature': base64.b64encode(proc.stdout).decode('ascii'),
+    }
+
+
+def process(request: Any, peer_uid: int) -> dict[str, Any]:
+    if not isinstance(request, dict) or request.get('action') != 'attest':
+        return {'ok': False, 'error': 'invalid-request'}
+    deployment = deployment_for_uid(peer_uid)
+    if deployment is None:
+        return {'ok': False, 'error': 'unknown-peer'}
+    resolved = resolve_snapshot(request, deployment)
+    if resolved is None:
+        return {'ok': False, 'error': 'invalid-snapshot'}
+    kind, snapshot, binding = resolved
+    statement = data_statement(snapshot, binding, deployment) if kind == 'data' else asset_statement(snapshot, binding, deployment)
+    if statement is None:
+        return {'ok': False, 'error': 'snapshot-not-attestable'}
+    attestation = sign(statement)
+    if attestation is None:
+        return {'ok': False, 'error': 'signing-failed'}
+    return {'ok': True, 'attestation': attestation}
+
+
+def serve_client(conn: socket.socket) -> None:
+    try:
+        creds = conn.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, struct.calcsize('3i'))
+        _pid, peer_uid, _gid = struct.unpack('3i', creds)
+        conn.settimeout(5.0)
+        data = b''
+        while b'\n' not in data and len(data) <= MAX_REQUEST:
+            chunk = conn.recv(2048)
+            if not chunk:
+                break
+            data += chunk
+        if len(data) > MAX_REQUEST or b'\n' not in data:
+            response = {'ok': False, 'error': 'request-too-large'}
+        else:
+            try:
+                request = json.loads(data.split(b'\n', 1)[0].decode('utf-8'))
+                response = process(request, peer_uid)
+            except (UnicodeError, ValueError):
+                response = {'ok': False, 'error': 'invalid-json'}
+        raw = (json.dumps(response, ensure_ascii=False, separators=(',', ':')) + '\n').encode('utf-8')
+        if len(raw) > MAX_RESPONSE:
+            raw = b'{"ok":false,"error":"response-too-large"}\n'
+        conn.sendall(raw)
+    except OSError as exc:
+        fail(f'client error: {exc}')
+    finally:
+        try:
+            conn.close()
+        except OSError:
+            pass
+
+
+def main() -> int:
+    if os.geteuid() != 0:
+        fail('must run as root')
+        return 1
+    if not regular_root_file(PRIVATE_KEY, 0o600) or not regular_root_file(PUBLIC_KEY, 0o644):
+        fail('signing key material missing or unsafe')
+        return 1
+    RUNTIME_DIR.mkdir(mode=0o755, parents=True, exist_ok=True)
+    os.chmod(RUNTIME_DIR, 0o755)
+    if SOCKET_PATH.exists() or SOCKET_PATH.is_symlink():
+        try:
+            st = os.lstat(SOCKET_PATH)
+            if st.st_uid != 0 or not stat.S_ISSOCK(st.st_mode):
+                fail('refusing unsafe pre-existing socket path')
+                return 1
+            SOCKET_PATH.unlink()
+        except OSError as exc:
+            fail(f'cannot clear old socket: {exc}')
+            return 1
+
+    server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    try:
+        server.bind(str(SOCKET_PATH))
+        os.chmod(SOCKET_PATH, 0o666)  # peer UID is the authorization boundary
+        server.listen(32)
+        server.settimeout(1.0)
+        stopping = False
+
+        def stop(_signum: int, _frame: Any) -> None:
+            nonlocal stopping
+            stopping = True
+
+        signal.signal(signal.SIGTERM, stop)
+        signal.signal(signal.SIGINT, stop)
+        while not stopping:
+            try:
+                conn, _ = server.accept()
+            except socket.timeout:
+                continue
+            except OSError:
+                if stopping:
+                    break
+                raise
+            serve_client(conn)
+        return 0
+    finally:
+        server.close()
+        try:
+            if SOCKET_PATH.exists() and not SOCKET_PATH.is_symlink():
+                SOCKET_PATH.unlink()
+        except OSError:
+            pass
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())
