@@ -65,11 +65,13 @@ try {
     writeAttBA(backupAttestatieSidecarData($dataPath), $att);
 
     checkBA(backupAttestatieVerifieerData($dataPath, 'tenant-a', 'public-contact'), 'geldige schema-2 datasnapshot verifieert cryptografisch');
+    checkBA(backupAttestatieVerifieerDataRaw($dataPath, $raw, 'tenant-a', 'public-contact'), 'exact reeds ingelezen snapshotbytes verifiëren tegen dezelfde signature');
     $err = null; $read = tenantBackupLeesArray('public-contact', basename($dataPath), $err);
     checkBA(is_array($read) && ($read['value'] ?? '') === 'origineel' && $err === null, 'geldige geattesteerde datasnapshot blijft herstelbaar');
 
     $tampered = $env; $tampered['data']['value'] = 'gemanipuleerd';
     file_put_contents($dataPath, json_encode($tampered, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+    checkBA(backupAttestatieVerifieerDataRaw($dataPath, $raw, 'tenant-a', 'public-contact'), 'in-memory restorebytes blijven verifieerbaar als bestand na de read wijzigt');
     $err = null; $read = tenantBackupLeesArray('public-contact', basename($dataPath), $err);
     checkBA($read === null && str_contains((string)$err, 'Cryptografische'), 'wijziging van snapshotdata wordt vóór restore gedetecteerd');
 
@@ -104,6 +106,14 @@ try {
     $assetAtt = is_array($assetStatement) ? attestBA($assetStatement, $key, $publicPem) : [];
     writeAttBA(backupAttestatieSidecarAsset($asset), $assetAtt);
     checkBA(backupAttestatieVerifieerAsset($asset, 'tenant-a', 'sponsors'), 'geldige assetattestatie bindt volledige payloadmanifestset');
+
+    $stagePayload = $tmp . '/stage-payload';
+    mkdir($stagePayload, 0750, true);
+    copy($asset . '/payload/logo.png', $stagePayload . '/logo.png');
+    checkBA(backupAttestatieVerifieerAssetStaging($asset, $stagePayload, 'tenant-a', 'sponsors'), 'gestagede assetkopie wordt opnieuw tegen ondertekende filelijst geverifieerd');
+    file_put_contents($stagePayload . '/logo.png', 'PNG-STAGING-GEMANIPULEERD');
+    checkBA(!backupAttestatieVerifieerAssetStaging($asset, $stagePayload, 'tenant-a', 'sponsors'), 'wijziging tijdens bron-naar-staging venster wordt vóór swap gedetecteerd');
+
     file_put_contents($asset . '/payload/logo.png', 'PNG-GEMANIPULEERD');
     checkBA(!backupAttestatieVerifieerAsset($asset, 'tenant-a', 'sponsors'), 'wijziging van assetpayload wordt vóór restore gedetecteerd');
     file_put_contents($asset . '/payload/logo.png', 'PNG-ORIGINEEL');
@@ -118,6 +128,8 @@ try {
 
     $phpSource = file_get_contents($root . '/app/storage/backup-attestation.php');
     checkBA(is_string($phpSource) && !preg_match('/\b(?:exec|system|shell_exec|proc_open|passthru)\s*\(/', $phpSource) && !str_contains($phpSource, 'private.pem'), 'tenant PHP-verifier bevat geen shell/root-exec of private-keypad');
+    $storeSource = file_get_contents($root . '/app/storage/tenant-backup-store.php');
+    checkBA(is_string($storeSource) && str_contains($storeSource, 'backupAttestatieVerifieerDataRaw($realPad, $raw') && str_contains($storeSource, 'backupAttestatieVerifieerAssetStaging('), 'restorepad gebruikt exact-read data-attestatie en staging-herverificatie');
     $attestorSource = file_get_contents($root . '/ops/vps-test-deploy/verenigingsplatform-backup-attestor');
     checkBA(is_string($attestorSource) && str_contains($attestorSource, 'SO_PEERCRED') && str_contains($attestorSource, "deployment.json") && str_contains($attestorSource, "private.pem") && str_contains($attestorSource, "schema', 0)) != 2"), 'root-attestor bindt peer-UID/deployment en accepteert alleen schema 2');
     $installer = file_get_contents($root . '/ops/vps-test-deploy/install-backup-attestation');
