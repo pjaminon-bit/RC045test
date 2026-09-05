@@ -14,15 +14,13 @@
 // operationele-taken-opslag.php: alleen functies, schrijft zelf niets naar
 // het scherm. Wordt gebruikt door beheer.php, tabblad Evenementen.
 //
-// PRIVACY. Het bestand staat BEWUST NIET in data/, want die map is publiek
-// opvraagbaar, en een deel van de evenementen is alleen voor bestuursleden
-// bedoeld (en de deelnemerslijst is sowieso geen publieke informatie). Het
-// heet evenementen-data.php en begint met een regel PHP die de uitvoer
-// meteen afbreekt: wordt het ooit rechtstreeks opgevraagd, dan voert de
-// server het uit als PHP en krijgt de bezoeker een lege pagina in plaats
-// van de evenementenlijst. Zet het bestand er daarnaast bij in .htaccess
-// (Require all denied). Let op dat de deploy dotfiles overslaat, dus die
-// .htaccess gaat met de hand via FTP.
+// STANDALONE COMPATIBILITEIT / PRIVACY. evenementen-data.php is het legacy
+// PHP+JSON-formaat voor losse installaties. De PHP-voorloop blokkeert directe
+// uitvoer; op Apache kan de repository-.htaccess aanvullend deny-en. Dit is
+// geen VPS-opslag- of deploycontract: nieuwe multi-tenant VPS-tenants volgen
+// de tenant-private storagegrens uit docs/PROVISIONING.md en
+// docs/VPS-DEPLOYMENT.md. .htaccess wordt door de releaseflow meegenomen;
+// er is geen handmatige FTP-stap voor VPS-deployments.
 // ============================================================
 
 require_once __DIR__ . '/leden-opslag.php';
@@ -255,7 +253,7 @@ function evenementDeelnameWijzigen($evenementId, $lidId, $aanmelden, &$fout = nu
     }
 
     $stondIngeschreven = $mogelijk['ingeschreven'];
-    if ($aanmelden && $stondIngeschreven) return true;  // al goed, niets te doen
+    if ($aanmelden && $stondIngeschreven) return true;
     if (!$aanmelden && !$stondIngeschreven) return true;
 
     if ($aanmelden) {
@@ -263,8 +261,6 @@ function evenementDeelnameWijzigen($evenementId, $lidId, $aanmelden, &$fout = nu
         $fout = 'De inschrijving voor dit evenement is gesloten.';
         return false;
       }
-      // Pas hier controleren, met het bestand onder de lock: tussen het
-      // tonen van de pagina en deze klik kan de laatste plek weg zijn.
       if ($mogelijk['vol']) {
         $fout = 'Dit evenement zit vol.';
         return false;
@@ -289,9 +285,6 @@ function evenementDeelnameWijzigen($evenementId, $lidId, $aanmelden, &$fout = nu
   }
 }
 
-// Aankomend boven geweest, daarbinnen aankomend op dichtstbijzijnde datum
-// eerst en geweest op meest recente datum eerst. Evenementen zonder datum
-// (nog te plannen) staan bovenaan bij aankomend.
 function evenementenGesorteerd($data) {
   $volgorde = ['aankomend' => 0, 'geweest' => 1];
   $lijst = $data['evenementen'];
@@ -302,21 +295,16 @@ function evenementenGesorteerd($data) {
     $da = (string) ($a['datum'] ?? '');
     $db = (string) ($b['datum'] ?? '');
     if ($sa === 0) {
-      // Aankomend: geen datum eerst, dan oplopend (eerstvolgende bovenaan).
       if ($da === '' && $db === '') return ((int) ($b['nummer'] ?? 0)) <=> ((int) ($a['nummer'] ?? 0));
       if ($da === '') return -1;
       if ($db === '') return 1;
       return $da <=> $db;
     }
-    // Geweest: aflopend (meest recente bovenaan).
     return $db <=> $da;
   });
   return $lijst;
 }
 
-// Tijd (HH:MM) valideren en normaliseren. Accepteert ook varianten als
-// "9", "9.30" of "930", zelfde soepele aanpak als vergaderingParseTijd() in
-// vergaderingen-opslag.php. Ongeldige of lege invoer wordt gewoon leeg.
 function evenementParseTijd($waarde) {
   $waarde = trim((string) $waarde);
   if ($waarde === '') return '';
@@ -334,9 +322,6 @@ function evenementParseTijd($waarde) {
   return '';
 }
 
-// Deelnemerslijst opschonen: alleen geldige, unieke lid-id's. Of een lid
-// nog echt bestaat controleert de aanroeper (net als bij toegewezen_aan),
-// hier alleen vorm en duplicaten.
 function evenementDeelnemersOpschonen($ruw) {
   if (!is_array($ruw)) return [];
   $uit = [];
@@ -373,16 +358,12 @@ function evenementNormaliseer($invoer, $bestaand = null) {
     $e['omschrijving'] = '';
   }
 
-  // Datum: verwacht al genormaliseerd (Y-m-d) via ledenParseDatum() door de
-  // aanroeper, hier alleen bewaren of leeg laten.
   if (array_key_exists('datum', $invoer)) {
     $e['datum'] = ledenGeldigeDatum((string) $invoer['datum']) ? $invoer['datum'] : '';
   } elseif (!isset($e['datum'])) {
     $e['datum'] = '';
   }
 
-  // Aanvang en eindtijd: hier (in tegenstelling tot de datumvelden) zelf
-  // geparsed, dat hoeft de aanroeper dus niet apart te doen.
   if (array_key_exists('tijd', $invoer)) {
     $e['tijd'] = evenementParseTijd($invoer['tijd']);
   } elseif (!isset($e['tijd'])) {
@@ -395,11 +376,6 @@ function evenementNormaliseer($invoer, $bestaand = null) {
     $e['eindtijd'] = '';
   }
 
-  // Begin- en einddatum inschrijving: ook al genormaliseerd door de
-  // aanroeper. Leeg mag: dan gelden er geen aparte inschrijvingsdata en is
-  // de gewone zichtbaarheid leidend (zie evenementZichtbaarVoorLeden()).
-  // De volgorde (eind niet voor begin) controleert de aanroeper, want hier
-  // is geen ruimte voor een foutmelding aan de gebruiker.
   if (array_key_exists('inschrijving_begin', $invoer)) {
     $e['inschrijving_begin'] = ledenGeldigeDatum((string) $invoer['inschrijving_begin']) ? $invoer['inschrijving_begin'] : '';
   } elseif (!isset($e['inschrijving_begin'])) {
@@ -431,9 +407,6 @@ function evenementNormaliseer($invoer, $bestaand = null) {
     $e['zichtbaarheid'] = 'leden';
   }
 
-  // Deelnemers (checkbox per lid): ontbreekt het hele blok in de invoer,
-  // dan is er niets aangevinkt en hoort de lijst leeg te worden, net als
-  // bij de aanwezigheid van een ledenvergadering.
   if (array_key_exists('deelnemers', $invoer)) {
     $e['deelnemers'] = evenementDeelnemersOpschonen($invoer['deelnemers']);
   } elseif (!isset($e['deelnemers']) || !is_array($e['deelnemers'])) {
