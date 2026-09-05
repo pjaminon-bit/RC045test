@@ -6,15 +6,14 @@
 // niets naar het scherm. Wordt gebruikt door beheer.php, tabblad
 // Bestuursvergadering.
 //
-// PRIVACY. Notulen, aanwezigheid en besluiten zijn intern. Het bestand
-// staat daarom net als het ledenbestand BEWUST NIET in data/, want die
-// map is publiek opvraagbaar. Het heet vergaderingen-data.php en begint
-// met een regel PHP die de uitvoer meteen afbreekt: wordt het ooit
-// rechtstreeks opgevraagd, dan voert de server het uit als PHP en krijgt
-// de bezoeker een lege pagina in plaats van de notulen. Zet het bestand
-// er daarnaast bij in .htaccess (Require all denied), twee sloten is
-// beter dan een. Let op dat de deploy dotfiles overslaat, dus die
-// .htaccess gaat met de hand via FTP.
+// STANDALONE COMPATIBILITEIT / PRIVACY. vergaderingen-data.php is het
+// legacy PHP+JSON-formaat voor losse installaties en begint met een
+// PHP-voorloop die directe uitvoer afbreekt. Op Apache kan de repository-
+// .htaccess als aanvullende denylaag dienen. Dit is geen VPS-opslag- of
+// deploycontract: nieuwe multi-tenant VPS-tenants volgen de tenant-private
+// storagegrens uit docs/PROVISIONING.md en docs/VPS-DEPLOYMENT.md. De
+// repository-.htaccess wordt door de releaseflow meegenomen; er is geen
+// handmatige FTP-stap voor VPS-deployments.
 // ============================================================
 
 require_once __DIR__ . '/leden-opslag.php';

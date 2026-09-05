@@ -6,14 +6,14 @@
 // zelf niets naar het scherm. Wordt gebruikt door beheer.php, tabblad
 // Takenlijst.
 //
-// PRIVACY. Net als de vergaderingen zijn dit interne bestuurszaken. Het
-// bestand staat daarom BEWUST NIET in data/, want die map is publiek
-// opvraagbaar. Het heet taken-data.php en begint met een regel PHP die de
-// uitvoer meteen afbreekt: wordt het ooit rechtstreeks opgevraagd, dan
-// voert de server het uit als PHP en krijgt de bezoeker een lege pagina in
-// plaats van de takenlijst. Zet het bestand er daarnaast bij in
-// .htaccess (Require all denied). Let op dat de deploy dotfiles overslaat,
-// dus die .htaccess gaat met de hand via FTP.
+// STANDALONE COMPATIBILITEIT / PRIVACY. taken-data.php is het legacy
+// PHP+JSON-formaat voor losse installaties en begint met een PHP-voorloop
+// die directe uitvoer afbreekt. Op Apache kan de repository-.htaccess als
+// extra denylaag dienen. Dit is geen VPS-opslag- of deploycontract: nieuwe
+// multi-tenant VPS-installaties gebruiken de tenant-private storagegrens uit
+// docs/PROVISIONING.md en docs/VPS-DEPLOYMENT.md. .htaccess wordt als
+// repositorybestand door de releaseflow meegenomen; er is geen handmatige
+// FTP-stap voor VPS-deployments.
 // ============================================================
 
 require_once __DIR__ . '/leden-opslag.php';
