@@ -13,6 +13,13 @@ const LEDEN_IMPORT_PREVIEW_MAX_RIJEN = 5000;
 const LEDEN_IMPORT_PREVIEW_MAX_BYTES = 16 * 1024 * 1024;
 const LEDEN_IMPORT_PREVIEW_MAX_BESTANDEN = 200;
 
+function ledenImportPreviewStorePrivateRoot(string $privateRoot): ?string
+{
+    $privateRoot = rtrim(trim($privateRoot), '/\\');
+    if ($privateRoot === '' || !str_starts_with($privateRoot, DIRECTORY_SEPARATOR)) return null;
+    return $privateRoot . DIRECTORY_SEPARATOR . 'tmp' . DIRECTORY_SEPARATOR . 'leden-import';
+}
+
 function ledenImportPreviewStoreContext(
     array $authPaden,
     string $tenantKey,
@@ -32,9 +39,15 @@ function ledenImportPreviewStoreContext(
     // Externe tenants houden tempdata rechtstreeks onder private_root. Voor
     // standalone gebruiken we de reeds installatie-geïsoleerde session-root;
     // zo komt de preview ook daar niet in de webroot terecht.
-    $root = !empty($authPaden['tenant_private'])
-        ? dirname($sessions) . DIRECTORY_SEPARATOR . 'tmp' . DIRECTORY_SEPARATOR . 'leden-import'
-        : $sessions . DIRECTORY_SEPARATOR . 'leden-import-previews';
+    if (!empty($authPaden['tenant_private'])) {
+        $privateRoot = dirname($sessions);
+        $root = ledenImportPreviewStorePrivateRoot($privateRoot);
+        $boundary = $privateRoot;
+    } else {
+        $root = $sessions . DIRECTORY_SEPARATOR . 'leden-import-previews';
+        $boundary = $sessions;
+    }
+    if (!is_string($root) || $root === '') return null;
 
     $ownerBinding = hash(
         'sha256',
@@ -43,18 +56,44 @@ function ledenImportPreviewStoreContext(
 
     return [
         'root' => $root,
+        'boundary' => $boundary,
         'tenant_key' => $tenantKey,
         'owner_binding' => $ownerBinding,
     ];
 }
 
+function ledenImportPreviewStorePadBinnenBoundary(string $boundary, string $pad): bool
+{
+    $boundary = rtrim($boundary, '/\\');
+    $pad = rtrim($pad, '/\\');
+    if ($boundary === '' || $pad === '' || !str_starts_with($boundary, DIRECTORY_SEPARATOR)) return false;
+    return $pad !== $boundary && str_starts_with($pad, $boundary . DIRECTORY_SEPARATOR);
+}
+
 function ledenImportPreviewStoreMaakRoot(array $context): bool
 {
-    $root = (string)($context['root'] ?? '');
-    if ($root === '' || is_link($root)) return false;
-    if (!is_dir($root) && !@mkdir($root, 0750, true) && !is_dir($root)) return false;
-    @chmod($root, 0750);
-    return is_dir($root) && !is_link($root) && is_writable($root);
+    $root = rtrim((string)($context['root'] ?? ''), '/\\');
+    $boundary = rtrim((string)($context['boundary'] ?? ''), '/\\');
+    if (!ledenImportPreviewStorePadBinnenBoundary($boundary, $root)) return false;
+    if (!is_dir($boundary) || is_link($boundary)) return false;
+
+    // De store kent maximaal twee eigen submappen. Maak iedere component apart
+    // zodat een bestaande symlink in de private tempnamespace nooit door een
+    // recursive mkdir wordt gevolgd.
+    $rel = substr($root, strlen($boundary) + 1);
+    $parts = preg_split('~[/\\\\]+~', $rel, -1, PREG_SPLIT_NO_EMPTY);
+    if (!is_array($parts) || $parts === [] || count($parts) > 2) return false;
+    $current = $boundary;
+    foreach ($parts as $part) {
+        if ($part === '.' || $part === '..') return false;
+        $current .= DIRECTORY_SEPARATOR . $part;
+        if (is_link($current)) return false;
+        if (!is_dir($current) && !@mkdir($current, 0750) && !is_dir($current)) return false;
+        @chmod($current, 0750);
+        if (!is_dir($current) || is_link($current)) return false;
+    }
+
+    return hash_equals($root, $current) && is_writable($root);
 }
 
 function ledenImportPreviewStoreIdGeldig(string $id): bool
@@ -66,7 +105,8 @@ function ledenImportPreviewStorePad(array $context, string $id): ?string
 {
     if (!ledenImportPreviewStoreIdGeldig($id)) return null;
     $root = rtrim((string)($context['root'] ?? ''), '/\\');
-    if ($root === '') return null;
+    $boundary = rtrim((string)($context['boundary'] ?? ''), '/\\');
+    if (!ledenImportPreviewStorePadBinnenBoundary($boundary, $root)) return null;
     return $root . DIRECTORY_SEPARATOR . $id . '.json';
 }
 
@@ -89,40 +129,73 @@ function ledenImportPreviewStoreVerwijderPad(string $pad): bool
     return @unlink($pad);
 }
 
+function ledenImportPreviewStoreCleanupNaam(string $naam): bool
+{
+    return preg_match('/^[a-f0-9]{64}\.json$/D', $naam) === 1
+        || preg_match('/^\.tmp-[a-f0-9]{12}$/D', $naam) === 1;
+}
+
 /**
  * Ruimt verlopen previews op voor alle users/sessies binnen dezelfde
- * installatie/tenant. Ook een verlaten browserpreview verdwijnt daardoor bij
- * het eerstvolgende ledenimportverzoek na de TTL, zonder zeven dagen op de
- * PHP-session-GC te wachten.
+ * installatie/tenant. Final previews gebruiken expires_at én mtime; een door
+ * procesafbreking achtergebleven .tmp-file heeft nog geen envelope en wordt
+ * daarom uitsluitend op mtime na dezelfde TTL verwijderd.
  */
-function ledenImportPreviewStoreCleanup(array $context, ?int $nu = null): int
+function ledenImportPreviewStoreCleanup(array $context, ?int $nu = null, bool $strict = false): int
 {
-    $root = (string)($context['root'] ?? '');
-    if ($root === '' || !is_dir($root) || is_link($root)) return 0;
+    $root = rtrim((string)($context['root'] ?? ''), '/\\');
+    $boundary = rtrim((string)($context['boundary'] ?? ''), '/\\');
+    if (!ledenImportPreviewStorePadBinnenBoundary($boundary, $root)) {
+        if ($strict) throw new RuntimeException('Ledenimport-previewroot valt buiten de private boundary.');
+        return 0;
+    }
+    if (!file_exists($root) && !is_link($root)) return 0;
+    if (!is_dir($root) || is_link($root)) {
+        if ($strict) throw new RuntimeException('Ledenimport-previewroot is geen veilige directory.');
+        return 0;
+    }
+    $realBoundary = realpath($boundary);
+    $realRoot = realpath($root);
+    if (!is_string($realBoundary) || !is_string($realRoot)
+        || !ledenImportPreviewStorePadBinnenBoundary($realBoundary, $realRoot)) {
+        if ($strict) throw new RuntimeException('Ledenimport-previewroot verlaat fysiek de private boundary.');
+        return 0;
+    }
+
     $nu ??= time();
     $verwijderd = 0;
+    $entries = scandir($root);
+    if (!is_array($entries)) {
+        if ($strict) throw new RuntimeException('Ledenimport-previewroot kon niet worden gelezen.');
+        return 0;
+    }
 
-    foreach (scandir($root) ?: [] as $naam) {
-        if ($naam === '.' || $naam === '..' || preg_match('/^[a-f0-9]{64}\.json$/D', $naam) !== 1) continue;
+    foreach ($entries as $naam) {
+        if ($naam === '.' || $naam === '..' || !ledenImportPreviewStoreCleanupNaam($naam)) continue;
         $pad = $root . DIRECTORY_SEPARATOR . $naam;
 
         // Nooit een symlink volgen. Een symlink in deze private tempmap is
         // geen geldige preview en kan veilig als directory-entry weg.
         if (is_link($pad)) {
-            if (@unlink($pad)) $verwijderd++;
+            if (@unlink($pad)) {
+                $verwijderd++;
+            } elseif ($strict) {
+                throw new RuntimeException('Onveilige ledenimport-previewsymlink kon niet worden verwijderd.');
+            }
             continue;
         }
         if (!is_file($pad)) continue;
 
         $mtime = @filemtime($pad);
         $verlopen = is_int($mtime) && $mtime > 0 && $mtime <= $nu - LEDEN_IMPORT_PREVIEW_TTL;
+        $isTmp = str_starts_with($naam, '.tmp-');
         $grootte = @filesize($pad);
         $raw = null;
 
-        if (is_int($grootte) && $grootte >= 0 && $grootte <= LEDEN_IMPORT_PREVIEW_MAX_BYTES) {
+        if (!$isTmp && is_int($grootte) && $grootte >= 0 && $grootte <= LEDEN_IMPORT_PREVIEW_MAX_BYTES) {
             $raw = @file_get_contents($pad);
         }
-        if (is_string($raw)) {
+        if (!$isTmp && is_string($raw)) {
             try {
                 $envelope = json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
                 if (is_array($envelope) && (int)($envelope['expires_at'] ?? 0) <= $nu) $verlopen = true;
@@ -132,10 +205,38 @@ function ledenImportPreviewStoreCleanup(array $context, ?int $nu = null): int
             }
         }
 
-        if ($verlopen && @unlink($pad)) $verwijderd++;
+        if ($verlopen) {
+            if (@unlink($pad)) {
+                $verwijderd++;
+            } elseif ($strict) {
+                throw new RuntimeException('Verlopen ledenimport-preview kon niet worden verwijderd.');
+            }
+        }
     }
 
     return $verwijderd;
+}
+
+/**
+ * Periodieke productie-GC zonder authsessie. De bestaande VPS-healthtimer
+ * roept /healthz.php iedere minuut via tenant-FPM aan; zo wordt verlopen PII
+ * rond de één-uursgrens verwijderd zonder repository-PHP als root uit te voeren.
+ */
+function ledenImportPreviewStoreCleanupPrivateRoot(string $privateRoot, ?int $nu = null): int
+{
+    $privateRoot = rtrim(trim($privateRoot), '/\\');
+    $root = ledenImportPreviewStorePrivateRoot($privateRoot);
+    if ($root === null || !is_dir($privateRoot) || is_link($privateRoot)) {
+        throw new RuntimeException('Private root voor ledenimport-cleanup is ongeldig.');
+    }
+    $tmpRoot = $privateRoot . DIRECTORY_SEPARATOR . 'tmp';
+    if (is_link($tmpRoot) || is_link($root)) {
+        throw new RuntimeException('Ledenimport-tempnamespace mag geen symlink bevatten.');
+    }
+    return ledenImportPreviewStoreCleanup([
+        'root' => $root,
+        'boundary' => $privateRoot,
+    ], $nu, true);
 }
 
 function ledenImportPreviewStoreAantalBestanden(array $context): int
