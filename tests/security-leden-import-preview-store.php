@@ -51,8 +51,14 @@ $ctxAndereTenant = ledenImportPreviewStoreContext($auth, 'tenant-b', 'beheerder-
 try {
     checkLIPS(is_array($ctxA), 'geldige tenant/user/sessiecontext wordt opgebouwd');
     checkLIPS(
-        is_array($ctxA) && str_starts_with((string)$ctxA['root'], $private . DIRECTORY_SEPARATOR . 'tmp' . DIRECTORY_SEPARATOR),
-        'externe tenantpreview blijft onder private_root'
+        is_array($ctxA)
+        && hash_equals($private, (string)$ctxA['boundary'])
+        && str_starts_with((string)$ctxA['root'], $private . DIRECTORY_SEPARATOR . 'tmp' . DIRECTORY_SEPARATOR),
+        'externe tenantpreview blijft onder expliciete private-rootboundary'
+    );
+    checkLIPS(
+        ledenImportPreviewStorePrivateRoot($private) === $private . DIRECTORY_SEPARATOR . 'tmp' . DIRECTORY_SEPARATOR . 'leden-import',
+        'periodieke cleanup en requeststore delen exact dezelfde tenantprivate root'
     );
     checkLIPS(
         is_array($ctxA) && preg_match('/^[a-f0-9]{64}$/D', (string)$ctxA['owner_binding']) === 1,
@@ -163,8 +169,17 @@ try {
 
     $abandonId = ledenImportPreviewStoreBewaar($ctxA, $klein, $nu);
     $abandonPad = is_string($abandonId) ? ledenImportPreviewStorePad($ctxA, $abandonId) : null;
-    $removed = ledenImportPreviewStoreCleanup($ctxA, $nu + LEDEN_IMPORT_PREVIEW_TTL + 1);
-    checkLIPS($removed >= 1 && is_string($abandonPad) && !file_exists($abandonPad), 'opportunistische cleanup verwijdert verlaten preview rond TTL');
+    $removed = ledenImportPreviewStoreCleanupPrivateRoot($private, $nu + LEDEN_IMPORT_PREVIEW_TTL + 1);
+    checkLIPS($removed >= 1 && is_string($abandonPad) && !file_exists($abandonPad), 'periodieke tenantcleanup verwijdert verlaten preview rond TTL zonder user/sessiecontext');
+
+    // Simuleer procesafbreking tussen tempwrite en atomic rename. Ook die bytes
+    // bevatten PII en mogen niet buiten de TTL blijven liggen.
+    ledenImportPreviewStoreMaakRoot($ctxA);
+    $crashTmp = (string)$ctxA['root'] . DIRECTORY_SEPARATOR . '.tmp-' . str_repeat('b', 12);
+    file_put_contents($crashTmp, '{"pii":"achtergebleven-tempdata"}');
+    touch($crashTmp, $nu - LEDEN_IMPORT_PREVIEW_TTL - 5);
+    $removedTmp = ledenImportPreviewStoreCleanupPrivateRoot($private, $nu);
+    checkLIPS($removedTmp >= 1 && !file_exists($crashTmp), 'periodieke cleanup verwijdert stale crash-tempfile met PII na dezelfde TTL');
 
     checkLIPS(ledenImportPreviewStorePad($ctxA, '../sessie') === null, 'preview-id accepteert geen path traversal');
 
@@ -177,17 +192,42 @@ try {
         ledenImportPreviewStoreCleanup($ctxA, time());
         checkLIPS(!is_link($symlinkPad) && file_get_contents($sentinel) === 'blijft-bestaan', 'cleanup volgt symlinkpreview nooit naar extern doel');
     } else {
-        checkLIPS(true, 'symlinktest niet ondersteund door testfilesystem; geen securityassertie overgeslagen in productiecode');
+        checkLIPS(true, 'symlinktest niet ondersteund door testfilesystem; productiecode blijft fail-closed');
     }
 
+    // Ook een symlink in de eigen tmp-parent mag niet door recursive mkdir
+    // gevolgd worden naar buiten de private root.
+    rrLIPS($private . '/tmp');
+    $outside = $tmp . '/outside';
+    mkdir($outside, 0750, true);
+    @symlink($outside, $private . '/tmp');
+    if (is_link($private . '/tmp')) {
+        checkLIPS(!ledenImportPreviewStoreMaakRoot($ctxA), 'requeststore volgt geen symlink in private tmp-parent');
+        $strictBlocked = false;
+        try {
+            ledenImportPreviewStoreCleanupPrivateRoot($private, time());
+        } catch (RuntimeException $e) {
+            $strictBlocked = str_contains($e->getMessage(), 'symlink');
+        }
+        checkLIPS($strictBlocked, 'periodieke cleanup faalt zichtbaar bij symlinkdrift in tempnamespace');
+        @unlink($private . '/tmp');
+    } else {
+        checkLIPS(true, 'tmp-parent symlinktest niet ondersteund door testfilesystem');
+        checkLIPS(true, 'strict symlinkdrifttest niet ondersteund door testfilesystem');
+    }
+
+    $standaloneRoot = $tmp . '/standalone-sessions';
+    mkdir($standaloneRoot, 0750, true);
     $standaloneAuth = [
         'tenant_private' => false,
-        'sessions' => $tmp . '/standalone-sessions',
+        'sessions' => $standaloneRoot,
         'session_binding' => hash('sha256', 'standalone-installatie'),
     ];
     $standaloneCtx = ledenImportPreviewStoreContext($standaloneAuth, 'default', 'beheerder', 'session-x');
     checkLIPS(
-        is_array($standaloneCtx) && str_starts_with((string)$standaloneCtx['root'], (string)$standaloneAuth['sessions']),
+        is_array($standaloneCtx)
+        && hash_equals($standaloneRoot, (string)$standaloneCtx['boundary'])
+        && str_starts_with((string)$standaloneCtx['root'], $standaloneRoot . DIRECTORY_SEPARATOR),
         'standalone preview gebruikt installatie-geïsoleerde server-side session-root in plaats van webroot'
     );
 
@@ -202,7 +242,22 @@ try {
         is_string($page)
         && str_contains($page, 'ledenImportPreviewStoreCleanup($previewContext)')
         && str_contains($page, 'liPreviewWissen($previewContext)'),
-        'pagina activeert TTL-cleanup en expliciete cleanup bij annuleren/succes'
+        'pagina activeert requestcleanup en expliciete cleanup bij annuleren/succes'
+    );
+
+    $health = file_get_contents($root . '/healthz.php');
+    $monitoring = file_get_contents($root . '/app/deployment/monitoring-contract.php');
+    checkLIPS(
+        is_string($health)
+        && str_contains($health, "require_once __DIR__ . '/app/leden/import-preview-store.php'")
+        && str_contains($health, 'ledenImportPreviewStoreCleanupPrivateRoot($private)'),
+        'VPS healthendpoint activeert periodieke cleanup als tenant-FPM-runtime'
+    );
+    checkLIPS(
+        is_string($monitoring)
+        && str_contains($monitoring, "'interval_seconds'=>60")
+        && str_contains($monitoring, "'OnCalendar=minutely'"),
+        'bestaande VPS-healthtimer triggert cleanup iedere minuut zonder nieuwe privileged scheduler'
     );
     checkLIPS(
         LEDEN_IMPORT_PREVIEW_TTL === 3600
