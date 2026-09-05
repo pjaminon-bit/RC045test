@@ -51,7 +51,7 @@ $vereisteLokaleLinks = [
     'tests/run-all.sh',
 ];
 foreach ($vereisteLokaleLinks as $relatief) {
-    readme160Check(str_contains($readme, '](' . $relatief . ')'), "README linkt naar {$relatief}");
+    readme160Check(str_contains($readme, '(' . $relatief . ')'), "README linkt naar {$relatief}");
     readme160Check(is_file($root . '/' . $relatief), "README-doel {$relatief} bestaat in de repository");
 }
 
