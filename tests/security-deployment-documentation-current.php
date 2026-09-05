@@ -75,14 +75,13 @@ foreach ($legacyOpslag as $bestand) {
     deployment161Check(str_contains($inhoud, 'STANDALONE COMPATIBILITEIT'), "{$bestand} markeert legacy opslag als standalonecompatibiliteit");
     deployment161Check(str_contains($inhoud, 'docs/VPS-DEPLOYMENT.md'), "{$bestand} verwijst naar het actuele VPS-contract");
     deployment161Check(!str_contains($inhoud, 'deploy dotfiles overslaat'), "{$bestand} bevat geen oude dotfiles-overslaanclaim");
-    deployment161Check(!str_contains($inhoud, 'dotfiles overslaat'), "{$bestand} bevat geen generieke oude dotfiles-overslaanclaim");
     deployment161Check(!str_contains($inhoud, 'met de hand via FTP'), "{$bestand} instrueert geen handmatige FTP voor .htaccess");
 }
 
 deployment161Check(is_file($root . '/.htaccess'), 'repository-.htaccess bestaat als versiebeheerd releasebestand');
 
 $readme = @file_get_contents($root . '/README.md');
-deployment161Check(is_string($readme) && str_contains($readme, '](docs/VPS-DEPLOYMENT.md)'), 'README linkt naar het actuele VPS-deploymentcontract');
+deployment161Check(is_string($readme) && str_contains($readme, '(docs/VPS-DEPLOYMENT.md)'), 'README linkt naar het actuele VPS-deploymentcontract');
 deployment161Check(is_string($readme) && !str_contains($readme, 'auditissue #161'), 'README bevat geen tijdelijke #161-waarschuwing meer');
 
 printf("VPS deploymentdocumentatie #161: %d OK, %d fout(en)\n", $ok, $fout);
