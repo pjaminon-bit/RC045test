@@ -1,279 +1,152 @@
 # VPS deploymentcontract
 
-Status per **20-08-2026**: fase 3.5.1 + fase 4.1 runtimevoorbereiding.
+Dit document is de **actuele architectuur- en navigatie-ingang** voor deployment van het multi-tenant verenigingsplatform op de VPS. De oorspronkelijke fase-4-opbouw is inmiddels gerealiseerd: tenantprovisioning, Linux/PHP-FPM-isolatie, Apache-vhosts, DNS, TLS, PostgreSQL/PDO, monitoring, immutable releases/rollback, tenant lifecycle, control-plane en de GitHub→VPS-test deployflow hebben elk een eigen operationeel contract.
 
-Dit document legt de serverlayout vast waarmee meerdere verenigingen dezelfde applicatiecode veilig kunnen gebruiken. Fase 3.5/3.5.1 levert het vaste, machineleesbare tenant- en hostcontract. Fase 4.1 bouwt daarop de Linux/PHP-FPM runtimebundle en root-applyprocedure. DNS, TLS en concrete webserver-vhosts volgen in fase 4.2–4.4.
+Gebruik dit bestand voor de samenhang en ga voor concrete procedures naar de gespecialiseerde documenten hieronder. Historische fasenummers in oudere/specialistische documenten beschrijven de herkomst van een contract; ze betekenen niet dat die voorziening nog toekomstig is.
 
-De officiële vervolgnummers staan in `docs/ROADMAP.md`. De concrete 4.1 runtimeprocedure staat in `docs/VPS-RUNTIME-ISOLATION.md`.
+## Canonieke operationele documenten
 
-## Doelarchitectuur
+| Onderwerp | Canonieke documentatie |
+|---|---|
+| Nieuwe tenant, configuratie- en filesystemisolatie | [PROVISIONING.md](PROVISIONING.md) |
+| Eerste beheerder voor een tenant | [ADMIN-BOOTSTRAP.md](ADMIN-BOOTSTRAP.md) |
+| Eerste VPS/host-bootstrap | [VPS-FIRST-BOOTSTRAP.md](VPS-FIRST-BOOTSTRAP.md) |
+| VPS readiness, OS en runtimevereisten | [VPS-READINESS.md](VPS-READINESS.md) |
+| Linux-user, PHP-FPM-pool en private runtime | [VPS-RUNTIME-ISOLATION.md](VPS-RUNTIME-ISOLATION.md) |
+| Apache-vhosts, catch-all en canonical-host routing | [VPS-WEBSERVER.md](VPS-WEBSERVER.md) |
+| DNS | [VPS-DNS.md](VPS-DNS.md) |
+| TLS/certificaten | [VPS-TLS.md](VPS-TLS.md) |
+| PostgreSQL/PDO-tenantbinding | [VPS-DATABASE.md](VPS-DATABASE.md) |
+| Immutable releases en rollback | [VPS-RELEASES.md](VPS-RELEASES.md) |
+| Monitoring en healthchecks | [VPS-MONITORING.md](VPS-MONITORING.md) |
+| Tenant disable/export/remove | [VPS-LIFECYCLE.md](VPS-LIFECYCLE.md) |
+| GitHub Actions → VPS-test deployflow | [GITHUB-VPS-TEST-DEPLOYMENT.md](GITHUB-VPS-TEST-DEPLOYMENT.md) |
+| Authenticated live E2E | [VPS-AUTHENTICATED-E2E.md](VPS-AUTHENTICATED-E2E.md) |
+| Platform control-plane | [VPS-CONTROL-PLANE.md](VPS-CONTROL-PLANE.md) |
+| Control-plane provisioning | [VPS-CONTROL-PLANE-PROVISIONING.md](VPS-CONTROL-PLANE-PROVISIONING.md) |
+| Deployuser SSH-hardening | [VST-DEPLOY-SSHD-HARDENING.md](VST-DEPLOY-SSHD-HARDENING.md) |
+| Cryptografische backupattestatie | [BACKUP-ATTESTATION.md](BACKUP-ATTESTATION.md) |
+| Volledige bron/live regressie | [FULL-REGRESSION-ACCEPTANCE.md](FULL-REGRESSION-ACCEPTANCE.md) |
+
+De [README](../README.md) blijft de repository-ingang. Voor de actuele Security & Hardening Audit zijn de nieuwste handovercomment en de feitelijke GitHub-state in issue #138 leidend.
+
+## Leidende VPS-architectuur
 
 ```text
 /srv/verenigingsplatform/
+├── current -> releases/<40-hex-commit>
 ├── releases/
-│   ├── <commit-a>/              # immutable/read-only applicatierelease
+│   ├── <commit-a>/              # root-owned, immutable/read-only
 │   └── <commit-b>/
-└── current -> releases/<commit> # logische gedeelde app-root
+└── ... platform/release-state ...
 
 /srv/verenigingen/
-├── noorderhaven/
-│   ├── config.php
+├── <tenant-a>/
+│   ├── config.php               # server-only tenantconfig
 │   ├── runtime.env
 │   ├── tenant.json
 │   ├── deployment.json
 │   ├── runtime/
-│   │   ├── runtime-plan.json
-│   │   └── vst-noorderhaven-<hash>.conf
-│   └── private/
-│       ├── auth/
-│       ├── audit/
-│       ├── backups/
-│       ├── collections/
-│       ├── public-content/
-│       ├── security/
-│       ├── sessions/
-│       └── tmp/
-└── duinrand/
-    └── ... dezelfde tenantstructuur, eigen data ...
+│   └── private/                 # auth/data/sessies/uploads/backups/tmp/etc.
+└── <tenant-b>/
+    └── ... eigen geïsoleerde tenantstate ...
 ```
 
-De webserver gebruikt voor iedere vereniging dezelfde logische documentroot, bijvoorbeeld `/srv/verenigingsplatform/current`. De tenantroot onder `/srv/verenigingen/<key>` is **nooit** een documentroot, alias of statische webmap.
+De harde grens is:
 
-## Deploymentdescriptor maken
+- **gedeelde applicatiecode** staat in een immutable release onder `/srv/verenigingsplatform/releases/<commit>`;
+- `current` verwijst atomisch naar één fysieke release;
+- **tenantconfiguratie en mutable/private data** staan onder `/srv/verenigingen/<tenant>` en nooit in de gedeelde release;
+- de tenantroot/private root is nooit een documentroot, alias of algemene statische webmap;
+- iedere tenant heeft een eigen Linux-runtime-identiteit, PHP-FPM-pool en Unix-socket;
+- permanente privileged host-entrypoints staan buiten de applicatierelease en voeren geen repository-/release-PHP als root uit.
 
-Nadat de tenant is geprovisioneerd en fase 3.4 de eerste beheerder heeft geactiveerd:
+## Tenantbinding en fail-closed runtime
 
-```bash
-php bin/prepare-vps-deployment.php \
-  --config=/srv/verenigingen/noorderhaven/config.php \
-  --app-root=/srv/verenigingsplatform/current
-```
-
-Standaard ontstaat:
+Nieuwe VPS-tenants gebruiken een externe server-side configuratie. De runtime moet minimaal aan de eigen tenant gebonden zijn met:
 
 ```text
-/srv/verenigingen/noorderhaven/deployment.json
+VERENIGING_REQUIRE_TENANT_CONFIG=1
+VERENIGING_CONFIG_FILE=/srv/verenigingen/<tenant>/config.php
+VERENIGING_PRIVATE_ROOT=/srv/verenigingen/<tenant>/private
 ```
 
-Voor alleen controle:
+Ontbrekende, onleesbare of inconsistente verplichte tenantconfiguratie mag niet terugvallen naar RC045/default- of standaloneconfiguratie. `deployment.json`, runtimeplan, webserverconfiguratie en databasebinding moeten dezelfde tenantidentiteit bewijzen.
 
-```bash
-php bin/prepare-vps-deployment.php \
-  --config=/srv/verenigingen/noorderhaven/config.php \
-  --app-root=/srv/verenigingsplatform/current \
-  --dry-run
-```
+## Web- en netwerkgrenzen
 
-De output is deterministisch. Een identieke tweede run verandert niets. Een afwijkend bestaand descriptor wordt alleen met bewust `--force` vervangen.
+De canonieke VPS-stack gebruikt Apache 2.4. Voor iedere tenant gelden onder meer:
 
-## Wat wordt vóór deployment gecontroleerd
+- een globale HTTP/HTTPS catch-all weigert onbekende hosts voordat een tenantvhost kan matchen;
+- HTTP→HTTPS gebruikt de vaste canonieke host en spiegelt geen client-`Host` terug;
+- de documentroot is de gedeelde applicatierelease;
+- PHP voor een tenanthost gaat uitsluitend naar de eigen PHP-FPM-socket;
+- tenant-private paden worden niet rechtstreeks geserveerd;
+- server-only code, tooling en VCS-metadata zijn niet publiek bereikbaar.
 
-De tool faalt gesloten wanneer één van deze grenzen niet klopt:
+DNS, TLS en webserverconfiguratie zijn operationele onderdelen van de huidige architectuur; gebruik respectievelijk `VPS-DNS.md`, `VPS-TLS.md` en `VPS-WEBSERVER.md` voor de actuele procedures.
 
-- tenantconfig is niet het provisioned `config.php` buiten de app-root;
-- `private_root` is niet de eigen `<tenant>/private` map;
-- config, `tenant.json` en `runtime.env` wijzen niet exact naar dezelfde tenant;
-- `tenant.json` gebruikt niet `require_tenant_config=true`;
-- `site_url` is niet canoniek HTTPS op de domeinroot;
-- de eerste beheerder uit fase 3.4 ontbreekt of de masterconfig bevat geen geldige password hash;
-- tenantroot en gedeelde code overlappen fysiek;
-- een tenantpad loopt via een symlink;
-- de opgegeven app-root bevat niet de verwachte gedeelde platformcode;
-- deploymentoutput probeert buiten de tenantroot te schrijven.
+## Database en private data
 
-Een release-symlink zoals `/srv/verenigingsplatform/current` is voor de **gedeelde code** wel toegestaan. `deployment.json` bewaart zowel dat logische pad als het fysiek opgeloste releasepad, zodat later zichtbaar is tegen welke release het contract is gecontroleerd.
+De VPS ondersteunt tenantgebonden PostgreSQL/PDO conform `VPS-DATABASE.md`. Databasecredentials horen niet in Git, `deployment.json` of de gedeelde release. Private tenantdata blijft onder de tenant-private storagegrens of de tenantgebonden database.
 
-## Inhoud van deployment.json
+Legacy PHP+JSON-bestanden in de repository bestaan voor standalone/templatecompatibiliteit. Ze zijn **geen architectuurbron voor nieuwe VPS-tenants**. Voor standalone Apache kan de repository-`.htaccess` als defense-in-depth denylaag relevant blijven, maar er is geen handmatige FTP-stap in de VPS-deployflow.
 
-Het descriptor bevat uitsluitend niet-geheime deploymentmetadata, waaronder:
+## `.htaccess` en release-inhoud
 
-- tenant-key en canonieke host;
-- logische en fysieke gedeelde app-root;
-- tenantroot, configbestand en private root;
-- het exacte fail-closed runtime-environment;
-- een deterministische PHP-FPM poolnaam en Unix-socket;
-- een unieke aanbevolen OS-runtimegebruiker;
-- readiness-vlaggen voor manifestbinding, runtimebinding, adminbootstrap en canonical-hostcontract;
-- webvereisten voor catch-all hostafwijzing en veilige HTTP→HTTPS-redirects.
+De repository bevat `.htaccess` als normaal versiebeheerd bestand. De immutable releaseflow bouwt een deterministisch inhoudsmanifest en sluit expliciet private/mutable paden en VCS-/CI-metadata uit; `.htaccess` is geen legacy handmatig te kopiëren serverbestand.
 
-Het descriptor bevat bewust **geen**:
+Daarom geldt:
 
-- beheerderswachtwoord of wachtwoordhash;
-- PDO-wachtwoord;
-- DSN/databasecredentials;
-- TLS private keys;
-- API-tokens of andere secrets.
+- **VPS:** geen handmatige FTP-upload van `.htaccess`; releases komen via de gecontroleerde immutable release/deployflow;
+- **standalone/template:** volg de hosting-/migratiedocumentatie voor die omgeving en behandel `.htaccess` alleen als Apache defense-in-depth, niet als vervanging voor veilige private opslag.
 
-## Fase 4.1: Linux/PHP-FPM runtimebundle
+## Immutable deployment en rollback
 
-Op basis van `deployment.json` wordt nu een tweede deterministisch contract gemaakt:
+Normale VPS-updates overschrijven de actieve website niet in-place. De releaseflow:
 
-```bash
-php bin/prepare-vps-runtime.php \
-  --deployment=/srv/verenigingen/noorderhaven/deployment.json \
-  --php-version=8.5 \
-  --web-user=www-data \
-  --web-group=www-data
-```
+1. bindt de kandidaat aan een exacte Git-commit en deterministisch manifest;
+2. valideert de kandidaat en de actuele tenants;
+3. staged een nieuwe root-owned, read-only release;
+4. test configuratie/PHP/database/webservergrenzen;
+5. wisselt `current` atomisch;
+6. reloadt de betrokken PHP-FPM-services;
+7. voert healthchecks uit;
+8. rolt automatisch terug wanneer activatie of post-switch health niet veilig kan worden bewezen.
 
-Dit schrijft onder de tenantroot:
+Mutable tenantdata, sessies, uploads, databases en tenantconfiguratie blijven buiten de releasewissel. Zie `VPS-RELEASES.md` voor het volledige contract.
 
-```text
-runtime/runtime-plan.json
-runtime/<tenant-pool>.conf
-```
+## GitHub → VPS-test
 
-De generator voert geen root-acties uit. Voor roottoepassing wordt de bundle eerst opnieuw gecontroleerd:
+Voor `RC045test` is `GITHUB-VPS-TEST-DEPLOYMENT.md` leidend. De normale keten is:
 
-```bash
-php bin/apply-vps-runtime.php \
-  --plan=/srv/verenigingen/noorderhaven/runtime/runtime-plan.json \
-  --check
-```
+1. PR-gates op GitHub;
+2. merge naar `main`;
+3. post-merge validatie en PR-lineagecontrole;
+4. tijdelijke private Tailscale-route vanaf de GitHub runner;
+5. restricted deployverzoek voor exact één toegestane commit;
+6. root-owned hostwrapper activeert via de vertrouwde release-engine de immutable kandidaat;
+7. smoke, ephemeral authenticated fixture, beheer/ledenportaal-E2E, credentialscan en fixturecleanup;
+8. automatische post-deploy Full Regression met `source-regression`, `live-security` en `live-browser`.
 
-Op de echte Linux-VPS kan daarna bewust worden toegepast:
+De GitHub-runner krijgt geen algemene root-shell en kopieert geen losse bestanden rechtstreeks over de actieve website.
 
-```bash
-sudo php bin/apply-vps-runtime.php \
-  --plan=/srv/verenigingen/noorderhaven/runtime/runtime-plan.json \
-  --apply \
-  --fpm-pool-dir=/etc/php/8.5/fpm/pool.d
-```
+## Standalone versus VPS
 
-De apply-tool reloadt PHP-FPM niet automatisch. Eerst moet de volledige serverconfiguratie met de distro-/versiespecifieke testopdracht worden gevalideerd; pas daarna volgt een expliciete reload.
+Houd deze twee deploymentmodellen bewust uit elkaar:
 
-## PHP-FPM: één pool per tenant
+**Multi-tenant VPS**
+- gedeelde immutable code;
+- externe fail-closed tenantconfig;
+- tenant-private filesystem/PDO;
+- eigen Linux-user + FPM-pool;
+- gecentraliseerde webserver/DNS/TLS/database/release/lifecyclecontracten;
+- normale deployment via de gecontroleerde releaseketen.
 
-De securitygrens op de VPS is niet alleen de applicatiecode. Iedere tenant krijgt een eigen PHP-FPM pool met de waarden uit het gevalideerde runtimeplan.
+**Standalone/templatecompatibiliteit**
+- kan lokale configuratie en legacy PHP+JSON-opslag gebruiken;
+- kan Apache `.htaccess` als aanvullende denylaag gebruiken;
+- is bedoeld voor bestaande/losse installaties en migratiecompatibiliteit;
+- mag niet als ontwerpbron worden gebruikt voor nieuwe VPS-tenants.
 
-Conceptueel:
-
-```ini
-[<deployment.php_fpm.pool>]
-user = <unieke tenant-system-user>
-group = <unieke tenant-primary-group>
-listen = <deployment.php_fpm.socket>
-listen.owner = www-data
-listen.group = www-data
-listen.mode = 0660
-
-clear_env = yes
-php_admin_value[session.save_path] = "/srv/verenigingen/<tenant>/private/sessions"
-php_admin_value[upload_tmp_dir] = "/srv/verenigingen/<tenant>/private/tmp"
-
-env[VERENIGING_REQUIRE_TENANT_CONFIG] = "1"
-env[VERENIGING_CONFIG_FILE] = "<tenant>/config.php"
-env[VERENIGING_PRIVATE_ROOT] = "<tenant>/private"
-```
-
-Belangrijk:
-
-- de tenant-runtimegebruiker is een system account zonder login, home of supplementary groups;
-- de tenant-runtimegebruiker krijgt schrijfrecht uitsluitend op zijn eigen private root;
-- andere tenant-runtimegebruikers krijgen daar geen toegang toe;
-- sessies en tijdelijke uploads staan in de eigen private root;
-- de gedeelde applicatierelease blijft centraal beheerd en is nooit tenant-owned;
-- `clear_env=yes` voorkomt dat een pool toevallig environment van een andere deployment erft;
-- databasecredentials volgen apart in fase 4.5 en komen niet in `deployment.json` of de 4.1 runtimebundle.
-
-De precieze `pm.*` capaciteit is geen tenantidentiteitsgrens en kan later op VPS-capaciteit worden afgestemd.
-
-## Webservercontract — fase 4.2
-
-Voor Apache of Nginx gelden dezelfde harde regels die in fase 3.5.1 al in het deploymentcontract zijn vastgelegd en in fase 4.2 daadwerkelijk worden geautomatiseerd:
-
-1. `server_name`/`ServerName` is exact `canonical_host` uit het descriptor;
-2. de HTTP-vhost redirect naar de **vaste** `web.http_redirect_target`; een request-`Host` mag nooit in de redirect worden teruggespiegeld;
-3. er bestaat vóór alle tenantvhosts een default/catch-all vhost die onbekende hosts weigert en nooit PHP naar een tenantpool stuurt;
-4. documentroot is de gedeelde `shared_code.app_root`;
-5. PHP voor de canonieke host gaat uitsluitend naar de eigen `php_fpm.socket`;
-6. de tenantroot/private root wordt nooit rechtstreeks geserveerd;
-7. `public-content.php` en `public-asset.php` blijven de enige gateways naar tenant-publieke data/assets;
-8. server-only code en ontwikkeltooling (`app`, `bin`, `tests`, `docs`, `.github`) én VCS-metadata zoals `.git` zijn niet via HTTP bereikbaar.
-
-### Waarom de gedeelde `.htaccess` niet redirect
-
-Sinds fase 3.5.1 doet de gedeelde `.htaccess` bewust **geen** HTTP→HTTPS-redirect meer. De codebase kent op dat niveau niet betrouwbaar welke tenantvhost de request had moeten accepteren, terwijl `HTTP_HOST` clientinvoer is. De huidige standalone/DEV-hosting handelt HTTP→HTTPS vóór deze laag af; op de VPS doet de vhost/reverse proxy dit met een literal canonical host.
-
-### Apache — vereiste vorm
-
-De exacte syntax hangt af van de uiteindelijke VPS, maar de volgorde is essentieel. Eerst een catch-all, daarna pas tenantvhosts.
-
-```apache
-# Eerste/default HTTP-vhost: nooit naar een tenant redirecten.
-<VirtualHost *:80>
-    ServerName invalid.local
-    <Location />
-        Require all denied
-    </Location>
-</VirtualHost>
-
-# Tenant HTTP-vhost: literal redirect, geen %{HTTP_HOST}.
-<VirtualHost *:80>
-    ServerName noorderhaven.example
-    Redirect permanent / https://noorderhaven.example/
-</VirtualHost>
-
-# Tenant HTTPS-vhost.
-<VirtualHost *:443>
-    ServerName noorderhaven.example
-    DocumentRoot /srv/verenigingsplatform/current
-    # TLS-config en SetHandler/ProxyPassMatch naar exact de tenant-FPM-socket.
-</VirtualHost>
-```
-
-Voor HTTPS moet eveneens een expliciete default/catch-all configuratie bestaan die een onbekende SNI/Host niet aan de eerste tenantpool koppelt. De concrete TLS-catch-all wordt in fase 4.2/4.4 uitgewerkt.
-
-### Nginx — vereiste vorm
-
-Nginx leest `.htaccess` niet. Een Nginx-deployment moet de deny-regels en de exacte routing voor publieke content/assets expliciet overnemen. Gebruik nooit een algemene alias naar `private/`.
-
-Conceptueel begint de configuratie met een default server die onbekende hosts direct weigert, gevolgd door tenantservers met een literal HTTP→HTTPS redirect. Gebruik ook hier nooit `$host` als redirectdoel wanneer `canonical_host` al bekend is.
-
-## Release-inhoud en VCS-metadata
-
-Een live release hoort bij voorkeur uit een build/export zonder `.git` te bestaan. Defense-in-depth blokkeert de gedeelde Apache-laag `.git` daarnaast expliciet. Voor Nginx moet dezelfde deny-regel in de serverconfiguratie worden opgenomen. `deployment.json.web.vcs_metadata_must_not_be_served=true` maakt dit een deploymentvereiste.
-
-## Filesystem ownership — fase 4.1
-
-Het 4.1-contract maakt de bedoelde scheiding concreet:
-
-```text
-shared release             centraal platformbeheer   nooit tenant-owned/writable
-tenantroot                  root:<tenantgroup>        0750
-config/runtime metadata    root:<tenantgroup>        0640
-runtime bundle             root:<tenantgroup>        0750/0640
-tenant private directories <tenantuser>:<group>      0750
-tenant private files       <tenantuser>:<group>      0640
-sessions + tmp dirs        <tenantuser>:<group>      0700
-sessions + tmp files       <tenantuser>:<group>      0600
-```
-
-De root-applytool weigert symlinks in de tenantboom vóór recursieve ownershipwijzigingen en controleert dat de fysieke shared release niet world-writable of via de tenantidentity schrijfbaar is. Hij wijzigt shared-code ownership/modes nooit.
-
-## Veilige releasewissel — fase 4.7
-
-De gedeelde code maakt later een releaseflow mogelijk zonder tenantcode te kopiëren:
-
-1. nieuwe commit naar een nieuwe immutable map onder `releases/` plaatsen;
-2. centrale tests uitvoeren;
-3. tenant-deployment/runtime preflight uitvoeren tegen de nieuwe release;
-4. pas na succesvolle checks `current` atomisch naar de nieuwe release laten wijzen;
-5. smoke tests per tenant uitvoeren;
-6. oude release tijdelijk beschikbaar houden voor snelle rollback.
-
-Tenantdata, uploads, auth en sessies blijven bij zo'n codewissel in `/srv/verenigingen/<key>/private` staan.
-
-## Resterende fase 4-stappen
-
-Na de code/CI-voorbereiding van fase 4.1 volgen volgens `docs/ROADMAP.md`:
-
-- **4.2:** concrete Apache/Nginx-vhosts en veilige reloadprocedure;
-- **4.3:** DNS;
-- **4.4:** TLS/certificaten en renewal;
-- **4.5:** PDO/database-secret provisioning;
-- **4.6:** monitoring, healthchecks en centrale logging;
-- **4.7:** release- en rollbackautomation;
-- **4.8:** tenant lifecycle (disable/export/remove).
-
-De daadwerkelijke 4.1 `--apply`-handeling wordt pas op de toekomstige VPS uitgevoerd. Code/CI-gereed betekent dus nadrukkelijk niet dat er al Linux-accounts of PHP-FPM pools op een productie-VPS zijn aangemaakt.
+Voor nieuwe platformtenants begint de route bij `PROVISIONING.md`, gevolgd door de relevante VPS-contracten uit de tabel bovenaan.
