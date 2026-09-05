@@ -36,8 +36,12 @@ readlink_bin='/usr/bin/readlink'
 grep_bin='/usr/bin/grep'
 stat_bin='/usr/bin/stat'
 systemctl='/usr/bin/systemctl'
+runuser_bin='/usr/sbin/runuser'
+env_bin='/usr/bin/env'
+find_bin='/usr/bin/find'
+apachectl='/usr/sbin/apache2ctl'
 
-for exe in "$python" "$php" "$git" "$install" "$mktemp" "$rm" "$readlink_bin" "$grep_bin" "$stat_bin" "$systemctl" "$host_launcher"; do
+for exe in "$python" "$php" "$git" "$install" "$mktemp" "$rm" "$readlink_bin" "$grep_bin" "$stat_bin" "$systemctl" "$host_launcher" "$runuser_bin" "$env_bin" "$find_bin" "$apachectl"; do
   [[ -x "$exe" ]] || { echo "Vereiste executable ontbreekt: $exe" >&2; exit 69; }
 done
 [[ -d "$platform_root" && -L "$platform_root/current" ]] || { echo 'Actieve immutable platformrelease ontbreekt.' >&2; exit 69; }
@@ -45,6 +49,137 @@ done
 [[ -f "$host_launcher" && ! -L "$host_launcher" && "$("$stat_bin" -c '%u:%g:%a' "$host_launcher")" == '0:0:755' ]] || {
   echo 'Root-owned host-launcher ontbreekt of heeft onveilige metadata.' >&2
   exit 69
+}
+
+validate_already_active() {
+  local active checker row tenant runtime_user php_version config private php_bin syntax_user tenant_inventory
+  local tenant_count=0
+  local -a tenant_rows=()
+  declare -A php_bins=()
+  declare -A php_users=()
+
+  active="$("$readlink_bin" -f "$platform_root/current")"
+  [[ "$active" == "$platform_root/releases/$commit" && -d "$active" && ! -L "$active" ]] || {
+    echo 'Same-active validatie geweigerd: current wijst niet exact naar de gevraagde immutable main-release.' >&2
+    return 1
+  }
+
+  checker="$active/bin/check-release-tenant.php"
+  [[ -f "$checker" && ! -L "$checker" && -r "$checker" ]] || {
+    echo 'Same-active validatie geweigerd: tenantprobe ontbreekt in actieve release.' >&2
+    return 1
+  }
+
+  if ! tenant_inventory="$("$python" - "$tenant_base" <<'PY'
+import json
+import re
+import sys
+from pathlib import Path
+
+base = Path(sys.argv[1])
+if not base.is_dir() or base.is_symlink():
+    raise SystemExit(2)
+
+rows = []
+for tenant_dir in sorted(base.iterdir(), key=lambda p: p.name):
+    if tenant_dir.is_symlink() or not tenant_dir.is_dir():
+        raise SystemExit(3)
+    tenant = tenant_dir.name
+    if re.fullmatch(r'[a-z0-9]([a-z0-9-]*[a-z0-9])?', tenant) is None:
+        raise SystemExit(4)
+    runtime = tenant_dir / 'runtime' / 'runtime-plan.json'
+    config = tenant_dir / 'config.php'
+    private = tenant_dir / 'private'
+    if runtime.is_symlink() or not runtime.is_file() or config.is_symlink() or not config.is_file() or private.is_symlink() or not private.is_dir():
+        raise SystemExit(5)
+    try:
+        doc = json.loads(runtime.read_text(encoding='utf-8'))
+    except (OSError, UnicodeError, ValueError):
+        raise SystemExit(6)
+    if not isinstance(doc, dict) or doc.get('tenant_key') != tenant:
+        raise SystemExit(7)
+    os_doc = doc.get('os')
+    settings = doc.get('settings')
+    if not isinstance(os_doc, dict) or not isinstance(settings, dict):
+        raise SystemExit(8)
+    user = os_doc.get('user')
+    php_version = settings.get('php_version')
+    if not isinstance(user, str) or re.fullmatch(r'vst[0-9a-f]{16}', user) is None:
+        raise SystemExit(9)
+    if not isinstance(php_version, str) or re.fullmatch(r'[0-9]+\.[0-9]+', php_version) is None:
+        raise SystemExit(10)
+    values = [tenant, user, php_version, str(config), str(private)]
+    if any('\t' in value or '\n' in value for value in values):
+        raise SystemExit(11)
+    rows.append('\t'.join(values))
+
+if not rows:
+    raise SystemExit(12)
+print('\n'.join(rows))
+PY
+  )"; then
+    echo 'Same-active validatie geweigerd: tenantinventaris kon niet veilig worden opgebouwd.' >&2
+    return 1
+  fi
+  mapfile -t tenant_rows <<<"$tenant_inventory"
+
+  [[ "${#tenant_rows[@]}" -gt 0 ]] || {
+    echo 'Same-active validatie geweigerd: geen tenants gevonden.' >&2
+    return 1
+  }
+
+  for row in "${tenant_rows[@]}"; do
+    IFS=$'\t' read -r tenant runtime_user php_version config private <<<"$row"
+    [[ -n "$tenant" && -n "$runtime_user" && -n "$php_version" && -n "$config" && -n "$private" ]] || {
+      echo 'Same-active validatie geweigerd: onvolledige tenantregel.' >&2
+      return 1
+    }
+    /usr/bin/id "$runtime_user" >/dev/null 2>&1 || {
+      echo "Same-active validatie geweigerd: runtime-user ontbreekt voor $tenant." >&2
+      return 1
+    }
+    php_bin="/usr/bin/php$php_version"
+    [[ -x "$php_bin" ]] || {
+      echo "Same-active validatie geweigerd: PHP CLI ontbreekt voor $tenant." >&2
+      return 1
+    }
+    php_bins["$php_bin"]=1
+    if [[ -z "${php_users[$php_bin]:-}" ]]; then
+      php_users["$php_bin"]="$runtime_user"
+    fi
+
+    "$runuser_bin" -u "$runtime_user" -- "$env_bin" \
+      VERENIGING_REQUIRE_TENANT_CONFIG=1 \
+      "VERENIGING_CONFIG_FILE=$config" \
+      "VERENIGING_PRIVATE_ROOT=$private" \
+      PATH=/usr/sbin:/usr/bin:/sbin:/bin \
+      "$php_bin" "$checker" "--expected-tenant=$tenant" >/dev/null || {
+        echo "Same-active validatie geweigerd: tenantprobe faalt voor $tenant." >&2
+        return 1
+      }
+    tenant_count=$((tenant_count + 1))
+  done
+
+  for php_bin in "${!php_bins[@]}"; do
+    syntax_user="${php_users[$php_bin]:-}"
+    [[ -n "$syntax_user" ]] || {
+      echo "Same-active validatie geweigerd: geen tenant-user gebonden aan $php_bin." >&2
+      return 1
+    }
+    while IFS= read -r -d '' php_file; do
+      "$runuser_bin" -u "$syntax_user" -- "$php_bin" -l "$php_file" >/dev/null || {
+        echo "Same-active validatie geweigerd: PHP syntax faalt in $php_file onder $php_bin." >&2
+        return 1
+      }
+    done < <("$find_bin" "$active" -type f -name '*.php' -print0)
+  done
+
+  "$apachectl" configtest >/dev/null || {
+    echo 'Same-active validatie geweigerd: Apache configtest faalt.' >&2
+    return 1
+  }
+
+  echo "DEPLOY NOOP VALIDATED commit=$commit tenants=$tenant_count already_active=1"
 }
 
 # Een deploy mag pas plaatsvinden nadat alle permanente rootentrypoints uit de
@@ -120,7 +255,19 @@ actual="$("$git" -C "$source_root" rev-parse HEAD)"
   --output="$plan"
 
 "$host_launcher" release-apply --plan="$plan" --check
-"$host_launcher" release-apply --plan="$plan" --deploy
+
+set +e
+deploy_output="$("$host_launcher" release-apply --plan="$plan" --deploy 2>&1)"
+deploy_rc=$?
+set -e
+if [[ "$deploy_rc" -eq 0 ]]; then
+  printf '%s\n' "$deploy_output"
+elif [[ "$deploy_rc" -eq 1 && "$deploy_output" == 'FOUT: Kandidaatrelease is al actief.' ]]; then
+  validate_already_active
+else
+  [[ -z "$deploy_output" ]] || printf '%s\n' "$deploy_output" >&2
+  exit "$deploy_rc"
+fi
 
 active="$("$readlink_bin" -f "$platform_root/current")"
 [[ "$active" == "$platform_root/releases/$commit" ]] || {

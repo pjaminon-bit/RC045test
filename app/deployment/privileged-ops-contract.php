@@ -77,7 +77,7 @@ function privilegedOpsContract(): array
 {
     $hashes = [
         'github-entry' => 'db27ea9809705497a7a1d95a291719e0c3f7666374f7bed49da0f655dc4af53d',
-        'github-deploy' => 'c97ee1941d56d53be69ea7bef4d773f5c1acbfff890562f501a0fd91d1f65092',
+        'github-deploy' => 'bfde43d89bc6a5ac71c778450f2f9a00a3499fd1374eb83bcc4b4c5911898afb',
         'github-deploy-sudoers' => 'e158079d31e9aa16b68f6db09356519f0639d0958e7e11fd347ff7671cee9271',
         'github-e2e' => 'a416e4cb44a680f20c9bf924ddde2cefec49f715ea542c7c706b4d46db46e32e',
         'github-e2e-sudoers' => '4e74398220aeef8c1307ef8931e726a6e375c911ef4fb6f813673a470199f59d',
