@@ -52,7 +52,7 @@ done
 }
 
 validate_already_active() {
-  local active checker row tenant runtime_user php_version config private php_bin syntax_user
+  local active checker row tenant runtime_user php_version config private php_bin syntax_user tenant_inventory
   local tenant_count=0
   local -a tenant_rows=()
   declare -A php_bins=()
@@ -70,7 +70,7 @@ validate_already_active() {
     return 1
   }
 
-  mapfile -t tenant_rows < <("$python" - "$tenant_base" <<'PY'
+  if ! tenant_inventory="$("$python" - "$tenant_base" <<'PY'
 import json
 import re
 import sys
@@ -117,10 +117,11 @@ if not rows:
     raise SystemExit(12)
 print('\n'.join(rows))
 PY
-  ) || {
+  )"; then
     echo 'Same-active validatie geweigerd: tenantinventaris kon niet veilig worden opgebouwd.' >&2
     return 1
-  }
+  fi
+  mapfile -t tenant_rows <<<"$tenant_inventory"
 
   [[ "${#tenant_rows[@]}" -gt 0 ]] || {
     echo 'Same-active validatie geweigerd: geen tenants gevonden.' >&2
