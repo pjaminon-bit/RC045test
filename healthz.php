@@ -15,11 +15,25 @@ try {
     platformPhpAssertRequiredExtensions();
     require_once __DIR__ . '/app/operational-log.php';
     require_once __DIR__ . '/app/storage/private-store.php';
+    require_once __DIR__ . '/app/leden/import-preview-store.php';
 
     $private = trim((string)($config['opslag']['private_root'] ?? ''));
     if ($private === '' || !is_dir($private) || !is_readable($private) || !is_writable($private)) {
         throw new RuntimeException('private-root-onbruikbaar');
     }
+
+    // De root-owned healthtimer raakt dit endpoint iedere minuut via HTTPS.
+    // De request zelf draait gewoon onder de tenant-FPM-user. Daardoor kan
+    // verlopen ledenimport-PII periodiek worden verwijderd zonder app/release
+    // PHP als root uit te voeren of een tweede privileged scheduler te maken.
+    $verwijderd = ledenImportPreviewStoreCleanupPrivateRoot($private);
+    if ($verwijderd > 0) {
+        vpOps46Log($config, 'leden_import_preview_cleanup', 'info', [
+            'component' => 'privacy-retention',
+            'removed' => $verwijderd,
+        ]);
+    }
+
     if (privateStoreDriver() !== 'pdo') {
         throw new RuntimeException('productie-driver-niet-pdo');
     }
