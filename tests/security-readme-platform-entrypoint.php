@@ -65,7 +65,7 @@ foreach ($workflowPaden as $workflow) {
 }
 
 readme160Check(
-    str_contains($readme, 'voer repository-/release-PHP niet als root uit'),
+    str_contains(strtolower($readme), 'voer repository-/release-php niet als root uit'),
     'README bewaakt de root/release trust-boundary voor nieuwe maintainers'
 );
 
