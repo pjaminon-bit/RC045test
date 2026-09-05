@@ -100,9 +100,11 @@ De installer:
 - roteert bestaande keymaterialen nooit stil;
 - installeert de keydirectory als `root:root 0711`, zodat de vaste public-keylocatie door de tenant-runtime traverseerbaar is zonder directorylisting;
 - installeert private/public key met vaste rootmetadata (`0600` / `0644`);
+- controleert bestaande `private/backups/tenant`-namespaces tegen de root-owned deploymentbinding en migreert uitsluitend de historische `root:root` ownershipdrift terug naar de unieke tenant-UID/GID;
+- weigert bij die migratie symlinks, special files, hardlinks, onverwachte owners en group/world-writeable objecten en gebruikt geen brede `chown -R` over tenantdata;
 - installeert de attestor buiten `current`/`releases`;
 - installeert een geharde systemd-service met onder andere `NoNewPrivileges`, `ProtectSystem=strict`, `ProtectHome` en read-only `/srv/verenigingen`;
-- activeert de service en controleert socket, service, keydirectory en geïnstalleerde bron;
+- activeert de service en controleert socket, service, keydirectory, backupnamespace-ownership en geïnstalleerde bron;
 - toont attestor- en public-key-SHA-256 voor live evidence.
 
 Herverificatie zonder wijziging:
@@ -111,7 +113,17 @@ Herverificatie zonder wijziging:
 sudo bash ops/vps-test-deploy/install-backup-attestation --check
 ```
 
+`--check` wijzigt geen tenantdata en faalt wanneer een bestaande backupnamespace niet aan het tenant-owned `0750`/`0640` contract voldoet.
+
 Na activatie moet minimaal één nieuwe data- en assetsnapshot worden gemaakt en succesvol worden gelezen/hersteld; een gecontroleerd gemanipuleerde kopie moet vóór restore worden geweigerd. Daarna wordt de normale VPS-testdeploy + authenticated/live regressieketen opnieuw uitgevoerd.
+
+## Legacy ownershipdrift van de backupnamespace
+
+De generieke runtime-inrichting maakt `private_root` en runtime-data tenant-owned. Op een bestaande VPS-testinstallatie bleek uit live acceptatie een oudere `private/backups/tenant`-subboom desondanks nog `root:root 0750`. Daardoor kon de tenant-runtime geen nieuwe schema-2 snapshot aanmaken en werd signing nooit bereikt.
+
+Dit is geen nieuwe privilegeboundary: de backupnamespace hoort bij de tenant-runtime. De root-only installer bevat daarom een beperkte migratie voor exact die bekende namespace. Hij deriveert private-root en tenantaccount uitsluitend uit een veilige `deployment.json`, vereist dat `private_root` en `private/backups` al correct tenant-owned zijn, valideert de volledige legacy boom terwijl de tenant hem nog niet kan betreden, herstelt descendants eerst en maakt de namespace-root pas als laatste tenant-owned. Gezonde namespaces worden alleen gevalideerd en niet herschreven.
+
+De volledige live finding en migratie-eisen staan in `docs/migratie-log/2026-09-05-backup-namespace-ownership.md`.
 
 ## Keyverlies en rotatie
 
@@ -123,7 +135,7 @@ De private key is onderdeel van de recovery trust boundary. Verwijder of roteer 
 
 ## Regressiecontract
 
-`tests/security-backup-attestation.php` bewaakt onder meer:
+`tests/security-backup-attestation.php` en `tests/security-backup-ownership-migration.php` bewaken onder meer:
 
 - geldige data-signature;
 - payload- en bindingtamper;
@@ -135,4 +147,6 @@ De private key is onderdeel van de recovery trust boundary. Verwijder of roteer 
 - uitschakelen van de unauthenticated prewrite-fallback na activatie;
 - geen privileged exec/private-keypad in de tenant PHP-client;
 - peer-UID/deploymentbinding en schema-2-eis in de root-attestor;
-- root-keydirectory/keymetadata en systemd-sandbox in de installer.
+- root-keydirectory/keymetadata en systemd-sandbox in de installer;
+- afgebakende backupnamespace-migratie zonder brede recursive chown;
+- symlink/special-file/hardlink/writeable-driftweigering, fd-gebaseerde inodebinding en root-last ownershipherstel.
