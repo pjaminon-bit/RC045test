@@ -32,13 +32,15 @@ readme160Check(str_contains($readme, 'bash tests/run-all.sh'), 'README geeft de 
 readme160Check(str_contains($readme, 'PHP 8.5 compatibility'), 'README benoemt de PHP 8.5 CI-gate');
 readme160Check(str_contains($readme, 'Security supply-chain'), 'README benoemt de supply-chain CI-gate');
 readme160Check(str_contains($readme, 'GitHub issue #138'), 'README linkt naar de centrale security/hardeningtracker');
-readme160Check(str_contains($readme, 'auditissue #161'), 'README waarschuwt dat historische VPS-deploymentnotities nog apart worden gereconcilieerd');
+readme160Check(str_contains($readme, 'actuele VPS deploymentcontract'), 'README verwijst nieuwe tenants naar het actuele VPS-deploymentcontract');
+readme160Check(!str_contains($readme, 'auditissue #161'), 'README bevat geen tijdelijke waarschuwing meer over de inmiddels gereconcilieerde VPS-documentatie');
 readme160Check(!str_contains($readme, "# rc045\nRC045 Website"), 'oude README-stub is verwijderd');
 
 $vereisteLokaleLinks = [
     'site-config.local.example.php',
     'app/deployment/php-runtime-requirements.php',
     'package.json',
+    'docs/VPS-DEPLOYMENT.md',
     'docs/PROVISIONING.md',
     'docs/ADMIN-BOOTSTRAP.md',
     'docs/GITHUB-VPS-TEST-DEPLOYMENT.md',
@@ -69,5 +71,5 @@ readme160Check(
     'README bewaakt de root/release trust-boundary voor nieuwe maintainers'
 );
 
-printf("README platform-entrypoint #160: %d OK, %d fout(en)\n", $ok, $fout);
+printf("README platform-entrypoint #160/#161: %d OK, %d fout(en)\n", $ok, $fout);
 exit($fout === 0 ? 0 : 1);
