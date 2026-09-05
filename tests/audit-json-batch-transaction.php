@@ -144,7 +144,12 @@ ajbtAssert(!$writerAangeroepen, 'Ongebonden standalone collection-write mag de w
 
 $import = file_get_contents(dirname(__DIR__) . '/beheer/leden-import.php');
 ajbtAssert(is_string($import), 'leden-import.php kon niet worden gelezen.');
-ajbtAssert(str_contains($import, "privateStoreBatchTransactie(['leden','contributies'],[ledenBestandPad(),contributiesBestandPad()]"), 'CSV-import moet Leden en Contributies aan één batchtransactie binden.');
+$importCompact = is_string($import) ? preg_replace('/\s+/', '', $import) : null;
+ajbtAssert(
+    is_string($importCompact)
+    && str_contains($importCompact, "privateStoreBatchTransactie(['leden','contributies'],[ledenBestandPad(),contributiesBestandPad()]"),
+    'CSV-import moet Leden en Contributies aan één batchtransactie binden.'
+);
 ajbtAssert(!str_contains($import, 'In PDO-modus is de transactie teruggedraaid'), 'Importmelding mag JSON niet langer als niet-transactioneel behandelen.');
 
 @unlink($a); @unlink($b); @unlink($c); @rmdir($root);
