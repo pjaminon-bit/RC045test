@@ -40,11 +40,11 @@ test199Contains($src, 'exit "$deploy_rc"', 'alle overige release-enginefouten be
 
 $checkPos = strpos($src, '"$host_launcher" release-apply --plan="$plan" --check');
 $deployPos = strpos($src, 'deploy_output="$("$host_launcher" release-apply --plan="$plan" --deploy 2>&1)"');
-$noopPos = strpos($src, 'validate_already_active');
+$noopCallPos = strpos($src, "\n  validate_already_active\n");
 test199(
-    is_int($checkPos) && is_int($deployPos) && is_int($noopPos)
-    && $checkPos < $deployPos && $noopPos < $checkPos,
-    'same-active helper bestaat, terwijl host-engine check vóór deploy blijft lopen'
+    is_int($checkPos) && is_int($deployPos) && is_int($noopCallPos)
+    && $checkPos < $deployPos && $deployPos < $noopCallPos,
+    'host-engine check en deploy moeten vóór de beperkte same-active revalidatie lopen'
 );
 
 $fnStart = strpos($src, "validate_already_active() {");
@@ -56,6 +56,9 @@ $helper = substr($src, $fnStart, $fnEnd - $fnStart);
 // FPM-reload, release-statewrite of brede filesystemmutatie is toegestaan.
 test199Contains($helper, '"$active" == "$platform_root/releases/$commit"', 'current moet fysiek aan dezelfde commit gebonden zijn');
 test199Contains($helper, '$active/bin/check-release-tenant.php', 'tenantprobe komt uit de reeds geïmmutabiliseerde actieve release');
+test199Contains($helper, 'if ! tenant_inventory=', 'tenantinventaris moet zijn eigen Python-exitstatus fail-closed bewaken');
+test199Contains($helper, 'mapfile -t tenant_rows <<<"$tenant_inventory"', 'alleen een geslaagde tenantinventaris mag worden geparsed');
+test199(!str_contains($helper, 'mapfile -t tenant_rows < <('), 'process-substitution mag Python-fouten in tenantinventaris niet verbergen');
 test199Contains($helper, "re.fullmatch(r'vst[0-9a-f]{16}'", 'runtime-user krijgt canonieke tenantvormcontrole');
 test199Contains($helper, 'doc.get(\'tenant_key\') != tenant', 'runtimeplan blijft aan tenantdirectory gebonden');
 test199Contains($helper, '"$runuser_bin" -u "$runtime_user" -- "$env_bin"', 'tenantprobe draait als tenant-runtimeuser');
