@@ -52,10 +52,11 @@ done
 }
 
 validate_already_active() {
-  local active checker row tenant runtime_user php_version config private php_bin
+  local active checker row tenant runtime_user php_version config private php_bin syntax_user
   local tenant_count=0
   local -a tenant_rows=()
   declare -A php_bins=()
+  declare -A php_users=()
 
   active="$("$readlink_bin" -f "$platform_root/current")"
   [[ "$active" == "$platform_root/releases/$commit" && -d "$active" && ! -L "$active" ]] || {
@@ -142,6 +143,9 @@ PY
       return 1
     }
     php_bins["$php_bin"]=1
+    if [[ -z "${php_users[$php_bin]:-}" ]]; then
+      php_users["$php_bin"]="$runtime_user"
+    fi
 
     "$runuser_bin" -u "$runtime_user" -- "$env_bin" \
       VERENIGING_REQUIRE_TENANT_CONFIG=1 \
@@ -156,8 +160,13 @@ PY
   done
 
   for php_bin in "${!php_bins[@]}"; do
+    syntax_user="${php_users[$php_bin]:-}"
+    [[ -n "$syntax_user" ]] || {
+      echo "Same-active validatie geweigerd: geen tenant-user gebonden aan $php_bin." >&2
+      return 1
+    }
     while IFS= read -r -d '' php_file; do
-      "$php_bin" -l "$php_file" >/dev/null || {
+      "$runuser_bin" -u "$syntax_user" -- "$php_bin" -l "$php_file" >/dev/null || {
         echo "Same-active validatie geweigerd: PHP syntax faalt in $php_file onder $php_bin." >&2
         return 1
       }
