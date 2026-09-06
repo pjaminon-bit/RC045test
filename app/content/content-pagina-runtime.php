@@ -30,7 +30,7 @@ function contentPaginaRuntimeStart(): void
         // hoeven verwijderen.
         $heroCss = contentPaginaHeroCss($sleutel);
         if ($heroCss !== '' && stripos($html, '</head>') !== false && strpos($html, 'id="content-page-hero"') === false) {
-            $style = '<style id="content-page-hero">' . $heroCss . '</style>';
+            $style = '<style nonce="' . siteCspHtmlWaarde(siteCspNonce()) . '" id="content-page-hero">' . $heroCss . '</style>';
             $html = preg_replace('~</head>~i', $style . "\n</head>", $html, 1) ?? $html;
         }
 

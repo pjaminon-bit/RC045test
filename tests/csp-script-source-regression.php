@@ -121,7 +121,8 @@ if (!is_string($siteConfig)) {
     foreach (['https://api.open-meteo.com', 'https://fonts.googleapis.com', 'https://fonts.gstatic.com', 'https://www.openstreetmap.org'] as $origin) {
         cspOk(str_contains($siteConfig, $origin), "bestaande CSP-originallowlist blijft behouden: {$origin}");
     }
-    cspOk(str_contains($siteConfig, "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com"), "style-src blijft bewust ongewijzigd voor apart hardeningtraject");
+    cspOk(str_contains($siteConfig, "style-src 'self' 'nonce-" . '{$cspNonce}' . "' https://fonts.googleapis.com"), 'style-src gebruikt self plus response-nonce en bestaande Google Fonts origin');
+    cspOk(str_contains($siteConfig, "style-src-attr 'none'"), 'style-attributen zijn fail-closed geblokkeerd');
     cspOk(!str_contains($siteConfig, "'unsafe-eval'"), "CSP voegt geen 'unsafe-eval' toe");
     cspOk(!str_contains($siteConfig, "'unsafe-hashes'"), "CSP voegt geen 'unsafe-hashes' toe");
     $cspBufferPos = strpos($siteConfig, 'siteCspRuntimeStart();');

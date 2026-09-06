@@ -54,7 +54,7 @@ function contentRenderVerhaal(string $sleutel): void
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
-<style id="content-page-hero-1"><?= $heroCss ?></style>
+<style nonce="<?=siteCspHtmlWaarde(siteCspNonce())?>" id="content-page-hero-1"><?= $heroCss ?></style>
 <link rel="stylesheet" href="csp205-content-renderer-1-3035699392f1.css">
 </head>
 <body>
@@ -115,7 +115,7 @@ function contentRenderArtikelen(string $sleutel): void
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
-<style id="content-page-hero-2"><?= $heroCss ?></style>
+<style nonce="<?=siteCspHtmlWaarde(siteCspNonce())?>" id="content-page-hero-2"><?= $heroCss ?></style>
 <link rel="stylesheet" href="csp205-content-renderer-2-935f1f35b2f9.css">
 </head>
 <body>

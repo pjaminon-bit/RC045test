@@ -67,7 +67,6 @@ function tenantPublicMediaTransform(string $html, array $config): string
     foreach ($xpath->query("//*[@id='hero-bg' or contains(concat(' ', normalize-space(@class), ' '), ' page-hero-bg ')]") ?: [] as $node) {
         if (!$node instanceof DOMElement || $hero === '') continue;
         $node->setAttribute('data-bg', $hero);
-        $node->setAttribute('style', "background-image:url('" . htmlspecialchars($hero, ENT_QUOTES, 'UTF-8') . "')");
     }
 
     return $dom->saveHTML() ?: $html;

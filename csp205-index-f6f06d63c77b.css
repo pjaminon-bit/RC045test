@@ -501,3 +501,24 @@
           .track-photo-wrap.tall { grid-row: span 1; }
           .photo-strip { height: 320px; }
         }
+.csp-i-add0c4f05a{position:fixed;top:8px;left:50%;transform:translateX(-50%);z-index:99999;background:#b42318;color:#fff;padding:5px 12px;border-radius:999px;font:700 12px/1.2 Arial,sans-serif;letter-spacing:.08em;box-shadow:0 2px 8px rgba(0,0,0,.25);pointer-events:none}
+.csp-i-d0466aa33f{display:none}
+.csp-i-480676fe6f{position:absolute; right:-40px; top:50%; transform:translateY(-50%); height: 520px; width: auto; opacity: 0.13; pointer-events:none; filter: drop-shadow(0 0 40px rgba(200,154,26,0.2)); z-index:1}
+.csp-i-f943910bb6{height: 140px; width: auto; margin-bottom: 24px; filter: drop-shadow(0 4px 16px rgba(0,0,0,0.4))}
+.csp-i-36960dfcfe{color: var(--muted); line-height: 1.8; margin-bottom: 24px}
+.csp-i-617166a2ab{color: var(--muted); line-height: 1.8}
+.csp-i-0868776988{font-size: 14px; color: var(--muted); margin-top: 8px; line-height: 1.6}
+.csp-i-3ade846eb0{font-size: 14px; color: rgba(255,255,255,0.6); margin-top: 8px; line-height: 1.6}
+.csp-i-7bb9ccf36b{color: var(--muted); line-height: 1.8; margin-bottom: 28px}
+.csp-i-a82d87a512{list-style:none; display:flex; flex-direction:column; gap:12px}
+.csp-i-b3d0b6d4ce{display:flex; align-items:center; gap:10px; font-size:15px}
+.csp-i-7162b40bdb{color:var(--green); font-size:18px}
+.csp-i-0ee4e9ef0f{display:inline-block; margin-top:12px; color:var(--teal); font-weight:600; font-size:14px}
+.csp-i-00f4471942{opacity: 0.4; cursor: default; pointer-events: none}
+.csp-i-66ec127d15{display:none; padding:12px 16px; background:#FEF3C7; border-radius:8px; color:#92400E; font-size:14px; font-weight:500}
+.csp-i-b887bfd543{display:flex; gap:8px}
+.csp-i-a4b90adc25{width:110px; flex-shrink:0}
+.csp-i-6253876a64{flex:1}
+.csp-i-e5e5912145{display:none; padding:16px; background:var(--teal-light); border-radius:8px; color:var(--teal-dark); font-weight:600; text-align:center}
+.csp-i-62e7fccff5{display:none; padding:16px; background:#FEE2E2; border-radius:8px; color:#DC2626; font-weight:600; text-align:center}
+.csp-i-5d7d33efba{opacity: 0.3; display: flex; align-items: center}

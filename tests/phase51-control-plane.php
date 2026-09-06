@@ -19,6 +19,7 @@ try{
  $apache=(string)file_get_contents($bundle.'/050-verenigingsplatform-control-plane.conf');c51(str_contains($apache,'AuthType Basic')&&str_contains($apache,'AuthUserFile')&&str_contains($apache,'Require valid-user'),'Apache beschermt volledige GUI met apart operatorbestand');
  c51(str_contains($apache,'SSL_TLS_SNI')&&str_contains($apache,'HTTP_HOST')&&str_contains($apache,'SSLStrictSNIVHostCheck On'),'platformbeheer controleert exact TLS-SNI en Host');
  c51(str_contains($apache,'Content-Security-Policy')&&str_contains($apache,'X-Frame-Options "DENY"'),'platformbeheer krijgt strikte browserbeveiligingsheaders');
+c51(str_contains($apache,"style-src 'self'")&&!str_contains($apache,"'unsafe-inline'"),'platformbeheer-CSP bevat geen unsafe-inline styles');
  c51(!str_contains($apache,$tenants)&&!str_contains($apache,'AllowOverride All'),'tenantroot wordt niet geserveerd en .htaccess is uit in control-plane vhost');
  $path=(string)file_get_contents($bundle.'/verenigingsplatform-control-plane.path');$svc=(string)file_get_contents($bundle.'/verenigingsplatform-control-plane.service');c51(str_contains($path,'DirectoryNotEmpty=')&&str_contains($path,'Unit=verenigingsplatform-control-plane.service'),'systemd path-unit start executor op niet-lege queue');
  c51(str_contains($svc,'User=root')&&str_contains($svc,'control-plane-executor.php')&&str_contains($svc,'PrivateTmp=true'),'uitsluitend aparte oneshot executor draait privileged');

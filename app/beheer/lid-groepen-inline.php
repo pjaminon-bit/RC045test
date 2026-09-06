@@ -72,8 +72,8 @@ function lidGroepenRender(array $lid): void
     });
     $archief = !empty($lid['gearchiveerd_op']);
     ?>
-    <div id="groepen" style="border-top:1px solid #eee9db;margin-top:20px;padding-top:18px">
-      <h3 style="margin-top:0">Commissies en werkgroepen</h3>
+    <div id="groepen" class="csp-i-8210b8c264">
+      <h3 class="csp-i-a0925a28f0">Commissies en werkgroepen</h3>
       <p class="meta">Beheer hier direct de groepen en rollen van dit lid. Verwijderen uit een groep sluit de deelnamehistorie met de datum van vandaag.</p>
       <?php if (!$groepen): ?>
         <p class="meta">Er zijn geen actieve commissies of werkgroepen waarvoor je beheerrecht hebt.</p>
@@ -93,10 +93,10 @@ function lidGroepenRender(array $lid): void
             $groepId = (string)($groep['id'] ?? '');
             $actief = null; foreach (groepenActieveLeden($groep) as $m) if (($m['lid_id'] ?? '') === $lidId) { $actief = $m; break; }
           ?>
-            <div class="item" style="padding:10px 0">
-              <label style="font-weight:700"><input type="checkbox" name="groepen[]" value="<?=lmEsc($groepId)?>" <?=$actief?'checked':''?>> <?=lmEsc($groep['naam'] ?? '')?></label>
+            <div class="item csp-i-74f604f83e">
+              <label class="csp-i-c6fa01b3f1"><input type="checkbox" name="groepen[]" value="<?=lmEsc($groepId)?>" <?=$actief?'checked':''?>> <?=lmEsc($groep['naam'] ?? '')?></label>
               <span class="meta"> · <?=lmEsc(groepenTypes()[$groep['type']] ?? $groep['type'])?></span>
-              <div class="actions" style="margin:7px 0 0 24px">
+              <div class="actions csp-i-8348677261">
                 <?php foreach ($rolMap as $rolId => $rolNaam): ?>
                   <label class="meta"><input type="checkbox" name="groepsrollen[<?=lmEsc($groepId)?>][]" value="<?=lmEsc($rolId)?>" <?=$actief&&in_array($rolId,(array)($actief['rollen']??[]),true)?'checked':''?>> <?=lmEsc($rolNaam)?></label>
                 <?php endforeach; ?>

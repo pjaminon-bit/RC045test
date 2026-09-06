@@ -170,7 +170,7 @@ function tenantHomepagePasTemplateToe(string $html): string
     foreach ($dom->getElementsByTagName('iframe') as $iframe) {
         if (!$iframe instanceof DOMElement) continue;
         $iframe->removeAttribute('src');
-        $iframe->setAttribute('srcdoc', '<!doctype html><html lang="nl"><body style="margin:0;display:grid;place-items:center;height:100%;font-family:sans-serif;background:#eef3ef;color:#526258">Locatiekaart nog niet ingesteld</body></html>');
+        $iframe->setAttribute('srcdoc', '<!doctype html><html lang="nl"><head><link rel="stylesheet" href="/iframe-placeholder.css"></head><body>Locatiekaart nog niet ingesteld</body></html>');
         $iframe->setAttribute('title', 'Locatie van ' . $naam);
     }
 
