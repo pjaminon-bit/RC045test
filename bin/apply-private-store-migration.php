@@ -31,6 +31,35 @@ function cut211VeiligBestand(string $pad, string $label): string
     return $real;
 }
 
+function cut211GroepId(string $group): int
+{
+    $info = @posix_getgrnam($group);
+    if (!is_array($info) || !isset($info['gid'])) throw new RuntimeException('Tenant-runtimegroup bestaat niet: ' . $group);
+    return (int)$info['gid'];
+}
+
+function cut211ControleerRootGroepBestand(string $pad, string $group, int $mode, string $label): void
+{
+    if (is_link($pad) || !is_file($pad)) throw new RuntimeException($label . ' is geen veilig regulier bestand.');
+    clearstatcache(true, $pad);
+    $stat = @lstat($pad);
+    if (!is_array($stat)
+        || (int)$stat['uid'] !== 0
+        || (int)$stat['gid'] !== cut211GroepId($group)
+        || (((int)$stat['mode'] & 0777) !== $mode)) {
+        throw new RuntimeException($label . ' heeft onverwachte owner/group/rechten.');
+    }
+}
+
+function cut211MaakRootGroepBestand(string $pad, string $group, int $mode, string $label): void
+{
+    if (is_link($pad) || !is_file($pad)) throw new RuntimeException($label . ' is geen veilig regulier bestand.');
+    if (!@chown($pad, 'root') || !@chgrp($pad, $group) || !@chmod($pad, $mode)) {
+        throw new RuntimeException($label . ' kon niet veilig root-owned worden ingesteld.');
+    }
+    cut211ControleerRootGroepBestand($pad, $group, $mode, $label);
+}
+
 function cut211RuntimeDir(string $tenantRoot, string $group): array
 {
     $dir = $tenantRoot . '/storage-runtime';
@@ -39,8 +68,14 @@ function cut211RuntimeDir(string $tenantRoot, string $group): array
     $real = realpath($dir);
     if ($real === false || !hash_equals($dir, $real)) throw new RuntimeException('Storage-runtime map is niet canoniek.');
     if (!@chown($dir, 'root') || !@chgrp($dir, $group) || !@chmod($dir, 0750)) throw new RuntimeException('Storage-runtime map kon niet veilig root-owned worden gemaakt.');
-    $stat = @stat($dir);
-    if (!is_array($stat) || (int)$stat['uid'] !== 0 || (((int)$stat['mode'] & 0777) !== 0750)) throw new RuntimeException('Storage-runtime map heeft onverwachte metadata.');
+    clearstatcache(true, $dir);
+    $stat = @lstat($dir);
+    if (!is_array($stat)
+        || (int)$stat['uid'] !== 0
+        || (int)$stat['gid'] !== cut211GroepId($group)
+        || (((int)$stat['mode'] & 0777) !== 0750)) {
+        throw new RuntimeException('Storage-runtime map heeft onverwachte metadata.');
+    }
 
     $lock = $dir . '/private-store-migration.lock';
     if (!file_exists($lock)) {
@@ -48,8 +83,7 @@ function cut211RuntimeDir(string $tenantRoot, string $group): array
         if (!is_resource($h)) throw new RuntimeException('Storage-migratielock kon niet worden aangemaakt.');
         fclose($h);
     }
-    if (is_link($lock) || !is_file($lock)) throw new RuntimeException('Storage-migratielock is onveilig.');
-    if (!@chown($lock, 'root') || !@chgrp($lock, $group) || !@chmod($lock, 0660)) throw new RuntimeException('Storage-migratielock kon niet veilig worden ingesteld.');
+    cut211MaakRootGroepBestand($lock, $group, 0660, 'Storage-migratielock');
     return ['dir' => $dir, 'lock' => $lock, 'marker' => $dir . '/private-store-migration.active', 'state' => $dir . '/private-store-runtime.json'];
 }
 
@@ -66,8 +100,15 @@ function cut211MarkerAan(array $paths, string $tenant, string $group, string $mo
     ], JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR) . "\n";
     $tmp = $paths['dir'] . '/.migration.active.tmp.' . bin2hex(random_bytes(8));
     if (@file_put_contents($tmp, $data, LOCK_EX) === false) throw new RuntimeException('Migratiemarker kon niet worden voorbereid.');
-    @chown($tmp, 'root'); @chgrp($tmp, $group); @chmod($tmp, 0640);
-    if (!@rename($tmp, $marker)) { @unlink($tmp); throw new RuntimeException('Migratiemarker kon niet atomisch worden geactiveerd.'); }
+    try {
+        cut211MaakRootGroepBestand($tmp, $group, 0640, 'Tijdelijke migratiemarker');
+        if (!@rename($tmp, $marker)) throw new RuntimeException('Migratiemarker kon niet atomisch worden geactiveerd.');
+        cut211ControleerRootGroepBestand($marker, $group, 0640, 'Actieve migratiemarker');
+    } catch (Throwable $e) {
+        @unlink($tmp);
+        if (file_exists($marker) && !is_link($marker)) @unlink($marker);
+        throw $e;
+    }
 }
 
 function cut211MarkerUit(array $paths): void
@@ -120,14 +161,21 @@ function cut211StateSchrijf(array $paths, string $tenant, string $group, array $
     $json = json_encode($state, JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR) . "\n";
     $tmp = $paths['dir'] . '/.private-store-runtime.tmp.' . bin2hex(random_bytes(8));
     if (@file_put_contents($tmp, $json, LOCK_EX) === false) throw new RuntimeException('Private-store runtime-state kon niet worden voorbereid.');
-    @chown($tmp, 'root'); @chgrp($tmp, $group); @chmod($tmp, 0640);
-    if (!@rename($tmp, $paths['state'])) { @unlink($tmp); throw new RuntimeException('Private-store runtime-state kon niet atomisch worden geactiveerd.'); }
+    try {
+        cut211MaakRootGroepBestand($tmp, $group, 0640, 'Tijdelijke private-store runtime-state');
+        if (!@rename($tmp, $paths['state'])) throw new RuntimeException('Private-store runtime-state kon niet atomisch worden geactiveerd.');
+        cut211ControleerRootGroepBestand($paths['state'], $group, 0640, 'Actieve private-store runtime-state');
+    } catch (Throwable $e) {
+        @unlink($tmp);
+        if (file_exists($paths['state']) && !is_link($paths['state'])) @unlink($paths['state']);
+        throw $e;
+    }
 }
 
-function cut211StateLees(array $paths, string $tenant): array
+function cut211StateLees(array $paths, string $tenant, string $group): array
 {
     $pad = $paths['state'];
-    if (is_link($pad) || !is_file($pad)) throw new RuntimeException('Actieve private-store runtime-state ontbreekt.');
+    cut211ControleerRootGroepBestand($pad, $group, 0640, 'Actieve private-store runtime-state');
     $raw = @file_get_contents($pad); $state = is_string($raw) ? json_decode($raw, true) : null;
     if (!is_array($state)
         || (int)($state['schema'] ?? 0) !== 1
@@ -140,12 +188,12 @@ function cut211StateLees(array $paths, string $tenant): array
     return $state;
 }
 
-function cut211RollbackState(array $paths): string
+function cut211RollbackState(array $paths, string $group): string
 {
     $suffix = gmdate('Ymd\THis\Z');
     $archive = $paths['dir'] . '/private-store-runtime.rolled-back-' . $suffix . '.json';
     if (file_exists($archive) || is_link($archive) || !@rename($paths['state'], $archive)) throw new RuntimeException('Runtime-state kon niet atomisch naar rollbackarchief worden verplaatst.');
-    @chmod($archive, 0640);
+    cut211ControleerRootGroepBestand($archive, $group, 0640, 'Gearchiveerde private-store runtime-state');
     return $archive;
 }
 
@@ -184,7 +232,7 @@ try {
 
     if ($mode === 'check') {
         $inventory = cut211Worker($osUser, $configPad, $privateRoot, ['--mode=inventory']);
-        $state = file_exists($paths['state']) ? cut211StateLees($paths, $tenant) : null;
+        $state = file_exists($paths['state']) ? cut211StateLees($paths, $tenant, $osUser) : null;
         echo json_encode(['tenant_key'=>$tenant,'configured_driver'=>'json','effective_driver'=>$state ? 'pdo':'json','inventory'=>$inventory], JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR) . "\n";
         exit(0);
     }
@@ -207,7 +255,7 @@ try {
             exit(0);
         }
 
-        $state = cut211StateLees($paths, $tenant);
+        $state = cut211StateLees($paths, $tenant, $osUser);
         $proofPad = trim((string)($opt['proof'] ?? ''));
         if ($proofPad === '') $proofPad = (string)($state['proof_path'] ?? '');
         if (!hash_equals((string)($state['proof_path'] ?? ''), $proofPad)) throw new RuntimeException('Rollbackproof wijkt af van de actieve runtime-state.');
@@ -217,7 +265,7 @@ try {
             || ($verify['rollback_safe'] ?? false) !== true) {
             throw new RuntimeException('Rollbackbewijs is niet exact gelijk aan de actieve cutover-state.');
         }
-        $archive = cut211RollbackState($paths);
+        $archive = cut211RollbackState($paths, $osUser);
         cut211MarkerUit($paths); $markerMoetUit = false;
         echo "MIGRATION ROLLBACK OK\n";
         echo json_encode(['tenant_key'=>$tenant,'effective_driver'=>'json','state_archive'=>$archive,'proof_sha256'=>$verify['proof_sha256']], JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR) . "\n";
