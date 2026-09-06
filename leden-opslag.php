@@ -733,6 +733,9 @@ function ledenParseJaNee($waarde) {
 
 // ===== CSV inlezen =====
 
+// De kolomnamen uit het Excel-bestand van de club, en wat er in het
+// ledenbestand van wordt. Meerdere schrijfwijzen per veld, omdat de
+// export van Excel niet altijd exact hetzelfde heet.
 function ledenCsvKolommen() {
   return [
     'nummer'         => ['nummer', 'nr', 'lidnummer', 'nummer lid'],
@@ -759,10 +762,16 @@ function ledenCsvKolommen() {
     'status'         => ['status', 'lidstatus'],
     'bestuursfunctie' => ['bestuursfunctie', 'bestuur', 'rol', 'functie'],
     'commissies'     => ['commissies', 'commissie'],
+    // Deze twee staan wel in het Excel-bestand maar worden niet opgeslagen:
+    // leeftijd en jeugd/senior rekent de beheerpagina zelf uit de geboorte-
+    // datum en de rekentabel. Ze staan hier alleen zodat de importcontrole
+    // ze kan melden als "wordt berekend" in plaats van "niet herkend".
     '_berekend'      => ['leeftijd', 'jeugdlid', 'jeugd', 'senior'],
   ];
 }
 
+// Splitst "Dorpstraat 12 a" in straat en huisnummer. Het Excel-bestand
+// van de club heeft geen apart huisnummerveld, het aanmeldformulier wel.
 function ledenSplitsAdres($straat, $huisnummer) {
   $straat = trim((string) $straat);
   $huisnummer = trim((string) $huisnummer);
@@ -774,6 +783,8 @@ function ledenSplitsAdres($straat, $huisnummer) {
   return [$straat, $huisnummer];
 }
 
+// "Contributie 2026 status" -> veld contributiestatus, jaar 2026.
+// Geeft [veldnaam, jaar] terug, of [null, null] als de kolom onbekend is.
 function ledenCsvKolomHerkennen($kop) {
   $kop = strtolower(trim((string) $kop));
   $kop = preg_replace('/\s+/u', ' ', $kop);
@@ -787,12 +798,20 @@ function ledenCsvKolomHerkennen($kop) {
   foreach (ledenCsvKolommen() as $veld => $namen) {
     if (in_array($kop, $namen, true)) return [$veld, $jaar];
   }
+  // "contributie" met een jaartal en zonder verder woord: dat is het bedrag.
   if ($kop === 'contributie' && $jaar !== null) return ['contributiebedrag', $jaar];
   return [null, null];
 }
 
+// Leest een CSV en geeft ['kolommen' => [...], 'rijen' => [...]] terug.
+// Puntkomma en komma worden allebei herkend, net als een bestand dat
+// Excel in Windows-codering heeft weggeschreven.
 function ledenCsvLezen($inhoud) {
+  // Byte order mark eraf.
   if (substr($inhoud, 0, 3) === "\xEF\xBB\xBF") $inhoud = substr($inhoud, 3);
+
+  // Excel op Windows schrijft vaak in CP1252. Als de inhoud geen geldige
+  // UTF-8 is, gaan we daarvan uit en zetten we het om.
   if (!ledenIsUtf8($inhoud)) {
     if (function_exists('iconv')) {
       $om = @iconv('Windows-1252', 'UTF-8//TRANSLIT', $inhoud);
@@ -810,6 +829,7 @@ function ledenCsvLezen($inhoud) {
   $handle = fopen('php://temp', 'r+');
   fwrite($handle, $inhoud);
   rewind($handle);
+
   $kop = fgetcsv($handle, 0, $scheiding);
   if ($kop === false) { fclose($handle); return ['kolommen' => [], 'rijen' => []]; }
 
@@ -840,11 +860,13 @@ function ledenCsvLezen($inhoud) {
       }
     }
     if (ledenVolledigeNaam($waarden) === '' && ($waarden['email'] ?? '') === '') continue;
-    list($waarden['straat'], $waarden['huisnummer']) = ledenSplitsAdres($waarden['straat'] ?? '', $waarden['huisnummer'] ?? '');
+    list($waarden['straat'], $waarden['huisnummer']) =
+      ledenSplitsAdres($waarden['straat'] ?? '', $waarden['huisnummer'] ?? '');
     $waarden['_contributie'] = $contributie;
     $rijen[] = $waarden;
   }
   fclose($handle);
+
   return ['kolommen' => $kolommen, 'rijen' => $rijen];
 }
 
@@ -853,6 +875,7 @@ function ledenIsUtf8($tekst) {
   return (bool) preg_match('//u', $tekst);
 }
 
+// Zet de tekstuele contributiestatus uit Excel om naar een sleutel.
 function ledenContributieStatusUitTekst($tekst) {
   $t = strtolower(trim((string) $tekst));
   if ($t === '') return 'open';
@@ -862,6 +885,26 @@ function ledenContributieStatusUitTekst($tekst) {
   return 'open';
 }
 
+// Zoekt een bestaand lid bij een importregel. Geeft de index terug plus
+// waarop de herkenning is gebaseerd, zodat de importcontrole kan laten
+// zien waarom een regel als "bijgewerkt" wordt aangemerkt.
+//
+// De volgorde loopt van hard naar zacht bewijs:
+//   1. mailadres              uniek genoeg om op zichzelf te staan
+//   2. lidnummer plus naam    allebei gelijk is sterk; alleen het nummer
+//                             niet, want een handmatig toegevoegd lid en
+//                             een importregel kunnen per ongeluk hetzelfde
+//                             nummer hebben terwijl het twee mensen zijn
+//   3. naam plus geboortedatum
+//   4. alleen de naam         alleen als die maar één keer voorkomt en er
+//                             niets tegenspreekt (zie hieronder)
+//
+// Die vierde stap zat er eerst niet in. Gevolg: een lid zonder mailadres
+// én zonder geboortedatum werd bij een tweede import niet herkend en kwam
+// er een tweede keer bij te staan, ook bij een export die je meteen weer
+// inleest. Om te voorkomen dat twee verschillende mensen met dezelfde naam
+// samengevoegd worden, telt die stap alleen als er precies één lid met die
+// naam is en geen van de andere gegevens elkaar tegenspreekt.
 function ledenZoekBestaandeMet($data, $kandidaat) {
   $geen = ['index' => null, 'reden' => ''];
   $email  = strtolower(trim((string) ($kandidaat['email'] ?? '')));
@@ -897,10 +940,13 @@ function ledenZoekBestaandeMet($data, $kandidaat) {
   foreach ($data['leden'] as $i => $lid) {
     if (strtolower(ledenVolledigeNaam($lid)) === $naam) $treffers[] = $i;
   }
+  // Meer dan één naamgenoot: dan is de naam alleen geen bewijs meer en
+  // wordt de regel als nieuw lid behandeld. Beter een dubbele regel die je
+  // ziet staan dan stilletjes de verkeerde persoon overschrijven.
   if (count($treffers) !== 1) return $geen;
 
   $lid = $data['leden'][$treffers[0]];
-  $lidEmail  = strtolower(trim((string) ($lid['email'] ?? '')));
+  $lidEmail  = strtolower(trim((string) ($lid['email'] ?? ''));
   $lidGeb    = trim((string) ($lid['geboortedatum'] ?? ''));
   $lidNummer = (int) ($lid['nummer'] ?? 0);
   if ($email !== '' && $lidEmail !== '' && $email !== $lidEmail) return $geen;
@@ -910,6 +956,7 @@ function ledenZoekBestaandeMet($data, $kandidaat) {
   return ['index' => $treffers[0], 'reden' => 'naam'];
 }
 
+// Alleen de index, voor de plekken die verder niets met de reden doen.
 function ledenZoekBestaande($data, $kandidaat) {
   return ledenZoekBestaandeMet($data, $kandidaat)['index'];
 }
