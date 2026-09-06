@@ -41,7 +41,7 @@ function database45SqlLiteral(string $waarde): string
     return "'" . str_replace("'", "''", $waarde) . "'";
 }
 
-function database45RuntimeContext(string $runtimePlanPad): array
+function database45RuntimeContext(string $runtimePlanPad, bool $migrationTarget = false): array
 {
     $context = runtime41PlanLeesEnValideer($runtimePlanPad);
     $runtime = $context['plan'];
@@ -51,10 +51,13 @@ function database45RuntimeContext(string $runtimePlanPad): array
 
     $configPad = (string)($deployment['config_file'] ?? '');
     $config = require $configPad;
+    $expectedDriver = $migrationTarget ? 'json' : 'pdo';
     if (!is_array($config)
         || !hash_equals($tenantKey, (string)($config['vereniging']['sleutel'] ?? ''))
-        || strtolower(trim((string)($config['opslag']['private_driver'] ?? ''))) !== 'pdo') {
-        throw new RuntimeException('Fase 4.5 vereist een tenant die expliciet met private_driver=pdo is geprovisioneerd.');
+        || strtolower(trim((string)($config['opslag']['private_driver'] ?? ''))) !== $expectedDriver) {
+        throw new RuntimeException($migrationTarget
+            ? 'Fase 4.5 migration-target vereist een tenant die expliciet met private_driver=json is geprovisioneerd.'
+            : 'Fase 4.5 vereist een tenant die expliciet met private_driver=pdo is geprovisioneerd.');
     }
     $pdoConfig = $config['opslag']['pdo'] ?? null;
     if (!is_array($pdoConfig)) $pdoConfig = [];
@@ -73,8 +76,10 @@ function database45RuntimeContext(string $runtimePlanPad): array
     catch (JsonException $e) { throw new RuntimeException('tenant.json bevat ongeldige JSON.'); }
     if (!is_array($manifest)
         || !hash_equals($tenantKey, (string)($manifest['tenant_key'] ?? ''))
-        || (string)($manifest['private_driver'] ?? '') !== 'pdo') {
-        throw new RuntimeException('tenant.json bindt niet aan dezelfde PDO-tenant.');
+        || (string)($manifest['private_driver'] ?? '') !== $expectedDriver) {
+        throw new RuntimeException($migrationTarget
+            ? 'tenant.json bindt niet aan dezelfde JSON migration-target tenant.'
+            : 'tenant.json bindt niet aan dezelfde PDO-tenant.');
     }
 
     $runtimeEnvPad = runtime41BestaandPad($tenantRoot . '/runtime.env', 'runtime.env');
@@ -107,6 +112,7 @@ function database45RuntimeContext(string $runtimePlanPad): array
         'config_file' => $configPad,
         'manifest_file' => $manifestPad,
         'manifest_sha256' => hash('sha256', $manifestRaw),
+        'migration_target' => $migrationTarget,
     ];
 }
 
@@ -219,6 +225,8 @@ function database45Plan(array $context): array
             'connectivity_check_as_tenant_os_user_required' => true,
         ],
     ];
+
+    if (!empty($context['migration_target'])) $basis['source']['migration_target'] = true;
 
     $hba = database45HbaConfig($basis);
     $migration = database45MigrationSql($basis);
@@ -335,8 +343,14 @@ function database45PlanLeesEnValideer(string $planPad): array
         throw new RuntimeException('database-plan.json heeft een onbekend schema/fase.');
     }
 
-    $runtimePlan = (string)($plan['source']['runtime_plan_file'] ?? '');
-    $context = database45RuntimeContext($runtimePlan);
+    $source = $plan['source'] ?? null;
+    if (!is_array($source)) throw new RuntimeException('database-plan.json mist bronbinding.');
+    if (array_key_exists('migration_target', $source) && $source['migration_target'] !== true) {
+        throw new RuntimeException('database-plan.json bevat een ongeldige migration_target vlag.');
+    }
+    $migrationTarget = ($source['migration_target'] ?? false) === true;
+    $runtimePlan = (string)($source['runtime_plan_file'] ?? '');
+    $context = database45RuntimeContext($runtimePlan, $migrationTarget);
     $verwacht = database45Plan($context);
     if (!hash_equals(database45Json($verwacht), database45Json($plan))) {
         throw new RuntimeException('database-plan.json wijkt af van het actuele tenant/runtimecontract.');

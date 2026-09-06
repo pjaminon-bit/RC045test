@@ -7,6 +7,8 @@ require_once dirname(__DIR__) . '/core/atomic-file-transaction.php';
 require_once __DIR__ . '/tenant-backup-store.php';
 require_once __DIR__ . '/private-store-prewrite.php';
 require_once __DIR__ . '/pdo-runtime.php';
+require_once __DIR__ . '/private-store-migration-guard.php';
+require_once __DIR__ . '/private-store-runtime-state.php';
 
 function privateStoreConfig(): array{static$config=null;if($config===null){$geladen=require dirname(__DIR__,2).'/site-config.php';$config=is_array($geladen)?$geladen:[];}return$config;}
 function privateStoreTenant(): string{$config=privateStoreConfig();return tenantRuntimeVeiligeSleutel((string)($config['vereniging']['sleutel']??'default'));}
@@ -14,8 +16,7 @@ function privateStoreDriver(): string
 {
     $config=privateStoreConfig();
     $driver=strtolower(trim((string)($config['opslag']['private_driver']??'')));
-    if($driver==='pdo'||$driver==='json')return$driver;
-    throw new RuntimeException('Private datastore-driver moet expliciet pdo of json zijn.');
+    return privateStoreEffectiveDriver($config,$driver);
 }
 function privateStoreJsonRoot(): ?string{return tenantRuntimePrivateRoot(privateStoreConfig());}
 function privateStoreBackupSleutel(string $collectie): string{return'private-'.tenantRuntimeCollectieSleutel($collectie);}
@@ -240,6 +241,13 @@ function privateStoreEnsureSchema(PDO $pdo): void
 
 function privateStoreTransactie(callable $callback)
 {
+    privateStoreMigrationWriteGuardEnter();
+    try{return privateStoreTransactieOnbewaakt($callback);}
+    finally{privateStoreMigrationWriteGuardLeave();}
+}
+
+function privateStoreTransactieOnbewaakt(callable $callback)
+{
     if(privateStoreDriver()!=='pdo'){
         $context =& privateStoreJsonTransactieContext();
         if(!empty($context['active']))return$callback();
@@ -287,6 +295,13 @@ function privateStoreLees(string $collectie,callable $jsonLezer): array
     $payload=(string)($rij['payload']??'');$data=json_decode($payload,true);if(json_last_error()!==JSON_ERROR_NONE||!is_array($data)){error_log('[platform] ongeldige private-store payload voor tenant '.privateStoreTenant().', collectie '.$collectie);throw new RuntimeException('Private verenigingsopslag bevat ongeldige data.');}return$data;
 }
 function privateStoreSchrijf(string $collectie,array $data,callable $jsonSchrijver,?string $legacyPad=null): bool
+{
+    privateStoreMigrationWriteGuardEnter();
+    try{return privateStoreSchrijfOnbewaakt($collectie,$data,$jsonSchrijver,$legacyPad);}
+    finally{privateStoreMigrationWriteGuardLeave();}
+}
+
+function privateStoreSchrijfOnbewaakt(string $collectie,array $data,callable $jsonSchrijver,?string $legacyPad=null): bool
 {
     $collectie=trim($collectie);if($collectie==='')return false;
     if(privateStoreDriver()!=='pdo'){
