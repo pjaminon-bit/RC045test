@@ -24,10 +24,11 @@ jobs:
           set -e
           echo "finalize generator exit=$rc (known generated-test lint may be nonzero)"
           cp tools/csp-style-regression-final.php tests/csp-style-source-regression.php
+          python3 tools/fix-phase483.py
           find . -type f -name '*.php' -not -path './vendor/*' -print0 | xargs -0 -n1 php -l >/dev/null
       - name: Remove temporary helper artifacts
         run: |
-          rm -f tools/finalize192.py tools/csp-style-regression-final.php .github/workflows/tmp-finalize-192.yml
+          rm -f tools/finalize192.py tools/csp-style-regression-final.php tools/fix-phase483.py .github/workflows/tmp-finalize-192.yml
       - name: Commit and verify clean product tree
         run: |
           git diff --check
