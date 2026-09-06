@@ -1,0 +1,57 @@
+name: Temporary #211 Phase A transform
+
+on:
+  push:
+    branches:
+      - helper/211-phase-a-run
+
+permissions:
+  contents: write
+
+jobs:
+  transform-and-verify:
+    if: github.event.head_commit.message == 'Temp: run #211 Phase A transform'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout helper branch
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Apply deterministic Phase A transform
+        run: |
+          set -euo pipefail
+          python3 tools/phase211_transform.py
+
+      - name: Syntax and focused regression
+        run: |
+          set -euo pipefail
+          php -l bin/provision-tenant.php
+          php -l site-config.php
+          php -l app/storage/private-store.php
+          php -l tests/phase33-second-tenant.php
+          php -l tests/platform211-postgresql-canonical.php
+          php tests/platform211-postgresql-canonical.php
+
+      - name: Full source regression
+        run: |
+          set -euo pipefail
+          while IFS= read -r -d '' bestand; do php -l "$bestand" >/dev/null; done < <(find . -type f -name '*.php' -not -path './node_modules/*' -print0)
+          node --check lidmaatschap-aanmelden.js
+          node --check tests/live-dev-browser.spec.js
+          node --check tests/live-dev-authenticated.spec.js
+          php -m | grep -qi '^pdo_sqlite$' || { echo 'pdo_sqlite ontbreekt op de runner' >&2; exit 1; }
+          bash tests/run-all.sh
+          test ! -e site-config.local.php
+
+      - name: Commit clean product tree
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/temp-211-phase-a.yml tools/phase211_transform.py
+          rmdir tools 2>/dev/null || true
+          git add -A
+          git diff --cached --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Platform: make PostgreSQL canonical for new tenants (#211)'
+          git push origin HEAD:helper/211-phase-a-run
