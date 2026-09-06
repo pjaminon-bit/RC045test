@@ -15,66 +15,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
-  <style>body { min-height: 100vh; display: flex; flex-direction: column; }
-    
-    h1, h2, h3 { font-family: 'Poppins', sans-serif; line-height: 1.2; }.nav { position: static; }
-    
-    .nav-back { display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; border-radius: 8px; font-size: 14px; font-weight: 500; color: var(--muted); transition: background 0.15s, color 0.15s; }
-    
-    .nav-back:hover { background: var(--teal-light); color: var(--teal-dark); }
-    
-    .main { flex: 1; display: flex; align-items: center; justify-content: center; padding: 48px 24px; }
-    
-    .bedankt-card { background: var(--white); border: 1.5px solid var(--border); border-radius: var(--radius); padding: 56px 48px; box-shadow: var(--shadow); max-width: 600px; width: 100%; text-align: center; }
-    
-    .bedankt-icon { font-size: 64px; margin-bottom: 24px; animation: bounceIn 0.6s ease; }
-    
-    @keyframes bounceIn { 0% { transform: scale(0); opacity: 0; } 60% { transform: scale(1.1); } 100% { transform: scale(1); opacity: 1; } }
-    
-    .bedankt-card h1 { font-size: 32px; font-weight: 800; color: var(--dark); margin-bottom: 16px; }
-    
-    .bedankt-card p { font-size: 16px; color: var(--muted); line-height: 1.7; margin-bottom: 12px; }
-    
-    .iban-card { background: var(--teal-light); border: 1.5px solid var(--teal); border-radius: var(--radius); padding: 20px 24px; margin: 28px 0; text-align: left; }
-    
-    .iban-card h4 { font-size: 13px; font-weight: 700; color: var(--teal-dark); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 10px; }
-    
-    .iban-number-row { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
-    
-    .iban-number { font-family: 'Poppins', sans-serif; font-size: 22px; font-weight: 800; color: var(--dark); letter-spacing: 0.08em; }
-    
-    .iban-copy-btn { background: none; border: 1.5px solid var(--teal); border-radius: 6px; padding: 3px 10px; font-size: 12px; font-weight: 600; color: var(--teal-dark); cursor: pointer; transition: background 0.15s; flex-shrink: 0; }
-    
-    .iban-copy-btn:hover { background: var(--teal-light); }
-    
-    .iban-copy-btn.copied { background: var(--teal); color: white; border-color: var(--teal); }
-    
-    .iban-detail { font-size: 13px; color: var(--teal-dark); line-height: 1.6; }
-    
-    .stappen { display: flex; flex-direction: column; gap: 12px; margin: 24px 0; text-align: left; }
-    
-    .stap { display: flex; align-items: flex-start; gap: 14px; padding: 14px 16px; background: var(--bg); border-radius: 10px; border: 1px solid var(--border); }
-    
-    .stap-num { width: 28px; height: 28px; border-radius: 50%; background: var(--teal); color: white; font-family: 'Poppins', sans-serif; font-weight: 700; font-size: 14px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-    
-    .stap-text { font-size: 14px; color: var(--text); line-height: 1.5; }
-    
-    .stap-text strong { color: var(--dark); }
-    
-    .btn-group { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; margin-top: 32px; }
-    
-    .btn-outline { background: transparent; color: var(--teal-dark); border: 1.5px solid var(--teal); }
-    
-    .btn-outline:hover { background: var(--teal-light); }.footer { padding: 32px 24px; text-align: center; font-size: 13px; }
-    
-    .footer a { color: var(--teal); }
-    
-    @media (max-width: 600px) {
-          .bedankt-card { padding: 36px 24px; }
-          .bedankt-card h1 { font-size: 26px; }
-          .iban-number { font-size: 18px; }
-        }
-  </style>
+  <link rel="stylesheet" href="csp205-bedankt-661944f142d1.css">
   <script data-goatcounter="https://rc045.goatcounter.com/count"
         async src="//gc.zgo.at/count.js"></script>
 </head>

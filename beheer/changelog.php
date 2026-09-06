@@ -137,9 +137,7 @@ $vast = array_values(array_merge($platform, $vast));
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex,nofollow">
 <title>Changelog beheren</title>
-<style>
-body{margin:0;background:#f6f2e8;color:#26351d;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.top{background:#fff;border-bottom:1px solid #ddd8c0;padding:16px 24px}.topin,.wrap{max-width:1050px;margin:auto}.topin{display:flex;justify-content:space-between}.top a{color:#2d6260;text-decoration:none;font-weight:700}.wrap{padding:30px 24px 70px}.kaart{background:#fff;border:1px solid #ddd8c0;border-radius:14px;padding:20px;margin-bottom:16px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.veld{margin-bottom:12px}.veld label{display:block;font-weight:700;font-size:12px;margin-bottom:5px}.veld input,.veld select,.veld textarea,.filterbalk input,.filterbalk select{width:100%;box-sizing:border-box;border:1px solid #cfcab7;border-radius:8px;padding:10px;font:inherit}.veld textarea{min-height:90px}.melding{padding:12px 14px;border-radius:9px;margin-bottom:18px}.ok{background:#e8f5ee;color:#205b38}.fout{background:#fdeceb;color:#8b2e27}.btn{border:0;border-radius:8px;padding:9px 14px;font-weight:700;cursor:pointer;background:#3a7a77;color:#fff}.danger{background:#a23b32}.meta{color:#68705f;font-size:13px}.acties{display:flex;gap:8px}.filterbalk{display:grid;grid-template-columns:2fr 1fr;gap:12px;margin:18px 0}.badge{display:inline-block;border-radius:999px;padding:4px 9px;background:#eef1e8;color:#506044;font-size:12px;font-weight:700}.vast{border-left:4px solid #c7b36b}.changelog-regel[hidden]{display:none!important}.historie-titel{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.historie-titel h3{margin:0}.historie-tekst{white-space:pre-line;line-height:1.5;margin-top:10px}@media(max-width:700px){.grid,.filterbalk{grid-template-columns:1fr}}
-</style>
+<link rel="stylesheet" href="csp205-changelog-f62e647a3753.css">
 </head>
 <body>
 <div class="top"><div class="topin"><a href="./">← Terug naar beheer</a><span><?= count($eigen) ?> eigen · <?= count($vast) ?> vaste regels</span></div></div>
