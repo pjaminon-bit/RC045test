@@ -6,6 +6,7 @@
 // laatste uitgaande HTML-filter. Doel: geen voorbeeldvereniging-identiteit,
 // voorbeeldmedia, analytics of vaste huisstijl mag naar een tenant lekken.
 // ============================================================
+require_once __DIR__ . '/csp-runtime.php';
 
 function tenantPublicRuntimeKleur(array $config, string $sleutel, string $fallback): string
 {
