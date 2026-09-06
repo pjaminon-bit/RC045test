@@ -21,6 +21,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 tools/phase211_transform.py
+          python3 tools/phase211_runtime_fixture.py
 
       - name: Syntax and focused regression
         run: |
@@ -29,8 +30,10 @@ jobs:
           php -l site-config.php
           php -l app/storage/private-store.php
           php -l tests/phase33-second-tenant.php
+          php -l tests/phase321-runtime-failclosed.php
           php -l tests/platform211-postgresql-canonical.php
           php tests/platform211-postgresql-canonical.php
+          php tests/phase321-runtime-failclosed.php
 
       - name: Full source regression
         run: |
@@ -46,7 +49,7 @@ jobs:
       - name: Commit clean product tree
         run: |
           set -euo pipefail
-          rm -f .github/workflows/temp-211-phase-a.yml tools/phase211_transform.py
+          rm -f .github/workflows/temp-211-phase-a.yml tools/phase211_transform.py tools/phase211_runtime_fixture.py
           rmdir tools 2>/dev/null || true
           git add -A
           git diff --cached --check
