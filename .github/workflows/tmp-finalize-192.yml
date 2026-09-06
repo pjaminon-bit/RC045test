@@ -1,0 +1,36 @@
+name: Temporary finalize CSP 192
+
+on:
+  push:
+    branches:
+      - tmp-finalize-192-clean
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    if: github.event.head_commit.message != 'Security: finalize style CSP hardening (#192)'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout helper branch
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+      - name: Apply deterministic migration
+        run: |
+          python3 tools/finalize192.py
+          php -v
+      - name: Remove temporary helper artifacts
+        run: |
+          rm -f tools/finalize192.py .github/workflows/tmp-finalize-192.yml
+      - name: Validate and commit clean product tree
+        run: |
+          git diff --check
+          git status --short
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "Security: finalize style CSP hardening (#192)"
+          git push origin HEAD:tmp-finalize-192-clean
