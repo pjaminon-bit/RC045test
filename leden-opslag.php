@@ -946,7 +946,7 @@ function ledenZoekBestaandeMet($data, $kandidaat) {
   if (count($treffers) !== 1) return $geen;
 
   $lid = $data['leden'][$treffers[0]];
-  $lidEmail  = strtolower(trim((string) ($lid['email'] ?? ''));
+  $lidEmail  = strtolower(trim((string) ($lid['email'] ?? '')));
   $lidGeb    = trim((string) ($lid['geboortedatum'] ?? ''));
   $lidNummer = (int) ($lid['nummer'] ?? 0);
   if ($email !== '' && $lidEmail !== '' && $email !== $lidEmail) return $geen;
