@@ -35,7 +35,7 @@ Ontbrekende of onbruikbare verplichte tenantconfiguratie mag nooit terugvallen n
 
 ### Standalone/templatecompatibiliteit
 
-De repository ondersteunt nog een losse/standalone configuratieroute, onder andere via [`site-config.local.example.php`](site-config.local.example.php), plus migratie- en templatecompatibiliteit voor bestaande installaties. Die paden zijn **compatibiliteitslagen** en niet de architectuurbron voor nieuwe VPS-tenants. Begin voor nieuwe tenants bij [Tenant provisioning](docs/PROVISIONING.md) en de VPS-runtime/deploymentcontracten.
+De repository ondersteunt nog een losse/standalone configuratieroute, onder andere via [`site-config.local.example.php`](site-config.local.example.php), plus migratie- en templatecompatibiliteit voor bestaande installaties. Die paden zijn **compatibiliteitslagen** en niet de architectuurbron voor nieuwe VPS-tenants. Begin voor nieuwe tenants bij [Tenant provisioning](docs/PROVISIONING.md) en het [actuele VPS deploymentcontract](docs/VPS-DEPLOYMENT.md).
 
 ## Runtime en lokale checks
 
@@ -63,6 +63,7 @@ Een PR alleen geldt niet als afrondbewijs voor audit- of hardeningwerk. Wanneer 
 
 | Onderwerp | Canonieke ingang |
 |---|---|
+| VPS-architectuur en operationele documentatie-index | [docs/VPS-DEPLOYMENT.md](docs/VPS-DEPLOYMENT.md) |
 | Nieuwe tenant / filesystem- en configisolatie | [docs/PROVISIONING.md](docs/PROVISIONING.md) |
 | Eerste tenantbeheerder | [docs/ADMIN-BOOTSTRAP.md](docs/ADMIN-BOOTSTRAP.md) |
 | GitHub Actions → VPS-test en deploygrenzen | [docs/GITHUB-VPS-TEST-DEPLOYMENT.md](docs/GITHUB-VPS-TEST-DEPLOYMENT.md) |
@@ -72,8 +73,6 @@ Een PR alleen geldt niet als afrondbewijs voor audit- of hardeningwerk. Wanneer 
 | Template-/standalonemigratie | [docs/TEMPLATE-MIGRATIE.md](docs/TEMPLATE-MIGRATIE.md) |
 | Volledige automatische bronregressie | [`tests/run-all.sh`](tests/run-all.sh) |
 | Security-/hardeningaudit en actuele handover | [GitHub issue #138](https://github.com/pjaminon-bit/RC045test/issues/138) |
-
-`docs/VPS-DEPLOYMENT.md` bevat nog historische gefaseerde opbouwnotities en wordt apart gereconcilieerd onder auditissue #161. Gebruik dat document zolang #161 open is niet als enige bron voor de actuele deployarchitectuur.
 
 ## Security- en onderhoudsregels
 
@@ -92,4 +91,4 @@ De repository is daarmee tegelijk:
 - de bron voor tenant provisioning, runtime-, lifecycle- en control-planecontracten;
 - de bron voor GitHub Actions, securityregressies en live VPS-testacceptatie.
 
-Voor een nieuwe maintainer is de aanbevolen route: **README → provisioning/runtime → relevante operationele doc → `tests/run-all.sh` / workflows → audittracker #138**.
+Voor een nieuwe maintainer is de aanbevolen route: **README → VPS deployment/provisioning/runtime → relevante operationele doc → `tests/run-all.sh` / workflows → audittracker #138**.

@@ -8,16 +8,14 @@
 //   - auth.php                 (rol van een ingelogde gebruiker bepalen)
 //   - aanmelden-ontvangst.php  (nieuwe aanmeldingen van aanmelden.html)
 //
-// PRIVACY. Het ledenbestand bevat geboortedata, adressen, telefoon-
-// nummers en mailadressen. Het staat daarom BEWUST NIET in data/,
-// want die map is publiek opvraagbaar omdat de website er JSON uit
-// leest. Het bestand heet leden-data.php en begint met een regel
-// PHP die de uitvoer meteen afbreekt. Wordt het ooit rechtstreeks
-// opgevraagd, dan voert de server het uit als PHP en krijgt de
-// bezoeker een lege pagina in plaats van het hele ledenbestand.
-// Dat werkt ook als de afscherming in .htaccess ontbreekt, wat kan
-// gebeuren omdat de deploy dotfiles overslaat. Zet die regel er
-// alsnog bij, twee sloten is beter dan een.
+// STANDALONE COMPATIBILITEIT / PRIVACY. leden-data.php is het legacy
+// PHP+JSON-formaat voor losse installaties en bevat gevoelige persoonsgegevens.
+// De PHP-voorloop blokkeert directe uitvoer; op Apache kan de repository-
+// .htaccess als aanvullende denylaag dienen. Dit is geen VPS-opslag- of
+// deploycontract: nieuwe multi-tenant VPS-tenants volgen de tenant-private
+// storagegrens uit docs/PROVISIONING.md en docs/VPS-DEPLOYMENT.md. De
+// repository-.htaccess wordt door de releaseflow meegenomen; er is geen
+// handmatige dotfile- of FTP-stap voor VPS-deployments.
 // ============================================================
 
 if (!defined('RC045_LEDEN')) {
