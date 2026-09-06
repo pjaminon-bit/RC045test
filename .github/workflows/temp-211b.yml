@@ -1,0 +1,40 @@
+name: Temporary Phase 211 Phase B verify
+
+on:
+  push:
+    branches:
+      - helper/211-phase-b-run
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout helper branch
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Apply deterministic source transform
+        run: python3 tools/phase211b_transform.py
+
+      - name: Diff and syntax
+        run: |
+          git diff --check
+          php -l app/storage/private-store-migration-guard.php
+          php -l app/storage/private-store-runtime-state.php
+          php -l app/storage/private-json-pdo-migration.php
+          php -l app/storage/private-store.php
+          php -l app/deployment/database-contract.php
+          php -l bin/prepare-vps-database.php
+          php -l bin/migrate-private-json-to-pdo.php
+          php -l bin/apply-private-store-migration.php
+          php -l tests/platform211-json-pdo-migration.php
+          bash -n ops/vps-test-deploy/verenigingsplatform-host-php
+
+      - name: Focused migration regression
+        run: php tests/platform211-json-pdo-migration.php
+
+      - name: Full source regression
+        run: bash tests/run-all.sh
