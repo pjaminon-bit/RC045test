@@ -18,7 +18,8 @@ function prepare45Stop(string $melding, int $code = 1): void
 function prepare45Help(): void
 {
     echo "Gebruik:\n";
-    echo "  php bin/prepare-vps-database.php --runtime-plan=/srv/verenigingen/club/runtime/runtime-plan.json [--force] [--dry-run]\n\n";
+    echo "  php bin/prepare-vps-database.php --runtime-plan=/srv/verenigingen/club/runtime/runtime-plan.json [--migration-target] [--force] [--dry-run]\n\n";
+    echo "  --migration-target  provision PDO-doel voor een nog actieve JSON-tenant; activeert PDO nog niet\n";
     echo "Fase 4.5 kiest bewust één lokaal PostgreSQL-database per tenant met Unix-socket peer authentication.\n";
     echo "Er wordt geen databasewachtwoord, DSN-secret of providersecret gevraagd of opgeslagen.\n";
 }
@@ -44,13 +45,13 @@ foreach ($_SERVER['argv'] ?? [] as $arg) {
     }
 }
 
-$opt = getopt('', ['runtime-plan:', 'force', 'dry-run', 'help']);
+$opt = getopt('', ['runtime-plan:', 'migration-target', 'force', 'dry-run', 'help']);
 if (isset($opt['help'])) { prepare45Help(); exit(0); }
 $runtimePlan = trim((string)($opt['runtime-plan'] ?? ''));
 if ($runtimePlan === '') prepare45Stop('--runtime-plan=/absoluut/pad/runtime-plan.json is verplicht.');
 
 try {
-    $context = database45RuntimeContext($runtimePlan);
+    $context = database45RuntimeContext($runtimePlan, isset($opt['migration-target']));
     $plan = database45Plan($context);
     $planJson = database45Json($plan);
     $bestanden = [
