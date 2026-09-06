@@ -19,7 +19,7 @@ tenantHomepageStartOutputFilter();
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
-  <link rel="stylesheet" href="csp205-index-6c81cdcc5da6.css">
+  <link rel="stylesheet" href="csp205-index-f6f06d63c77b.css">
   <script type="application/ld+json" id="structured-data">
   {
     "@context": "https://schema.org",
@@ -67,7 +67,7 @@ tenantHomepageStartOutputFilter();
         async src="//gc.zgo.at/count.js"></script>
 </head>
 <body>
-<div id="testsite-banner" role="status" style="position:fixed;top:8px;left:50%;transform:translateX(-50%);z-index:99999;background:#b42318;color:#fff;padding:5px 12px;border-radius:999px;font:700 12px/1.2 Arial,sans-serif;letter-spacing:.08em;box-shadow:0 2px 8px rgba(0,0,0,.25);pointer-events:none">TESTSITE</div>
+<div id="testsite-banner" role="status" class="csp-i-add0c4f05a">TESTSITE</div>
 
 <a href="#main-content" class="skip-link">Naar hoofdinhoud</a>
 
@@ -117,7 +117,7 @@ tenantHomepageStartOutputFilter();
 </nav>
 
 <!-- ===== MEDEDELING (inhoud komt uit data/actueel.json, bijwerken via beheer.php) ===== -->
-<div class="announce-bar" id="announce-bar" style="display:none;">
+<div class="announce-bar csp-i-d0466aa33f" id="announce-bar">
   <span class="announce-bar-icon" aria-hidden="true">📣</span>
   <span id="announce-text"></span>
 </div>
@@ -128,9 +128,9 @@ tenantHomepageStartOutputFilter();
 <section class="hero" id="main-content">
   <div class="hero-bg" id="hero-bg"></div>
   <div class="hero-gradient"></div>
-  <img width="400" height="423" src="rc045-logo.png" alt="" aria-hidden="true" style="position:absolute; right:-40px; top:50%; transform:translateY(-50%); height: 520px; width: auto; opacity: 0.13; pointer-events:none; filter: drop-shadow(0 0 40px rgba(200,154,26,0.2)); z-index:1;">
+  <img width="400" height="423" src="rc045-logo.png" alt="" aria-hidden="true" class="csp-i-480676fe6f">
   <div class="hero-content">
-    <img width="400" height="423" src="rc045-logo.png" alt="RC045" style="height: 140px; width: auto; margin-bottom: 24px; filter: drop-shadow(0 4px 16px rgba(0,0,0,0.4));">
+    <img width="400" height="423" src="rc045-logo.png" alt="RC045" class="csp-i-f943910bb6">
     <h1>RC045<br><span>BASHERS OF THE SOUTH</span></h1>
     <p id="hp-hero-intro" data-i18n="hero.intro">Wij zijn een gezellige vereniging uit het zuiden van Limburg voor liefhebbers van elektrisch aangedreven, radiografisch bestuurbare auto's. Voor beginners én ervaren hobbyisten. Jong én oud.</p>
     <div class="hero-buttons">
@@ -181,7 +181,7 @@ tenantHomepageStartOutputFilter();
 </div>
 
 <!-- ===== NIEUWS ===== -->
-<section class="section nieuws" id="nieuws" style="display:none;">
+<section class="section nieuws csp-i-d0466aa33f" id="nieuws">
   <div class="container">
     <div class="section-header reveal">
       <div class="section-label" id="hp-nieuws-label" data-i18n="nieuws.label">Nieuws</div>
@@ -205,8 +205,8 @@ tenantHomepageStartOutputFilter();
       <div class="reveal reveal-delay-2">
         <div class="section-label" id="hp-about-label" data-i18n="about.label">Wie zijn wij</div>
         <h2 class="section-title" id="hp-about-title" data-i18n="about.title">Dé RC-vereniging van Zuid-Limburg</h2>
-        <p style="color: var(--muted); line-height: 1.8; margin-bottom: 24px;" id="hp-about-p1" data-i18n="about.p1">RC045 is een actieve vereniging voor liefhebbers van radiografisch bestuurbare auto's. We rijden met elektrische RC-auto's in alle schalen. Of je nu net begint of al jaren rijdt: bij ons ben je welkom.</p>
-        <p style="color: var(--muted); line-height: 1.8;" id="hp-about-p2" data-i18n="about.p2">We beschikken over een eigen baan in Eygelshoven, op het terrein van Kok Lexmond. Naast de basher baan hebben we ook een enorm crawler-parcours en een jump-track.</p>
+        <p id="hp-about-p1" data-i18n="about.p1" class="csp-i-36960dfcfe">RC045 is een actieve vereniging voor liefhebbers van radiografisch bestuurbare auto's. We rijden met elektrische RC-auto's in alle schalen. Of je nu net begint of al jaren rijdt: bij ons ben je welkom.</p>
+        <p id="hp-about-p2" data-i18n="about.p2" class="csp-i-617166a2ab">We beschikken over een eigen baan in Eygelshoven, op het terrein van Kok Lexmond. Naast de basher baan hebben we ook een enorm crawler-parcours en een jump-track.</p>
         <div class="about-features">
           <div class="feature-card reveal reveal-delay-1">
             <div class="feature-card-icon">⚡</div>
@@ -263,7 +263,7 @@ tenantHomepageStartOutputFilter();
       <div class="price-card reveal reveal-delay-1">
         <div class="price-card-tag" id="hp-guest-tag" data-i18n="guest.tag">Gastrijden</div>
         <h3 id="hp-guest-title" data-i18n="guest.title">Kom eens gastrijden!</h3>
-        <p style="font-size: 14px; color: var(--muted); margin-top: 8px; line-height: 1.6;" id="hp-guest-text" data-i18n="guest.text">Rij een hele dag mee op onze baan zonder lidmaatschap. Check onze openingstijden en kom gewoon langs, meld je wel even bij een (bestuurs)lid als je er bent!</p>
+        <p id="hp-guest-text" data-i18n="guest.text" class="csp-i-0868776988">Rij een hele dag mee op onze baan zonder lidmaatschap. Check onze openingstijden en kom gewoon langs, meld je wel even bij een (bestuurs)lid als je er bent!</p>
         <ul class="price-list">
           <li><span id="hp-guest-adult" data-i18n="guest.adult">Volwassene (16+)</span><span class="price-amount">€10</span></li>
           <li><span id="hp-guest-youth" data-i18n="guest.youth">Jeugd (t/m 15 jaar)</span><span class="price-amount">€5</span></li>
@@ -279,7 +279,7 @@ tenantHomepageStartOutputFilter();
       <div class="price-card featured reveal reveal-delay-2">
         <div class="price-card-tag" id="hp-member-tag" data-i18n="member.tag">Lidmaatschap</div>
         <h3 id="hp-member-title" data-i18n="member.title">Word lid van RC045</h3>
-        <p style="font-size: 14px; color: rgba(255,255,255,0.6); margin-top: 8px; line-height: 1.6;" id="hp-member-text" data-i18n="member.text">Onbeperkt rijden op alle banen, toegang tot de groepsapp, kennis delen met medehobbyisten en altijd iemand om je mee te helpen.</p>
+        <p id="hp-member-text" data-i18n="member.text" class="csp-i-3ade846eb0">Onbeperkt rijden op alle banen, toegang tot de groepsapp, kennis delen met medehobbyisten en altijd iemand om je mee te helpen.</p>
         <ul class="price-list">
           <li><span id="hp-member-youth" data-i18n="member.youth">Jeugdlid (t/m 15 jaar)</span><span class="price-amount" id="prijs-jeugd">€50/jaar</span></li>
           <li><span id="hp-member-senior" data-i18n="member.senior">Seniorlid (16+)</span><span class="price-amount" id="prijs-senior">€100/jaar</span></li>
@@ -301,14 +301,14 @@ tenantHomepageStartOutputFilter();
       <div class="reveal">
         <div class="section-label" id="hp-track-label" data-i18n="track.label">Onze locatie</div>
         <h2 class="section-title" id="hp-track-title" data-i18n="track.title">De baan in Eygelshoven</h2>
-        <p style="color: var(--muted); line-height: 1.8; margin-bottom: 28px;" id="hp-track-p1" data-i18n="track.p1">Ons terrein bevindt zich op het perceel van Kok Lexmond in Eygelshoven (Kerkrade). We beschikken over meerdere banen: een race-circuit, een crawler-parcours, en een jump-track voor de echte thrill-seekers.</p>
-        <p style="color: var(--muted); line-height: 1.8; margin-bottom: 28px;" id="hp-track-p2" data-i18n="track.p2">Volg bij aankomst de pijlen met het RC045-logo en je ziet ons vanzelf. Er is voldoende gratis parkeergelegenheid.</p>
-        <ul style="list-style:none; display:flex; flex-direction:column; gap:12px;">
-          <li style="display:flex; align-items:center; gap:10px; font-size:15px;"><span style="color:var(--green); font-size:18px;">✓</span><span id="hp-track-f1" data-i18n="track.f1">Race-circuit voor buggy's, truggies en meer</span></li>
-          <li style="display:flex; align-items:center; gap:10px; font-size:15px;"><span style="color:var(--green); font-size:18px;">✓</span><span id="hp-track-f2" data-i18n="track.f2">Off-road crawler-parcours</span></li>
-          <li style="display:flex; align-items:center; gap:10px; font-size:15px;"><span style="color:var(--green); font-size:18px;">✓</span><span id="hp-track-f3" data-i18n="track.f3">Jump-track met schans</span></li>
-          <li style="display:flex; align-items:center; gap:10px; font-size:15px;"><span style="color:var(--green); font-size:18px;">✓</span><span id="hp-track-f4" data-i18n="track.f4">Kantine & werkruimte aanwezig</span></li>
-          <li style="display:flex; align-items:center; gap:10px; font-size:15px;"><span style="color:var(--green); font-size:18px;">✓</span><span id="hp-track-f5" data-i18n="track.f5">Voldoende parkeerruimte</span></li>
+        <p id="hp-track-p1" data-i18n="track.p1" class="csp-i-7bb9ccf36b">Ons terrein bevindt zich op het perceel van Kok Lexmond in Eygelshoven (Kerkrade). We beschikken over meerdere banen: een race-circuit, een crawler-parcours, en een jump-track voor de echte thrill-seekers.</p>
+        <p id="hp-track-p2" data-i18n="track.p2" class="csp-i-7bb9ccf36b">Volg bij aankomst de pijlen met het RC045-logo en je ziet ons vanzelf. Er is voldoende gratis parkeergelegenheid.</p>
+        <ul class="csp-i-a82d87a512">
+          <li class="csp-i-b3d0b6d4ce"><span class="csp-i-7162b40bdb">✓</span><span id="hp-track-f1" data-i18n="track.f1">Race-circuit voor buggy's, truggies en meer</span></li>
+          <li class="csp-i-b3d0b6d4ce"><span class="csp-i-7162b40bdb">✓</span><span id="hp-track-f2" data-i18n="track.f2">Off-road crawler-parcours</span></li>
+          <li class="csp-i-b3d0b6d4ce"><span class="csp-i-7162b40bdb">✓</span><span id="hp-track-f3" data-i18n="track.f3">Jump-track met schans</span></li>
+          <li class="csp-i-b3d0b6d4ce"><span class="csp-i-7162b40bdb">✓</span><span id="hp-track-f4" data-i18n="track.f4">Kantine & werkruimte aanwezig</span></li>
+          <li class="csp-i-b3d0b6d4ce"><span class="csp-i-7162b40bdb">✓</span><span id="hp-track-f5" data-i18n="track.f5">Voldoende parkeerruimte</span></li>
         </ul>
       </div>
       <div class="reveal reveal-delay-2">
@@ -530,7 +530,7 @@ tenantHomepageStartOutputFilter();
           <div>
             <h4 id="hp-addr-title" data-i18n="addr.title">Adres</h4>
             <p><span id="addr-straat">Wijngaardsberg 26</span><br><span id="addr-postcode-plaats">6464 EZ Eygelshoven</span><br><br><span id="hp-addr-text" data-i18n="addr.text">Onze baan ligt op het terrein van Kok Lexmond, bij aankomst volg je de pijlen RC045.</span></p>
-            <a href="https://www.openstreetmap.org/search?lat=50.889462&lon=6.071899&zoom=19#map=19/50.889461/6.071900" target="_blank" style="display:inline-block; margin-top:12px; color:var(--teal); font-weight:600; font-size:14px;" id="hp-addr-route" data-i18n="addr.route">Routebeschrijving openen →</a>
+            <a href="https://www.openstreetmap.org/search?lat=50.889462&lon=6.071899&zoom=19#map=19/50.889461/6.071900" target="_blank" id="hp-addr-route" data-i18n="addr.route" class="csp-i-0ee4e9ef0f">Routebeschrijving openen →</a>
           </div>
         </div>
       </div>
@@ -561,7 +561,7 @@ tenantHomepageStartOutputFilter();
               <div class="channel-value" id="contact-facebook-value">facebook.com/rc045</div>
             </div>
           </a>
-          <div class="channel" style="opacity: 0.4; cursor: default; pointer-events: none;">
+          <div class="channel csp-i-00f4471942">
             <div class="channel-icon"><img src="https://upload.wikimedia.org/wikipedia/commons/a/a5/Instagram_icon.png" alt="" width="28" height="28" aria-hidden="true" loading="lazy" decoding="async"></div>
             <div>
               <div class="channel-label">Instagram</div>
@@ -583,24 +583,24 @@ tenantHomepageStartOutputFilter();
           <label for="email" id="hp-form-email" data-i18n="form.email">E-mailadres</label>
           <input type="email" id="email" name="email">
         </div>
-        <div id="email-warning" data-i18n="warn.email" style="display:none; padding:12px 16px; background:#FEF3C7; border-radius:8px; color:#92400E; font-size:14px; font-weight:500;">
+        <div id="email-warning" data-i18n="warn.email" class="csp-i-66ec127d15">
           ⚠️ Vul een geldig e-mailadres in (bijv. naam@voorbeeld.nl)
         </div>
         <div class="form-group">
           <label for="telefoon" id="hp-form-phone" data-i18n="form.phone">Telefoonnummer</label>
-          <div style="display:flex; gap:8px;">
-            <select id="landcode" style="width:110px; flex-shrink:0;">
+          <div class="csp-i-b887bfd543">
+            <select id="landcode" class="csp-i-a4b90adc25">
               <option value="+31">🇳🇱 +31</option>
               <option value="+32">🇧🇪 +32</option>
               <option value="+49">🇩🇪 +49</option>
             </select>
-            <input type="tel" id="telefoon" style="flex:1;"><input type="hidden" id="telefoon-combined" name="telefoon">
+            <input type="tel" id="telefoon" class="csp-i-6253876a64"><input type="hidden" id="telefoon-combined" name="telefoon">
           </div>
         </div>
-        <div id="phone-warning" data-i18n="warn.phone" style="display:none; padding:12px 16px; background:#FEF3C7; border-radius:8px; color:#92400E; font-size:14px; font-weight:500;">
+        <div id="phone-warning" data-i18n="warn.phone" class="csp-i-66ec127d15">
           ⚠️ Vul een geldig telefoonnummer in (minimaal 9 cijfers)
         </div>
-        <div id="contact-warning" data-i18n="warn.contact" style="display:none; padding:12px 16px; background:#FEF3C7; border-radius:8px; color:#92400E; font-size:14px; font-weight:500;">
+        <div id="contact-warning" data-i18n="warn.contact" class="csp-i-66ec127d15">
           ⚠️ We hebben een e-mailadres of telefoonnummer van je nodig om contact op te nemen.
         </div>
         <div class="form-group">
@@ -616,10 +616,10 @@ tenantHomepageStartOutputFilter();
           <label for="bericht" id="hp-form-message" data-i18n="form.message">Bericht *</label>
           <textarea id="bericht" name="bericht" data-i18n-placeholder="form.message.ph" placeholder="Schrijf hier je vraag of bericht..." required></textarea>
         </div>
-        <div id="form-success" data-i18n="form.success" style="display:none; padding:16px; background:var(--teal-light); border-radius:8px; color:var(--teal-dark); font-weight:600; text-align:center;">
+        <div id="form-success" data-i18n="form.success" class="csp-i-e5e5912145">
           ✅ Bericht verzonden! We nemen zo snel mogelijk contact op.
         </div>
-        <div id="form-error" data-i18n="form.error" style="display:none; padding:16px; background:#FEE2E2; border-radius:8px; color:#DC2626; font-weight:600; text-align:center;">
+        <div id="form-error" data-i18n="form.error" class="csp-i-62e7fccff5">
           ❌ Er ging iets mis. Probeer het opnieuw of mail naar bestuur@rc045.nl
         </div>
         <div class="form-submit">
@@ -641,7 +641,7 @@ tenantHomepageStartOutputFilter();
           <a href="https://www.facebook.com/rc045/" target="_blank" title="Facebook" aria-label="RC045 op Facebook" id="footer-facebook-link">
             <img src="https://upload.wikimedia.org/wikipedia/commons/b/b9/2023_Facebook_icon.svg" alt="" width="28" height="28" aria-hidden="true" loading="lazy" decoding="async">
           </a>
-          <span title="Instagram (binnenkort)" style="opacity: 0.3; display: flex; align-items: center;" aria-label="Instagram binnenkort beschikbaar">
+          <span title="Instagram (binnenkort)" aria-label="Instagram binnenkort beschikbaar" class="csp-i-5d7d33efba">
             <img src="https://upload.wikimedia.org/wikipedia/commons/a/a5/Instagram_icon.png" alt="" width="28" height="28" aria-hidden="true" loading="lazy" decoding="async">
           </span>
         </div>

@@ -129,7 +129,7 @@ if (PHP_SAPI !== 'cli' && !headers_sent()) {
     header(
         "Content-Security-Policy: default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; "
         . "form-action {$formAction}; script-src 'self' 'nonce-{$cspNonce}'; script-src-attr 'none'; "
-        . "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        . "style-src 'self' 'nonce-{$cspNonce}' https://fonts.googleapis.com; style-src-attr 'none'; "
         . "font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; "
         . "connect-src {$connectSrc}; media-src 'self' blob:; worker-src 'self' blob:; "
         . "frame-src https://www.openstreetmap.org; upgrade-insecure-requests"

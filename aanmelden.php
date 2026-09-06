@@ -14,7 +14,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
-  <link rel="stylesheet" href="csp205-aanmelden-887c147a5647.css">
+  <link rel="stylesheet" href="csp205-aanmelden-b31d17f20682.css">
   <script data-goatcounter="https://rc045.goatcounter.com/count"
         async src="//gc.zgo.at/count.js"></script>
 </head>
@@ -179,22 +179,22 @@
       <div class="akkoord-group">
         <input type="checkbox" id="akkoord-reglement" name="akkoord_reglement" value="ja">
         <label for="akkoord-reglement">
-          <span data-i18n="form.agree1a">Ik ga akkoord met het</span> <a href="baanreglement.html" data-i18n="form.agree1link">baanreglement</a> <span data-i18n="form.agree1b">van RC045 en verklaar dit gelezen en begrepen te hebben.</span> <span style="color:var(--teal); font-weight:700;">*</span>
+          <span data-i18n="form.agree1a">Ik ga akkoord met het</span> <a href="baanreglement.html" data-i18n="form.agree1link">baanreglement</a> <span data-i18n="form.agree1b">van RC045 en verklaar dit gelezen en begrepen te hebben.</span> <span class="csp-i-cc46f09fd6">*</span>
         </label>
       </div>
-      <div class="akkoord-group" style="margin-top: 10px;">
+      <div class="akkoord-group csp-i-3b6fad0b29">
         <input type="checkbox" id="akkoord-betaling" name="akkoord_betaling" value="ja">
         <label for="akkoord-betaling">
-          <span data-i18n="form.agree2">Ik ga akkoord met de contributieverplichting en zal het verschuldigde bedrag z.s.m. overmaken naar</span> <span class="iban-copy-wrap"><strong id="am-iban-number-inline">NL51 RABO 0367 6153 63</strong><button class="iban-copy-btn" type="button" data-i18n="iban.copy">📋 Kopieer</button></span> <span data-i18n="form.agree2b">t.n.v. RC045, onder vermelding van mijn voor- en achternaam + "contributie RC045 {jaar}".</span> <span style="color:var(--teal); font-weight:700;">*</span>
+          <span data-i18n="form.agree2">Ik ga akkoord met de contributieverplichting en zal het verschuldigde bedrag z.s.m. overmaken naar</span> <span class="iban-copy-wrap"><strong id="am-iban-number-inline">NL51 RABO 0367 6153 63</strong><button class="iban-copy-btn" type="button" data-i18n="iban.copy">📋 Kopieer</button></span> <span data-i18n="form.agree2b">t.n.v. RC045, onder vermelding van mijn voor- en achternaam + "contributie RC045 {jaar}".</span> <span class="csp-i-cc46f09fd6">*</span>
         </label>
       </div>
 
       <!-- Meldingen -->
-      <div class="melding warning" id="akkoord-warning" style="margin-top:12px;"><span data-i18n="warn.agree">⚠️ Je dient akkoord te gaan met beide verklaringen om je te kunnen aanmelden.</span></div>
-      <div class="melding error" id="form-error" style="margin-top:12px;"><span data-i18n="warn.error">❌ Er ging iets mis. Probeer het opnieuw of mail naar bestuur@rc045.nl</span></div>
-      <div class="melding success" id="form-success" style="margin-top:12px;">
+      <div class="melding warning csp-i-b6d781cbbc" id="akkoord-warning"><span data-i18n="warn.agree">⚠️ Je dient akkoord te gaan met beide verklaringen om je te kunnen aanmelden.</span></div>
+      <div class="melding error csp-i-b6d781cbbc" id="form-error"><span data-i18n="warn.error">❌ Er ging iets mis. Probeer het opnieuw of mail naar bestuur@rc045.nl</span></div>
+      <div class="melding success csp-i-b6d781cbbc" id="form-success">
         <span id="am-success-title" data-i18n="success.title">✅ Aanmelding ontvangen! We nemen zo snel mogelijk contact met je op.</span><br><br>
-        <span style="font-size:14px; font-weight:400;"><span id="am-success-sub" data-i18n="success.sub">Vergeet niet de contributie over te maken via de betalingsinstructies hierboven.</span></span>
+        <span class="csp-i-6ffdd55d0e"><span id="am-success-sub" data-i18n="success.sub">Vergeet niet de contributie over te maken via de betalingsinstructies hierboven.</span></span>
       </div>
 
       <button type="submit" class="btn btn-primary" id="submit-btn" data-i18n="form.submit">Aanmelden bij RC045 →</button>
@@ -222,7 +222,7 @@
           <a href="https://www.facebook.com/rc045/" target="_blank" title="Facebook" aria-label="RC045 op Facebook" id="footer-facebook-link">
             <img src="https://upload.wikimedia.org/wikipedia/commons/b/b9/2023_Facebook_icon.svg" alt="" width="28" height="28" aria-hidden="true" loading="lazy" decoding="async">
           </a>
-          <span title="Instagram (binnenkort)" style="opacity: 0.3; display: flex; align-items: center;" aria-label="Instagram binnenkort beschikbaar">
+          <span title="Instagram (binnenkort)" aria-label="Instagram binnenkort beschikbaar" class="csp-i-5d7d33efba">
             <img src="https://upload.wikimedia.org/wikipedia/commons/a/a5/Instagram_icon.png" alt="" width="28" height="28" aria-hidden="true" loading="lazy" decoding="async">
           </span>
         </div>
@@ -698,7 +698,7 @@
         <div class="contributie-sub">${isJeugd ? t['contrib.jeugd'] : t['contrib.senior']} · ${t['contrib.inschrijving']} december</div>
         <div class="contributie-breakdown">
           ${t['contrib.inschrijfkosten']}: €${rekentabelInschrijfkosten}<br>
-          <strong style="font-size:16px;">${t['contrib.totaal']}: €${rekentabelInschrijfkosten}</strong><br><br>
+          <strong class="csp-i-43e9c079be">${t['contrib.totaal']}: €${rekentabelInschrijfkosten}</strong><br><br>
           ${vulRekentabelTokens(t['contrib.volledig'])}: €${volledigeContributie} (${t['contrib.niet_overmaken']})
         </div>
       `;
@@ -715,7 +715,7 @@
       <div class="contributie-breakdown">
         ${t['contrib.label']}: €${contributie} (${t['contrib.prorata']} ${maandNamen[maand] || maandNamen[0]})<br>
         ${t['contrib.inschrijfkosten']}: €${rekentabelInschrijfkosten}<br>
-        <strong style="font-size:16px;">${t['contrib.totaal']}: €${totaal}</strong><br><br>
+        <strong class="csp-i-43e9c079be">${t['contrib.totaal']}: €${totaal}</strong><br><br>
         ${vulRekentabelTokens(t['contrib.volledig'])}: €${volledigeContributie} (${t['contrib.niet_overmaken']})
       </div>
     `;

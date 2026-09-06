@@ -152,11 +152,17 @@ function apply48SuspendedPaden(array $p):array
 {
     $tenant=(string)$p['tenant_key'];if(!runtime41CanoniekeTenantKey($tenant))throw new RuntimeException('Ongeldige tenant-key voor suspended placeholder.');
     $naam='210-vp-'.$tenant.'-suspended.conf';
-    return ['root'=>'/var/www/verenigingsplatform-suspended','index'=>'/var/www/verenigingsplatform-suspended/index.html','available'=>'/etc/apache2/sites-available/'.$naam,'enabled'=>'/etc/apache2/sites-enabled/'.$naam];
+    return ['root'=>'/var/www/verenigingsplatform-suspended','index'=>'/var/www/verenigingsplatform-suspended/index.html','style'=>'/var/www/verenigingsplatform-suspended/style.css','available'=>'/etc/apache2/sites-available/'.$naam,'enabled'=>'/etc/apache2/sites-enabled/'.$naam];
+}
+function apply48SuspendedCss():string
+{
+    return <<<'CSS'
+html{color-scheme:light}*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px;background:#f4f6f4;color:#17211b;font:16px/1.55 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.card{width:min(680px,100%);background:#fff;border:1px solid #dce3de;border-radius:18px;padding:clamp(28px,6vw,54px);box-shadow:0 14px 44px rgba(18,38,25,.08);text-align:center}.mark{width:52px;height:52px;margin:0 auto 20px;border-radius:50%;display:grid;place-items:center;background:#eef3ef;font-size:24px}h1{margin:0 0 12px;font-size:clamp(1.55rem,4vw,2.25rem);line-height:1.18}p{margin:0 auto;max-width:520px;color:#647169}.foot{margin-top:28px;padding-top:20px;border-top:1px solid #edf0ed;color:#8a948d;font-size:.82rem}
+CSS;
 }
 function apply48SuspendedHtml():string
 {
-    return '<!doctype html><html lang="nl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow,noarchive"><title>Website tijdelijk uitgeschakeld</title><style>html{color-scheme:light}*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px;background:#f4f6f4;color:#17211b;font:16px/1.55 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.card{width:min(680px,100%);background:#fff;border:1px solid #dce3de;border-radius:18px;padding:clamp(28px,6vw,54px);box-shadow:0 14px 44px rgba(18,38,25,.08);text-align:center}.mark{width:52px;height:52px;margin:0 auto 20px;border-radius:50%;display:grid;place-items:center;background:#eef3ef;font-size:24px}h1{margin:0 0 12px;font-size:clamp(1.55rem,4vw,2.25rem);line-height:1.18}p{margin:0 auto;max-width:520px;color:#647169}.foot{margin-top:28px;padding-top:20px;border-top:1px solid #edf0ed;color:#8a948d;font-size:.82rem}</style></head><body><main class="card"><div class="mark" aria-hidden="true">⏸</div><h1>Deze vereniging is tijdelijk uitgeschakeld</h1><p>De website is op dit moment niet beschikbaar. Probeer het later opnieuw of neem contact op met de vereniging als je vragen hebt.</p><div class="foot">Verenigingsplatform</div></main></body></html>\n';
+    return '<!doctype html><html lang="nl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow,noarchive"><title>Website tijdelijk uitgeschakeld</title><link rel="stylesheet" href="/style.css"></head><body><main class="card"><div class="mark" aria-hidden="true">⏸</div><h1>Deze vereniging is tijdelijk uitgeschakeld</h1><p>De website is op dit moment niet beschikbaar. Probeer het later opnieuw of neem contact op met de vereniging als je vragen hebt.</p><div class="foot">Verenigingsplatform</div></main></body></html>\n';
 }
 function apply48SuspendedVhost(array $p):string
 {
@@ -165,7 +171,7 @@ function apply48SuspendedVhost(array $p):string
         '# Fase 4.8: statische HTTPS-placeholder voor suspended tenant; geen PHP/FPM/database.',
         '<VirtualHost *:443>','    ServerName '.$host,'    StrictHostCheck On','    SSLEngine on','    SSLStrictSNIVHostCheck On','    SSLProtocol all -SSLv3 -TLSv1 -TLSv1.1','    SSLCompression Off',
         '    SSLCertificateFile '.tls44ApacheQuote($cert.'/fullchain.pem'),'    SSLCertificateKeyFile '.tls44ApacheQuote($cert.'/privkey.pem'),
-        '    Header always set Strict-Transport-Security "max-age=31536000"','    Header always set Cache-Control "no-store, max-age=0"','    Header always set X-Robots-Tag "noindex, nofollow,noarchive"','    Header always set X-Content-Type-Options "nosniff"','    Header always set Referrer-Policy "no-referrer"','    Header always set Content-Security-Policy "default-src \'none\'; style-src \'unsafe-inline\'; base-uri \'none\'; frame-ancestors \'none\'"',
+        '    Header always set Strict-Transport-Security "max-age=31536000"','    Header always set Cache-Control "no-store, max-age=0"','    Header always set X-Robots-Tag "noindex, nofollow,noarchive"','    Header always set X-Content-Type-Options "nosniff"','    Header always set Referrer-Policy "no-referrer"','    Header always set Content-Security-Policy "default-src \'none\'; style-src \'self\'; base-uri \'none\'; frame-ancestors \'none\'"',
         '    RewriteEngine On','    RewriteCond %{SSL:SSL_TLS_SNI} !^'.$hostRe.'$ [NC,OR]','    RewriteCond %{HTTP_HOST} !^'.$hostRe.'(?::443)?$ [NC]','    RewriteRule ^ - [F,L]',
         '    DocumentRoot '.tls44ApacheQuote($x['root']),'    DirectoryIndex index.html','    ErrorDocument 503 /index.html','    RewriteCond %{REQUEST_URI} !^/index\\.html$ [NC]','    RewriteRule ^ - [R=503,L]',
         '    <Directory '.tls44ApacheQuote($x['root']).'>','        Options None','        AllowOverride None','        Require all granted','        <LimitExcept GET HEAD>','            Require all denied','        </LimitExcept>','    </Directory>','</VirtualHost>',''
@@ -173,7 +179,7 @@ function apply48SuspendedVhost(array $p):string
 }
 function apply48SuspendedBestanden(array $p):array
 {
-    $x=apply48SuspendedPaden($p);apply48SafeDir($x['root'],0755);apply48Write($x['index'],apply48SuspendedHtml(),0644);apply48Write($x['available'],apply48SuspendedVhost($p),0644);return$x;
+    $x=apply48SuspendedPaden($p);apply48SafeDir($x['root'],0755);apply48Write($x['index'],apply48SuspendedHtml(),0644);apply48Write($x['style'],apply48SuspendedCss(),0644);apply48Write($x['available'],apply48SuspendedVhost($p),0644);return$x;
 }
 function apply48ApacheAan(array $p):void
 {

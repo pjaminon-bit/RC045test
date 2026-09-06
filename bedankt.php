@@ -15,7 +15,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
-  <link rel="stylesheet" href="csp205-bedankt-661944f142d1.css">
+  <link rel="stylesheet" href="csp205-bedankt-d8aa6cfe465f.css">
   <script data-goatcounter="https://rc045.goatcounter.com/count"
         async src="//gc.zgo.at/count.js"></script>
 </head>
@@ -30,7 +30,7 @@
       <img width="400" height="423" src="rc045-logo.png" alt="RC045 logo">
       <div><span class="nav-logo-text">RC045</span></div>
     </a>
-    <div style="display:flex; align-items:center; gap:12px;">
+    <div class="csp-i-a527d03795">
     <div class="lang-switch" id="lang-switch">
       <button class="lang-trigger" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Taal / Language / Sprache">
         <span class="lang-trigger-flag" aria-hidden="true"><svg viewBox="0 0 30 20" width="20" height="14"><rect width="30" height="6.67" fill="#AE1C28"/><rect y="6.67" width="30" height="6.66" fill="#fff"/><rect y="13.33" width="30" height="6.67" fill="#21468B"/></svg></span>
