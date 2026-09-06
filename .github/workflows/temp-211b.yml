@@ -36,5 +36,42 @@ jobs:
       - name: Focused migration regression
         run: php tests/platform211-json-pdo-migration.php
 
-      - name: Full source regression
-        run: bash tests/run-all.sh
+      - name: JavaScript syntax regression
+        run: |
+          while IFS= read -r -d '' js; do
+            node --check "$js"
+          done < <(find . -type f -name '*.js' -not -path './node_modules/*' -not -path './vendor/*' -not -path './playwright-report/*' -print0)
+
+      - name: Audit PHP regressions
+        run: |
+          while IFS= read -r test_file; do
+            echo ">>> $test_file"
+            php "$test_file"
+          done < <(find tests -maxdepth 1 -type f -name 'audit*.php' | sort)
+
+      - name: Phase PHP regressions
+        run: |
+          while IFS= read -r test_file; do
+            echo ">>> $test_file"
+            php "$test_file"
+          done < <(find tests -maxdepth 1 -type f -name 'phase*.php' | sort)
+
+      - name: Platform PHP regressions
+        run: |
+          while IFS= read -r test_file; do
+            echo ">>> $test_file"
+            php "$test_file"
+          done < <(find tests -maxdepth 1 -type f -name 'platform*.php' | sort)
+
+      - name: Remaining PHP regressions
+        run: |
+          while IFS= read -r test_file; do
+            case "$(basename "$test_file")" in
+              audit*.php|phase*.php|platform*.php) continue ;;
+            esac
+            echo ">>> $test_file"
+            php "$test_file"
+          done < <(find tests -maxdepth 1 -type f -name '*.php' | sort)
+
+      - name: Repository boundaries
+        run: test ! -e site-config.local.php
