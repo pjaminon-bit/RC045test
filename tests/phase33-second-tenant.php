@@ -41,6 +41,7 @@ function provision33(string $script, string $base, string $key, string $name, st
         . ' --name=' . escapeshellarg($name)
         . ' --url=' . escapeshellarg($url)
         . ' --root=' . escapeshellarg($base)
+        . ' --driver=json'
         . ' --modules=' . escapeshellarg($modules);
     return run33($cmd);
 }
@@ -101,6 +102,11 @@ try {
         ($cfgA['opslag']['private_root'] ?? '') === $tenantA . '/private'
         && ($cfgB['opslag']['private_root'] ?? '') === $tenantB . '/private',
         'iedere tenant heeft een eigen private root'
+    );
+    check33(
+        ($cfgA['opslag']['private_driver'] ?? '') === 'json'
+        && ($cfgB['opslag']['private_driver'] ?? '') === 'json',
+        'filesystem-isolatietest kiest JSON uitsluitend expliciet als compatibiliteitsbackend'
     );
 
     $brandA = $cfgA['branding'] ?? [];

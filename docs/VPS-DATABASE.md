@@ -1,8 +1,9 @@
 # VPS database provisioning — fase 4.5
 
-Status: **code/automation en CI-contract gereed; daadwerkelijke PostgreSQL provisioning volgt op de echte VPS.**
+Status: **code/automation, CI én echte VPS-validatie afgerond. PostgreSQL/PDO is de canonieke private datastore voor nieuwe VPS-tenants.**
 
-Fase 4.5 kiest één canoniek productiemodel voor private PDO-opslag:
+Fase 4.5 kiest één canoniek productiemodel voor private PDO-opslag. Sinds platformstap #211 gebruikt nieuwe tenantprovisioning standaard PDO; `--driver=json` blijft uitsluitend een expliciete standalone/legacycompatibiliteitskeuze:
+
 
 - PostgreSQL **16 of nieuwer** op dezelfde Linux VPS;
 - PostgreSQL draait **socket-only** met `listen_addresses=''`: geen TCP-listener voor tenantdatabases;

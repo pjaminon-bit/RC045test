@@ -12,6 +12,7 @@ php bin/provision-tenant.php \
   --name="Voorbeeldvereniging" \
   --url=https://voorbeeldvereniging.nl \
   --root=/srv/verenigingen \
+  --driver=pdo \
   --modules=website,ledenadministratie,aanmelden,sponsors
 ```
 
@@ -181,7 +182,7 @@ Private JSON-collecties staan onder:
 private/collections/
 ```
 
-Bij `--driver=pdo` gebruikt dezelfde repositorylaag tenant-key isolatie in de gedeelde PDO-store. Een externe PDO-tenant valt niet terug naar legacy JSON wanneer zijn collectie leeg is.
+Nieuwe tenants gebruiken canoniek `--driver=pdo`. De first-VPS/productiebootstrap geeft dit bovendien expliciet door en provisiont PostgreSQL vóór tenant-FPM wordt geactiveerd. `--driver=json` blijft alleen beschikbaar als bewuste standalone/legacycompatibiliteitskeuze. Een externe PDO-tenant valt nooit terug naar legacy JSON wanneer de database ontbreekt, faalt of een collectie leeg is.
 
 Databasecredentials worden niet door de provisioner gevraagd. DSN/user/password horen server-side via deployment/secrets gekoppeld te worden.
 
@@ -212,8 +213,8 @@ Op de VPS hoort `/srv/verenigingen` alleen schrijfbaar te zijn voor de vertrouwd
 
 ```text
 --timezone=Europe/Amsterdam
---driver=json
---driver=pdo
+--driver=pdo   # standaard/canoniek voor nieuwe tenants
+--driver=json  # alleen expliciete standalone/legacycompatibiliteit
 --modules=website,ledenadministratie,...
 --force
 --dry-run
