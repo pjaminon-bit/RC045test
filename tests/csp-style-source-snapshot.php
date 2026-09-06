@@ -14,7 +14,13 @@ if ($grepOutput === null) {
     exit(1);
 }
 
-$files = array_values(array_filter(array_map('trim', preg_split('/\\R/', $grepOutput) ?: [])));
+$files = array_values(array_filter(array_map(
+    static function (string $path): string {
+        $path = trim($path);
+        return str_starts_with($path, 'HEAD:') ? substr($path, 5) : $path;
+    },
+    preg_split('/\\R/', $grepOutput) ?: []
+)));
 
 $cssCommand = 'git -C ' . escapeshellarg($root) . " ls-files '*.css'";
 $cssOutput = shell_exec($cssCommand);
@@ -44,7 +50,9 @@ foreach ($files as $path) {
         exit(1);
     }
     echo 'CSP_SOURCE_SNAPSHOT_BEGIN ' . base64_encode($path) . "\n";
-    echo base64_encode($content) . "\n";
+    foreach (str_split(base64_encode($content), 32000) as $chunk) {
+        echo $chunk . "\n";
+    }
     echo "CSP_SOURCE_SNAPSHOT_END\n";
 }
 
