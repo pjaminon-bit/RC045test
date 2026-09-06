@@ -27,7 +27,7 @@ try{
     check321runtime(strpos($outVerplicht,'CONFIG_KEY=rc045')===false,'fail-closed fout voert geen succesvolle RC045 fallback uit');
 
     $tenantCfg=$tmp.'/tenant.php';
-    file_put_contents($tenantCfg,"<?php return ['vereniging'=>['sleutel'=>'tenant-veilig','naam'=>'Tenant Veilig']];\n");
+    file_put_contents($tenantCfg,"<?php return ['vereniging'=>['sleutel'=>'tenant-veilig','naam'=>'Tenant Veilig'],'opslag'=>['private_driver'=>'json']];\n");
     $envGeldig='VERENIGING_REQUIRE_TENANT_CONFIG=1 VERENIGING_CONFIG_FILE='.escapeshellarg($tenantCfg);
     [$codeGeldig,$outGeldig]=run321runtime($envGeldig,$runner);
     check321runtime($codeGeldig===0&&trim($outGeldig)==='CONFIG_KEY=tenant-veilig','verplichte modus laadt expliciete tenantconfig');
