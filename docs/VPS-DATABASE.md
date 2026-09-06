@@ -4,7 +4,6 @@ Status: **code/automation, CI én echte VPS-validatie afgerond. PostgreSQL/PDO i
 
 Fase 4.5 kiest één canoniek productiemodel voor private PDO-opslag. Sinds platformstap #211 gebruikt nieuwe tenantprovisioning standaard PDO; `--driver=json` blijft uitsluitend een expliciete standalone/legacycompatibiliteitskeuze:
 
-
 - PostgreSQL **16 of nieuwer** op dezelfde Linux VPS;
 - PostgreSQL draait **socket-only** met `listen_addresses=''`: geen TCP-listener voor tenantdatabases;
 - **één database per tenant**;
@@ -28,7 +27,7 @@ Dat levert een sterkere lokale grens op dan gedeelde wachtwoorden:
 
 ## Voorwaarden
 
-Voor een tenant moeten vooraf aanwezig zijn:
+Voor een normale nieuwe PDO-tenant moeten vooraf aanwezig zijn:
 
 1. provisioning met `--driver=pdo`;
 2. fase 3.4 admin bootstrap;
@@ -38,14 +37,26 @@ Voor een tenant moeten vooraf aanwezig zijn:
 6. PostgreSQL moet gecontroleerd met `listen_addresses=''` zijn gestart en `/var/run/postgresql` als Unix-socket aanbieden;
 7. de tenant-PHP-FPM pool moet vóór iedere database-`--apply` zijn gestopt. Fase 4.5.1 weigert actieve processen van de tenant-runtimeuser fail-closed.
 
-Fase 4.5 schakelt een bestaande JSON-tenant **niet automatisch** om. Een datamigratie is een afzonderlijke, expliciete operatie en mag niet verstopt zitten in infrastructuurprovisioning.
+Fase 4.5 schakelt een bestaande JSON-tenant **niet automatisch** om. Voor zo'n tenant kan dezelfde database-infrastructuur nu expliciet als **migration-target** worden voorbereid; de daadwerkelijke drivercutover blijft een afzonderlijke, gecontroleerde Phase-B-operatie. Zie [`PRIVATE-STORE-MIGRATIE.md`](PRIVATE-STORE-MIGRATIE.md).
 
 ## Bundle genereren
+
+Voor een normale PDO-tenant:
 
 ```bash
 php bin/prepare-vps-database.php \
   --runtime-plan=/srv/verenigingen/noorderhaven/runtime/runtime-plan.json
 ```
+
+Voor een bestaande JSON-tenant die als expliciet migratiedoel naar PostgreSQL/PDO wordt voorbereid:
+
+```bash
+php bin/prepare-vps-database.php \
+  --runtime-plan=/srv/verenigingen/noorderhaven/runtime/runtime-plan.json \
+  --migration-target
+```
+
+`--migration-target` verandert de actieve private-store-driver niet. Het staat uitsluitend toe dat het bestaande databasecontract voor een JSON-geprovisioneerde tenant als migratiedoel wordt voorbereid.
 
 Dry run:
 
@@ -170,7 +181,7 @@ Deze check:
 
 ## Niet onderdeel van 4.5
 
-- automatische migratie van bestaande JSON-data naar PostgreSQL;
+- automatische of impliciete JSON→PostgreSQL-cutover **binnen** databaseprovisioning; de expliciete migratieprocedure staat in [`PRIVATE-STORE-MIGRATIE.md`](PRIVATE-STORE-MIGRATIE.md);
 - remote/managed PostgreSQL met password/certificaat-auth;
 - fysieke PostgreSQL backup/restore, PITR en monitoring;
 - database lifecycle bij tenant delete/export.
