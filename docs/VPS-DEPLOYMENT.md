@@ -73,6 +73,16 @@ VERENIGING_PRIVATE_ROOT=/srv/verenigingen/<tenant>/private
 
 Ontbrekende, onleesbare of inconsistente verplichte tenantconfiguratie mag niet terugvallen naar RC045/default- of standaloneconfiguratie. `deployment.json`, runtimeplan, webserverconfiguratie en databasebinding moeten dezelfde tenantidentiteit bewijzen.
 
+De productie-baseline voor Ubuntu 26.04 gebruikt PHP 8.5. Een runtimebundle wordt volgens het gespecialiseerde runtimecontract bijvoorbeeld gegenereerd met:
+
+```bash
+php bin/prepare-vps-runtime.php \
+  --deployment=/srv/verenigingen/<tenant>/deployment.json \
+  --php-version=8.5
+```
+
+Bij root-toepassing hoort de FPM-pool bij dezelfde PHP-versie onder `/etc/php/8.5/fpm/pool.d`. De volledige generatie-, controle- en applyprocedure staat in `VPS-RUNTIME-ISOLATION.md`; dit deploymentcontract herhaalt alleen de actuele productiebaseline en vormt geen tweede operationele procedure.
+
 ## Web- en netwerkgrenzen
 
 De canonieke VPS-stack gebruikt Apache 2.4. Voor iedere tenant gelden onder meer:
