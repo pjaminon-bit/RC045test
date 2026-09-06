@@ -8,6 +8,7 @@
 if (PHP_SAPI !== 'cli') { http_response_code(403); exit('Alleen via CLI beschikbaar.'); }
 
 require_once dirname(__DIR__) . '/app/deployment/runtime-contract.php';
+require_once dirname(__DIR__) . '/app/deployment/process-runner.php';
 require_once dirname(__DIR__) . '/app/core/tenant-runtime.php';
 
 function cut211Stop(string $melding, int $code = 1): never
@@ -90,13 +91,7 @@ function cut211Worker(string $osUser, string $config, string $privateRoot, array
         $php, $worker,
     ];
     foreach ($args as $arg) $cmd[] = $arg;
-    $spec = [0 => ['pipe','r'], 1 => ['pipe','w'], 2 => ['pipe','w']];
-    $proc = proc_open($cmd, $spec, $pipes, null, null, ['bypass_shell' => true]);
-    if (!is_resource($proc)) throw new RuntimeException('Migratieworker kon niet worden gestart.');
-    fclose($pipes[0]);
-    $stdout = stream_get_contents($pipes[1]); $stderr = stream_get_contents($pipes[2]);
-    fclose($pipes[1]); fclose($pipes[2]);
-    $code = proc_close($proc);
+    [$code, $stdout, $stderr] = process521Run($cmd, null, null, null, 900, 2097152);
     if ($code !== 0) throw new RuntimeException('Migratieworker faalde: ' . trim((string)$stderr));
     $lines = preg_split('/\r\n|\n|\r/', trim((string)$stdout));
     $last = is_array($lines) && $lines !== [] ? end($lines) : '';
