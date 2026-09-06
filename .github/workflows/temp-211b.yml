@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 jobs:
-  verify:
+  core:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout helper branch
@@ -44,34 +44,63 @@ jobs:
 
       - name: Audit PHP regressions
         run: |
-          while IFS= read -r test_file; do
-            echo ">>> $test_file"
-            php "$test_file"
-          done < <(find tests -maxdepth 1 -type f -name 'audit*.php' | sort)
+          while IFS= read -r test_file; do php "$test_file"; done < <(find tests -maxdepth 1 -type f -name 'audit*.php' | sort)
 
       - name: Phase PHP regressions
         run: |
-          while IFS= read -r test_file; do
-            echo ">>> $test_file"
-            php "$test_file"
-          done < <(find tests -maxdepth 1 -type f -name 'phase*.php' | sort)
+          while IFS= read -r test_file; do php "$test_file"; done < <(find tests -maxdepth 1 -type f -name 'phase*.php' | sort)
 
       - name: Platform PHP regressions
         run: |
-          while IFS= read -r test_file; do
-            echo ">>> $test_file"
-            php "$test_file"
-          done < <(find tests -maxdepth 1 -type f -name 'platform*.php' | sort)
+          while IFS= read -r test_file; do php "$test_file"; done < <(find tests -maxdepth 1 -type f -name 'platform*.php' | sort)
 
-      - name: Remaining PHP regressions
+  discover-remaining:
+    runs-on: ubuntu-latest
+    outputs:
+      tests: ${{ steps.tests.outputs.tests }}
+    steps:
+      - name: Checkout helper branch
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - id: tests
+        name: Discover remaining PHP regressions
+        shell: bash
         run: |
-          while IFS= read -r test_file; do
-            case "$(basename "$test_file")" in
-              audit*.php|phase*.php|platform*.php) continue ;;
-            esac
-            echo ">>> $test_file"
-            php "$test_file"
-          done < <(find tests -maxdepth 1 -type f -name '*.php' | sort)
+          tests="$(python3 - <<'PY'
+          import json
+          from pathlib import Path
+          items=[]
+          for p in sorted(Path('tests').glob('*.php')):
+              n=p.name
+              if n.startswith(('audit','phase','platform')):
+                  continue
+              items.append(str(p))
+          print(json.dumps(items,separators=(',',':')))
+          PY
+          )"
+          echo "tests=$tests" >> "$GITHUB_OUTPUT"
 
+  remaining:
+    needs: [core, discover-remaining]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        test: ${{ fromJSON(needs.discover-remaining.outputs.tests) }}
+    name: remaining — ${{ matrix.test }}
+    steps:
+      - name: Checkout helper branch
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Apply deterministic source transform
+        run: python3 tools/phase211b_transform.py
+      - name: Run regression
+        run: php "${{ matrix.test }}"
+
+  repository-boundaries:
+    needs: [remaining]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout helper branch
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Repository boundaries
         run: test ! -e site-config.local.php
