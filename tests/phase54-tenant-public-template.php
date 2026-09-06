@@ -90,11 +90,21 @@ try {
     check54(str_contains($html, 'images/template-placeholder.svg'), 'ontbrekende tenantmedia gebruikt een neutrale placeholder');
 
     $bron = (string) file_get_contents($root . '/index.php');
-    check54(str_contains($bron, '@media (max-width: 900px)') && str_contains($bron, '@media (max-width: 700px)'), 'bestaande responsive templatebreakpoints blijven actief');
+    $responsiveCss = '';
+    if (preg_match('~<link\s+rel="stylesheet"\s+href="(csp205-index-[0-9a-f]{12}\.css)"~', $bron, $cssMatch) === 1) {
+        $cssPad = $root . '/' . $cssMatch[1];
+        if (is_file($cssPad)) $responsiveCss = (string) file_get_contents($cssPad);
+    }
     check54(
-        preg_match('~\\.rules-grid\\s*\\{[^}]*grid-template-columns:\\s*1fr~s', $bron) === 1
-        && preg_match('~\\.track-layout\\s*\\{[^}]*grid-template-columns:\\s*1fr~s', $bron) === 1,
-        'brede grids stapelen op kleine schermen'
+        $responsiveCss !== ''
+        && str_contains($responsiveCss, '@media (max-width: 900px)')
+        && str_contains($responsiveCss, '@media (max-width: 700px)'),
+        'bestaande responsive templatebreakpoints blijven actief via het geladen CSP-stylesheet'
+    );
+    check54(
+        preg_match('~\.rules-grid\s*\{[^}]*grid-template-columns:\s*1fr~s', $responsiveCss) === 1
+        && preg_match('~\.track-layout\s*\{[^}]*grid-template-columns:\s*1fr~s', $responsiveCss) === 1,
+        'brede grids stapelen op kleine schermen via het geladen CSP-stylesheet'
     );
 
     $veilig = ['about_title' => ['nl' => 'Onze eigen roeivereniging']];

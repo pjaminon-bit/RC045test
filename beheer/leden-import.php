@@ -311,7 +311,7 @@ $preview = liPreviewLaad($previewContext, $previewStatus);
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex,nofollow">
 <title>Leden importeren</title>
-<style>body{margin:0;background:#f6f2e8;color:#26351d;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.top{padding:14px 22px;background:#fff;border-bottom:1px solid #ddd8c0}.top a{color:#2d6260;font-weight:750;text-decoration:none}.wrap{max-width:1100px;margin:30px auto;padding:0 20px 70px}.card{background:#fff;border:1px solid #ddd8c0;border-radius:14px;padding:20px;margin:14px 0}.btn{border:1px solid #d3ccb7;background:#fff;color:#2d6260;border-radius:8px;padding:9px 12px;font:inherit;font-weight:750;cursor:pointer}.btn.primary{background:#3a7a77;color:#fff;border:0}.btn.danger{background:#fff0ed;color:#8b2e27}.actions{display:flex;gap:8px;flex-wrap:wrap}.melding{padding:12px;border-radius:8px;background:#eaf6ee}.melding.fout{background:#fdeceb;color:#8b2e27}.meta{color:#68705f;font-size:13px}.tablewrap{overflow:auto}table{width:100%;border-collapse:collapse;min-width:700px}th,td{text-align:left;padding:8px;border-bottom:1px solid #eee9db}.nieuw{color:#23613e}.bij{color:#8a6513}</style>
+<link rel="stylesheet" href="csp205-leden-import-2080b7b601b1.css">
 <link rel="stylesheet" href="ui-2026.css">
 </head>
 <body>

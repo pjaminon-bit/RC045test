@@ -6,6 +6,7 @@
 // laatste uitgaande HTML-filter. Doel: geen voorbeeldvereniging-identiteit,
 // voorbeeldmedia, analytics of vaste huisstijl mag naar een tenant lekken.
 // ============================================================
+require_once __DIR__ . '/csp-runtime.php';
 
 function tenantPublicRuntimeKleur(array $config, string $sleutel, string $fallback): string
 {
@@ -56,7 +57,7 @@ function tenantPublicRuntimeThemeMarkup(array $config): string
         $regels[] = $css . ':' . tenantPublicRuntimeKleur($config, $sleutel, $fallback) . '!important';
     }
     $navText = tenantPublicRuntimeKleur($config, 'nav_text', '#2A3818');
-    return '<style id="tenant-product-theme">:root{' . implode(';', $regels) . '}'
+    return '<style nonce="' . siteCspHtmlWaarde(siteCspNonce()) . '" id="tenant-product-theme">:root{' . implode(';', $regels) . '}'
         . '.nav{background:var(--nav-bg)!important}.nav-links a,.nav-logo-text,.nav-logo-sub{color:' . $navText . '!important}'
         . '.nav-links .nav-lid a{color:#fff!important}'
         . '</style>';

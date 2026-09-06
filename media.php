@@ -14,41 +14,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
-  <style>
-    
-    .page-hero-bg { position: absolute; top: -80px; left: 0; right: 0; bottom: -80px; background-image: url('images/crawlergroep.jpg'); background-size: cover; background-position: center; opacity: 0.35; will-change: transform; }
-    
-    .main { max-width: 990px; margin: 0 auto; padding: 56px 24px 80px; }
-    
-    .intro-text { font-size: 16px; color: var(--muted); line-height: 1.8; margin-bottom: 48px; }
-    
-    .media-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; }
-    
-    .media-card { background: var(--white); border: 1.5px solid var(--border); border-radius: var(--radius); padding: 22px; box-shadow: var(--shadow); display: flex; align-items: flex-start; gap: 16px; transition: transform 0.2s, box-shadow 0.2s; }
-    
-    .media-card:hover { transform: translateY(-3px); box-shadow: 0 8px 32px rgba(0,0,0,0.12); }
-    
-    .media-logo { flex-shrink: 0; width: 44px; height: 44px; border-radius: 10px; background: var(--teal-light); display: flex; align-items: center; justify-content: center; font-size: 20px; }
-    
-    .media-body { flex: 1; }
-    
-    .media-date { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; }
-    
-    .media-source { font-size: 12px; font-weight: 700; color: var(--teal-dark); margin-bottom: 8px; }
-    
-    .media-title { font-family: 'Poppins', sans-serif; font-size: 16px; font-weight: 700; color: var(--dark); margin-bottom: 6px; }
-    
-    .media-desc { font-size: 14px; color: var(--muted); line-height: 1.7; margin-bottom: 16px; }
-    
-    .media-link { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600; color: var(--teal-dark); border-bottom: 1.5px solid var(--teal); padding-bottom: 1px; transition: color 0.2s, border-color 0.2s; }
-    
-    .media-link:hover { color: var(--teal); border-color: var(--teal); }
-    
-    @media (max-width: 700px) {
-      .media-grid { grid-template-columns: 1fr; }
-      .media-card { flex-direction: column; gap: 16px; padding: 20px; }
-    }
-  </style>
+  <link rel="stylesheet" href="csp205-media-abe69927c5b8.css">
   <script data-goatcounter="https://rc045.goatcounter.com/count"
         async src="//gc.zgo.at/count.js"></script>
 </head>
@@ -111,7 +77,7 @@
           <a href="https://www.facebook.com/rc045/" target="_blank" title="Facebook" aria-label="RC045 op Facebook" id="footer-facebook-link">
             <img src="https://upload.wikimedia.org/wikipedia/commons/b/b9/2023_Facebook_icon.svg" alt="" width="28" height="28" aria-hidden="true" loading="lazy" decoding="async">
           </a>
-          <span title="Instagram (binnenkort)" style="opacity: 0.3; display: flex; align-items: center;" aria-label="Instagram binnenkort beschikbaar">
+          <span title="Instagram (binnenkort)" aria-label="Instagram binnenkort beschikbaar" class="csp-i-5d7d33efba">
             <img src="https://upload.wikimedia.org/wikipedia/commons/a/a5/Instagram_icon.png" alt="" width="28" height="28" aria-hidden="true" loading="lazy" decoding="async">
           </span>
         </div>

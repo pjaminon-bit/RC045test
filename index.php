@@ -19,511 +19,7 @@ tenantHomepageStartOutputFilter();
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
-  <style>
-    /* Ankers landen onder de vaste navigatiebalk in plaats van eronder te verdwijnen. */
-    .hero, .section, .photo-strip { scroll-margin-top: 80px; }
-    
-    /* De mededelingsbalk was een massief gouden vlak. Dat viel op als een
-       waarschuwing, terwijl het meestal gewoon een mededeling is. De kleur zit
-       nu in de onderlijn (teal, dezelfde kleur als de knoppen) en het vlak is
-       het zachte zand dat ook onder de kaarten zit. Beide kleuren zijn
-       variabelen, dus de donkere stand rolt automatisch mee. */
-    .announce-bar { background: var(--gold-light); color: var(--text); text-align: center; padding: 13px 20px; font-size: 15px; font-weight: 600; line-height: 1.5; display: flex; align-items: center; justify-content: center; gap: 10px; border-bottom: 2px solid var(--teal); }
-    
-    .announce-bar-icon { flex-shrink: 0; font-size: 17px; }
-    
-    @media (max-width: 700px) { .announce-bar { font-size: 14px; padding: 10px 16px; } }
-    
-    .nav-logo-sub { font-size: 13px; font-weight: 400; color: var(--muted); display: block; letter-spacing: 0.05em; text-transform: uppercase; }
-    
-    .nav-links li.active > a, .nav-links li.active.nav-cta > a { background: var(--teal-light); color: var(--teal-dark); font-weight: 700; box-shadow: inset 0 -2px 0 var(--teal); animation: navActivate 0.4s cubic-bezier(0.34, 1.56, 0.64, 1); }
-    
-    @keyframes navActivate { 0% { transform: translateY(-6px) scale(0.9); opacity: 0; } 60% { transform: translateY(2px) scale(1.05); } 100% { transform: translateY(0) scale(1); opacity: 1; } }
-    
-    .hero { position: relative; overflow: hidden; background: var(--dark); min-height: 580px; display: flex; align-items: center; }
-    
-    .hero-bg { position: absolute; top: -80px; left: 0; right: 0; bottom: -80px; background-size: cover; background-position: center; opacity: 0.35; will-change: transform; }
-    
-    .hero-gradient { position: absolute; inset: 0; background: linear-gradient(135deg, rgba(30,44,19,0.88) 0%, rgba(58,122,119,0.25) 100%); }
-    
-    .hero-content { position: relative; z-index: 2; max-width: 1200px; margin: 0 auto; padding: 80px 24px; }
-    
-    @keyframes pulse-red { 0%, 100% { box-shadow: 0 0 0 3px rgba(239,68,68,0.3); } 50% { box-shadow: 0 0 0 6px rgba(239,68,68,0.1); } }
-    
-    @keyframes pulse { 0%, 100% { box-shadow: 0 0 0 3px rgba(34,197,94,0.3); } 50% { box-shadow: 0 0 0 6px rgba(34,197,94,0.1); } }
-    
-    .hero h1 { font-size: clamp(36px, 6vw, 64px); font-weight: 800; color: white; margin-bottom: 20px; max-width: 700px; }
-    
-    .hero h1 span { color: #E8C76A; }
-    
-    .hero p { font-size: 18px; color: rgba(255,255,255,0.75); max-width: 540px; margin-bottom: 36px; line-height: 1.7; }
-    
-    .hero-buttons { display: flex; flex-wrap: wrap; gap: 12px; }
-    
-    .btn-outline { background: rgba(255,255,255,0.1); color: white; border: 1.5px solid rgba(255,255,255,0.3); backdrop-filter: blur(4px); }
-    
-    .btn-outline:hover { background: rgba(255,255,255,0.18); transform: translateY(-1px); }
-    
-    .btn-white { background: white; color: var(--teal-dark); }
-    
-    .btn-white:hover { background: var(--teal-light); transform: translateY(-1px); }
-    
-    #announce-text { white-space: pre-line; }
-    
-    .actueel-hours { display: none; background: var(--gold-light); border: 1px solid var(--teal); border-radius: 8px; padding: 10px 14px; margin-bottom: 14px; font-size: 14px; line-height: 1.6; }
-    
-    .actueel-hours strong { color: var(--teal-dark); }
-    
-    .actueel-hours-text { white-space: pre-line; }
-    
-    .info-bar { background: var(--white); border-bottom: 1px solid var(--border); box-shadow: var(--shadow); }
-    
-    .info-bar-inner { max-width: 1200px; margin: 0 auto; padding: 0 24px; display: grid; grid-template-columns: repeat(3, 1fr); }
-    
-    .info-item { display: flex; align-items: center; gap: 16px; padding: 24px 0; border-right: 1px solid var(--border); }
-    
-    .info-item:last-child { border-right: none; padding-left: 32px; }
-    
-    .info-item:first-child { padding-right: 32px; }
-    
-    .info-item:nth-child(2) { padding: 24px 32px; }
-    
-    .info-icon { width: 48px; height: 48px; border-radius: 12px; background: var(--teal-light); display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 22px; }
-    
-    .info-label { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 2px; }
-    
-    .info-value { font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 15px; color: var(--text); }
-    
-    .info-hours-note { font-size: 12px; color: var(--muted); margin-top: 6px; line-height: 1.5; }
-    
-    .info-value small { font-weight: 400; font-size: 13px; color: var(--muted); font-family: 'Inter', sans-serif; }
-    
-    .info-location-link { color: inherit; text-decoration: none; border-bottom: 1.5px dashed var(--muted); padding-bottom: 1px; transition: border-color 0.2s, color 0.2s; cursor: pointer; }
-    
-    .info-location-link:hover { color: var(--teal-dark); border-bottom-color: var(--teal-dark); }
-    
-    .status-open { display: inline-flex; align-items: center; gap: 6px; color: #16A34A; font-size: 13px; font-weight: 600; margin-top: 2px; }
-    
-    .status-open::before { content: ''; width: 7px; height: 7px; background: var(--green); border-radius: 50%; }
-    
-    .status-closed { display: inline-flex; align-items: center; gap: 6px; color: #DC2626; font-size: 13px; font-weight: 600; margin-top: 2px; }
-    
-    .status-closed::before { content: ''; width: 7px; height: 7px; background: #EF4444; border-radius: 50%; }
-    
-    .status-members { display: inline-flex; align-items: center; gap: 6px; color: var(--teal-dark); font-size: 13px; font-weight: 600; margin-top: 2px; }
-    
-    .status-members::before { content: ''; width: 7px; height: 7px; background: var(--teal); border-radius: 50%; }
-    
-    .status-animo { display: inline-flex; align-items: center; gap: 6px; color: #8A6A12; font-size: 13px; font-weight: 600; margin-top: 2px; }
-    
-    .status-animo::before { content: ''; width: 7px; height: 7px; background: var(--gold); border-radius: 50%; }
-    
-    .reveal { opacity: 0; transform: translateY(32px); transition: opacity 0.6s ease, transform 0.6s ease; }
-    
-    .reveal.visible { opacity: 1; transform: translateY(0); }
-    
-    .reveal-delay-1 { transition-delay: 0.1s; }
-    
-    .reveal-delay-2 { transition-delay: 0.2s; }
-    
-    .reveal-delay-3 { transition-delay: 0.3s; }
-    
-    .reveal-delay-4 { transition-delay: 0.4s; }
-    
-    .section { padding: 80px 24px; }
-    
-    .container { max-width: 1200px; margin: 0 auto; }
-    
-    .section-title { font-size: clamp(28px, 4vw, 42px); font-weight: 700; color: var(--dark); margin-bottom: 16px; }
-    
-    .section-sub { font-size: 17px; color: var(--muted); max-width: 560px; line-height: 1.7; }
-    
-    .section-header { margin-bottom: 48px; }
-    
-    .section-header.center { text-align: center; }
-    
-    .section-header.center .section-sub { margin: 0 auto; }
-    
-    .about { background: var(--white); }
-    
-    .about-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 64px; align-items: center; }
-    
-    .about-images { position: relative; }
-    
-    .about-img-main { width: 100%; height: 380px; object-fit: cover; border-radius: var(--radius); box-shadow: var(--shadow); cursor: pointer; transition: opacity 0.2s; }
-    
-    .about-img-main:hover { opacity: 0.92; }
-    
-    .about-img-secondary { position: absolute; bottom: -28px; right: -28px; width: 220px; height: 160px; object-fit: cover; border-radius: var(--radius); border: 4px solid var(--white); box-shadow: var(--shadow); cursor: pointer; transition: opacity 0.2s; }
-    
-    .about-img-secondary:hover { opacity: 0.92; }
-    
-    .about-features { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 32px; }
-    
-    .about-story-link { display: block; width: fit-content; margin-top: 28px; color: var(--teal-dark); font-weight: 600; font-size: 17px; border-bottom: 1.5px solid var(--teal); padding-bottom: 2px; transition: border-color 0.2s, color 0.2s; }
-    
-    .about-story-link:hover { color: var(--teal); }
-    
-    .about-story-link + .about-story-link { margin-top: 10px; }
-    
-    .feature-card { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 16px; transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s; }
-    
-    .feature-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-hover); border-color: var(--teal-light); }
-    
-    .feature-card-icon { font-size: 24px; margin-bottom: 8px; }
-    
-    .feature-card h4 { font-size: 14px; font-weight: 600; color: var(--dark); margin-bottom: 4px; }
-    
-    .feature-card p { font-size: 13px; color: var(--muted); }
-    
-    .about-photos-title { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--gold); margin: 56px 0 20px; }
-    
-    .about-photos-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; border-radius: var(--radius); overflow: hidden; }
-    
-    .about-photo { object-fit: cover; width: 100%; height: 200px; transition: transform 0.4s; cursor: pointer; }
-    
-    .about-photo:hover { transform: scale(1.05); }
-    
-    .about-photo-wrap { overflow: hidden; }
-    
-    .pricing { background: var(--bg); }
-    
-    .pricing-grid { display: grid; grid-template-columns: 1fr; gap: 24px; max-width: 600px; margin: 0 auto; }
-    
-    .price-card { background: var(--white); border: 1.5px solid var(--border); border-radius: var(--radius); padding: 36px; transition: transform 0.2s, box-shadow 0.2s; }
-    
-    .price-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-hover); }
-    
-    .price-card.featured { background: var(--dark); border-color: var(--dark); color: white; position: relative; overflow: hidden; }
-    
-    .price-card.featured::before { content: ''; position: absolute; top: 0; left: -100%; width: 60%; height: 100%; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.12), transparent); animation: shimmer 4s infinite; pointer-events: none; }
-    
-    @keyframes shimmer { 0% { left: -100%; } 100% { left: 200%; } }
-    
-    .price-card-tag { display: inline-block; background: var(--teal-light); color: var(--teal-dark); padding: 4px 12px; border-radius: 100px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 20px; }
-    
-    .price-card.featured .price-card-tag { background: rgba(200,154,26,0.2); color: #E8C76A; }
-    
-    .price-card h3 { font-size: 22px; font-weight: 700; margin-bottom: 8px; }
-    
-    .price-card.featured h3 { color: white; }
-    
-    .price-list { list-style: none; margin: 20px 0 28px; }
-    
-    .price-list li { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 15px; }
-    
-    .price-card.featured .price-list li { border-bottom-color: rgba(255,255,255,0.1); }
-    
-    .price-list li:last-child { border-bottom: none; }
-    
-    .price-list .price-amount { font-family: 'Poppins', sans-serif; font-weight: 700; font-size: 17px; color: var(--teal); }
-    
-    .price-card .btn-primary { width: 100%; justify-content: center; }
-    
-    .price-card.featured .btn-white { width: 100%; justify-content: center; }
-    
-    .price-notes { list-style: none; margin: 0 0 24px; display: grid; gap: 9px; }
-    
-    .price-notes li { position: relative; padding-left: 16px; font-size: 13px; color: var(--muted); line-height: 1.55; }
-    
-    .price-notes li::before { content: ''; position: absolute; left: 0; top: 7px; width: 5px; height: 5px; border-radius: 50%; background: var(--teal); opacity: 0.5; }
-    
-    .price-notes a { color: inherit; text-decoration: underline; text-underline-offset: 2px; text-decoration-thickness: 1px; }
-    
-    .price-notes a:hover { color: var(--teal); }
-    
-    .price-card.featured .price-notes li { color: rgba(255,255,255,0.5); }
-    
-    .price-card.featured .price-notes li::before { background: #E8C76A; opacity: 0.6; }
-    
-    .price-card.featured .price-notes a:hover { color: #E8C76A; }
-    
-    .price-notes:empty { display: none; }
-    
-    .track { background: var(--white); }
-    
-    .track-grid { display: grid; grid-template-columns: 2fr 1fr; grid-template-rows: 240px 240px; gap: 16px; border-radius: var(--radius); overflow: hidden; }
-    
-    .track-grid + .track-grid { margin-top: 16px; }
-    
-    .track-photo { object-fit: cover; width: 100%; height: 100%; transition: transform 0.4s; cursor: pointer; }
-    
-    .track-photo:hover { transform: scale(1.05); }
-    
-    .track-photo-wrap { overflow: hidden; }
-    
-    .track-photo-wrap.tall { grid-row: span 2; }
-    
-    .track-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: start; }
-    
-    .photo-strip { width: 100%; height: 550px; overflow: hidden; }
-    
-    .carousel { position: relative; width: 100%; height: 100%; background: var(--dark); }
-    
-    .carousel-slide { position: absolute; inset: 0; opacity: 0; transition: opacity 0.6s ease; overflow: hidden; }
-    
-    .carousel-slide.active { opacity: 1; }
-    
-    .carousel-slide-bg { position: absolute; inset: -20px; background-size: cover; background-position: center; filter: blur(28px) brightness(0.6); transform: scale(1.15); }
-    
-    .carousel-img { position: relative; width: 100%; height: 100%; object-fit: contain; display: block; }
-    
-    .carousel-arrow { position: absolute; top: 50%; transform: translateY(-50%); width: 44px; height: 44px; border-radius: 50%; background: rgba(30,44,19,0.55); color: white; border: none; font-size: 26px; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background 0.2s; z-index: 2; }
-    
-    .carousel-arrow:hover { background: rgba(30,44,19,0.8); }
-    
-    .carousel-prev { left: 16px; }
-    
-    .carousel-next { right: 16px; }
-    
-    .carousel-dots { position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; z-index: 2; }
-    
-    .carousel-dot { width: 9px; height: 9px; border-radius: 50%; background: rgba(255,255,255,0.5); border: none; cursor: pointer; padding: 0; transition: background 0.2s, transform 0.2s; }
-    
-    .carousel-dot.active { background: white; transform: scale(1.2); }
-    
-    .agenda { background: var(--bg); }
-    
-    /* Kolommen passen zich vanzelf aan: nooit meer dan 5 naast elkaar
-       (begrensd door de minmax-breedte hieronder samen met de
-       max-breedte van .container), en met minder dan 5 kaarten vullen
-       de bestaande kaarten de rij mooi op in plaats van een leeg gat
-       aan het eind. Schaalt vanzelf terug naar 1 kolom op een smal
-       scherm, daarom is er geen aparte @media-regel meer voor nodig. */
-    .agenda-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 20px; }
-    
-    .agenda-card { background: var(--white); border: 1.5px solid var(--border); border-radius: var(--radius); padding: 24px; transition: transform 0.2s, box-shadow 0.2s; position: relative; overflow: hidden; opacity: 0; transform: translateY(24px); display: flex; flex-direction: column; }
-    
-    .agenda-card.visible { animation: cardDrop 0.5s ease forwards; }
-    
-    .agenda-card.visible:nth-child(2) { animation-delay: 0.1s; }
-    
-    .agenda-card.visible:nth-child(3) { animation-delay: 0.2s; }
-    
-    @keyframes cardDrop { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: translateY(0); } }
-    
-    .agenda-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-hover); }
-    
-    .agenda-card-date { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 56px; height: 56px; background: var(--teal-light); border-radius: 10px; margin-bottom: 16px; flex-shrink: 0; }
-    
-    .agenda-card-day { font-family: 'Poppins', sans-serif; font-size: 22px; font-weight: 800; color: var(--teal-dark); line-height: 1; }
-    
-    .agenda-card-month { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--teal); }
-    
-    .agenda-card-tag { display: inline-block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; padding: 3px 10px; border-radius: 100px; margin-bottom: 10px; }
-    
-    .agenda-card-tag.open-dag { background: var(--teal-light); color: var(--teal-dark); }
-    
-    .agenda-card-tag.leden { background: var(--gold-light); color: var(--gold); }
-    
-    .agenda-card-tag.wedstrijd { background: #FEE2E2; color: #DC2626; }
-    
-    .agenda-card h3 { font-size: 16px; font-weight: 700; color: var(--dark); margin-bottom: 6px; }
-    
-    .agenda-card p { font-size: 14px; color: var(--muted); line-height: 1.6; }
-    
-    .agenda-card-time { font-size: 13px; font-weight: 600; color: var(--teal); margin-top: auto; padding-top: 12px; display: flex; align-items: center; gap: 4px; }
-    
-    .agenda-card.afgelopen { border-style: dashed; }
-    
-    .agenda-card.afgelopen:hover { transform: none; box-shadow: none; }
-    
-    .agenda-card.afgelopen .agenda-card-date { background: var(--bg); opacity: 0.3; }
-    
-    .agenda-card.afgelopen .agenda-card-tag { background: var(--bg); color: var(--muted); opacity: 0.3; }
-
-    .nieuws { background: var(--bg); padding-top: 56px; padding-bottom: 56px; }
-
-    .nieuws-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 20px; }
-
-    .nieuws-card { background: var(--white); border: 1.5px solid var(--border); border-radius: var(--radius); padding: 24px; box-shadow: var(--shadow); transition: transform 0.2s, box-shadow 0.2s; }
-
-    .nieuws-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-hover); }
-
-    .nieuws-card-date { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--gold); margin-bottom: 8px; }
-
-    .nieuws-card h3 { font-size: 17px; font-weight: 700; color: var(--dark); margin-bottom: 8px; }
-
-    .nieuws-card p { font-size: 14px; color: var(--muted); line-height: 1.6; }
-
-    .nieuws-card-link { display: inline-block; margin-top: 12px; font-size: 14px; font-weight: 600; color: var(--teal-dark); }
-
-    .nieuws-card-link:hover { color: var(--teal); }
-
-    .agenda-card.afgelopen h3,
-        .agenda-card.afgelopen p,
-        .agenda-card.afgelopen .agenda-card-time { opacity: 0.3; }
-    
-    .agenda-card-past-badge { position: absolute; top: 14px; right: 14px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; padding: 3px 10px; border-radius: 100px; background: var(--gold-light); color: var(--rust); }
-    
-    .rules { background: var(--dark); color: white; }
-    
-    .rules .section-title { color: white; }
-    
-    .rules .section-sub { color: rgba(255,255,255,0.6); }
-    
-    .rules-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
-    
-    .rule-card { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: var(--radius); padding: 24px; transition: background 0.2s, transform 0.2s; }
-    
-    .rule-card:hover { background: rgba(255,255,255,0.09); transform: translateY(-3px); }
-    
-    .rule-card-num { font-family: 'Poppins', sans-serif; font-size: 36px; font-weight: 800; color: rgba(200,154,26,0.4); line-height: 1; margin-bottom: 12px; }
-    
-    .rule-card h4 { font-size: 16px; font-weight: 600; margin-bottom: 8px; color: white; }
-    
-    .rule-card p { font-size: 14px; color: rgba(255,255,255,0.55); line-height: 1.6; }
-    
-    .rules-link { display: inline-flex; align-items: center; gap: 8px; margin-top: 40px; color: #E8C76A; font-weight: 600; font-size: 17px; border-bottom: 1.5px solid rgba(200,154,26,0.4); padding-bottom: 2px; transition: border-color 0.2s; }
-    
-    .rules-link:hover { border-color: #E8C76A; }
-    
-    .location { background: var(--bg); }
-    
-    .location-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: start; }
-    
-    .location-map { border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); aspect-ratio: 4/3; background: #E5E3DF; display: flex; align-items: center; justify-content: center; position: relative; }
-    
-    .location-map iframe { width: 100%; height: 100%; border: none; position: absolute; inset: 0; }
-    
-    .opening-hours { background: var(--white); border: 1.5px solid var(--border); border-radius: var(--radius); padding: 28px; margin-bottom: 24px; }
-    
-    .opening-hours h3 { font-size: 18px; font-weight: 700; margin-bottom: 6px; display: flex; align-items: center; gap: 8px; }
-    
-    .hours-intro-note { font-size: 12px; color: var(--muted); line-height: 1.5; margin: 0 0 16px; }
-    
-    .hours-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 15px; }
-    
-    .hours-row:last-child { border-bottom: none; }
-    
-    .hours-day { font-weight: 500; }
-    
-    .hours-time { color: var(--muted); font-size: 14px; }
-    
-    /* Openingstijden die via beheer.php op een gesloten-stand staan (gewoon
-       gesloten, onderhoud of slecht weer). De tijd blijft zichtbaar (doorgestreept en gedempt) zodat duidelijk is
-       dat het om een tijdelijke afwijking gaat, met de reden eronder. De
-       negatieve marges laten de markering doorlopen tot de rand van de kaart
-       (.opening-hours heeft 28px padding); 3px rand + 25px padding houdt de
-       tekst op dezelfde lijn als de andere regels. */
-    .hours-time-wrap { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
-    
-    .hours-closed-note { display: none; font-size: 12px; font-weight: 700; padding: 4px 11px; border-radius: 100px; background: var(--rust); color: var(--white); text-align: center; }
-    
-    .hours-row.is-gesloten { align-items: flex-start; background: rgba(139,51,25,0.09); border-left: 3px solid var(--rust); margin-left: -28px; margin-right: -28px; padding-left: 25px; padding-right: 28px; }
-    
-    .hours-row.is-gesloten .hours-time { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--rust); text-decoration-thickness: 2px; }
-    
-    .hours-row.is-gesloten .hours-closed-note { display: block; }
-    
-    /* Alleen open voor leden is geen sluiting: de baan is die dag gewoon open,
-       maar niet voor gasten. De tijd blijft daarom leesbaar staan (geen
-       doorhaling) en de markering is teal in plaats van rust, zodat het
-       zichtbaar iets anders is dan een gesloten dag. */
-    .hours-row.is-leden { align-items: flex-start; background: rgba(58,122,119,0.08); border-left: 3px solid var(--teal); margin-left: -28px; margin-right: -28px; padding-left: 25px; padding-right: 28px; }
-    
-    .hours-row.is-leden .hours-closed-note { display: block; background: var(--teal); }
-    
-    /* Alleen bij voldoende animo: de baan is die dag open, maar of het doorgaat
-       hangt van de opkomst af. Dat is de mildste van de drie afwijkingen, en
-       zo ziet hij er ook uit: geen gevuld vlak zoals bij gesloten (rust) en
-       alleen leden (teal), maar een open randje in goud. De tijd blijft
-       leesbaar, want de dag is niet afgelast. */
-    .hours-row.is-animo { align-items: flex-start; background: rgba(200,154,26,0.06); border-left: 3px solid var(--gold); margin-left: -28px; margin-right: -28px; padding-left: 25px; padding-right: 28px; }
-    
-    .hours-row.is-animo .hours-closed-note { display: block; background: transparent; color: var(--text); border: 1px solid var(--gold); font-weight: 600; }
-    
-    /* Zelfde melding in de info-balk bovenaan. Daar is bewust geen achtergrond
-       en randje gebruikt: dat blok is een smalle strook van drie kolommen en
-       wordt daar te zwaar van. */
-    .info-value .tijd-gesloten { text-decoration: line-through; text-decoration-color: var(--rust); text-decoration-thickness: 2px; color: var(--muted); }
-    
-    .info-closed-note { display: block; width: fit-content; margin-top: 4px; font-family: 'Inter', sans-serif; font-size: 12px; font-weight: 700; padding: 4px 11px; border-radius: 100px; background: var(--rust); color: var(--white); }
-    
-    .info-closed-note.is-leden { background: var(--teal); }
-    
-    .info-closed-note.is-animo { background: transparent; color: var(--text); border: 1px solid var(--gold); font-weight: 600; }
-    
-    /* Openingstijden-notities: zelfde opsommingsstijl als de notities onder de
-       prijskaarten (.price-notes), zodat beide blokken er gelijk uitzien. */
-    .hours-note { list-style: none; font-size: 13px; color: var(--muted); margin: 14px 0 0; padding: 12px; background: var(--teal-light); border-radius: 8px; line-height: 1.5; display: grid; gap: 8px; }
-
-    .hours-note li { position: relative; padding-left: 16px; }
-
-    .hours-note li::before { content: ''; position: absolute; left: 0; top: 7px; width: 5px; height: 5px; border-radius: 50%; background: var(--teal); opacity: 0.5; }
-    
-    .address-card { background: var(--white); border: 1.5px solid var(--border); border-radius: var(--radius); padding: 20px 28px; display: flex; gap: 16px; align-items: flex-start; }
-    
-    .address-card-icon { font-size: 24px; margin-top: 2px; }
-    
-    .address-card h4 { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
-    
-    .address-card p { font-size: 14px; color: var(--muted); line-height: 1.6; }
-    
-    .weather-card { background: var(--teal-light); border: 1.5px solid var(--teal-light); border-radius: var(--radius); padding: 20px 28px; margin-bottom: 24px; display: flex; align-items: center; gap: 20px; }
-    
-    .weather-icon-big { font-size: 48px; line-height: 1; flex-shrink: 0; }
-    
-    .weather-temp-big { font-family: 'Poppins', sans-serif; font-weight: 700; font-size: 36px; color: var(--teal-dark); line-height: 1; }
-    
-    .weather-desc-text { font-size: 14px; color: var(--muted); margin-top: 4px; }
-    
-    .weather-details { display: flex; gap: 16px; margin-top: 8px; flex-wrap: wrap; }
-    
-    .weather-detail { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 4px; }
-    
-    .weather-label { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--teal-dark); margin-bottom: 6px; }
-    
-    .contact { background: var(--white); }
-    
-    .contact-grid { display: grid; grid-template-columns: 1fr 1.5fr; gap: 64px; align-items: start; }
-    
-    .contact-info p { font-size: 16px; color: var(--muted); line-height: 1.7; margin-bottom: 32px; }
-    
-    .contact-channels { display: flex; flex-direction: column; gap: 12px; }
-    
-    .channel { display: flex; align-items: center; gap: 16px; padding: 16px; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; transition: border-color 0.2s, transform 0.2s; }
-    
-    .channel:hover { border-color: var(--teal); transform: translateX(4px); }
-    
-    .channel-icon { width: 44px; text-align: center; display: flex; align-items: center; justify-content: center; font-size: 22px; }
-    
-    .channel-label { font-size: 12px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
-    
-    .channel-value { font-size: 15px; font-weight: 600; color: var(--text); }
-    
-    .contact-form { display: flex; flex-direction: column; gap: 16px; }
-    
-    .form-group input, .form-group textarea, .form-group select { padding: 12px 16px; border: 1.5px solid var(--border); border-radius: 8px; font-family: 'Inter', sans-serif; font-size: 15px; color: var(--text); background: var(--bg); transition: border-color 0.2s, box-shadow 0.2s; outline: none; }
-    
-    .form-group input:focus, .form-group textarea:focus, .form-group select:focus { border-color: var(--teal); box-shadow: 0 0 0 3px rgba(58,122,119,0.12); }
-    
-    .form-group textarea { resize: vertical; min-height: 120px; }
-    
-    .form-submit .btn-primary { width: 100%; justify-content: center; }
-    
-    @media (max-width: 900px) {
-          .about-grid, .pricing-grid, .location-grid, .contact-grid, .footer-top { grid-template-columns: 1fr; }
-          .info-bar-inner { grid-template-columns: 1fr; }
-          .info-item { border-right: none; border-bottom: 1px solid var(--border); padding: 20px 0 !important; }
-          .info-item:last-child { border-bottom: none; }
-          .rules-grid { grid-template-columns: 1fr; gap: 12px; }
-          .track-layout { grid-template-columns: 1fr; }
-          .about-img-secondary { display: none; }
-          .about-features { grid-template-columns: 1fr; }
-          .footer-top { gap: 32px; }
-          .footer-bottom { flex-direction: column; gap: 8px; text-align: center; }
-        }
-    
-    @media (max-width: 700px) {
-          .section { padding: 60px 20px; }
-          .hero-content { padding: 64px 20px; }
-          .track-grid { grid-template-columns: 1fr; grid-template-rows: auto; }
-          .about-photos-grid { grid-template-columns: 1fr 1fr; }
-          .track-photo-wrap.tall { grid-row: span 1; }
-          .photo-strip { height: 320px; }
-        }
-  </style>
+  <link rel="stylesheet" href="csp205-index-f6f06d63c77b.css">
   <script type="application/ld+json" id="structured-data">
   {
     "@context": "https://schema.org",
@@ -571,7 +67,7 @@ tenantHomepageStartOutputFilter();
         async src="//gc.zgo.at/count.js"></script>
 </head>
 <body>
-<div id="testsite-banner" role="status" style="position:fixed;top:8px;left:50%;transform:translateX(-50%);z-index:99999;background:#b42318;color:#fff;padding:5px 12px;border-radius:999px;font:700 12px/1.2 Arial,sans-serif;letter-spacing:.08em;box-shadow:0 2px 8px rgba(0,0,0,.25);pointer-events:none">TESTSITE</div>
+<div id="testsite-banner" role="status" class="csp-i-add0c4f05a">TESTSITE</div>
 
 <a href="#main-content" class="skip-link">Naar hoofdinhoud</a>
 
@@ -621,7 +117,7 @@ tenantHomepageStartOutputFilter();
 </nav>
 
 <!-- ===== MEDEDELING (inhoud komt uit data/actueel.json, bijwerken via beheer.php) ===== -->
-<div class="announce-bar" id="announce-bar" style="display:none;">
+<div class="announce-bar csp-i-d0466aa33f" id="announce-bar">
   <span class="announce-bar-icon" aria-hidden="true">📣</span>
   <span id="announce-text"></span>
 </div>
@@ -632,9 +128,9 @@ tenantHomepageStartOutputFilter();
 <section class="hero" id="main-content">
   <div class="hero-bg" id="hero-bg"></div>
   <div class="hero-gradient"></div>
-  <img width="400" height="423" src="rc045-logo.png" alt="" aria-hidden="true" style="position:absolute; right:-40px; top:50%; transform:translateY(-50%); height: 520px; width: auto; opacity: 0.13; pointer-events:none; filter: drop-shadow(0 0 40px rgba(200,154,26,0.2)); z-index:1;">
+  <img width="400" height="423" src="rc045-logo.png" alt="" aria-hidden="true" class="csp-i-480676fe6f">
   <div class="hero-content">
-    <img width="400" height="423" src="rc045-logo.png" alt="RC045" style="height: 140px; width: auto; margin-bottom: 24px; filter: drop-shadow(0 4px 16px rgba(0,0,0,0.4));">
+    <img width="400" height="423" src="rc045-logo.png" alt="RC045" class="csp-i-f943910bb6">
     <h1>RC045<br><span>BASHERS OF THE SOUTH</span></h1>
     <p id="hp-hero-intro" data-i18n="hero.intro">Wij zijn een gezellige vereniging uit het zuiden van Limburg voor liefhebbers van elektrisch aangedreven, radiografisch bestuurbare auto's. Voor beginners én ervaren hobbyisten. Jong én oud.</p>
     <div class="hero-buttons">
@@ -685,7 +181,7 @@ tenantHomepageStartOutputFilter();
 </div>
 
 <!-- ===== NIEUWS ===== -->
-<section class="section nieuws" id="nieuws" style="display:none;">
+<section class="section nieuws csp-i-d0466aa33f" id="nieuws">
   <div class="container">
     <div class="section-header reveal">
       <div class="section-label" id="hp-nieuws-label" data-i18n="nieuws.label">Nieuws</div>
@@ -709,8 +205,8 @@ tenantHomepageStartOutputFilter();
       <div class="reveal reveal-delay-2">
         <div class="section-label" id="hp-about-label" data-i18n="about.label">Wie zijn wij</div>
         <h2 class="section-title" id="hp-about-title" data-i18n="about.title">Dé RC-vereniging van Zuid-Limburg</h2>
-        <p style="color: var(--muted); line-height: 1.8; margin-bottom: 24px;" id="hp-about-p1" data-i18n="about.p1">RC045 is een actieve vereniging voor liefhebbers van radiografisch bestuurbare auto's. We rijden met elektrische RC-auto's in alle schalen. Of je nu net begint of al jaren rijdt: bij ons ben je welkom.</p>
-        <p style="color: var(--muted); line-height: 1.8;" id="hp-about-p2" data-i18n="about.p2">We beschikken over een eigen baan in Eygelshoven, op het terrein van Kok Lexmond. Naast de basher baan hebben we ook een enorm crawler-parcours en een jump-track.</p>
+        <p id="hp-about-p1" data-i18n="about.p1" class="csp-i-36960dfcfe">RC045 is een actieve vereniging voor liefhebbers van radiografisch bestuurbare auto's. We rijden met elektrische RC-auto's in alle schalen. Of je nu net begint of al jaren rijdt: bij ons ben je welkom.</p>
+        <p id="hp-about-p2" data-i18n="about.p2" class="csp-i-617166a2ab">We beschikken over een eigen baan in Eygelshoven, op het terrein van Kok Lexmond. Naast de basher baan hebben we ook een enorm crawler-parcours en een jump-track.</p>
         <div class="about-features">
           <div class="feature-card reveal reveal-delay-1">
             <div class="feature-card-icon">⚡</div>
@@ -767,7 +263,7 @@ tenantHomepageStartOutputFilter();
       <div class="price-card reveal reveal-delay-1">
         <div class="price-card-tag" id="hp-guest-tag" data-i18n="guest.tag">Gastrijden</div>
         <h3 id="hp-guest-title" data-i18n="guest.title">Kom eens gastrijden!</h3>
-        <p style="font-size: 14px; color: var(--muted); margin-top: 8px; line-height: 1.6;" id="hp-guest-text" data-i18n="guest.text">Rij een hele dag mee op onze baan zonder lidmaatschap. Check onze openingstijden en kom gewoon langs, meld je wel even bij een (bestuurs)lid als je er bent!</p>
+        <p id="hp-guest-text" data-i18n="guest.text" class="csp-i-0868776988">Rij een hele dag mee op onze baan zonder lidmaatschap. Check onze openingstijden en kom gewoon langs, meld je wel even bij een (bestuurs)lid als je er bent!</p>
         <ul class="price-list">
           <li><span id="hp-guest-adult" data-i18n="guest.adult">Volwassene (16+)</span><span class="price-amount">€10</span></li>
           <li><span id="hp-guest-youth" data-i18n="guest.youth">Jeugd (t/m 15 jaar)</span><span class="price-amount">€5</span></li>
@@ -783,7 +279,7 @@ tenantHomepageStartOutputFilter();
       <div class="price-card featured reveal reveal-delay-2">
         <div class="price-card-tag" id="hp-member-tag" data-i18n="member.tag">Lidmaatschap</div>
         <h3 id="hp-member-title" data-i18n="member.title">Word lid van RC045</h3>
-        <p style="font-size: 14px; color: rgba(255,255,255,0.6); margin-top: 8px; line-height: 1.6;" id="hp-member-text" data-i18n="member.text">Onbeperkt rijden op alle banen, toegang tot de groepsapp, kennis delen met medehobbyisten en altijd iemand om je mee te helpen.</p>
+        <p id="hp-member-text" data-i18n="member.text" class="csp-i-3ade846eb0">Onbeperkt rijden op alle banen, toegang tot de groepsapp, kennis delen met medehobbyisten en altijd iemand om je mee te helpen.</p>
         <ul class="price-list">
           <li><span id="hp-member-youth" data-i18n="member.youth">Jeugdlid (t/m 15 jaar)</span><span class="price-amount" id="prijs-jeugd">€50/jaar</span></li>
           <li><span id="hp-member-senior" data-i18n="member.senior">Seniorlid (16+)</span><span class="price-amount" id="prijs-senior">€100/jaar</span></li>
@@ -805,14 +301,14 @@ tenantHomepageStartOutputFilter();
       <div class="reveal">
         <div class="section-label" id="hp-track-label" data-i18n="track.label">Onze locatie</div>
         <h2 class="section-title" id="hp-track-title" data-i18n="track.title">De baan in Eygelshoven</h2>
-        <p style="color: var(--muted); line-height: 1.8; margin-bottom: 28px;" id="hp-track-p1" data-i18n="track.p1">Ons terrein bevindt zich op het perceel van Kok Lexmond in Eygelshoven (Kerkrade). We beschikken over meerdere banen: een race-circuit, een crawler-parcours, en een jump-track voor de echte thrill-seekers.</p>
-        <p style="color: var(--muted); line-height: 1.8; margin-bottom: 28px;" id="hp-track-p2" data-i18n="track.p2">Volg bij aankomst de pijlen met het RC045-logo en je ziet ons vanzelf. Er is voldoende gratis parkeergelegenheid.</p>
-        <ul style="list-style:none; display:flex; flex-direction:column; gap:12px;">
-          <li style="display:flex; align-items:center; gap:10px; font-size:15px;"><span style="color:var(--green); font-size:18px;">✓</span><span id="hp-track-f1" data-i18n="track.f1">Race-circuit voor buggy's, truggies en meer</span></li>
-          <li style="display:flex; align-items:center; gap:10px; font-size:15px;"><span style="color:var(--green); font-size:18px;">✓</span><span id="hp-track-f2" data-i18n="track.f2">Off-road crawler-parcours</span></li>
-          <li style="display:flex; align-items:center; gap:10px; font-size:15px;"><span style="color:var(--green); font-size:18px;">✓</span><span id="hp-track-f3" data-i18n="track.f3">Jump-track met schans</span></li>
-          <li style="display:flex; align-items:center; gap:10px; font-size:15px;"><span style="color:var(--green); font-size:18px;">✓</span><span id="hp-track-f4" data-i18n="track.f4">Kantine & werkruimte aanwezig</span></li>
-          <li style="display:flex; align-items:center; gap:10px; font-size:15px;"><span style="color:var(--green); font-size:18px;">✓</span><span id="hp-track-f5" data-i18n="track.f5">Voldoende parkeerruimte</span></li>
+        <p id="hp-track-p1" data-i18n="track.p1" class="csp-i-7bb9ccf36b">Ons terrein bevindt zich op het perceel van Kok Lexmond in Eygelshoven (Kerkrade). We beschikken over meerdere banen: een race-circuit, een crawler-parcours, en een jump-track voor de echte thrill-seekers.</p>
+        <p id="hp-track-p2" data-i18n="track.p2" class="csp-i-7bb9ccf36b">Volg bij aankomst de pijlen met het RC045-logo en je ziet ons vanzelf. Er is voldoende gratis parkeergelegenheid.</p>
+        <ul class="csp-i-a82d87a512">
+          <li class="csp-i-b3d0b6d4ce"><span class="csp-i-7162b40bdb">✓</span><span id="hp-track-f1" data-i18n="track.f1">Race-circuit voor buggy's, truggies en meer</span></li>
+          <li class="csp-i-b3d0b6d4ce"><span class="csp-i-7162b40bdb">✓</span><span id="hp-track-f2" data-i18n="track.f2">Off-road crawler-parcours</span></li>
+          <li class="csp-i-b3d0b6d4ce"><span class="csp-i-7162b40bdb">✓</span><span id="hp-track-f3" data-i18n="track.f3">Jump-track met schans</span></li>
+          <li class="csp-i-b3d0b6d4ce"><span class="csp-i-7162b40bdb">✓</span><span id="hp-track-f4" data-i18n="track.f4">Kantine & werkruimte aanwezig</span></li>
+          <li class="csp-i-b3d0b6d4ce"><span class="csp-i-7162b40bdb">✓</span><span id="hp-track-f5" data-i18n="track.f5">Voldoende parkeerruimte</span></li>
         </ul>
       </div>
       <div class="reveal reveal-delay-2">
@@ -1034,7 +530,7 @@ tenantHomepageStartOutputFilter();
           <div>
             <h4 id="hp-addr-title" data-i18n="addr.title">Adres</h4>
             <p><span id="addr-straat">Wijngaardsberg 26</span><br><span id="addr-postcode-plaats">6464 EZ Eygelshoven</span><br><br><span id="hp-addr-text" data-i18n="addr.text">Onze baan ligt op het terrein van Kok Lexmond, bij aankomst volg je de pijlen RC045.</span></p>
-            <a href="https://www.openstreetmap.org/search?lat=50.889462&lon=6.071899&zoom=19#map=19/50.889461/6.071900" target="_blank" style="display:inline-block; margin-top:12px; color:var(--teal); font-weight:600; font-size:14px;" id="hp-addr-route" data-i18n="addr.route">Routebeschrijving openen →</a>
+            <a href="https://www.openstreetmap.org/search?lat=50.889462&lon=6.071899&zoom=19#map=19/50.889461/6.071900" target="_blank" id="hp-addr-route" data-i18n="addr.route" class="csp-i-0ee4e9ef0f">Routebeschrijving openen →</a>
           </div>
         </div>
       </div>
@@ -1065,7 +561,7 @@ tenantHomepageStartOutputFilter();
               <div class="channel-value" id="contact-facebook-value">facebook.com/rc045</div>
             </div>
           </a>
-          <div class="channel" style="opacity: 0.4; cursor: default; pointer-events: none;">
+          <div class="channel csp-i-00f4471942">
             <div class="channel-icon"><img src="https://upload.wikimedia.org/wikipedia/commons/a/a5/Instagram_icon.png" alt="" width="28" height="28" aria-hidden="true" loading="lazy" decoding="async"></div>
             <div>
               <div class="channel-label">Instagram</div>
@@ -1087,24 +583,24 @@ tenantHomepageStartOutputFilter();
           <label for="email" id="hp-form-email" data-i18n="form.email">E-mailadres</label>
           <input type="email" id="email" name="email">
         </div>
-        <div id="email-warning" data-i18n="warn.email" style="display:none; padding:12px 16px; background:#FEF3C7; border-radius:8px; color:#92400E; font-size:14px; font-weight:500;">
+        <div id="email-warning" data-i18n="warn.email" class="csp-i-66ec127d15">
           ⚠️ Vul een geldig e-mailadres in (bijv. naam@voorbeeld.nl)
         </div>
         <div class="form-group">
           <label for="telefoon" id="hp-form-phone" data-i18n="form.phone">Telefoonnummer</label>
-          <div style="display:flex; gap:8px;">
-            <select id="landcode" style="width:110px; flex-shrink:0;">
+          <div class="csp-i-b887bfd543">
+            <select id="landcode" class="csp-i-a4b90adc25">
               <option value="+31">🇳🇱 +31</option>
               <option value="+32">🇧🇪 +32</option>
               <option value="+49">🇩🇪 +49</option>
             </select>
-            <input type="tel" id="telefoon" style="flex:1;"><input type="hidden" id="telefoon-combined" name="telefoon">
+            <input type="tel" id="telefoon" class="csp-i-6253876a64"><input type="hidden" id="telefoon-combined" name="telefoon">
           </div>
         </div>
-        <div id="phone-warning" data-i18n="warn.phone" style="display:none; padding:12px 16px; background:#FEF3C7; border-radius:8px; color:#92400E; font-size:14px; font-weight:500;">
+        <div id="phone-warning" data-i18n="warn.phone" class="csp-i-66ec127d15">
           ⚠️ Vul een geldig telefoonnummer in (minimaal 9 cijfers)
         </div>
-        <div id="contact-warning" data-i18n="warn.contact" style="display:none; padding:12px 16px; background:#FEF3C7; border-radius:8px; color:#92400E; font-size:14px; font-weight:500;">
+        <div id="contact-warning" data-i18n="warn.contact" class="csp-i-66ec127d15">
           ⚠️ We hebben een e-mailadres of telefoonnummer van je nodig om contact op te nemen.
         </div>
         <div class="form-group">
@@ -1120,10 +616,10 @@ tenantHomepageStartOutputFilter();
           <label for="bericht" id="hp-form-message" data-i18n="form.message">Bericht *</label>
           <textarea id="bericht" name="bericht" data-i18n-placeholder="form.message.ph" placeholder="Schrijf hier je vraag of bericht..." required></textarea>
         </div>
-        <div id="form-success" data-i18n="form.success" style="display:none; padding:16px; background:var(--teal-light); border-radius:8px; color:var(--teal-dark); font-weight:600; text-align:center;">
+        <div id="form-success" data-i18n="form.success" class="csp-i-e5e5912145">
           ✅ Bericht verzonden! We nemen zo snel mogelijk contact op.
         </div>
-        <div id="form-error" data-i18n="form.error" style="display:none; padding:16px; background:#FEE2E2; border-radius:8px; color:#DC2626; font-weight:600; text-align:center;">
+        <div id="form-error" data-i18n="form.error" class="csp-i-62e7fccff5">
           ❌ Er ging iets mis. Probeer het opnieuw of mail naar bestuur@rc045.nl
         </div>
         <div class="form-submit">
@@ -1145,7 +641,7 @@ tenantHomepageStartOutputFilter();
           <a href="https://www.facebook.com/rc045/" target="_blank" title="Facebook" aria-label="RC045 op Facebook" id="footer-facebook-link">
             <img src="https://upload.wikimedia.org/wikipedia/commons/b/b9/2023_Facebook_icon.svg" alt="" width="28" height="28" aria-hidden="true" loading="lazy" decoding="async">
           </a>
-          <span title="Instagram (binnenkort)" style="opacity: 0.3; display: flex; align-items: center;" aria-label="Instagram binnenkort beschikbaar">
+          <span title="Instagram (binnenkort)" aria-label="Instagram binnenkort beschikbaar" class="csp-i-5d7d33efba">
             <img src="https://upload.wikimedia.org/wikipedia/commons/a/a5/Instagram_icon.png" alt="" width="28" height="28" aria-hidden="true" loading="lazy" decoding="async">
           </span>
         </div>

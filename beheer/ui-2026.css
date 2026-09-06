@@ -91,3 +91,8 @@ th,td{padding:11px 14px!important;border-bottom:1px solid #e9eeeb!important;text
 @media(max-width:800px){.wrap{margin:26px auto!important;padding:0 16px 58px!important}.top{padding:11px 16px!important}.card,.groep,.kaart,.empty{padding:19px!important}.card{margin:16px 0!important}.grid{gap:12px!important}.toolbar,.actions,.filters,.accept{gap:8px!important}.btn,button,input[type=submit],input[type=button]{min-height:42px}.subnav{padding-left:15px!important}.beheer-dashboard .grid{gap:26px!important}.beheer-dashboard .groep{padding:0!important}.beheer-dashboard .topin{gap:7px!important}.beheer-dashboard .user{font-size:13px!important}.stats{grid-template-columns:1fr!important}.stat{padding:14px 16px!important}table{display:table;white-space:normal}.tablewrap table{min-width:680px}}
 @media(max-width:620px){h1{font-size:29px!important}.hero{margin-bottom:24px!important}.beheer-dashboard .hero{margin-bottom:28px!important}.beheer-dashboard .grid{grid-template-columns:1fr!important}.beheer-dashboard .module{min-height:54px!important}.beheer-dashboard .subnav{padding:0 14px 13px!important}.beheer-dashboard .top{position:sticky!important}.toolbar>input:not([type=hidden]),.toolbar>.veld,.filters>.veld{flex:1 1 100%}.actions .btn,.actions button{max-width:100%}}
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*:before,*:after{transition:none!important;animation:none!important}}
+.csp-i-8210b8c264{border-top:1px solid #eee9db;margin-top:20px;padding-top:18px}
+.csp-i-a0925a28f0{margin-top:0}
+.csp-i-74f604f83e{padding:10px 0}
+.csp-i-c6fa01b3f1{font-weight:700}
+.csp-i-8348677261{margin:7px 0 0 24px}

@@ -14,191 +14,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
-  <style>.page-hero { min-height: 320px; }
-    
-    .page-hero-bg { position: absolute; top: -80px; left: 0; right: 0; bottom: -80px; background-image: url('images/hero-achtergrond.jpg'); background-size: cover; background-position: center; opacity: 0.35; will-change: transform; }
-    
-    .page-hero .section-label { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; color: var(--gold); margin-bottom: 12px; }.page-hero p { max-width: 540px; }
-    
-    .main { max-width: 800px; margin: 0 auto; padding: 48px 24px 80px; }
-    
-    .contributie-card { background: var(--teal-light); border: 1.5px solid var(--teal); border-radius: var(--radius); padding: 24px 28px; margin-bottom: 32px; }
-    
-    .contributie-card h3 { font-size: 16px; font-weight: 700; color: var(--teal-dark); margin-bottom: 8px; }
-    
-    .contributie-bedrag { font-family: 'Poppins', sans-serif; font-size: 32px; font-weight: 800; color: var(--teal-dark); line-height: 1; margin: 8px 0 4px; }
-    
-    .contributie-sub { font-size: 13px; color: var(--teal-dark); opacity: 0.75; }
-    
-    .contributie-breakdown { margin-top: 12px; font-size: 13px; color: var(--teal-dark); line-height: 1.6; }
-    
-    .contributie-placeholder { font-size: 15px; color: var(--muted); font-style: italic; }
-    
-    .contributie-bedrag { animation: countUp 0.5s ease-out; }
-    
-    @keyframes countUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-    
-    .form-card { background: var(--white); border: 1.5px solid var(--border); border-radius: var(--radius); padding: 36px; box-shadow: var(--shadow); }
-    
-    .form-section-title { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--gold); margin: 28px 0 16px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
-    
-    .form-section-title:first-child { margin-top: 0; }
-    
-    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-    
-    .form-group.full { grid-column: 1 / -1; }
-    
-    .form-group label span { color: var(--teal); }
-    
-    .form-group input, .form-group select { padding: 12px 16px; border: 1.5px solid var(--border); border-radius: 8px; font-family: 'Inter', sans-serif; font-size: 15px; color: var(--text); background: var(--bg); transition: border-color 0.2s, box-shadow 0.2s; outline: none; width: 100%; }
-    
-    /* Safari (iOS) duwt de waarde van een datumveld standaard naar rechts en
-       maakt het veld zo breed als de kolom. Links uitlijnen en begrenzen. */
-    .form-group input[type="date"] { -webkit-appearance: none; appearance: none; text-align: left; max-width: 240px; min-height: 46px; }
-
-    .form-group input:focus, .form-group select:focus { border-color: var(--teal); box-shadow: 0 0 0 3px rgba(58,122,119,0.12); }
-    
-    .phone-row { display: flex; gap: 8px; }
-    
-    .phone-row select { width: 120px; flex-shrink: 0; }
-    
-    .phone-row input { flex: 1; }
-    
-    .jeugdlid-badge { display: none; margin-top: 8px; padding: 8px 12px; border-radius: 8px; font-size: 13px; font-weight: 600; }
-    
-    .jeugdlid-badge.jeugd { background: #FEF3C7; color: #92400E; display: flex; align-items: center; gap: 6px; }
-    
-    .jeugdlid-badge.senior { background: var(--teal-light); color: var(--teal-dark); display: flex; align-items: center; gap: 6px; }
-    
-    .akkoord-group { display: flex; align-items: flex-start; gap: 12px; padding: 16px; background: var(--bg); border: 1.5px solid var(--border); border-radius: 10px; margin-top: 8px; transition: border-color 0.2s; cursor: pointer; }
-    
-    .akkoord-group:hover { border-color: var(--teal); }
-    
-    .akkoord-group input[type="checkbox"] { width: 18px; height: 18px; flex-shrink: 0; margin-top: 2px; accent-color: var(--teal); cursor: pointer; }
-    
-    .akkoord-group label { font-size: 14px; color: var(--text); line-height: 1.5; cursor: pointer; }
-    
-    .akkoord-group label a { color: var(--teal); font-weight: 600; text-decoration: underline; }
-    
-    .form-group label span.req { color: var(--teal); font-weight: 700; }
-    
-    .field-error { display: none; font-size: 13px; color: #DC2626; margin-top: 4px; font-weight: 500; }
-    
-    .form-group.has-error .field-error { display: block; }
-    
-    .input-error { border-color: #DC2626 !important; box-shadow: 0 0 0 3px rgba(220,38,38,0.12) !important; }
-    
-    .melding { display: none; padding: 12px 16px; border-radius: 8px; font-size: 14px; font-weight: 500; margin-top: 8px; }
-    
-    .melding.warning { background: #FEF3C7; color: #92400E; }
-    
-    .melding.error { background: #FEE2E2; color: #DC2626; }
-    
-    .melding.success { background: var(--teal-light); color: var(--teal-dark); font-size: 16px; font-weight: 700; text-align: center; padding: 20px; }
-    
-    .iban-copy-wrap { display: flex; align-items: center; gap: 10px; }
-    
-    .iban-copy-btn { background: none; border: 1.5px solid var(--teal); border-radius: 6px; padding: 3px 10px; font-size: 12px; font-weight: 600; color: var(--teal-dark); cursor: pointer; transition: background 0.15s; flex-shrink: 0; }
-    
-    .iban-copy-btn:hover { background: var(--teal-light); }
-    
-    .iban-copy-btn.copied { background: var(--teal); color: white; border-color: var(--teal); }
-    
-    .iban-card { background: var(--gold-light); border: 1.5px solid var(--gold); border-radius: var(--radius); padding: 20px 24px; margin-top: 16px; }
-    
-    .iban-card h4 { font-size: 14px; font-weight: 700; color: var(--dark); margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.06em; }
-    
-    .iban-number { font-family: 'Poppins', sans-serif; font-size: 22px; font-weight: 800; color: var(--dark); letter-spacing: 0.08em; margin-bottom: 4px; }
-    
-    .iban-detail { font-size: 13px; color: var(--muted); line-height: 1.6; }
-    
-    .faq-card { background: var(--white); border: 1.5px solid var(--border); border-radius: var(--radius); padding: 36px; box-shadow: var(--shadow); margin-top: 24px; }
-    
-    .faq-title { font-size: 20px; font-weight: 700; color: var(--dark); margin-bottom: 24px; }
-    
-    .faq-item { border-bottom: 1px solid var(--border); padding: 16px 0; cursor: pointer; }
-    
-    .faq-item:last-child { border-bottom: none; padding-bottom: 0; }
-    
-    .faq-question { font-size: 15px; font-weight: 600; color: var(--text); display: flex; justify-content: space-between; align-items: center; gap: 16px; }
-    
-    .faq-question::after { content: '+'; font-size: 20px; color: var(--teal); flex-shrink: 0; transition: transform 0.2s; }
-    
-    .faq-item.open .faq-question::after { transform: rotate(45deg); }
-    
-    .faq-answer { font-size: 14px; color: var(--muted); line-height: 1.7; max-height: 0; overflow: hidden; transition: max-height 0.3s ease, padding 0.3s; }
-    
-    .faq-item.open .faq-answer { max-height: 600px; padding-top: 12px; }
-    
-    .btn-primary { width: 100%; justify-content: center; margin-top: 24px; font-size: 17px; padding: 16px; }
-    
-    .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
-    
-    @media (max-width: 600px) {
-          .form-grid { grid-template-columns: 1fr; }
-          .form-card { padding: 24px 20px; }
-        }
-    
-    /* ===== BEDANKT-OVERLAY (verschijnt na een geslaagde aanmelding) ===== */
-    /* Dit is een laag binnen de pagina zelf, geen nieuw browservenster,
-       dus popupblokkers spelen hier geen rol. */
-    .modal-overlay { display: none; position: fixed; inset: 0; z-index: 2000; background: rgba(30,44,19,0.55); backdrop-filter: blur(3px); align-items: center; justify-content: center; padding: 24px; }
-
-    .modal-overlay.open { display: flex; }
-
-    /* svh is de schermhoogte zonder de adres- en knoppenbalk van de browser.
-       Zonder die eenheid valt de onderkant van de kaart op iOS achter de
-       adresbalk. De vh-regel blijft staan als terugval voor oudere browsers. */
-    .modal-card { position: relative; background: var(--white); border: 1.5px solid var(--border); border-radius: var(--radius); box-shadow: 0 20px 60px rgba(0,0,0,0.30); width: 100%; max-width: 560px; max-height: calc(100vh - 48px); max-height: calc(100svh - 48px); overflow-y: auto; overscroll-behavior: contain; padding: 40px 36px 32px; text-align: center; animation: modalIn 0.28s ease; }
-
-    @keyframes modalIn { from { opacity: 0; transform: translateY(16px) scale(0.98); } to { opacity: 1; transform: none; } }
-
-    .modal-close { position: absolute; top: 10px; right: 12px; background: none; border: none; font-size: 26px; line-height: 1; color: var(--muted); cursor: pointer; padding: 4px 10px; border-radius: 8px; transition: background 0.15s, color 0.15s; }
-
-    .modal-close:hover { background: var(--bg); color: var(--dark); }
-
-    .modal-icon { font-size: 56px; margin-bottom: 16px; }
-
-    .modal-card h2 { font-size: 28px; font-weight: 800; color: var(--dark); margin-bottom: 12px; }
-
-    .modal-sub { font-size: 15px; color: var(--muted); line-height: 1.7; }
-
-    .modal-stappen { display: flex; flex-direction: column; gap: 12px; text-align: left; margin-top: 24px; }
-
-    .modal-stap { display: flex; gap: 12px; align-items: flex-start; }
-
-    .modal-stap-num { flex-shrink: 0; width: 26px; height: 26px; border-radius: 50%; background: var(--teal); color: white; font-family: 'Poppins', sans-serif; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
-
-    .modal-stap-text { font-size: 14px; color: var(--text); line-height: 1.6; }
-
-    .modal-card .iban-card { text-align: left; margin-top: 24px; }
-
-    .modal-card .iban-copy-wrap { flex-wrap: wrap; }
-
-    .modal-btns { display: flex; gap: 10px; margin-top: 24px; }
-
-    .modal-btn { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 13px 18px; border-radius: 10px; font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 14px; cursor: pointer; transition: all 0.2s; border: 1.5px solid transparent; }
-
-    .modal-btn-primary { background: var(--teal); color: white; }
-
-    .modal-btn-primary:hover { background: var(--teal-dark); }
-
-    .modal-btn-outline { background: none; border-color: var(--border); color: var(--text); }
-
-    .modal-btn-outline:hover { background: var(--bg); }
-
-    @media (max-width: 560px) {
-          .modal-overlay { padding: 14px calc(14px + env(safe-area-inset-right)) calc(14px + env(safe-area-inset-bottom)) calc(14px + env(safe-area-inset-left)); }
-          .modal-card { padding: 28px 20px 24px; max-height: calc(100vh - 28px); max-height: calc(100svh - 28px); }
-          .modal-icon { font-size: 42px; margin-bottom: 10px; }
-          .modal-card h2 { font-size: 22px; margin-bottom: 10px; }
-          .modal-sub { font-size: 14px; line-height: 1.6; }
-          .modal-stappen { margin-top: 18px; gap: 10px; }
-          .modal-card .iban-card { margin-top: 18px; padding: 16px 18px; }
-          .modal-card .iban-number { font-size: 17px; letter-spacing: 0.05em; }
-          .modal-btns { flex-direction: column; margin-top: 18px; }
-        }
-  </style>
+  <link rel="stylesheet" href="csp205-aanmelden-b31d17f20682.css">
   <script data-goatcounter="https://rc045.goatcounter.com/count"
         async src="//gc.zgo.at/count.js"></script>
 </head>
@@ -363,22 +179,22 @@
       <div class="akkoord-group">
         <input type="checkbox" id="akkoord-reglement" name="akkoord_reglement" value="ja">
         <label for="akkoord-reglement">
-          <span data-i18n="form.agree1a">Ik ga akkoord met het</span> <a href="baanreglement.html" data-i18n="form.agree1link">baanreglement</a> <span data-i18n="form.agree1b">van RC045 en verklaar dit gelezen en begrepen te hebben.</span> <span style="color:var(--teal); font-weight:700;">*</span>
+          <span data-i18n="form.agree1a">Ik ga akkoord met het</span> <a href="baanreglement.html" data-i18n="form.agree1link">baanreglement</a> <span data-i18n="form.agree1b">van RC045 en verklaar dit gelezen en begrepen te hebben.</span> <span class="csp-i-cc46f09fd6">*</span>
         </label>
       </div>
-      <div class="akkoord-group" style="margin-top: 10px;">
+      <div class="akkoord-group csp-i-3b6fad0b29">
         <input type="checkbox" id="akkoord-betaling" name="akkoord_betaling" value="ja">
         <label for="akkoord-betaling">
-          <span data-i18n="form.agree2">Ik ga akkoord met de contributieverplichting en zal het verschuldigde bedrag z.s.m. overmaken naar</span> <span class="iban-copy-wrap"><strong id="am-iban-number-inline">NL51 RABO 0367 6153 63</strong><button class="iban-copy-btn" type="button" data-i18n="iban.copy">📋 Kopieer</button></span> <span data-i18n="form.agree2b">t.n.v. RC045, onder vermelding van mijn voor- en achternaam + "contributie RC045 {jaar}".</span> <span style="color:var(--teal); font-weight:700;">*</span>
+          <span data-i18n="form.agree2">Ik ga akkoord met de contributieverplichting en zal het verschuldigde bedrag z.s.m. overmaken naar</span> <span class="iban-copy-wrap"><strong id="am-iban-number-inline">NL51 RABO 0367 6153 63</strong><button class="iban-copy-btn" type="button" data-i18n="iban.copy">📋 Kopieer</button></span> <span data-i18n="form.agree2b">t.n.v. RC045, onder vermelding van mijn voor- en achternaam + "contributie RC045 {jaar}".</span> <span class="csp-i-cc46f09fd6">*</span>
         </label>
       </div>
 
       <!-- Meldingen -->
-      <div class="melding warning" id="akkoord-warning" style="margin-top:12px;"><span data-i18n="warn.agree">⚠️ Je dient akkoord te gaan met beide verklaringen om je te kunnen aanmelden.</span></div>
-      <div class="melding error" id="form-error" style="margin-top:12px;"><span data-i18n="warn.error">❌ Er ging iets mis. Probeer het opnieuw of mail naar bestuur@rc045.nl</span></div>
-      <div class="melding success" id="form-success" style="margin-top:12px;">
+      <div class="melding warning csp-i-b6d781cbbc" id="akkoord-warning"><span data-i18n="warn.agree">⚠️ Je dient akkoord te gaan met beide verklaringen om je te kunnen aanmelden.</span></div>
+      <div class="melding error csp-i-b6d781cbbc" id="form-error"><span data-i18n="warn.error">❌ Er ging iets mis. Probeer het opnieuw of mail naar bestuur@rc045.nl</span></div>
+      <div class="melding success csp-i-b6d781cbbc" id="form-success">
         <span id="am-success-title" data-i18n="success.title">✅ Aanmelding ontvangen! We nemen zo snel mogelijk contact met je op.</span><br><br>
-        <span style="font-size:14px; font-weight:400;"><span id="am-success-sub" data-i18n="success.sub">Vergeet niet de contributie over te maken via de betalingsinstructies hierboven.</span></span>
+        <span class="csp-i-6ffdd55d0e"><span id="am-success-sub" data-i18n="success.sub">Vergeet niet de contributie over te maken via de betalingsinstructies hierboven.</span></span>
       </div>
 
       <button type="submit" class="btn btn-primary" id="submit-btn" data-i18n="form.submit">Aanmelden bij RC045 →</button>
@@ -406,7 +222,7 @@
           <a href="https://www.facebook.com/rc045/" target="_blank" title="Facebook" aria-label="RC045 op Facebook" id="footer-facebook-link">
             <img src="https://upload.wikimedia.org/wikipedia/commons/b/b9/2023_Facebook_icon.svg" alt="" width="28" height="28" aria-hidden="true" loading="lazy" decoding="async">
           </a>
-          <span title="Instagram (binnenkort)" style="opacity: 0.3; display: flex; align-items: center;" aria-label="Instagram binnenkort beschikbaar">
+          <span title="Instagram (binnenkort)" aria-label="Instagram binnenkort beschikbaar" class="csp-i-5d7d33efba">
             <img src="https://upload.wikimedia.org/wikipedia/commons/a/a5/Instagram_icon.png" alt="" width="28" height="28" aria-hidden="true" loading="lazy" decoding="async">
           </span>
         </div>
@@ -882,7 +698,7 @@
         <div class="contributie-sub">${isJeugd ? t['contrib.jeugd'] : t['contrib.senior']} · ${t['contrib.inschrijving']} december</div>
         <div class="contributie-breakdown">
           ${t['contrib.inschrijfkosten']}: €${rekentabelInschrijfkosten}<br>
-          <strong style="font-size:16px;">${t['contrib.totaal']}: €${rekentabelInschrijfkosten}</strong><br><br>
+          <strong class="csp-i-43e9c079be">${t['contrib.totaal']}: €${rekentabelInschrijfkosten}</strong><br><br>
           ${vulRekentabelTokens(t['contrib.volledig'])}: €${volledigeContributie} (${t['contrib.niet_overmaken']})
         </div>
       `;
@@ -899,7 +715,7 @@
       <div class="contributie-breakdown">
         ${t['contrib.label']}: €${contributie} (${t['contrib.prorata']} ${maandNamen[maand] || maandNamen[0]})<br>
         ${t['contrib.inschrijfkosten']}: €${rekentabelInschrijfkosten}<br>
-        <strong style="font-size:16px;">${t['contrib.totaal']}: €${totaal}</strong><br><br>
+        <strong class="csp-i-43e9c079be">${t['contrib.totaal']}: €${totaal}</strong><br><br>
         ${vulRekentabelTokens(t['contrib.volledig'])}: €${volledigeContributie} (${t['contrib.niet_overmaken']})
       </div>
     `;

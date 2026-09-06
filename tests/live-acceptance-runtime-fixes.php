@@ -15,7 +15,8 @@ $out=[];$exit=0;exec(escapeshellcmd(PHP_BINARY).' '.escapeshellarg($launcher).' 
 laf3($exit===0&&trim(implode("\n",$out))==='STATUS=204','standalone ontbrekende homepage override eindigt werkelijk als HTTP 204');
 
 $leden=(string)file_get_contents($root.'/leden/index.php');
-laf3(str_contains($leden,'.wrap button{min-height:44px!important')&&str_contains($leden,'padding:10px 16px'),'leden-loginbutton heeft minimaal 44px hoogte en bruikbare padding');
+$ledenLoginCss=(string)file_get_contents($root.'/leden/csp205-index-41371aa64bd2.css');
+laf3(str_contains($leden,'href="csp205-index-41371aa64bd2.css"')&&str_contains($ledenLoginCss,'.wrap button{min-height:44px!important')&&str_contains($ledenLoginCss,'padding:10px 16px'),'leden-loginbutton heeft minimaal 44px hoogte en bruikbare padding via het geladen CSP-stylesheet');
 
 $isolatie=(string)file_get_contents($root.'/tests/phase321-public-content-isolation.php');
 laf3(

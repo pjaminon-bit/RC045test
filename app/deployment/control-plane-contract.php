@@ -279,7 +279,7 @@ function control51ApacheConfig(array $plan): string
         '    Header always set Cache-Control "no-store, max-age=0"',
         '    Header always set Pragma "no-cache"',
         '    Header always set X-Robots-Tag "noindex, nofollow, noarchive"',
-        '    Header always set Content-Security-Policy "default-src \'self\'; style-src \'self\' \'unsafe-inline\'; form-action \'self\'; frame-ancestors \'none\'; base-uri \'none\'"',
+        '    Header always set Content-Security-Policy "default-src \'self\'; style-src \'self\'; form-action \'self\'; frame-ancestors \'none\'; base-uri \'none\'"',
         '    RewriteEngine On',
         '    RewriteCond %{SSL:SSL_TLS_SNI} !^' . $hostRe . '$ [NC,OR]',
         '    RewriteCond %{HTTP_HOST} !^' . $hostRe . '(?::443)?$ [NC]',

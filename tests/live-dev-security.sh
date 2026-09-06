@@ -22,10 +22,19 @@ if ! grep -Eqi '^x-powered-by:' "$TMP/headers.clean"; then ok 'geen X-Powered-By
 
 csp="$(grep -Ei '^content-security-policy:' "$TMP/headers.clean" | tail -n1 || true)"
 if [[ -n "$csp" ]]; then ok 'Content-Security-Policy actief'; else bad 'Content-Security-Policy ontbreekt'; fi
-for directive in "default-src 'self'" "base-uri 'self'" "object-src 'none'" "frame-ancestors 'none'" "form-action 'self'" "script-src 'self'" "frame-src https://www.openstreetmap.org"; do
+for directive in "default-src 'self'" "base-uri 'self'" "object-src 'none'" "frame-ancestors 'none'" "form-action 'self'" "script-src 'self'" "script-src-attr 'none'" "style-src-attr 'none'" "frame-src https://www.openstreetmap.org"; do
   if grep -Fqi "$directive" <<<"$csp"; then ok "CSP bevat $directive"; else bad "CSP mist $directive"; fi
 done
+if grep -Eqi "style-src[^;]*'unsafe-inline'" <<<"$csp"; then bad 'CSP style-src bevat nog unsafe-inline'; else ok 'CSP style-src bevat geen unsafe-inline'; fi
+if grep -Eqi "style-src[[:space:]]+'self'[[:space:]]+'nonce-[A-Za-z0-9+/_=-]+'[[:space:]]+https://fonts\.googleapis\.com" <<<"$csp"; then ok 'CSP style-src bindt dynamische styles aan response-nonce'; else bad 'CSP style-src mist self + nonce + Google Fonts contract'; fi
 if ! grep -Eqi 'script-src[^;]*(gc\.zgo\.at|goatcounter|openstreetmap\.org)' <<<"$csp"; then ok 'CSP staat geen externe analytics- of kaartscriptorigin toe'; else bad 'CSP laat externe analytics/kaart-JS als script toe'; fi
+
+for route in / /beheer/ /leden/; do
+  safe="$(tr '/ ' '__' <<<"$route")"
+  curl --silent --show-error --dump-header "$TMP/csp-$safe" --output /dev/null --connect-timeout 10 --max-time 30 "$BASE$route"
+  route_csp="$(tr -d '\r' < "$TMP/csp-$safe" | grep -Ei '^content-security-policy:' | tail -n1 || true)"
+  if [[ -n "$route_csp" ]] && grep -Fqi "style-src-attr 'none'" <<<"$route_csp" && ! grep -Eqi "style-src[^;]*'unsafe-inline'" <<<"$route_csp"; then ok "$route heeft hardened style-CSP"; else bad "$route mist hardened style-CSP"; fi
+done
 
 trace="$(curl --silent --show-error --request TRACE --output /dev/null --write-out '%{http_code}' --connect-timeout 10 --max-time 30 "$BASE/" || true)"
 case "$trace" in 403|405|501) ok "TRACE geblokkeerd ($trace)";; *) bad "TRACE onverwacht toegestaan/status $trace";; esac

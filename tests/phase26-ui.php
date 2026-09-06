@@ -15,8 +15,8 @@ t26(strpos($comm,'ui-2026.css')!==false&&strpos($comm,'ob_start')!==false,'commi
 t26(strpos($werk,'ui-2026.css')!==false&&strpos($werk,'ob_start')!==false,'werkgroepen injecteert UI-laag zonder groepscontroller te wijzigen');
 $content=t26txt($root.'/beheer/content.php');
 t26(strpos($content,'beheer/ui-2026.css')!==false,'generieke contenteditor laadt UI 2026');
-$dashboard=t26txt($root.'/beheer/index.php');
-t26(strpos($dashboard,".module span:first-child:before{content:'* '")!==false,'modulaire beheeritems behouden zichtbare stermarkering');
+$dashboard=t26txt($root.'/beheer/index.php');$dashboardCss=t26txt($root.'/beheer/csp205-index-8e244dd87d1c.css');
+t26(strpos($dashboard,'href="csp205-index-8e244dd87d1c.css"')!==false&&strpos($dashboardCss,".module span:first-child:before{content:'* '")!==false,'modulaire beheeritems behouden zichtbare stermarkering via het geladen CSP-stylesheet');
 $aanmeld=t26txt($root.'/beheer/aanmeldingen.php');
 t26(strpos($aanmeld,'class="btn primary"')!==false&&strpos($aanmeld,'class="btn danger"')!==false,'aanmeldingen gebruikt gestandaardiseerde actieknoppen');
 echo 'Phase 2.6 UI checks: '.count($ok).' OK, '.count($errors)." fout(en)\n";if($errors){foreach($errors as $e)fwrite(STDERR,"FOUT: $e\n");exit(1);}foreach($ok as $m)echo "OK: $m\n";
