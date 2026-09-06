@@ -59,7 +59,7 @@ done
 }
 
 [[ "$#" -ge 1 ]] || {
-  echo 'Gebruik: verenigingsplatform-host-php <health|release-prepare|release-apply|control-plane|lifecycle|provision|monitoring-prepare|monitoring-apply|lifecycle-prepare|control-plane-prepare|control-plane-apply> [args...]' >&2
+  echo 'Gebruik: verenigingsplatform-host-php <health|release-prepare|release-apply|control-plane|lifecycle|provision|storage-migrate|monitoring-prepare|monitoring-apply|lifecycle-prepare|control-plane-prepare|control-plane-apply> [args...]' >&2
   exit 64
 }
 command="$1"
@@ -72,6 +72,7 @@ case "$command" in
   control-plane) script='bin/control-plane-integrity-wrapper.php' ;;
   lifecycle) script='bin/apply-vps-lifecycle.php' ;;
   provision) script='bin/provision-tenant.php' ;;
+  storage-migrate) script='bin/apply-private-store-migration.php' ;;
   monitoring-prepare) script='bin/prepare-vps-monitoring.php' ;;
   monitoring-apply) script='bin/apply-vps-monitoring.php' ;;
   lifecycle-prepare) script='bin/prepare-vps-lifecycle.php' ;;
