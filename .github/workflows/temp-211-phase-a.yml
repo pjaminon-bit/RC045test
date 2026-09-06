@@ -1,4 +1,4 @@
-name: Temporary #211 Phase A transform
+name: Temporary Phase 211 Phase A transform
 
 on:
   push:
@@ -10,7 +10,6 @@ permissions:
 
 jobs:
   transform-and-verify:
-    if: github.event.head_commit.message == 'Temp: run #211 Phase A transform'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout helper branch
