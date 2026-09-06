@@ -10,7 +10,13 @@ require_once __DIR__ . '/pdo-runtime.php';
 
 function privateStoreConfig(): array{static$config=null;if($config===null){$geladen=require dirname(__DIR__,2).'/site-config.php';$config=is_array($geladen)?$geladen:[];}return$config;}
 function privateStoreTenant(): string{$config=privateStoreConfig();return tenantRuntimeVeiligeSleutel((string)($config['vereniging']['sleutel']??'default'));}
-function privateStoreDriver(): string{$config=privateStoreConfig();$driver=strtolower(trim((string)($config['opslag']['private_driver']??'json')));return$driver==='pdo'?'pdo':'json';}
+function privateStoreDriver(): string
+{
+    $config=privateStoreConfig();
+    $driver=strtolower(trim((string)($config['opslag']['private_driver']??'')));
+    if($driver==='pdo'||$driver==='json')return$driver;
+    throw new RuntimeException('Private datastore-driver moet expliciet pdo of json zijn.');
+}
 function privateStoreJsonRoot(): ?string{return tenantRuntimePrivateRoot(privateStoreConfig());}
 function privateStoreBackupSleutel(string $collectie): string{return'private-'.tenantRuntimeCollectieSleutel($collectie);}
 

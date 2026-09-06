@@ -72,6 +72,12 @@ if ($overridePad !== null) {
     if (!is_array($lokaal)) {
         throw new RuntimeException('Verenigingsconfiguratie moet een array retourneren.');
     }
+    if ($externPad !== null) {
+        $externDriver = $lokaal['opslag']['private_driver'] ?? null;
+        if (!is_string($externDriver) || !in_array(strtolower(trim($externDriver)), ['pdo', 'json'], true)) {
+            throw new RuntimeException('Externe tenantconfig moet private_driver expliciet als pdo of json vastleggen.');
+        }
+    }
     $config = array_replace_recursive($config, $lokaal);
 }
 

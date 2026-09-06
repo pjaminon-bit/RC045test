@@ -23,7 +23,7 @@ function provisionHelp(): void
     echo "  3-63 tekens; alleen a-z, 0-9 en enkele koppeltekens; geen --; 'default' is gereserveerd.\n\n";
     echo "Opties:\n";
     echo "  --timezone=Europe/Amsterdam\n";
-    echo "  --driver=json|pdo\n";
+    echo "  --driver=pdo|json          standaard pdo; json alleen expliciete standalone/legacycompatibiliteit\n";
     echo "  --modules=website,ledenadministratie,...\n";
     echo "                           expliciete kommagescheiden modulekeuze; zonder optie zijn alle platformmodules actief\n";
     echo "  --force                 bestaande config gecontroleerd vervangen\n";
@@ -318,7 +318,7 @@ $naam = trim((string)$opt['name']);
 $url = rtrim(trim((string)$opt['url']), '/');
 $baseRoot = provisionNormalizeBase((string)$opt['root']);
 $timezone = trim((string)($opt['timezone'] ?? 'Europe/Amsterdam')) ?: 'Europe/Amsterdam';
-$driver = strtolower(trim((string)($opt['driver'] ?? 'json')));
+$driver = strtolower(trim((string)($opt['driver'] ?? 'pdo')));
 $modulesOptie = array_key_exists('modules', $opt) ? (string)$opt['modules'] : null;
 $modules = provisionModuleKeuze($modulesOptie);
 $force = isset($opt['force']);
@@ -328,7 +328,7 @@ if (!filter_var($url, FILTER_VALIDATE_URL) || !in_array((string)parse_url($url, 
     provisionStop('--url moet een geldige http(s)-URL zijn.');
 }
 if (!in_array($timezone, timezone_identifiers_list(), true)) provisionStop('Ongeldige timezone.');
-if (!in_array($driver, ['json', 'pdo'], true)) provisionStop('--driver moet json of pdo zijn.');
+if (!in_array($driver, ['pdo', 'json'], true)) provisionStop('--driver moet pdo of json zijn.');
 
 $tenantRoot = rtrim($baseRoot, '/\\') . DIRECTORY_SEPARATOR . $key;
 $tenantRoot = provisionCanoniekDoelpad($tenantRoot);
