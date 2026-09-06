@@ -14,6 +14,7 @@ if ($trackedRc === 0) {
 $styleBlocks = [];
 $styleAttributes = [];
 $dynamicStyleSinks = [];
+$relevantFiles = [];
 $gitChanged = [];
 exec('cd ' . escapeshellarg($root) . ' && git status --porcelain=v1 --untracked-files=all', $gitChanged);
 
@@ -28,8 +29,10 @@ foreach ($it as $info) {
     $raw = @file_get_contents($path);
     if (!is_string($raw)) continue;
     $origin = isset($tracked[$rel]) ? 'TRACKED' : 'GENERATED';
+    $relevant = false;
 
     if (preg_match_all('~<style\\b[^>]*>~i', $raw, $matches, PREG_OFFSET_CAPTURE)) {
+        $relevant = true;
         foreach ($matches[0] as $match) {
             $line = 1 + substr_count(substr($raw, 0, $match[1]), "\n");
             $styleBlocks[] = "{$origin} {$rel}:{$line}";
@@ -37,6 +40,7 @@ foreach ($it as $info) {
     }
 
     if (preg_match_all("~\\sstyle\\s*=\\s*([\"'])(.*?)\\1~is", $raw, $matches, PREG_SET_ORDER | PREG_OFFSET_CAPTURE)) {
+        $relevant = true;
         foreach ($matches as $match) {
             $line = 1 + substr_count(substr($raw, 0, $match[0][1]), "\n");
             $value = preg_replace('/\\s+/', ' ', trim((string)$match[2][0]));
@@ -58,18 +62,22 @@ foreach ($it as $info) {
     ];
     foreach ($sinkPatterns as $label => $pattern) {
         if (preg_match_all($pattern, $raw, $matches, PREG_OFFSET_CAPTURE)) {
+            if (in_array($label, ['cssText', 'setAttribute(style)', 'setAttributeNS(style)', 'createElement(style)'], true)) $relevant = true;
             foreach ($matches[0] as $match) {
                 $line = 1 + substr_count(substr($raw, 0, $match[1]), "\n");
                 $dynamicStyleSinks[] = "{$origin} {$rel}:{$line}: {$label}";
             }
         }
     }
+
+    if ($relevant) $relevantFiles[$rel] = $raw;
 }
 
 sort($styleBlocks);
 usort($styleAttributes, static fn(array $a, array $b): int => strcmp($a['location'], $b['location']));
 $dynamicStyleSinks = array_values(array_unique($dynamicStyleSinks));
 sort($dynamicStyleSinks);
+ksort($relevantFiles);
 
 $uniqueValues = [];
 foreach ($styleAttributes as $entry) {
@@ -90,5 +98,11 @@ foreach ($uniqueValues as $value => $locations) {
 echo "DYNAMIC_STYLE_SINKS\n";
 if ($dynamicStyleSinks === []) echo "  geen inline-style JavaScript-sinks gevonden\n";
 else foreach ($dynamicStyleSinks as $entry) echo "  {$entry}\n";
+
+echo "CSP192_SOURCE_DUMP_BEGIN\n";
+foreach ($relevantFiles as $rel => $raw) {
+    echo 'FILE ' . base64_encode($rel) . ' ' . base64_encode($raw) . "\n";
+}
+echo "CSP192_SOURCE_DUMP_END\n";
 
 exit(0);
