@@ -11,6 +11,15 @@ RewriteRule ^Over-ons/?$ /index.html#over-ons [R=301,L,NC,NE]
 RewriteRule ^Lidmaatschap/?$ /#lidmaatschap [R=301,L,NC,NE]
 RewriteRule ^ index.php [L,QSA]
 
+# Defense in depth voor standalone Apache: een later toegevoegd PHP-bestand
+# mag nooit door alleen zijn filesystemplaatsing uitvoerbaar of leesbaar worden.
+<FilesMatch "\.php$">
+  Require all denied
+</FilesMatch>
+<Files "index.php">
+  Require all granted
+</Files>
+
 <IfModule mod_headers.c>
   Header always set X-Content-Type-Options "nosniff"
   Header always set Referrer-Policy "strict-origin-when-cross-origin"
