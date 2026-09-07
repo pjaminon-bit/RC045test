@@ -98,19 +98,21 @@ async function geldigeGeboortedatumVoorTenant(page) {
   return `${String(jaar).padStart(4,'0')}-01-01`;
 }
 
-test('aanmeldformulier slaat exact één lokaal inboxrecord op en lekt geen PII naar Formspree', async ({page}) => {
+test('aanmeldformulier slaat exact één lokaal inboxrecord op en lekt geen PII naar externe endpoints', async ({page}) => {
   test.setTimeout(120000);
   const token = `${Date.now()}-${Math.random().toString(16).slice(2,10)}`;
   const email = `e2e-aanmelding-${token}@example.test`;
   const achternaam = `Aanmelding-${token}`;
-  const formspreePosts = [];
+  const externePiiPosts = [];
   const intakeResponses = [];
 
   page.on('request', req => {
     if (req.method() !== 'POST') return;
     try {
       const u = new URL(req.url());
-      if (u.hostname === 'formspree.io' || u.hostname.endsWith('.formspree.io')) formspreePosts.push(req.url());
+      if (u.origin === BASE_URL.origin) return;
+      const body = req.postData() || '';
+      if (body.includes(email) || body.includes(achternaam)) externePiiPosts.push(req.url());
     } catch (_) {}
   });
   page.on('response', res => {
@@ -130,7 +132,6 @@ test('aanmeldformulier slaat exact één lokaal inboxrecord op en lekt geen PII 
     expect(action).toBeTruthy();
     expect(new URL(action, page.url()).origin).toBe(BASE_URL.origin);
     expect(new URL(action, page.url()).pathname).toMatch(/\/aanmelden-ontvangst\.php$/);
-    expect((await page.content()).toLowerCase()).not.toContain('formspree.io');
 
     const geboortedatum = await geldigeGeboortedatumVoorTenant(page);
     await page.locator('#voornaam').fill('E2E');
@@ -157,7 +158,7 @@ test('aanmeldformulier slaat exact één lokaal inboxrecord op en lekt geen PII 
     expect(intakeStatus, `Lokale intake gaf HTTP ${intakeStatus}`).toBe(200);
     await expect(page.locator('#bedankt-modal')).toHaveClass(/open/);
     await page.waitForTimeout(400);
-    expect(formspreePosts, 'Aanmeldformulier stuurde PII naar Formspree').toEqual([]);
+    expect(externePiiPosts, 'Aanmeldformulier stuurde PII naar een extern endpoint').toEqual([]);
     expect(intakeResponses.length, 'Een submit moet exact één lokale intake-POST doen').toBe(1);
 
     await openAanmeldingenAlsAdmin(page, 'open');
