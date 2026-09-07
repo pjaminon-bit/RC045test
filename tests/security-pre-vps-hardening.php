@@ -105,9 +105,8 @@ spvCheck(
 );
 spvCheck(
     str_contains($siteConfig, '$formAction = "\'self\'"')
-    && str_contains($siteConfig, '$connectSrc')
-    && !str_contains($siteConfig, 'formspree.io'),
-    'CSP houdt publieke formulieren en contactdata uitsluitend same-origin'
+    && str_contains($siteConfig, '$connectSrc = "\'self\' https://api.open-meteo.com"'),
+    'CSP houdt publieke formulieren same-origin en beperkt cross-origin connecties tot Open-Meteo'
 );
 
 $contactEndpoint = spvBron($root . '/contact-ontvangst.php');
