@@ -2,9 +2,9 @@
 // ============================================================
 // Same-origin contactinbox runtime
 // ============================================================
-// De gedeelde template bevat historisch een externe Formspree-action. Deze
-// laatste gerichte outputguard vervangt uitsluitend het publieke contactform
-// door de eigen endpoint en maakt een eerder tenant-disabled formulier actief.
+// Het publieke contactformulier hoort rechtstreeks naar de lokale tenantinbox
+// te posten. Deze defense-in-depth guard forceert die same-origin bestemming
+// en maakt een eventueel tenant-disabled formulier actief.
 // ============================================================
 
 function contactInboxRuntimeTransform(string $html): string
@@ -30,8 +30,8 @@ function contactInboxRuntimeTransform(string $html): string
         1
     )??$html;
 
-    // Defense-in-depth: het contactformulier mag na transformatie nooit nog
-    // een externe Formspree-action of tenant-disabled vlag bevatten.
+    // Defense-in-depth: het contactformulier mag na transformatie nooit een
+    // externe action of tenant-disabled vlag bevatten.
     if(preg_match('~<form\b[^>]*\bid=["\']contact-form["\'][^>]*\baction=["\']https?://~i',$html)===1||preg_match('~<form\b[^>]*\bid=["\']contact-form["\'][^>]*data-tenant-disabled~i',$html)===1){
         throw new RuntimeException('Contactformulier kon niet veilig naar de tenantinbox worden gerouteerd.');
     }
