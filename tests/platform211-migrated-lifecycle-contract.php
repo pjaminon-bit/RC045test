@@ -2,9 +2,11 @@
 $root = dirname(__DIR__); $ok=0; $fout=0;
 function p211lcCheck(bool $c,string $l):void{global$ok,$fout;if($c){$ok++;echo"OK: {$l}\n";}else{$fout++;fwrite(STDERR,"FOUT: {$l}\n");}}
 function p211lcRm(string$p):void{if(is_link($p)||is_file($p)){@unlink($p);return;}if(!is_dir($p))return;foreach(scandir($p)?:[]as$n){if($n==='.'||$n==='..')continue;p211lcRm($p.'/'.$n);}@rmdir($p);}
-function p211lcRun(array$a,?string$in=null):array{$d=[0=>['pipe','r'],1=>['pipe','w'],2=>['pipe','w']];$p=proc_open($a,$d,$x,null,null,['bypass_shell'=>true]);if(!is_resource($p))return[255,''];if($in!==null)fwrite($x[0],$in);fclose($x[0]);$o=stream_get_contents($x[1]);fclose($x[1]);$e=stream_get_contents($x[2]);fclose($x[2]);return[proc_close($p),trim((string)$o."\n".(string)$e)];}
+function p211lcRun(array$a,?string$in=null):array{$d=[0=>['pipe','r'],1=>['pipe','w'],2=>['pipe','w']];$p=proc_open($a,$d,$x,null,null,['bypass_shell'=>true]);if(!is_resource($p))return[255,'','proc_open mislukt'];if($in!==null)fwrite($x[0],$in);fclose($x[0]);$o=stream_get_contents($x[1]);fclose($x[1]);$e=stream_get_contents($x[2]);fclose($x[2]);return[proc_close($p),trim((string)$o),trim((string)$e)];}
+function p211lcCliFailure(string$label,int$code,string$out,string$err):void{if($code===0)return;fwrite(STDERR,"CLI {$label}: exitcode={$code}\n");if($out!=='')fwrite(STDERR,"stdout:\n{$out}\n");if($err!=='')fwrite(STDERR,"stderr:\n{$err}\n");}
 
 require_once $root.'/app/deployment/lifecycle-contract.php';
+require_once $root.'/app/core/tenant-runtime.php';
 require_once $root.'/app/storage/private-store-runtime-state.php';
 
 function p211lcReady(string$dns,string$tenant,string$host,string$ip):string{
@@ -16,25 +18,28 @@ function p211lcReady(string$dns,string$tenant,string$host,string$ip):string{
 $tmp=sys_get_temp_dir().'/platform211-lifecycle-'.bin2hex(random_bytes(5));$base=$tmp.'/tenants';@mkdir($base,0750,true);
 $tenant='migrated-lifecycle';$t=$base.'/'.$tenant;
 try{
-    [$pc,$po]=p211lcRun([PHP_BINARY,$root.'/bin/provision-tenant.php','--key='.$tenant,'--name=Migrated Lifecycle','--url=https://'.$tenant.'.example','--root='.$base,'--driver=json','--modules=website,ledenadministratie']);
+    [$pc,$po,$pe]=p211lcRun([PHP_BINARY,$root.'/bin/provision-tenant.php','--key='.$tenant,'--name=Migrated Lifecycle','--url=https://'.$tenant.'.example','--root='.$base,'--driver=json','--modules=website,ledenadministratie']);
+    p211lcCliFailure('provision-tenant',$pc,$po,$pe);
     p211lcCheck($pc===0,'JSON-geprovisioneerde tenantfixture is aangemaakt');
-    [$bc]=p211lcRun([PHP_BINARY,$root.'/bin/bootstrap-tenant-admin.php','--config='.$t.'/config.php','--password-stdin'],'Lifecycle-Migrate-Admin-2026!'."\n");
+    [$bc,$bo,$be]=p211lcRun([PHP_BINARY,$root.'/bin/bootstrap-tenant-admin.php','--config='.$t.'/config.php','--password-stdin'],'Lifecycle-Migrate-Admin-2026!'."\n");
+    p211lcCliFailure('bootstrap-tenant-admin',$bc,$bo,$be);
     p211lcCheck($bc===0,'tenantfixture heeft geldige private/bootstrapcontext');
 
     $prep=[
-        [PHP_BINARY,$root.'/bin/prepare-vps-deployment.php','--config='.$t.'/config.php','--app-root='.$root],
-        [PHP_BINARY,$root.'/bin/prepare-vps-runtime.php','--deployment='.$t.'/deployment.json'],
-        [PHP_BINARY,$root.'/bin/prepare-vps-webserver.php','--runtime-plan='.$t.'/runtime/runtime-plan.json'],
-        [PHP_BINARY,$root.'/bin/prepare-vps-dns.php','--web-plan='.$t.'/webserver/web-plan.json','--strategy=direct','--ipv4=203.0.113.73'],
+        ['prepare-vps-deployment',[PHP_BINARY,$root.'/bin/prepare-vps-deployment.php','--config='.$t.'/config.php','--app-root='.$root]],
+        ['prepare-vps-runtime',[PHP_BINARY,$root.'/bin/prepare-vps-runtime.php','--deployment='.$t.'/deployment.json']],
+        ['prepare-vps-webserver',[PHP_BINARY,$root.'/bin/prepare-vps-webserver.php','--runtime-plan='.$t.'/runtime/runtime-plan.json']],
+        ['prepare-vps-dns',[PHP_BINARY,$root.'/bin/prepare-vps-dns.php','--web-plan='.$t.'/webserver/web-plan.json','--strategy=direct','--ipv4=203.0.113.73']],
     ];
-    $prepOk=true;foreach($prep as$c){[$code,$out]=p211lcRun($c);if($code!==0){$prepOk=false;fwrite(STDERR,$out."\n");break;}}
+    $prepOk=true;foreach($prep as[$label,$c]){[$code,$out,$err]=p211lcRun($c);if($code!==0){$prepOk=false;p211lcCliFailure($label,$code,$out,$err);break;}}
     p211lcCheck($prepOk,'JSON-tenant doorloopt deployment/runtime/web/DNS plangeneratie');
 
     $ready=p211lcReady($t.'/dns/dns-plan.json',$tenant,$tenant.'.example','203.0.113.73');
-    [$tc,$to]=p211lcRun([PHP_BINARY,$root.'/bin/prepare-vps-tls.php','--dns-readiness='.$ready]);
-    [$dc,$do]=p211lcRun([PHP_BINARY,$root.'/bin/prepare-vps-database.php','--runtime-plan='.$t.'/runtime/runtime-plan.json','--migration-target']);
-    [$mc,$mo]=p211lcRun([PHP_BINARY,$root.'/bin/prepare-vps-monitoring.php','--tls-plan='.$t.'/tls/tls-plan.json','--database-plan='.$t.'/database/database-plan.json','--alerts=off']);
-    [$lc,$lo]=p211lcRun([PHP_BINARY,$root.'/bin/prepare-vps-lifecycle.php','--monitoring-plan='.$t.'/monitoring/monitoring-plan.json']);
+    [$tc,$to,$te]=p211lcRun([PHP_BINARY,$root.'/bin/prepare-vps-tls.php','--dns-readiness='.$ready]);
+    [$dc,$do,$de]=p211lcRun([PHP_BINARY,$root.'/bin/prepare-vps-database.php','--runtime-plan='.$t.'/runtime/runtime-plan.json','--migration-target']);
+    [$mc,$mo,$me]=p211lcRun([PHP_BINARY,$root.'/bin/prepare-vps-monitoring.php','--tls-plan='.$t.'/tls/tls-plan.json','--database-plan='.$t.'/database/database-plan.json','--alerts=disabled']);
+    [$lc,$lo,$le]=p211lcRun([PHP_BINARY,$root.'/bin/prepare-vps-lifecycle.php','--monitoring-plan='.$t.'/monitoring/monitoring-plan.json']);
+    p211lcCliFailure('prepare-vps-tls',$tc,$to,$te);p211lcCliFailure('prepare-vps-database',$dc,$do,$de);p211lcCliFailure('prepare-vps-monitoring',$mc,$mo,$me);p211lcCliFailure('prepare-vps-lifecycle',$lc,$lo,$le);
     p211lcCheck($tc===0&&$dc===0&&$mc===0&&$lc===0,'migration-target database → monitoring → lifecycle bronketen wordt geldig opgebouwd');
 
     $db=json_decode((string)file_get_contents($t.'/database/database-plan.json'),true);
@@ -50,7 +55,8 @@ try{
     );
     p211lcCheck(($life['database']['database']??'')===($db['isolation']['database']??''),'lifecycle-export gebruikt exact de migration-target PostgreSQL-database');
 
-    [$cc,$co]=p211lcRun([PHP_BINARY,$root.'/bin/apply-vps-lifecycle.php','--plan='.$lifePad,'--check']);
+    [$cc,$co,$ce]=p211lcRun([PHP_BINARY,$root.'/bin/apply-vps-lifecycle.php','--plan='.$lifePad,'--check']);
+    p211lcCliFailure('apply-vps-lifecycle pre-cutover check',$cc,$co,$ce);
     p211lcCheck($cc===0&&str_contains($co,'CHECK OK'),'lifecyclecontract valideert vóór cutover');
 
     $private=$t.'/private';$proofDir=$private.'/migrations/private-json-to-pdo';$runtimeDir=$t.'/storage-runtime';@mkdir($proofDir,0750,true);@mkdir($runtimeDir,0750,true);
@@ -64,7 +70,8 @@ try{
     $cfg=require $t.'/config.php';
     p211lcCheck(privateStoreEffectiveDriver($cfg,'json')==='pdo','geldige cutover-state maakt dezelfde JSON-tenant effectief PDO');
 
-    [$ac,$ao]=p211lcRun([PHP_BINARY,$root.'/bin/apply-vps-lifecycle.php','--plan='.$lifePad,'--check']);
+    [$ac,$ao,$ae]=p211lcRun([PHP_BINARY,$root.'/bin/apply-vps-lifecycle.php','--plan='.$lifePad,'--check']);
+    p211lcCliFailure('apply-vps-lifecycle post-cutover check',$ac,$ao,$ae);
     p211lcCheck($ac===0&&str_contains($ao,'CHECK OK'),'lifecyclecontract blijft na effectieve PDO-cutover volledig geldig');
     p211lcCheck(hash('sha256',$lifeRaw)===hash_file('sha256',$lifePad),'cutover wijzigt lifecycleplan niet');
 
