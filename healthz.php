@@ -16,6 +16,7 @@ try {
     require_once __DIR__ . '/app/operational-log.php';
     require_once __DIR__ . '/app/storage/private-store.php';
     require_once __DIR__ . '/app/leden/import-preview-store.php';
+    require_once __DIR__ . '/app/core/privacy-retention-runtime.php';
     require_once __DIR__ . '/app/notifications/tenant-notifications.php';
 
     $private = trim((string)($config['opslag']['private_root'] ?? ''));
@@ -42,6 +43,23 @@ try {
     $probe = $pdo->query('SELECT 1');
     if ($probe === false || (int)$probe->fetchColumn() !== 1) {
         throw new RuntimeException('database-probe-mislukt');
+    }
+
+    // Contact- en aanmeldings-PII hebben configureerbare maximale
+    // bewaartermijnen. Een tenant-private lock + dagmarker zorgt dat deze
+    // cleanup onafhankelijk van beheerbezoek wordt afgedwongen, maar ondanks
+    // de minutentimer maximaal eenmaal per lokale kalenderdag draait.
+    $retentie = privacyRetentionMaintenanceRun($config);
+    if (($retentie['ran'] ?? false) === true) {
+        $contactVerwijderd = (int)($retentie['contact_removed'] ?? 0);
+        $aanmeldingenVerwijderd = (int)($retentie['membership_removed'] ?? 0);
+        if ($contactVerwijderd > 0 || $aanmeldingenVerwijderd > 0) {
+            vpOps46Log($config, 'formulier_pii_retention_cleanup', 'info', [
+                'component' => 'privacy-retention',
+                'contact_removed' => $contactVerwijderd,
+                'membership_removed' => $aanmeldingenVerwijderd,
+            ]);
+        }
     }
 
     // Notificatiedelivery gebruikt dezelfde niet-geprivilegieerde tenant-FPM
