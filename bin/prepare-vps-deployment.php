@@ -101,12 +101,16 @@ function deploy35AppRoot(string $pad): array
     if ($real === false || !is_dir($real)) deploy35Stop('--app-root bestaat niet of is geen map.');
     $real = rtrim($real, '/\\');
 
-    foreach (['site-config.php', 'auth.php', 'public-content.php', 'public-asset.php', 'bin/provision-tenant.php', 'bin/bootstrap-tenant-admin.php'] as $bestand) {
+    foreach (['site-config.php', 'auth.php', 'public-content.php', 'public-asset.php', 'public/index.php', 'public/.htaccess', 'bin/provision-tenant.php', 'bin/bootstrap-tenant-admin.php'] as $bestand) {
         if (!is_file($real . DIRECTORY_SEPARATOR . $bestand)) {
             deploy35Stop("--app-root lijkt geen volledige verenigingsplatformrelease te zijn; ontbreekt: {$bestand}");
         }
     }
-    return ['logical' => $logisch, 'real' => $real];
+    $publicReal = realpath($real . DIRECTORY_SEPARATOR . 'public');
+    if ($publicReal === false || !is_dir($publicReal) || is_link($real . DIRECTORY_SEPARATOR . 'public')) {
+        deploy35Stop('--app-root/public moet een fysieke, niet-gesymlinkte directory zijn.');
+    }
+    return ['logical' => $logisch, 'real' => $real, 'public_logical' => $logisch . '/public', 'public_real' => rtrim($publicReal, '/\\')];
 }
 
 function deploy35ValideTenantKey(string $key): bool
@@ -243,7 +247,8 @@ function deploy35Context(string $configInvoer, string $appRootInvoer): array
         'shared_code' => [
             'app_root' => $app['logical'],
             'app_root_real' => $app['real'],
-            'document_root' => $app['logical'],
+            'document_root' => $app['public_logical'],
+            'document_root_real' => $app['public_real'],
             'read_only_for_tenant_runtime' => true,
         ],
         'tenant' => [
@@ -267,7 +272,8 @@ function deploy35Context(string $configInvoer, string $appRootInvoer): array
             'redirect_must_not_use_request_host' => true,
             'reject_unknown_hosts' => true,
             'default_vhost_must_reject' => true,
-            'serve_only_shared_app_root' => true,
+            'serve_only_minimal_public_root' => true,
+            'application_code_outside_document_root' => true,
             'private_root_must_never_be_document_root' => true,
             'tenant_runtime_selected_by_php_pool' => true,
             'vcs_metadata_must_not_be_served' => true,
@@ -277,6 +283,7 @@ function deploy35Context(string $configInvoer, string $appRootInvoer): array
             'runtime_env_bound' => true,
             'admin_bootstrapped' => true,
             'tenant_storage_outside_app_root' => true,
+            'public_document_root_present' => true,
             'canonical_host_contract' => true,
         ],
     ];
