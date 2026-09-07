@@ -14,6 +14,25 @@ function tenantPublicRuntimeKleur(array $config, string $sleutel, string $fallba
     return preg_match('/^#[0-9A-F]{6}$/D', $waarde) === 1 ? $waarde : $fallback;
 }
 
+function tenantPublicRuntimeHtmlWaarde(string $waarde): string
+{
+    return htmlspecialchars($waarde, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+}
+
+function tenantPublicRuntimeHttpUrl(string $waarde, string $fallback = ''): string
+{
+    $waarde = trim($waarde);
+    if ($waarde === '') return $fallback;
+    if (preg_match('/[\x00-\x1F\x7F]/', $waarde) === 1) return $fallback;
+    if (filter_var($waarde, FILTER_VALIDATE_URL) === false) return $fallback;
+
+    $schema = strtolower((string) parse_url($waarde, PHP_URL_SCHEME));
+    if (!in_array($schema, ['http', 'https'], true)) return $fallback;
+    if (parse_url($waarde, PHP_URL_HOST) === null) return $fallback;
+    if (parse_url($waarde, PHP_URL_USER) !== null || parse_url($waarde, PHP_URL_PASS) !== null) return $fallback;
+    return $waarde;
+}
+
 function tenantPublicRuntimeAssetUrl(array $config, string $sleutel, string $fallback = ''): string
 {
     $asset = trim((string)($config['branding'][$sleutel] ?? ''));
@@ -126,7 +145,7 @@ function tenantPublicRuntimeTransform(string $html, array $config): string
     $naam = trim((string)($config['vereniging']['naam'] ?? 'Vereniging')) ?: 'Vereniging';
     $volledig = trim((string)($config['vereniging']['volledige_naam'] ?? $naam)) ?: $naam;
     $slogan = trim((string)($config['vereniging']['slogan'] ?? ''));
-    $siteUrl = rtrim((string)($config['vereniging']['site_url'] ?? ''), '/');
+    $siteUrl = tenantPublicRuntimeHttpUrl((string)($config['vereniging']['site_url'] ?? ''), '/');
     $betaling = is_array($config['betaling'] ?? null) ? $config['betaling'] : [];
     $iban = trim((string)($betaling['iban'] ?? '')) ?: 'Nog niet ingesteld';
     $tenaamstelling = trim((string)($betaling['tenaamstelling'] ?? '')) ?: $volledig;
@@ -134,7 +153,7 @@ function tenantPublicRuntimeTransform(string $html, array $config): string
     $omschrijving = str_replace('{naam}', $naam, $omschrijving);
     $contact = tenantPublicRuntimeContact($config);
     $email = filter_var((string)($contact['email'] ?? ''), FILTER_VALIDATE_EMAIL) ? (string)$contact['email'] : '';
-    $facebook = trim((string)($contact['facebook'] ?? ''));
+    $facebook = tenantPublicRuntimeHttpUrl((string)($contact['facebook'] ?? ''), '');
     $straat = trim((string)($contact['adres_straat'] ?? ''));
     $plaats = trim((string)($contact['adres_postcode_plaats'] ?? ''));
     $logo = tenantPublicRuntimeAssetUrl($config, 'logo', 'images/template-placeholder.svg');
@@ -165,28 +184,34 @@ function tenantPublicRuntimeTransform(string $html, array $config): string
     // eigen logo gebruiken we bewust de lokale dummy-placeholder.
     $html = tenantPublicRuntimePlaceholderLokaleMedia($html, $logo);
 
+    // De bronstrings komen voor in gewone tekst, attributen en legacy inline
+    // script/JSON. Daarom mag geen tenantwaarde hier ooit rauwe HTML-markup
+    // toevoegen. HTML-escaping neutraliseert <, >, &, enkele en dubbele quotes
+    // voordat de globale compatibiliteitsvervanging plaatsvindt. In raw-text
+    // scriptblokken blijven entities letterlijke, onschadelijke tekst; in normale
+    // HTML decodeert de browser ze terug naar de bedoelde zichtbare waarde.
     $vervangingen = [
-        'RC045 – Bashers of the South' => $volledig,
-        'RC045 · Bashers of the South' => $volledig,
-        'Bashers of the South' => $slogan !== '' ? $slogan : $naam,
-        'NL51 RABO 0367 6153 63' => $iban,
-        'T.n.v. RC045' => 'T.n.v. ' . $tenaamstelling,
-        'In the name of RC045' => 'In the name of ' . $tenaamstelling,
-        'Auf den Namen RC045' => 'Auf den Namen ' . $tenaamstelling,
-        'contributie RC045 {jaar}' => $omschrijving,
-        'RC045 {jaar}' => $naam . ' {jaar}',
-        'bestuur@rc045.nl' => $email !== '' ? $email : 'contactgegevens volgen',
-        'https://www.facebook.com/rc045/' => $facebook !== '' ? $facebook : '#contact',
-        'facebook.com/rc045' => $facebook !== '' ? preg_replace('~^https?://~i', '', $facebook) : 'sociale media volgen',
-        'Wijngaardsberg 26' => $straat !== '' ? $straat : 'Adres nog niet ingesteld',
-        '6464 EZ Eygelshoven' => $plaats !== '' ? $plaats : 'Plaats nog niet ingesteld',
-        'Kerkrade (Eygelshoven)' => $plaats !== '' ? $plaats : 'Plaats nog niet ingesteld',
-        'Eygelshoven' => $plaats !== '' ? $plaats : 'de verenigingslocatie',
+        'RC045 – Bashers of the South' => tenantPublicRuntimeHtmlWaarde($volledig),
+        'RC045 · Bashers of the South' => tenantPublicRuntimeHtmlWaarde($volledig),
+        'Bashers of the South' => tenantPublicRuntimeHtmlWaarde($slogan !== '' ? $slogan : $naam),
+        'NL51 RABO 0367 6153 63' => tenantPublicRuntimeHtmlWaarde($iban),
+        'T.n.v. RC045' => tenantPublicRuntimeHtmlWaarde('T.n.v. ' . $tenaamstelling),
+        'In the name of RC045' => tenantPublicRuntimeHtmlWaarde('In the name of ' . $tenaamstelling),
+        'Auf den Namen RC045' => tenantPublicRuntimeHtmlWaarde('Auf den Namen ' . $tenaamstelling),
+        'contributie RC045 {jaar}' => tenantPublicRuntimeHtmlWaarde($omschrijving),
+        'RC045 {jaar}' => tenantPublicRuntimeHtmlWaarde($naam . ' {jaar}'),
+        'bestuur@rc045.nl' => tenantPublicRuntimeHtmlWaarde($email !== '' ? $email : 'contactgegevens volgen'),
+        'https://www.facebook.com/rc045/' => tenantPublicRuntimeHtmlWaarde($facebook !== '' ? $facebook : '#contact'),
+        'facebook.com/rc045' => tenantPublicRuntimeHtmlWaarde($facebook !== '' ? (string) preg_replace('~^https?://~i', '', $facebook) : 'sociale media volgen'),
+        'Wijngaardsberg 26' => tenantPublicRuntimeHtmlWaarde($straat !== '' ? $straat : 'Adres nog niet ingesteld'),
+        '6464 EZ Eygelshoven' => tenantPublicRuntimeHtmlWaarde($plaats !== '' ? $plaats : 'Plaats nog niet ingesteld'),
+        'Kerkrade (Eygelshoven)' => tenantPublicRuntimeHtmlWaarde($plaats !== '' ? $plaats : 'Plaats nog niet ingesteld'),
+        'Eygelshoven' => tenantPublicRuntimeHtmlWaarde($plaats !== '' ? $plaats : 'de verenigingslocatie'),
         'Kok Lexmond' => 'de locatiebeheerder',
-        'https://rc045.nl' => $siteUrl !== '' ? $siteUrl : '/',
+        'https://rc045.nl' => tenantPublicRuntimeHtmlWaarde($siteUrl),
         'pjaminon@me.com' => '',
         'Pascal Jaminon' => 'Websitebeheer',
-        'RC045' => $naam,
+        'RC045' => tenantPublicRuntimeHtmlWaarde($naam),
     ];
     $html = str_ireplace(array_keys($vervangingen), array_values($vervangingen), $html);
 
