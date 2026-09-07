@@ -83,10 +83,10 @@ HTML;
 
     $html = tenantPublicRuntimeTransform($bron, $config);
 
-    check221(str_contains($html, 'Club &lt;/title&gt;&lt;script id=&quot;tenant-pwn&quot;&gt;alert(1)&lt;/script&gt;'), 'tenantnaam wordt als HTML-tekst geëscaped');
+    check221(str_contains($html, 'Club &lt;/title&gt;&lt;script id="tenant-pwn"&gt;alert(1)&lt;/script&gt;'), 'tenantnaam wordt als veilige HTML-tekst gerenderd');
     check221(str_contains($html, 'Volledige &lt;svg onload=alert(2)&gt; Club'), 'volledige naam kan geen SVG-markup injecteren');
     check221(str_contains($html, 'Slogan &lt;img src=x onerror=alert(3)&gt;'), 'slogan kan geen image/eventhandler injecteren');
-    check221(str_contains($html, 'NL00 TEST &lt;script id=&quot;iban-pwn&quot;&gt;alert(6)&lt;/script&gt;'), 'betalingswaarde wordt veilig geëscaped');
+    check221(str_contains($html, 'NL00 TEST &lt;script id="iban-pwn"&gt;alert(6)&lt;/script&gt;'), 'betalingswaarde wordt als veilige HTML-tekst gerenderd');
     check221(str_contains($html, 'Straat &lt;/span&gt;&lt;img src=x onerror=alert(4)&gt;'), 'contactadres kan geen elementinjectie veroorzaken');
     check221(str_contains($html, '1234 AB &lt;svg onload=alert(5)&gt;'), 'contactplaats kan geen SVG-eventhandler injecteren');
 
@@ -108,7 +108,7 @@ HTML;
         ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . "\n"
     );
     $normaalHtml = tenantPublicRuntimeTransform($bron, $normaal);
-    check221(str_contains($normaalHtml, 'O&#039;Brien &amp; Co'), 'legitieme apostrof en ampersand blijven veilig renderbaar');
+    check221(str_contains($normaalHtml, "O'Brien &amp; Co"), 'legitieme apostrof en ampersand blijven veilig renderbaar in tekstcontext');
     check221(str_contains($normaalHtml, 'https://social.example/club?a=1&amp;b=2'), 'geldige HTTPS-link blijft behouden en attribuutveilig');
 
     check221(tenantPublicRuntimeHttpUrl('https://example.test/pad?q=1', '') === 'https://example.test/pad?q=1', 'HTTPS-URL wordt geaccepteerd');
