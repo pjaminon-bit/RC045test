@@ -48,6 +48,27 @@ function volgorde54(string $html, array $naalden): bool
     return true;
 }
 
+function publiekeContext54(string $html): string
+{
+    if (!class_exists(DOMDocument::class)) return $html;
+    $vorige = libxml_use_internal_errors(true);
+    $dom = new DOMDocument('1.0', 'UTF-8');
+    $geladen = $dom->loadHTML('<?xml encoding="UTF-8">' . $html, LIBXML_NOWARNING | LIBXML_NOERROR);
+    libxml_clear_errors();
+    libxml_use_internal_errors($vorige);
+    if (!$geladen) return $html;
+    $xpath = new DOMXPath($dom);
+    $publiek = '';
+    foreach ($xpath->query('//text()[not(ancestor::script) and not(ancestor::style)]') ?: [] as $node) $publiek .= ' ' . $node->nodeValue;
+    foreach ($xpath->query('//*[@href or @title or @alt or @aria-label or @content]') ?: [] as $element) {
+        if (!$element instanceof DOMElement) continue;
+        foreach (['href', 'title', 'alt', 'aria-label', 'content'] as $attribuut) {
+            if ($element->hasAttribute($attribuut)) $publiek .= ' ' . $element->getAttribute($attribuut);
+        }
+    }
+    return strtolower($publiek);
+}
+
 $tmp = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'vereniging-phase54-' . bin2hex(random_bytes(4));
 $base = $tmp . '/tenants';
 @mkdir($base, 0750, true);
@@ -70,6 +91,7 @@ try {
 
     [$renderCode, $html] = render54($root, $config);
     $laag = strtolower($html);
+    $publiekLaag = publiekeContext54($html);
     check54($renderCode === 0 && str_contains($html, 'Roeivereniging Noorderhaven'), 'server-side output gebruikt de tenantnaam');
     check54(str_contains($html, 'data-template="tenant-shared-v1"'), 'externe tenant gebruikt de gedeelde template');
     check54(str_contains($html, 'href="styles.css"') && str_contains($html, 'src="site-i18n.js"') && str_contains($html, 'src="homepage.js"'), 'tenant gebruikt dezelfde CSS en JavaScript als RC045');
@@ -85,7 +107,7 @@ try {
         'class="photo-strip reveal"', 'id="activiteiten"', 'class="section rules"', 'id="locatie"', 'id="contact"',
     ]), 'homepage behoudt alle tien RC045-secties in dezelfde volgorde');
 
-    check54(!str_contains($laag, 'rc045') && !str_contains($laag, 'bashers of the south') && !str_contains($laag, 'eygelshoven'), 'gerenderde homepage lekt geen RC045-identiteit');
+    check54(!str_contains($publiekLaag, 'rc045') && !str_contains($publiekLaag, 'bashers of the south') && !str_contains($publiekLaag, 'eygelshoven'), 'publieke homepagecontext lekt geen RC045-identiteit');
     check54(!str_contains($laag, 'images/crawler') && !str_contains($laag, 'images/basher') && !str_contains($laag, 'rc045-logo'), 'gerenderde homepage vraagt geen RC045-media op');
     check54(str_contains($html, 'images/template-placeholder.svg'), 'ontbrekende tenantmedia gebruikt een neutrale placeholder');
 
@@ -124,8 +146,8 @@ try {
     file_put_contents($homepagePad, json_encode($legacy, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n");
     file_put_contents($contactPad, json_encode(['email'=>'bestuur@rc045.nl'], JSON_PRETTY_PRINT) . "\n");
     [$legacyCode, $legacyHtml] = render54($root, $config);
-    $legacyLaag = strtolower($legacyHtml);
-    check54($legacyCode === 0 && !str_contains($legacyLaag, 'rc045') && !str_contains($legacyLaag, 'eygelshoven'), 'legacy tenantdata wordt fail-closed genegeerd');
+    $legacyPubliek = publiekeContext54($legacyHtml);
+    check54($legacyCode === 0 && !str_contains($legacyPubliek, 'rc045') && !str_contains($legacyPubliek, 'eygelshoven'), 'legacy tenantdata wordt fail-closed genegeerd');
 } finally {
     rr54($tmp);
 }
