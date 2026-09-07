@@ -61,6 +61,63 @@ function tenantHomepageVeiligeUrl($waarde): string
     return in_array(strtolower((string) parse_url($url, PHP_URL_SCHEME)), ['http', 'https'], true) ? $url : '';
 }
 
+function tenantHomepagePasLegacyTekstContextToe(DOMDocument $dom, array $vervangingen): void
+{
+    $xpath = new DOMXPath($dom);
+    foreach ($xpath->query('//text()[not(ancestor::script) and not(ancestor::style)]') ?: [] as $node) {
+        $node->nodeValue = str_replace(array_keys($vervangingen), array_values($vervangingen), (string)$node->nodeValue);
+    }
+    foreach ($xpath->query('//*') ?: [] as $element) {
+        if (!$element instanceof DOMElement) continue;
+        foreach (['title', 'alt', 'aria-label', 'placeholder', 'content'] as $attribuut) {
+            if (!$element->hasAttribute($attribuut)) continue;
+            $element->setAttribute($attribuut, str_replace(array_keys($vervangingen), array_values($vervangingen), $element->getAttribute($attribuut)));
+        }
+    }
+}
+
+function tenantHomepagePasLegacyHrefContextToe(DOMDocument $dom, string $siteUrl, string $email, string $facebook): void
+{
+    $xpath = new DOMXPath($dom);
+    foreach ($xpath->query('//*[@href]') ?: [] as $element) {
+        if (!$element instanceof DOMElement) continue;
+        $href = $element->getAttribute('href');
+        if ($href === 'https://www.facebook.com/rc045/' || $href === 'https://www.facebook.com/rc045') {
+            $element->setAttribute('href', $facebook !== '' ? $facebook : '#contact');
+            continue;
+        }
+        if (str_starts_with(strtolower($href), 'mailto:bestuur@rc045.nl')) {
+            $element->setAttribute('href', $email !== '' ? 'mailto:' . $email : '#contact');
+            continue;
+        }
+        if (stripos($href, 'pjaminon') !== false && str_starts_with(strtolower($href), 'mailto:')) {
+            $element->setAttribute('href', '#');
+            continue;
+        }
+        if (str_starts_with($href, 'https://rc045.nl')) {
+            $suffix = substr($href, strlen('https://rc045.nl'));
+            $element->setAttribute('href', rtrim($siteUrl, '/') . '/' . ltrim($suffix, '/'));
+        }
+    }
+}
+
+function tenantHomepageBevatLegacyPubliekeContext(DOMDocument $dom): bool
+{
+    $xpath = new DOMXPath($dom);
+    $publiek = '';
+    foreach ($xpath->query('//text()[not(ancestor::script) and not(ancestor::style)]') ?: [] as $node) $publiek .= ' ' . $node->nodeValue;
+    foreach ($xpath->query('//*[@href or @title or @alt or @aria-label or @content]') ?: [] as $element) {
+        if (!$element instanceof DOMElement) continue;
+        foreach (['href', 'title', 'alt', 'aria-label', 'content'] as $attribuut) {
+            if ($element->hasAttribute($attribuut)) $publiek .= ' ' . $element->getAttribute($attribuut);
+        }
+    }
+    foreach (['rc045','bashers of the south','eygelshoven','wijngaardsberg','bestuur@rc045.nl','facebook.com/rc045','kok lexmond'] as $verboden) {
+        if (stripos($publiek, $verboden) !== false) return true;
+    }
+    return false;
+}
+
 function tenantHomepagePasTemplateToe(string $html): string
 {
     if (!tenantHomepageActief() || trim($html) === '') return $html;
@@ -217,6 +274,10 @@ function tenantHomepagePasTemplateToe(string $html): string
     $head = $dom->getElementsByTagName('head')->item(0);
     if ($head instanceof DOMElement) $head->appendChild($contextScript);
 
+    // Alleen publieke tekst- en tekstattribuutcontexten krijgen een legacy-
+    // fallback. Script/style-inhoud en technische attributen blijven onaangeroerd.
+    // Daarmee kan een displaynaam geen storage key, selector of programmatische
+    // identifier meer muteren.
     $vervangingen = [
         'RC045 – Bashers of the South'=>$naam . ($slogan !== '' ? ' – ' . $slogan : ''),
         'RC045 · Bashers of the South'=>$naam . ($slogan !== '' ? ' · ' . $slogan : ''),
@@ -230,12 +291,12 @@ function tenantHomepagePasTemplateToe(string $html): string
         'Eygelshoven'=>$plaatsTekst,
         'Kok Lexmond'=>'de locatiebeheerder',
     ];
-    $uit = $dom->saveHTML() ?: '';
-    $uit = str_ireplace(array_keys($vervangingen), array_values($vervangingen), $uit);
-    if (tenantContentBevatLegacy($uit)) {
-        throw new RuntimeException('Legacy-identiteit bleef achter in tenanthomepage-output.');
+    tenantHomepagePasLegacyTekstContextToe($dom, $vervangingen);
+    tenantHomepagePasLegacyHrefContextToe($dom, $siteUrl, $email, $facebook);
+    if (tenantHomepageBevatLegacyPubliekeContext($dom)) {
+        throw new RuntimeException('Legacy-identiteit bleef achter in publieke tenanthomepagecontext.');
     }
-    return $uit;
+    return $dom->saveHTML() ?: '';
 }
 
 function tenantHomepageStartOutputFilter(): void
