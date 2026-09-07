@@ -10,6 +10,7 @@ if (PHP_SAPI !== 'cli') { http_response_code(403); exit('Alleen via CLI beschikb
 require_once dirname(__DIR__) . '/app/deployment/runtime-contract.php';
 require_once dirname(__DIR__) . '/app/deployment/process-runner.php';
 require_once dirname(__DIR__) . '/app/core/tenant-runtime.php';
+require_once dirname(__DIR__) . '/app/storage/private-store-migration-operational-guard.php';
 
 function cut211Stop(string $melding, int $code = 1): never
 {
@@ -227,13 +228,14 @@ try {
         throw new RuntimeException('Tenantmanifest is niet consistent JSON-geprovisioneerd.');
     }
     cut211VeiligBestand($tenantRoot . '/database/database-runtime.json', 'PDO migration-target runtime');
+    $operationalPlans = privateMigrationOperationalPlansValidate($tenantRoot, $tenant);
     if (!posix_getpwnam($osUser) || !posix_getgrnam($osUser)) throw new RuntimeException('Tenant-runtimeuser/group bestaat niet.');
     $paths = cut211RuntimeDir($tenantRoot, $osUser);
 
     if ($mode === 'check') {
         $inventory = cut211Worker($osUser, $configPad, $privateRoot, ['--mode=inventory']);
         $state = file_exists($paths['state']) ? cut211StateLees($paths, $tenant, $osUser) : null;
-        echo json_encode(['tenant_key'=>$tenant,'configured_driver'=>'json','effective_driver'=>$state ? 'pdo':'json','inventory'=>$inventory], JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR) . "\n";
+        echo json_encode(['tenant_key'=>$tenant,'configured_driver'=>'json','effective_driver'=>$state ? 'pdo':'json','operational_plans'=>$operationalPlans,'inventory'=>$inventory], JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR) . "\n";
         exit(0);
     }
 
