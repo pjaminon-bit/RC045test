@@ -144,7 +144,7 @@ De CMS-laag is gemigreerd; publieke formulierlogica is bewust niet herschreven. 
 - wijziging terugzetten;
 - formulier-validatie en contributieberekening regressietesten.
 
-Een echte testaanmelding is alleen nodig wanneer Formspree-mail én automatische ledenopslag bewust meegetest moeten worden.
+Een echte testaanmelding is alleen nodig wanneer de destijds gebruikte externe formulierprovider én automatische ledenopslag bewust meegetest moeten worden.
 
 ## Nog legacy in `beheer/index.php`
 
