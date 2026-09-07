@@ -196,7 +196,7 @@
     activeBtn.classList.add('active');
     activeBtn.setAttribute('aria-pressed', 'true');
     document.documentElement.lang = lang;
-    localStorage.setItem('rc045_lang', lang);
+    setStoredLanguage(lang);
     updateInternalLinks(lang);
     renderBedanktGegevens();
   }
