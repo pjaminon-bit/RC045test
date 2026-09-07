@@ -1,0 +1,122 @@
+name: Temporary #211 acceptance proof retention
+
+on:
+  push:
+    branches:
+      - agent/211-vps-migration-acceptance
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: ${{ github.actor != 'github-actions[bot]' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout acceptance branch
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: agent/211-vps-migration-acceptance
+
+      - name: Retain final migration proof with evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          runner = Path('bin/accept-phase211-json-pdo.php')
+          src = runner.read_text()
+
+          anchor = """function a211TreeDelete(string $root): void
+          {"""
+          insert = """function a211RetainProof(string $source, string $target, string $expectedSha): void
+          {
+              if (!preg_match('/^[0-9a-f]{64}$/D', $expectedSha) || is_link($source) || !is_file($source)) {
+                  throw new RuntimeException('Finale migratieproof kan niet veilig worden bewaard.');
+              }
+              $sourceSha = @hash_file('sha256', $source);
+              if (!is_string($sourceSha) || !hash_equals($expectedSha, $sourceSha)) throw new RuntimeException('Finale migratieproof wijkt vóór retentie af.');
+              if (is_link($target) || file_exists($target)) throw new RuntimeException('Retained proof-doel bestaat al of is onveilig.');
+              $raw = @file_get_contents($source);
+              if (!is_string($raw)) throw new RuntimeException('Finale migratieproof kon niet worden gelezen voor retentie.');
+              $tmp = dirname($target) . '/.' . basename($target) . '.tmp.' . bin2hex(random_bytes(6));
+              if (@file_put_contents($tmp, $raw, LOCK_EX) === false || !@chown($tmp, 0) || !@chgrp($tmp, 0) || !@chmod($tmp, 0600)) {
+                  @unlink($tmp); throw new RuntimeException('Retained proof kon niet root-only worden voorbereid.');
+              }
+              if (!@rename($tmp, $target)) { @unlink($tmp); throw new RuntimeException('Retained proof kon niet atomisch worden geplaatst.'); }
+              a211Meta($target, 0600, false);
+              $targetSha = @hash_file('sha256', $target);
+              if (!is_string($targetSha) || !hash_equals($expectedSha, $targetSha)) throw new RuntimeException('Retained proof wijkt na schrijven af.');
+          }
+
+          function a211TreeDelete(string $root): void
+          {"""
+          if anchor not in src:
+              raise SystemExit('runner insertion anchor missing')
+          src = src.replace(anchor, insert, 1)
+
+          old = """    $proofPath = (string)($finalApply['proof_path'] ?? '');
+              $proofSha = (string)($finalApply['proof_sha256'] ?? '');
+              if ($proofPath === '' || !is_file($proofPath) || is_link($proofPath) || !preg_match('/^[0-9a-f]{64}$/D', $proofSha)
+                  || !hash_equals($proofSha, (string)hash_file('sha256', $proofPath))) throw new RuntimeException('Finale cutoverproof ontbreekt of hash wijkt af.');
+              $evidence['final_cutover'] = $finalApply + ['read_only_application_probe'=>'ok'];"""
+          new = """    $proofPath = (string)($finalApply['proof_path'] ?? '');
+              $proofSha = (string)($finalApply['proof_sha256'] ?? '');
+              if ($proofPath === '' || !is_file($proofPath) || is_link($proofPath) || !preg_match('/^[0-9a-f]{64}$/D', $proofSha)
+                  || !hash_equals($proofSha, (string)hash_file('sha256', $proofPath))) throw new RuntimeException('Finale cutoverproof ontbreekt of hash wijkt af.');
+              $retainedProof = A211_EVIDENCE_BASE . '/acceptance-' . $runId . '-migration-proof.json';
+              a211RetainProof($proofPath, $retainedProof, $proofSha);
+              $evidence['final_cutover'] = $finalApply + ['read_only_application_probe'=>'ok','retained_proof_path'=>$retainedProof];"""
+          if old not in src:
+              raise SystemExit('runner proof anchor missing')
+          src = src.replace(old, new, 1)
+
+          old_out = """    'target_aggregate_sha256'=>$evidence['final_cutover']['target_aggregate_sha256'] ?? null,
+              'evidence_path'=>$evidencePad,"""
+          new_out = """    'target_aggregate_sha256'=>$evidence['final_cutover']['target_aggregate_sha256'] ?? null,
+              'retained_proof_path'=>$evidence['final_cutover']['retained_proof_path'] ?? null,
+              'evidence_path'=>$evidencePad,"""
+          if old_out not in src:
+              raise SystemExit('runner output anchor missing')
+          src = src.replace(old_out, new_out, 1)
+          runner.write_text(src)
+
+          test = Path('tests/platform211-vps-migration-acceptance.php')
+          t = test.read_text()
+          anchor_t = """c211v(str_contains($src, 'proof_sha256') && str_contains($src, 'target_aggregate_sha256'), 'finale cryptografische migratiebewijzen worden gerapporteerd');
+          """
+          replacement_t = anchor_t + "c211v(str_contains($src, 'a211RetainProof') && str_contains($src, 'retained_proof_path'), 'finale proof wordt vóór fixturecleanup root-only retained');\n"
+          if anchor_t not in t:
+              raise SystemExit('test anchor missing')
+          test.write_text(t.replace(anchor_t, replacement_t, 1))
+
+          doc = Path('docs/PRIVATE-STORE-MIGRATIE-ACCEPTATIE.md')
+          d = doc.read_text()
+          d = d.replace(
+              '- bewaart een root-only evidencebestand onder `/var/lib/verenigingsplatform/phase211-acceptance/`;',
+              '- bewaart een root-only evidencebestand én een byte-identieke root-only kopie van het finale migratieproof onder `/var/lib/verenigingsplatform/phase211-acceptance/`;',
+              1,
+          )
+          d = d.replace(
+              '- `evidence_path`;\n- `cleanup=ok`.',
+              '- `evidence_path`;\n- `retained_proof_path`;\n- `cleanup=ok`.',
+              1,
+          )
+          doc.write_text(d)
+          PY
+          php -l bin/accept-phase211-json-pdo.php
+          php tests/platform211-vps-migration-acceptance.php
+          git diff --check
+
+      - name: Remove temporary workflow and commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/temp-211-acceptance-proof.yml
+          git add bin/accept-phase211-json-pdo.php tests/platform211-vps-migration-acceptance.php docs/PRIVATE-STORE-MIGRATIE-ACCEPTATIE.md .github/workflows/temp-211-acceptance-proof.yml
+          git diff --cached --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Test #211: retain VPS migration acceptance proof'
+          git push origin HEAD:agent/211-vps-migration-acceptance
