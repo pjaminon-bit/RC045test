@@ -41,18 +41,27 @@ function web42RuntimeContext(string $runtimePlanPad): array
         || ($web['redirect_must_not_use_request_host'] ?? false) !== true
         || ($web['reject_unknown_hosts'] ?? false) !== true
         || ($web['default_vhost_must_reject'] ?? false) !== true
-        || ($web['serve_only_shared_app_root'] ?? false) !== true
+        || ($web['serve_only_minimal_public_root'] ?? false) !== true
+        || ($web['application_code_outside_document_root'] ?? false) !== true
         || ($web['private_root_must_never_be_document_root'] ?? false) !== true
         || ($web['tenant_runtime_selected_by_php_pool'] ?? false) !== true
         || ($web['vcs_metadata_must_not_be_served'] ?? false) !== true) {
-        throw new RuntimeException('deployment.json voldoet niet aan het aangescherpte webservercontract.');
+        throw new RuntimeException('deployment.json voldoet niet aan het minimale public-root webservercontract.');
     }
 
+    $appRoot = (string)$deployment['app_root'];
+    $appRootReal = (string)$deployment['app_root_real'];
     $documentRoot = (string)($raw['shared_code']['document_root'] ?? '');
-    if (!hash_equals((string)$deployment['app_root'], $documentRoot)
-        || !hash_equals((string)$runtime['filesystem']['shared_code']['path'], $documentRoot)
-        || !hash_equals((string)$runtime['filesystem']['shared_code']['real_path'], (string)$deployment['app_root_real'])) {
-        throw new RuntimeException('DocumentRoot, runtimeplan en gedeelde release zijn niet exact aan elkaar gebonden.');
+    $documentRootReal = (string)($raw['shared_code']['document_root_real'] ?? '');
+    $expectedDocumentRoot = rtrim($appRoot, '/') . '/public';
+    $expectedDocumentRootReal = rtrim($appRootReal, '/') . '/public';
+    if (!hash_equals($expectedDocumentRoot, $documentRoot)
+        || !hash_equals($expectedDocumentRootReal, $documentRootReal)
+        || !is_dir($documentRootReal)
+        || is_link($documentRootReal)
+        || !hash_equals((string)$runtime['filesystem']['shared_code']['path'], $appRoot)
+        || !hash_equals((string)$runtime['filesystem']['shared_code']['real_path'], $appRootReal)) {
+        throw new RuntimeException('DocumentRoot is niet exact de fysieke public/ subdirectory van de gedeelde immutable release.');
     }
 
     $pool = (string)($runtime['php_fpm']['pool'] ?? '');
@@ -78,8 +87,10 @@ function web42RuntimeContext(string $runtimePlanPad): array
         'tenant_root' => (string)$runtime['filesystem']['tenant_root']['path'],
         'private_root' => (string)$runtime['filesystem']['private_root']['path'],
         'host' => $host,
+        'app_root' => $appRoot,
+        'app_root_real' => $appRootReal,
         'document_root' => $documentRoot,
-        'document_root_real' => (string)$deployment['app_root_real'],
+        'document_root_real' => $documentRootReal,
         'pool' => $pool,
         'socket' => $socket,
     ];
@@ -123,8 +134,10 @@ function web42Plan(array $context, string $outputDir): array
             'deployment_sha256' => $context['deployment']['sha256'],
         ],
         'shared_code' => [
+            'app_root' => $context['app_root'],
+            'app_root_real' => $context['app_root_real'],
             'document_root' => $context['document_root'],
-            'real_path' => $context['document_root_real'],
+            'document_root_real' => $context['document_root_real'],
         ],
         'php_fpm' => [
             'pool' => $pool,
@@ -166,11 +179,14 @@ function web42Plan(array $context, string $outputDir): array
             'default_http_vhost_must_be_first' => true,
             'strict_host_check_on_default' => true,
             'http_vhost_must_not_route_php' => true,
-            'document_root_is_shared_release_only' => true,
+            'document_root_is_minimal_public_subdir' => true,
+            'application_release_root_denied' => true,
+            'internal_code_outside_document_root' => true,
             'tenant_private_root_never_served' => true,
             'php_routes_to_own_socket_only' => true,
+            'only_public_front_controller_executes_php' => true,
+            'aliases_outside_public_root_forbidden' => true,
             'generic_proxy_pass_forbidden' => true,
-            'tooling_and_vcs_denied_server_side' => true,
         ],
         'activation' => [
             'artifacts_are_inactive' => true,
@@ -193,10 +209,6 @@ function web42Json(array $data): string
 
 function web42ApacheQuote(string $waarde): string
 {
-    // Apache-regexvoorbeelden gebruiken backslashes rechtstreeks in quoted
-    // arguments (zoals "\\.php$"). Verdubbel die dus niet generiek: dat zou
-    // de regexbetekenis wijzigen. Quotes/newlines zijn in onze gecontroleerde
-    // literals niet nodig en worden fail-closed geweigerd.
     if ($waarde === ''
         || str_contains($waarde, "\0")
         || str_contains($waarde, "\r")
@@ -241,25 +253,21 @@ function web42TenantHttpConfig(array $plan): string
 function web42HttpsRoutingFragment(array $plan): string
 {
     $docroot = $plan['shared_code']['document_root'];
-    $docrootParent = dirname($docroot);
+    $releaseRoot = $plan['shared_code']['app_root'];
     $socket = $plan['php_fpm']['socket'];
     $backend = $plan['php_fpm']['backend'];
 
-    $gevoelig = '^(?:beheer-(?:config\\.php|users\\.json|log\\.json|login-pogingen\\.json)|'
-        . 'leden-app\\.php|leden-data\\.php|aanmeldingen-data\\.php|contributies-data\\.php|groepen-data\\.php|ledenlabels-data\\.php|'
-        . 'leden-opslag\\.php|aanmeldingen-opslag\\.php|groepen-opslag\\.php|ledenlabels-opslag\\.php|aanmelden-pogingen\\.php|'
-        . 'vergaderingen-data\\.php|vergaderingen-opslag\\.php|taken-data\\.php|taken-opslag\\.php|'
-        . 'operationele-taken-data\\.php|operationele-taken-opslag\\.php|evenementen-data\\.php|evenementen-opslag\\.php|'
-        . 'auth\\.php|data-slot\\.php|vertaal-config\\.php|site-config(?:\\.local)?\\.php|site\\.php|site-seo\\.php|'
-        . 'paneel-modules\\.php|module-definities\\.php|changelog-historie\\.php|dev-build\\.json)$';
+    if (!hash_equals(rtrim($releaseRoot, '/') . '/public', $docroot)) {
+        throw new RuntimeException('Apache-fragment weigert een documentroot buiten app_root/public.');
+    }
 
     return implode("\n", [
         '# Gegenereerd door fase 4.2. Include dit uitsluitend BINNEN de tenant HTTPS-vhost uit fase 4.4.',
-        '# TLS/certificaat en de exacte hostbinding worden door de fase-4.4 wrapper geleverd.',
+        '# Primaire securitygrens: alleen app_root/public is DocumentRoot; releasecode blijft erbuiten.',
         'UseCanonicalName On',
         'ProxyRequests Off',
         'DocumentRoot ' . web42ApacheQuote($docroot),
-        'DirectoryIndex index.php index.html',
+        'DirectoryIndex index.php',
         '',
         '<Directory "/">',
         '    Options None',
@@ -267,33 +275,26 @@ function web42HttpsRoutingFragment(array $plan): string
         '    Require all denied',
         '</Directory>',
         '',
-        '<Directory ' . web42ApacheQuote($docrootParent) . '>',
-        '    Options +FollowSymLinks',
+        '<Directory ' . web42ApacheQuote($releaseRoot) . '>',
+        '    Options None',
         '    AllowOverride None',
         '    Require all denied',
         '</Directory>',
         '',
         '<Directory ' . web42ApacheQuote($docroot) . '>',
-        '    Options -Indexes -ExecCGI +FollowSymLinks',
-        '    AllowOverride All',
+        '    Options -Indexes -ExecCGI -MultiViews +FollowSymLinks',
+        '    AllowOverride FileInfo Indexes Options',
         '    Require all granted',
         '</Directory>',
         '',
-        '<LocationMatch "^/(?:app|bin|tests|docs|\\.github|\\.git)(?:/|$)">',
-        '    Require all denied',
-        '</LocationMatch>',
-        '',
-        '<LocationMatch "^/ops(?:/|$)">',
-        '    Require all denied',
-        '</LocationMatch>',
-        '',
-        '<FilesMatch ' . web42ApacheQuote($gevoelig) . '>',
-        '    Require all denied',
-        '</FilesMatch>',
-        '',
+        '# Defense in depth: alleen de front controller mag ooit als PHP-handler eindigen.',
         '<FilesMatch "\\.php$">',
-        '    SetHandler ' . web42ApacheQuote('proxy:unix:' . $socket . '|' . $backend),
+        '    Require all denied',
         '</FilesMatch>',
+        '<Files "index.php">',
+        '    Require all granted',
+        '    SetHandler ' . web42ApacheQuote('proxy:unix:' . $socket . '|' . $backend),
+        '</Files>',
         '',
     ]);
 }
