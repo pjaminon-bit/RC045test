@@ -549,8 +549,10 @@
     });
     document.querySelectorAll('.lang-flag').forEach(btn => { btn.classList.remove('active'); btn.setAttribute('aria-pressed', 'false'); });
     const activeBtn = document.querySelector(`.lang-flag[onclick="setLang('${lang}')"]`);
-    activeBtn.classList.add('active');
-    activeBtn.setAttribute('aria-pressed', 'true');
+    if (activeBtn) {
+      activeBtn.classList.add('active');
+      activeBtn.setAttribute('aria-pressed', 'true');
+    }
     var sluitKnop = document.getElementById('bedankt-close');
     if (sluitKnop) sluitKnop.setAttribute('aria-label', t['bedankt.close'] || 'Sluiten');
     document.documentElement.lang = lang;
