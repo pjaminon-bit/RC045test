@@ -179,8 +179,7 @@ PHP);
     c54(($ret['ids'] ?? null) === ['recent-nieuw','recent-beoordeeld'], 'recente aanmeldingen blijven binnen de bewaartermijn beschikbaar');
 
     // 5. Contactprivacy/CSP: alle installaties houden formulierdata same-origin.
-    // Externe tenant en standalone hebben voor contact geen externe provider
-    // meer nodig; Open-Meteo blijft de enige functionele connect-src uitzondering.
+    // Open-Meteo blijft de enige functionele cross-origin connect-src uitzondering.
     $siteConfigSrc = (string)file_get_contents($root . '/site-config.php');
     $contactRuntimeSrc = (string)file_get_contents($root . '/app/core/contact-inbox-runtime.php');
     c54(str_contains($siteConfigSrc, "if (PHP_SAPI !== 'cli' && !headers_sent())"), 'CSP wordt voor webresponses centraal gezet');
@@ -192,8 +191,8 @@ PHP);
         && str_contains($siteConfigSrc, "object-src 'none'"),
         'centrale CSP bevat afdwingbare nonce-gebonden basis- en scriptgrenzen'
     );
-    c54(str_contains($siteConfigSrc, '$formAction = "\'self\'"') && !str_contains($siteConfigSrc, 'formspree.io'), 'CSP houdt formulieracties voor alle installaties uitsluitend same-origin');
-    c54(str_contains($siteConfigSrc, "'self' https://api.open-meteo.com") && !str_contains($siteConfigSrc, 'https://formspree.io'), 'connect-src bevat geen externe formulierprovider meer');
+    c54(str_contains($siteConfigSrc, '$formAction = "\'self\'"'), 'CSP houdt formulieracties voor alle installaties uitsluitend same-origin');
+    c54(str_contains($siteConfigSrc, '$connectSrc = "\'self\' https://api.open-meteo.com"'), 'connect-src beperkt cross-origin verkeer tot Open-Meteo');
     c54(str_contains($contactRuntimeSrc, 'contact-ontvangst.php') && str_contains($contactRuntimeSrc, 'RuntimeException'), 'contactruntime forceert de gedeelde contactvorm fail-closed naar eigen endpoint');
 } finally {
     wis54($tmp);
