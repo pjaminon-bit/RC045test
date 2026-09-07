@@ -111,8 +111,8 @@ function privacyRetentionMaintenanceRun(array $config, ?int $nu = null): array
             }
         }
 
-        $contact = contactBerichtenOpschonenBewaartermijn();
-        $membership = aanmeldingenOpschonenBewaartermijn();
+        $contact = contactBerichtenOpschonenBewaartermijn($nu);
+        $membership = aanmeldingenOpschonenBewaartermijn($nu);
 
         privacyRetentionMarkerSchrijf($markerPad, [
             'schema' => 1,
