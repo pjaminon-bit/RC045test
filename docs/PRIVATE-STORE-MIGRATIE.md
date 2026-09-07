@@ -70,7 +70,7 @@ php bin/prepare-vps-monitoring.php \
   --force
 
 php bin/apply-vps-monitoring.php \
-  --plan=/srv/verenigingen/<tenant>/monitoring/monitoring-plan.json \
+  --monitoring-plan=/srv/verenigingen/<tenant>/monitoring/monitoring-plan.json \
   --check
 ```
 
