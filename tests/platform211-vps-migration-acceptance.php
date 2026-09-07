@@ -22,6 +22,7 @@ c211v(str_contains($src, 'database45HbaConfig($plan)') && str_contains($src, 'Te
 c211v(str_contains($src, 'runtime41VerwachteOsUser') && str_contains($src, '/usr/sbin/userdel') && str_contains($src, '/usr/sbin/groupdel'), 'cleanup is aan deterministische runtime-identiteit gebonden');
 c211v(str_contains($src, "'cleanup'=>'not-started'") && str_contains($src, "\$evidence['cleanup'] = 'ok'"), 'evidence legt cleanupresultaat vast');
 c211v(str_contains($src, 'proof_sha256') && str_contains($src, 'target_aggregate_sha256'), 'finale cryptografische migratiebewijzen worden gerapporteerd');
+c211v(str_contains($src, 'a211RetainProof') && str_contains($src, 'retained_proof_path'), 'finale proof wordt vóór fixturecleanup root-only retained');
 c211v(!str_contains($src, 'shell_exec(') && !str_contains($src, 'system(') && !str_contains($src, 'passthru(') && !str_contains($src, 'popen('), 'runner introduceert geen shelluitvoering');
 
 echo "Platform #211 VPS migration acceptance: {$ok} OK, {$fout} fout(en)\n";

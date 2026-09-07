@@ -150,6 +150,26 @@ function a211WriteEvidence(string $pad, array $data): void
     a211Meta($pad, 0600, false);
 }
 
+function a211RetainProof(string $source, string $target, string $expectedSha): void
+{
+    if (!preg_match('/^[0-9a-f]{64}$/D', $expectedSha) || is_link($source) || !is_file($source)) {
+        throw new RuntimeException('Finale migratieproof kan niet veilig worden bewaard.');
+    }
+    $sourceSha = @hash_file('sha256', $source);
+    if (!is_string($sourceSha) || !hash_equals($expectedSha, $sourceSha)) throw new RuntimeException('Finale migratieproof wijkt vóór retentie af.');
+    if (is_link($target) || file_exists($target)) throw new RuntimeException('Retained proof-doel bestaat al of is onveilig.');
+    $raw = @file_get_contents($source);
+    if (!is_string($raw)) throw new RuntimeException('Finale migratieproof kon niet worden gelezen voor retentie.');
+    $tmp = dirname($target) . '/.' . basename($target) . '.tmp.' . bin2hex(random_bytes(6));
+    if (@file_put_contents($tmp, $raw, LOCK_EX) === false || !@chown($tmp, 0) || !@chgrp($tmp, 0) || !@chmod($tmp, 0600)) {
+        @unlink($tmp); throw new RuntimeException('Retained proof kon niet root-only worden voorbereid.');
+    }
+    if (!@rename($tmp, $target)) { @unlink($tmp); throw new RuntimeException('Retained proof kon niet atomisch worden geplaatst.'); }
+    a211Meta($target, 0600, false);
+    $targetSha = @hash_file('sha256', $target);
+    if (!is_string($targetSha) || !hash_equals($expectedSha, $targetSha)) throw new RuntimeException('Retained proof wijkt na schrijven af.');
+}
+
 function a211TreeDelete(string $root): void
 {
     if (is_link($root) || !is_dir($root)) throw new RuntimeException('Fixture-root is geen veilige directory.');
@@ -430,7 +450,9 @@ try {
     $proofSha = (string)($finalApply['proof_sha256'] ?? '');
     if ($proofPath === '' || !is_file($proofPath) || is_link($proofPath) || !preg_match('/^[0-9a-f]{64}$/D', $proofSha)
         || !hash_equals($proofSha, (string)hash_file('sha256', $proofPath))) throw new RuntimeException('Finale cutoverproof ontbreekt of hash wijkt af.');
-    $evidence['final_cutover'] = $finalApply + ['read_only_application_probe'=>'ok'];
+    $retainedProof = A211_EVIDENCE_BASE . '/acceptance-' . $runId . '-migration-proof.json';
+    a211RetainProof($proofPath, $retainedProof, $proofSha);
+    $evidence['final_cutover'] = $finalApply + ['read_only_application_probe'=>'ok','retained_proof_path'=>$retainedProof];
     $evidence['source_final'] = privateMigrationSamenvatting(privateMigrationInventory($private));
     if ($evidence['source_final'] !== $sourceBefore) throw new RuntimeException('JSON rollbackanker wijzigde tijdens succesvolle acceptatie.');
     $evidence['result'] = 'acceptance-passed-before-cleanup';
@@ -466,6 +488,7 @@ echo json_encode([
     'release_commit'=>$evidence['release_commit'] ?? null,
     'proof_sha256'=>$evidence['final_cutover']['proof_sha256'] ?? null,
     'target_aggregate_sha256'=>$evidence['final_cutover']['target_aggregate_sha256'] ?? null,
+    'retained_proof_path'=>$evidence['final_cutover']['retained_proof_path'] ?? null,
     'evidence_path'=>$evidencePad,
     'cleanup'=>$evidence['cleanup'],
 ], JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR) . "\n";

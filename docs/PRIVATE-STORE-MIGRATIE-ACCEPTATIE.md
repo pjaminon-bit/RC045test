@@ -15,7 +15,7 @@ Deze procedure is uitsluitend bedoeld om de echte Phase-B-migratie één keer ge
 - maakt de fixture expliciet met `private_driver=json`;
 - gebruikt voor runtimeapply een tijdelijke FPM-poolmap die niet in de actieve PHP-FPM-config wordt geladen;
 - bereidt PostgreSQL uitsluitend met `--migration-target` voor;
-- bewaart een root-only evidencebestand onder `/var/lib/verenigingsplatform/phase211-acceptance/`;
+- bewaart een root-only evidencebestand én een byte-identieke root-only kopie van het finale migratieproof onder `/var/lib/verenigingsplatform/phase211-acceptance/`;
 - verwijdert geen vooraf bestaande objecten.
 
 ## Bewijsvolgorde
@@ -62,6 +62,7 @@ gevolgd door één JSON-regel met minimaal:
 - `proof_sha256`;
 - `target_aggregate_sha256`;
 - `evidence_path`;
+- `retained_proof_path`;
 - `cleanup=ok`.
 
 Bij iedere fout: voer de runner niet opnieuw uit voordat de gemelde cleanup- of bindingafwijking is onderzocht. Het evidencebestand blijft root-only beschikbaar voor de handover in #211 en #210.
