@@ -570,7 +570,7 @@ tenantHomepageStartOutputFilter();
           </div>
         </div>
       </div>
-      <form class="contact-form reveal reveal-delay-2" action="https://formspree.io/f/xbdevlzw" method="POST" id="contact-form">
+      <form class="contact-form reveal reveal-delay-2" action="contact-ontvangst.php" method="POST" id="contact-form">
         <div class="hp-field" aria-hidden="true">
           <label for="website">Website</label>
           <input type="text" id="website" name="website" tabindex="-1" autocomplete="off">

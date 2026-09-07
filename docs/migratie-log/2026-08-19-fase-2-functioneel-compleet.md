@@ -200,7 +200,7 @@ Controleer in één ronde:
 6. Logboek controleren op de mutatie;
 7. Back-ups controleren op een nieuwe snapshot;
 8. Changelog controleren op zichtbare vaste historie en werkend zoek-/categoriefilter;
-9. Aanmelden controleren op bestaande veldvalidatie en contributieberekening (een echte aanmelding hoeft niet te worden verzonden tenzij Formspree en automatische ledenopslag bewust meegetest worden).
+9. Aanmelden controleren op bestaande veldvalidatie en contributieberekening (een echte aanmelding hoeft niet te worden verzonden tenzij de destijds gebruikte externe formulierprovider en automatische ledenopslag bewust meegetest worden).
 
 ## Fysieke legacycode in `beheer/index.php`
 

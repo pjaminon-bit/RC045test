@@ -73,34 +73,31 @@ function siteSeoDefinitiesVoorRuntime(): array
   return is_array($override) ? array_replace_recursive($basis, $override) : $basis;
 }
 
-// Issue #159: de legacy standalone-template bevat nog een Formspree-action en
-// een tweede, best-effort lokale POST. De centrale publieke runtime maakt de
-// daadwerkelijke browseroutput fail-closed same-origin: één POST, naar de
-// lokale intake. Dit geldt bewust voor standalone én tenants, zodat browser-PII
-// nooit rechtstreeks naar een vaste third-party endpoint kan vertrekken.
+// Defense-in-depth voor het publieke aanmeldformulier: de bron hoort al naar
+// de lokale intake te posten, maar gerenderde output wordt alsnog naar exact
+// dezelfde same-origin bestemming genormaliseerd.
 function siteAanmeldenSameOriginOutput(string $html): string
 {
-  $html = str_replace(
-    'https://formspree.io/f/mgobjlkl',
-    'aanmelden-ontvangst.php',
-    $html
-  );
+  if ($html === '' || (stripos($html, 'id="aanmeld-form"') === false && stripos($html, "id='aanmeld-form'") === false)) {
+    return $html;
+  }
 
-  $legacyComment = <<<'TXT'
-        // Daarnaast naar onze eigen server, zodat de aanmelding meteen in het
-        // ledenbestand komt met de status "in verificatie". Bewust pas hier,
-        // na Formspree: gaat dit mis, dan staat de aanmelding nog steeds in de
-        // mail aan het bestuur en merkt de bezoeker er niets van.
-TXT;
-  $html = str_replace($legacyComment, '', $html);
+  $html = preg_replace_callback(
+    '~<form\b[^>]*\bid=["\']aanmeld-form["\'][^>]*>~i',
+    static function(array $m): string {
+      $form = $m[0];
+      if (preg_match('~\baction=["\'][^"\']*["\']~i', $form) === 1) {
+        return preg_replace('~\baction=["\'][^"\']*["\']~i', 'action="aanmelden-ontvangst.php"', $form, 1) ?? $form;
+      }
+      return preg_replace('~<form\b~i', '<form action="aanmelden-ontvangst.php"', $form, 1) ?? $form;
+    },
+    $html,
+    1
+  ) ?? $html;
 
-  $legacyFetch = <<<'TXT'
-        fetch('aanmelden-ontvangst.php', {
-          method: 'POST',
-          body: new FormData(form)
-        }).catch(function() { /* stil falen, de mail is al onderweg */ });
-TXT;
-  $html = str_replace($legacyFetch, '', $html);
+  if (preg_match('~<form\b[^>]*\bid=["\']aanmeld-form["\'][^>]*\baction=["\']https?://~i', $html) === 1) {
+    throw new RuntimeException('Aanmeldformulier kon niet veilig naar de lokale intake worden gerouteerd.');
+  }
 
   return $html;
 }

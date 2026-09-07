@@ -15,7 +15,7 @@ Ongewijzigd gebleven in `aanmelden.php` en `aanmelden-ontvangst.php`:
 - twee verplichte akkoordverklaringen;
 - jeugd/senior-bepaling op basis van geboortedatum en rekentabel;
 - pro-rata contributieberekening inclusief decemberlogica;
-- Formspree als eerste verzendroute;
+- de destijds gebruikte externe formulierprovider als eerste verzendroute;
 - eigen `aanmelden-ontvangst.php` als tweede opslagroute naar ledenadministratie;
 - honeypot, rate-limit per gehasht IP en dubbele inzendingcontrole;
 - status `nieuw` en contributieregel `open` bij automatische ontvangst.
@@ -39,6 +39,6 @@ Ongewijzigd gebleven in `aanmelden.php` en `aanmelden-ontvangst.php`:
 4. Doe één tijdelijke `[TEST]`-wijziging in bijvoorbeeld de hero-titel en controleer de publieke DEV-aanmeldpagina.
 5. Zet de tekst terug.
 6. Test daarna het publieke formulier zonder te verzenden: verplichte velden, e-mail/mobiel, beide akkoordvinkjes en contributieberekening moeten zich exact gedragen als vóór de migratie.
-7. Een echte testaanmelding alleen uitvoeren als we bewust ook de Formspree-mail en ledenadministratie willen testen.
+7. Een echte testaanmelding alleen uitvoeren als we bewust ook de externe formulierprovider en ledenadministratie willen testen.
 
 Status: **gebouwd, nog praktisch te valideren**.
