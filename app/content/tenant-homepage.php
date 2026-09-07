@@ -76,6 +76,31 @@ function tenantHomepagePasLegacyTekstContextToe(DOMDocument $dom, array $vervang
     }
 }
 
+function tenantHomepagePasLegacyHrefContextToe(DOMDocument $dom, string $siteUrl, string $email, string $facebook): void
+{
+    $xpath = new DOMXPath($dom);
+    foreach ($xpath->query('//*[@href]') ?: [] as $element) {
+        if (!$element instanceof DOMElement) continue;
+        $href = $element->getAttribute('href');
+        if ($href === 'https://www.facebook.com/rc045/' || $href === 'https://www.facebook.com/rc045') {
+            $element->setAttribute('href', $facebook !== '' ? $facebook : '#contact');
+            continue;
+        }
+        if (str_starts_with(strtolower($href), 'mailto:bestuur@rc045.nl')) {
+            $element->setAttribute('href', $email !== '' ? 'mailto:' . $email : '#contact');
+            continue;
+        }
+        if (stripos($href, 'pjaminon') !== false && str_starts_with(strtolower($href), 'mailto:')) {
+            $element->setAttribute('href', '#');
+            continue;
+        }
+        if (str_starts_with($href, 'https://rc045.nl')) {
+            $suffix = substr($href, strlen('https://rc045.nl'));
+            $element->setAttribute('href', rtrim($siteUrl, '/') . '/' . ltrim($suffix, '/'));
+        }
+    }
+}
+
 function tenantHomepageBevatLegacyPubliekeContext(DOMDocument $dom): bool
 {
     $xpath = new DOMXPath($dom);
@@ -267,6 +292,7 @@ function tenantHomepagePasTemplateToe(string $html): string
         'Kok Lexmond'=>'de locatiebeheerder',
     ];
     tenantHomepagePasLegacyTekstContextToe($dom, $vervangingen);
+    tenantHomepagePasLegacyHrefContextToe($dom, $siteUrl, $email, $facebook);
     if (tenantHomepageBevatLegacyPubliekeContext($dom)) {
         throw new RuntimeException('Legacy-identiteit bleef achter in publieke tenanthomepagecontext.');
     }
