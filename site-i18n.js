@@ -1,5 +1,29 @@
 // RC045 gedeelde taal helpers (gebruikt door elke pagina)
 
+function getLanguageStorageKey() {
+  var context = window.verenigingSiteContext;
+  if (context && context.external) {
+    var tenantKey = typeof context.tenantKey === 'string' ? context.tenantKey.trim() : '';
+    // Een externe tenant valt bewust niet terug op rc045_lang als de stabiele
+    // tenantKey ontbreekt. Die legacy-key heeft geen tenantprovenance en zou
+    // daardoor taalstate tussen tenants kunnen lekken.
+    return tenantKey ? tenantKey + '_lang' : null;
+  }
+  return 'rc045_lang';
+}
+
+function getStoredLanguage() {
+  var key = getLanguageStorageKey();
+  if (!key) return null;
+  try { return localStorage.getItem(key); } catch (e) { return null; }
+}
+
+function setStoredLanguage(lang) {
+  var key = getLanguageStorageKey();
+  if (!key || typeof lang !== 'string' || !lang) return false;
+  try { localStorage.setItem(key, lang); return true; } catch (e) { return false; }
+}
+
 function getInitialLang(translations) {
     // Pagina's mogen hun vertalingen lokaal houden en ze expliciet meegeven.
     // Voor bestaande pagina's zonder argument blijft de oude globale i18n-opzet
@@ -7,10 +31,7 @@ function getInitialLang(translations) {
     var bron = translations || (typeof i18n !== 'undefined' ? i18n : null) || {};
     const urlLang = new URLSearchParams(window.location.search).get('lang');
     if (urlLang && bron[urlLang]) return urlLang;
-    const taalSleutel = window.verenigingSiteContext && window.verenigingSiteContext.external
-      ? window.verenigingSiteContext.tenantKey + '_lang'
-      : 'rc045_lang';
-    const storedLang = localStorage.getItem(taalSleutel);
+    const storedLang = getStoredLanguage();
     if (storedLang && bron[storedLang]) return storedLang;
     return 'nl';
   }

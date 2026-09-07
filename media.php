@@ -173,7 +173,7 @@ function setLang(lang) {
   activeBtn.classList.add('active');
   activeBtn.setAttribute('aria-pressed', 'true');
   document.documentElement.lang = lang;
-  localStorage.setItem('rc045_lang', lang);
+  setStoredLanguage(lang);
   const currentUrl = new URL(window.location.href);
   if (lang === 'nl') currentUrl.searchParams.delete('lang');
   else currentUrl.searchParams.set('lang', lang);
