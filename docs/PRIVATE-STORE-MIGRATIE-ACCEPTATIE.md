@@ -39,6 +39,8 @@ De runner voert op de echte VPS uit:
 
 Cleanup verwijdert PostgreSQL-objecten alleen wanneer hun deterministische naam én tenantmarker exact bij `phase211acceptance` horen. De tenant-HBA wordt alleen verwijderd wanneer de inhoud exact overeenkomt met het gegenereerde migration-targetplan. Iedere afwijking faalt gesloten en blijft voor onderzoek staan.
 
+Vóór de fixtureboom wordt verwijderd, kopieert de runner het finale `migration-proof.json` byte-identiek naar de evidence-map en controleert hij opnieuw dat de SHA-256 exact gelijk is aan `proof_sha256`. Daardoor blijven zowel het machineleesbare samenvattingsbewijs als het oorspronkelijke finale migratieproof na succesvolle cleanup beschikbaar voor audit en handover.
+
 ## Uitvoeren
 
 Voer de runner pas uit nadat zijn commit normaal is gemerged, gedeployed en als root-owned host-engine is geïnstalleerd. Gebruik het script uit de host-engine, nooit uit `/srv/verenigingsplatform/current` of een Git-checkout:
@@ -65,4 +67,4 @@ gevolgd door één JSON-regel met minimaal:
 - `retained_proof_path`;
 - `cleanup=ok`.
 
-Bij iedere fout: voer de runner niet opnieuw uit voordat de gemelde cleanup- of bindingafwijking is onderzocht. Het evidencebestand blijft root-only beschikbaar voor de handover in #211 en #210.
+Bij iedere fout: voer de runner niet opnieuw uit voordat de gemelde cleanup- of bindingafwijking is onderzocht. Het evidencebestand en, zodra de finale cutover dat punt heeft bereikt, het retained proof blijven root-only beschikbaar voor de handover in #211 en #210.
