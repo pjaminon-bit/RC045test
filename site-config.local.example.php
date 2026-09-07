@@ -19,6 +19,11 @@
 //
 // De expliciete pdo dsn/user/password velden hieronder blijven alleen bestaan
 // voor standalone/legacy ontwikkel- of migratiesituaties.
+//
+// Notificaties vanaf fase 6A:
+//   transportconfig staat in dit server-only bestand; SMTP-credentials staan
+//   apart onder private_root en dus nooit in repositorycode of webinstellingen.
+//   Zolang enabled=false en required=false blijft notificatiedelivery uit.
 
 return [
     'vereniging' => [
@@ -52,5 +57,22 @@ return [
         'pdo'=>[
             'dsn'=>'','user'=>'','password'=>'',
         ],
+    ],
+    'notificaties' => [
+        'enabled'=>false,
+        'required'=>false,
+        'provider'=>'smtp',
+        'from'=>'notificaties@vereniging.example',
+        'recipients'=>[
+            'contact.received'=>['bestuur@vereniging.example'],
+            'membership.received'=>['ledenadministratie@vereniging.example'],
+        ],
+        'smtp'=>[
+            'host'=>'smtp.vereniging.example',
+            'port'=>587,
+            'security'=>'starttls', // starttls of smtps; TLS-verificatie is altijd verplicht
+            'credentials_file'=>'/srv/verenigingen/voorbeeldvereniging/private/secrets/notifications-smtp.json',
+        ],
+        'stale_after_seconds'=>900,
     ],
 ];

@@ -9,6 +9,8 @@ require_once __DIR__.'/app/core/site.php';
 require_once __DIR__.'/app/storage/domein-repositories.php';
 require_once __DIR__.'/aanmeldingen-opslag.php';
 require_once __DIR__.'/app/leden/lidmaatschap.php';
+require_once __DIR__.'/app/notifications/tenant-notifications.php';
+require_once __DIR__.'/app/operational-log.php';
 function aanmeldenAntwoord(int $status,string $tekst): void{http_response_code($status);echo json_encode(['ok'=>$status<400,'melding'=>$tekst],JSON_UNESCAPED_UNICODE);exit;}
 if(!siteModuleActief('aanmelden'))aanmeldenAntwoord(404,'Aanmelden is niet beschikbaar.');
 if(($_SERVER['REQUEST_METHOD']??'')!=='POST')aanmeldenAntwoord(405,'Alleen POST.');
@@ -41,6 +43,21 @@ try{
     $leden=repoLedenLees();if($emailKlein!=='')foreach((array)($leden['leden']??[]) as $lid)if(is_array($lid)&&strtolower(trim((string)($lid['email']??'')))===$emailKlein)aanmeldenAntwoord(200,'Ontvangen.');
     [$straat,$huisnummer]=ledenSplitsAdres($_POST['straat']??'',$_POST['huisnummer']??'');
     $aanmelding=aanmeldingNormaliseer(['voornaam'=>$voornaam,'tussenvoegsel'=>$_POST['tussenvoegsel']??'','achternaam'=>$achternaam,'geboortedatum'=>$geb,'straat'=>$straat,'huisnummer'=>$huisnummer,'postcode'=>$_POST['postcode']??'','gemeente'=>$_POST['stad']??'','land'=>$_POST['land']??'','telefoon'=>$telefoon,'email'=>$email,'lidmaatschap_type'=>$type['id'],'contributie_jaar'=>$jaar,'contributie_maand'=>$maand,'berekend_bedrag'=>$bedrag,'berekend_inschrijfgeld'=>$inschrijfgeld,'bron'=>'aanmeldformulier']);
-    $inbox['aanmeldingen'][]=$aanmelding;if(!aanmeldingenSchrijf($inbox))aanmeldenAntwoord(500,'Opslaan mislukt.');
+    $inbox['aanmeldingen'][]=$aanmelding;
+
+    // De private aanmeldingeninbox is authoritative. Notification enqueue is
+    // uitsluitend een opvolgbaar side-effect na een geslaagde primaire write.
+    if(!aanmeldingenSchrijf($inbox))aanmeldenAntwoord(500,'Opslaan mislukt.');
+    if(tenantNotificationShouldEnqueue()){
+        try{
+            if(!tenantNotificationEnqueue('membership.received',(string)$aanmelding['id'])){
+                vpOps46Log(siteConfig(),'notification_enqueue_failed','error',['component'=>'notification','check'=>'membership.received','code'=>'outbox_write_failed']);
+                error_log('[platform] notification enqueue mislukt: outbox_write_failed');
+            }
+        }catch(Throwable $e){
+            vpOps46Log(siteConfig(),'notification_enqueue_failed','error',['component'=>'notification','check'=>'membership.received','code'=>'outbox_exception','error_class'=>get_class($e)]);
+            error_log('[platform] notification enqueue mislukt: outbox_exception '.get_class($e));
+        }
+    }
 }finally{dataSlotDicht($slot);}
 aanmeldenAntwoord(200,'Ontvangen.');
