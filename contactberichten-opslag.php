@@ -87,12 +87,12 @@ function contactBerichtenPasRetentieToe(array &$data,?int $nu=null): int
     return$voor-count($data['berichten']);
 }
 
-function contactBerichtenOpschonenBewaartermijn(): int
+function contactBerichtenOpschonenBewaartermijn(?int $nu=null): int
 {
     $slot=dataSlotOpen();
     try{
         $data=contactBerichtenLees();
-        $aantal=contactBerichtenPasRetentieToe($data);
+        $aantal=contactBerichtenPasRetentieToe($data,$nu);
         if($aantal>0&&!contactBerichtenSchrijf($data))throw new RuntimeException('Contactberichten konden niet veilig worden opgeschoond.');
         return$aantal;
     }finally{
