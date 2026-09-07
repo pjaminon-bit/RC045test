@@ -2,9 +2,10 @@
 // ============================================================
 // Productieruntime voor externe tenantbranding
 // ============================================================
-// Deze laag wordt alleen voor externe tenants geregistreerd en werkt als
-// laatste uitgaande HTML-filter. Doel: geen voorbeeldvereniging-identiteit,
-// voorbeeldmedia, analytics of vaste huisstijl mag naar een tenant lekken.
+// Externe tenants delen de publieke templates, maar tenantidentiteit wordt
+// contextueel toegepast. Tekst, URL-attributen, JSON en JavaScript krijgen
+// ieder hun eigen renderpad; willekeurige broncode/identifiers worden niet
+// meer via een whole-response zoek-en-vervanglaag gemuteerd.
 // ============================================================
 require_once __DIR__ . '/csp-runtime.php';
 
@@ -54,6 +55,55 @@ function tenantPublicRuntimeContact(array $config): array
     if ($raw === false) return [];
     $data = json_decode($raw, true);
     return is_array($data) ? $data : [];
+}
+
+function tenantPublicRuntimeRenderContext(array $config): array
+{
+    $naam = trim((string)($config['vereniging']['naam'] ?? 'Vereniging')) ?: 'Vereniging';
+    $volledig = trim((string)($config['vereniging']['volledige_naam'] ?? $naam)) ?: $naam;
+    $slogan = trim((string)($config['vereniging']['slogan'] ?? ''));
+    $siteUrl = tenantPublicRuntimeHttpUrl((string)($config['vereniging']['site_url'] ?? ''), '/');
+    $betaling = is_array($config['betaling'] ?? null) ? $config['betaling'] : [];
+    $iban = trim((string)($betaling['iban'] ?? '')) ?: 'Nog niet ingesteld';
+    $tenaamstelling = trim((string)($betaling['tenaamstelling'] ?? '')) ?: $volledig;
+    $omschrijving = trim((string)($betaling['omschrijving'] ?? '')) ?: 'Contributie {jaar} - {naam}';
+    $omschrijving = str_replace('{naam}', $naam, $omschrijving);
+    $contact = tenantPublicRuntimeContact($config);
+    $email = filter_var((string)($contact['email'] ?? ''), FILTER_VALIDATE_EMAIL) ? (string)$contact['email'] : '';
+    $facebook = tenantPublicRuntimeHttpUrl((string)($contact['facebook'] ?? ''), '');
+    $straat = trim((string)($contact['adres_straat'] ?? ''));
+    $plaats = trim((string)($contact['adres_postcode_plaats'] ?? ''));
+
+    return [
+        'naam' => $naam,
+        'volledige_naam' => $volledig,
+        'slogan' => $slogan,
+        'site_url' => $siteUrl,
+        'email' => $email,
+        'facebook' => $facebook,
+        'tekst' => [
+            'RC045 – Bashers of the South' => $volledig,
+            'RC045 · Bashers of the South' => $volledig,
+            'Bashers of the South' => $slogan !== '' ? $slogan : $naam,
+            'NL51 RABO 0367 6153 63' => $iban,
+            'T.n.v. RC045' => 'T.n.v. ' . $tenaamstelling,
+            'In the name of RC045' => 'In the name of ' . $tenaamstelling,
+            'Auf den Namen RC045' => 'Auf den Namen ' . $tenaamstelling,
+            'contributie RC045 {jaar}' => $omschrijving,
+            'RC045 {jaar}' => $naam . ' {jaar}',
+            'bestuur@rc045.nl' => $email !== '' ? $email : 'contactgegevens volgen',
+            'facebook.com/rc045' => $facebook !== '' ? (string) preg_replace('~^https?://~i', '', $facebook) : 'sociale media volgen',
+            'Wijngaardsberg 26' => $straat !== '' ? $straat : 'Adres nog niet ingesteld',
+            '6464 EZ Eygelshoven' => $plaats !== '' ? $plaats : 'Plaats nog niet ingesteld',
+            'Kerkrade (Eygelshoven)' => $plaats !== '' ? $plaats : 'Plaats nog niet ingesteld',
+            'Eygelshoven' => $plaats !== '' ? $plaats : 'de verenigingslocatie',
+            'Kok Lexmond' => 'de locatiebeheerder',
+            'https://rc045.nl' => $siteUrl,
+            'pjaminon@me.com' => '',
+            'Pascal Jaminon' => 'Websitebeheer',
+            'RC045' => $naam,
+        ],
+    ];
 }
 
 function tenantPublicRuntimeThemeMarkup(array $config): string
@@ -138,24 +188,124 @@ function tenantPublicRuntimePlaceholderLokaleMedia(string $html, string $logoUrl
     return $html;
 }
 
+function tenantPublicRuntimeJsWaarde(string $waarde): string
+{
+    $json = json_encode($waarde, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
+    if (!is_string($json) || strlen($json) < 2) return '';
+    return substr($json, 1, -1);
+}
+
+function tenantPublicRuntimeJsonContext($waarde, array $tekstMap)
+{
+    if (is_string($waarde)) return str_replace(array_keys($tekstMap), array_values($tekstMap), $waarde);
+    if (!is_array($waarde)) return $waarde;
+    foreach ($waarde as $sleutel => $item) $waarde[$sleutel] = tenantPublicRuntimeJsonContext($item, $tekstMap);
+    return $waarde;
+}
+
+function tenantPublicRuntimeSiteHref(string $href, array $context): string
+{
+    $facebook = (string)($context['facebook'] ?? '');
+    $email = (string)($context['email'] ?? '');
+    $siteUrl = (string)($context['site_url'] ?? '/');
+
+    if ($href === 'https://www.facebook.com/rc045/' || $href === 'https://www.facebook.com/rc045') {
+        return $facebook !== '' ? $facebook : '#contact';
+    }
+    if (str_starts_with(strtolower($href), 'mailto:bestuur@rc045.nl')) {
+        return $email !== '' ? 'mailto:' . $email : '#contact';
+    }
+    if (stripos($href, 'pjaminon') !== false && str_starts_with(strtolower($href), 'mailto:')) return '#';
+    if (str_starts_with($href, 'https://rc045.nl')) {
+        $suffix = substr($href, strlen('https://rc045.nl'));
+        return rtrim($siteUrl, '/') . '/' . ltrim($suffix, '/');
+    }
+    return $href;
+}
+
+function tenantPublicRuntimePasRenderContextToe(string $html, array $config): string
+{
+    if (!class_exists(DOMDocument::class)) {
+        throw new RuntimeException('DOM-extensie ontbreekt; tenantoutput kan niet contextveilig worden gerenderd.');
+    }
+
+    $context = tenantPublicRuntimeRenderContext($config);
+    $tekstMap = $context['tekst'];
+    $vorige = libxml_use_internal_errors(true);
+    $dom = new DOMDocument('1.0', 'UTF-8');
+    $geladen = $dom->loadHTML('<?xml encoding="UTF-8">' . $html, LIBXML_NOWARNING | LIBXML_NOERROR);
+    libxml_clear_errors();
+    libxml_use_internal_errors($vorige);
+    if (!$geladen) throw new RuntimeException('Publieke tenant-HTML kon niet contextveilig worden verwerkt.');
+    foreach ($dom->childNodes as $kind) {
+        if ($kind->nodeType === XML_PI_NODE) { $dom->removeChild($kind); break; }
+    }
+
+    $xpath = new DOMXPath($dom);
+    foreach ($xpath->query('//text()[not(ancestor::script) and not(ancestor::style)]') ?: [] as $node) {
+        $node->nodeValue = str_replace(array_keys($tekstMap), array_values($tekstMap), (string)$node->nodeValue);
+    }
+
+    foreach ($xpath->query('//*') ?: [] as $element) {
+        if (!$element instanceof DOMElement) continue;
+        foreach (['title', 'alt', 'aria-label', 'placeholder', 'content', 'value'] as $attribuut) {
+            if (!$element->hasAttribute($attribuut)) continue;
+            $element->setAttribute($attribuut, str_replace(array_keys($tekstMap), array_values($tekstMap), $element->getAttribute($attribuut)));
+        }
+        if ($element->hasAttribute('href')) {
+            $element->setAttribute('href', tenantPublicRuntimeSiteHref($element->getAttribute('href'), $context));
+        }
+    }
+
+    foreach ($xpath->query('//script[@type="application/ld+json"]') ?: [] as $script) {
+        if (!$script instanceof DOMElement) continue;
+        $data = json_decode(trim($script->textContent), true);
+        if (!is_array($data)) continue;
+        $data = tenantPublicRuntimeJsonContext($data, $tekstMap);
+        $script->textContent = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?: '{}';
+    }
+
+    // Legacy inline scripts mogen alleen zichtbare, hoofdlettergevoelige
+    // voorbeeldinhoud krijgen. Technische identifiers zoals rc045_lang blijven
+    // onaangeroerd; daardoor kan een displaynaam nooit meer een storage key,
+    // selector of andere programmatische identifier muteren.
+    $jsMap = [];
+    foreach ($tekstMap as $bron => $doel) $jsMap[$bron] = tenantPublicRuntimeJsWaarde((string)$doel);
+    foreach ($xpath->query('//script[not(@type="application/ld+json") and not(@id="vereniging-site-context")]') ?: [] as $script) {
+        if (!$script instanceof DOMElement) continue;
+        $script->textContent = str_replace(array_keys($jsMap), array_values($jsMap), $script->textContent);
+    }
+
+    // De aanmeldroute is een expliciete applicatiecontext, geen merkvervanging.
+    $aanmeldForm = $dom->getElementById('aanmeld-form');
+    if ($aanmeldForm instanceof DOMElement) $aanmeldForm->setAttribute('action', 'aanmelden-ontvangst.php');
+
+    $zichtbaar = '';
+    foreach ($xpath->query('//text()[not(ancestor::script) and not(ancestor::style)]') ?: [] as $node) $zichtbaar .= ' ' . $node->nodeValue;
+    foreach ($xpath->query('//*[@href or @title or @alt or @aria-label or @content]') ?: [] as $element) {
+        if (!$element instanceof DOMElement) continue;
+        foreach (['href', 'title', 'alt', 'aria-label', 'content'] as $attribuut) {
+            if ($element->hasAttribute($attribuut)) $zichtbaar .= ' ' . $element->getAttribute($attribuut);
+        }
+    }
+    foreach ([
+        'rc045','bashers of the south','eygelshoven','wijngaardsberg',
+        'bestuur@rc045.nl','facebook.com/rc045','kok lexmond',
+        'nl51 rabo 0367 6153 63','pjaminon@me.com','goatcounter.com',
+    ] as $verboden) {
+        if (stripos($zichtbaar, $verboden) !== false) {
+            error_log('[platform] tenantuitvoer geblokkeerd door legacy fingerprint: ' . $verboden);
+            throw new RuntimeException('Publieke tenantuitvoer bevat niet-neutrale voorbeeldinhoud.');
+        }
+    }
+
+    return $dom->saveHTML() ?: '';
+}
+
 function tenantPublicRuntimeTransform(string $html, array $config): string
 {
     if ($html === '' || (stripos($html, '<html') === false && stripos($html, '<!doctype') === false)) return $html;
 
-    $naam = trim((string)($config['vereniging']['naam'] ?? 'Vereniging')) ?: 'Vereniging';
-    $volledig = trim((string)($config['vereniging']['volledige_naam'] ?? $naam)) ?: $naam;
-    $slogan = trim((string)($config['vereniging']['slogan'] ?? ''));
-    $siteUrl = tenantPublicRuntimeHttpUrl((string)($config['vereniging']['site_url'] ?? ''), '/');
-    $betaling = is_array($config['betaling'] ?? null) ? $config['betaling'] : [];
-    $iban = trim((string)($betaling['iban'] ?? '')) ?: 'Nog niet ingesteld';
-    $tenaamstelling = trim((string)($betaling['tenaamstelling'] ?? '')) ?: $volledig;
-    $omschrijving = trim((string)($betaling['omschrijving'] ?? '')) ?: 'Contributie {jaar} - {naam}';
-    $omschrijving = str_replace('{naam}', $naam, $omschrijving);
-    $contact = tenantPublicRuntimeContact($config);
-    $email = filter_var((string)($contact['email'] ?? ''), FILTER_VALIDATE_EMAIL) ? (string)$contact['email'] : '';
-    $facebook = tenantPublicRuntimeHttpUrl((string)($contact['facebook'] ?? ''), '');
-    $straat = trim((string)($contact['adres_straat'] ?? ''));
-    $plaats = trim((string)($contact['adres_postcode_plaats'] ?? ''));
     $logo = tenantPublicRuntimeAssetUrl($config, 'logo', 'images/template-placeholder.svg');
 
     // Oude favicon/manifest/analytics-tags verdwijnen voor externe tenants.
@@ -168,68 +318,17 @@ function tenantPublicRuntimeTransform(string $html, array $config): string
         $html = preg_replace('~</head>~i', $head . "\n</head>", $html, 1) ?? $html;
     }
 
-    // Het publieke aanmeldformulier gebruikt voor tenants uitsluitend de eigen
-    // privacyvriendelijke inbox. De historische externe mailroute is verboden.
-    $html = preg_replace(
-        '~(<form\b[^>]*\bid=["\']aanmeld-form["\'][^>]*\baction=["\'])[^"\']*(["\'])~i',
-        '$1aanmelden-ontvangst.php$2',
-        $html,
-        1
-    ) ?? $html;
-    $html = str_replace("fetch('aanmelden-ontvangst.php', {", "if (!(window.verenigingSiteContext && window.verenigingSiteContext.external)) fetch('aanmelden-ontvangst.php', {", $html);
+    // Bestaande inline aanmeldcode mag voor externe tenants niet nog een tweede
+    // client-side ontvangstpad starten. Dit is een smalle legacy-compatibiliteits-
+    // guard en staat los van tenantidentiteit.
+    $html = str_replace(
+        "fetch('aanmelden-ontvangst.php', {",
+        "if (!(window.verenigingSiteContext && window.verenigingSiteContext.external)) fetch('aanmelden-ontvangst.php', {",
+        $html
+    );
 
-    // Neutraliseer historische media vóór tekstuele merkvervanging. Anders kan
-    // rc045-logo.png eerst in bijvoorbeeld Testvereniging-logo.png veranderen
-    // en is de legacy-mediaherkenning daarna te laat. Voor een tenant zonder
-    // eigen logo gebruiken we bewust de lokale dummy-placeholder.
     $html = tenantPublicRuntimePlaceholderLokaleMedia($html, $logo);
-
-    // De bronstrings komen voor in gewone tekst, attributen en legacy inline
-    // script/JSON. Daarom mag geen tenantwaarde hier ooit rauwe HTML-markup
-    // toevoegen. HTML-escaping neutraliseert <, >, &, enkele en dubbele quotes
-    // voordat de globale compatibiliteitsvervanging plaatsvindt. In raw-text
-    // scriptblokken blijven entities letterlijke, onschadelijke tekst; in normale
-    // HTML decodeert de browser ze terug naar de bedoelde zichtbare waarde.
-    $vervangingen = [
-        'RC045 – Bashers of the South' => tenantPublicRuntimeHtmlWaarde($volledig),
-        'RC045 · Bashers of the South' => tenantPublicRuntimeHtmlWaarde($volledig),
-        'Bashers of the South' => tenantPublicRuntimeHtmlWaarde($slogan !== '' ? $slogan : $naam),
-        'NL51 RABO 0367 6153 63' => tenantPublicRuntimeHtmlWaarde($iban),
-        'T.n.v. RC045' => tenantPublicRuntimeHtmlWaarde('T.n.v. ' . $tenaamstelling),
-        'In the name of RC045' => tenantPublicRuntimeHtmlWaarde('In the name of ' . $tenaamstelling),
-        'Auf den Namen RC045' => tenantPublicRuntimeHtmlWaarde('Auf den Namen ' . $tenaamstelling),
-        'contributie RC045 {jaar}' => tenantPublicRuntimeHtmlWaarde($omschrijving),
-        'RC045 {jaar}' => tenantPublicRuntimeHtmlWaarde($naam . ' {jaar}'),
-        'bestuur@rc045.nl' => tenantPublicRuntimeHtmlWaarde($email !== '' ? $email : 'contactgegevens volgen'),
-        'https://www.facebook.com/rc045/' => tenantPublicRuntimeHtmlWaarde($facebook !== '' ? $facebook : '#contact'),
-        'facebook.com/rc045' => tenantPublicRuntimeHtmlWaarde($facebook !== '' ? (string) preg_replace('~^https?://~i', '', $facebook) : 'sociale media volgen'),
-        'Wijngaardsberg 26' => tenantPublicRuntimeHtmlWaarde($straat !== '' ? $straat : 'Adres nog niet ingesteld'),
-        '6464 EZ Eygelshoven' => tenantPublicRuntimeHtmlWaarde($plaats !== '' ? $plaats : 'Plaats nog niet ingesteld'),
-        'Kerkrade (Eygelshoven)' => tenantPublicRuntimeHtmlWaarde($plaats !== '' ? $plaats : 'Plaats nog niet ingesteld'),
-        'Eygelshoven' => tenantPublicRuntimeHtmlWaarde($plaats !== '' ? $plaats : 'de verenigingslocatie'),
-        'Kok Lexmond' => 'de locatiebeheerder',
-        'https://rc045.nl' => tenantPublicRuntimeHtmlWaarde($siteUrl),
-        'pjaminon@me.com' => '',
-        'Pascal Jaminon' => 'Websitebeheer',
-        'RC045' => tenantPublicRuntimeHtmlWaarde($naam),
-    ];
-    $html = str_ireplace(array_keys($vervangingen), array_values($vervangingen), $html);
-
-    // Historische mailto-credit neutraliseren zonder een hardcoded productmerk.
-    $html = preg_replace('~mailto:\?subject=Website%20[^"\']+~i', '#', $html) ?? $html;
-    $html = preg_replace('~mailto:[^"\']*pjaminon[^"\']*~i', '#', $html) ?? $html;
-
-    foreach ([
-        'rc045','bashers of the south','eygelshoven','wijngaardsberg',
-        'bestuur@rc045.nl','facebook.com/rc045','kok lexmond',
-        'nl51 rabo 0367 6153 63','pjaminon@me.com','goatcounter.com',
-    ] as $verboden) {
-        if (stripos($html, $verboden) !== false) {
-            error_log('[platform] tenantuitvoer geblokkeerd door legacy fingerprint: ' . $verboden);
-            throw new RuntimeException('Publieke tenantuitvoer bevat niet-neutrale voorbeeldinhoud.');
-        }
-    }
-    return $html;
+    return tenantPublicRuntimePasRenderContextToe($html, $config);
 }
 
 function tenantPublicRuntimeStart(array $config, ?string $externPad): void
