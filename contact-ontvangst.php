@@ -9,6 +9,7 @@ require_once __DIR__.'/app/core/site.php';
 require_once __DIR__.'/contactberichten-opslag.php';
 require_once __DIR__.'/aanmeldingen-opslag.php'; // hergebruik geharde publieke rate-limitopslag
 require_once __DIR__.'/app/notifications/tenant-notifications.php';
+require_once __DIR__.'/app/operational-log.php';
 
 function contactAntwoord(int $status,string $tekst): void
 {
@@ -59,15 +60,23 @@ try{
         if($zelfdeContact&&$zelfdeBericht)contactAntwoord(200,'Ontvangen.');
     }
 
+    // De lokale inbox is authoritative. Een notificatie-outage mag deze write
+    // nooit terugrollen of de succesvolle formulierresponse veranderen.
     $record=contactBerichtNormaliseer(['naam'=>$naam,'email'=>$email,'telefoon'=>$telefoon,'onderwerp'=>$onderwerp,'bericht'=>$bericht]);
     $inbox['berichten'][]=$record;
+    if(!contactBerichtenSchrijf($inbox))contactAntwoord(500,'Opslaan mislukt.');
+
     if(tenantNotificationShouldEnqueue()){
-        $opgeslagen=privateStoreTransactie(static function()use($inbox,$record){
-            if(!contactBerichtenSchrijf($inbox))return false;
-            return tenantNotificationEnqueue('contact.received',(string)$record['id']);
-        });
-        if($opgeslagen===false)contactAntwoord(500,'Opslaan mislukt.');
-    }elseif(!contactBerichtenSchrijf($inbox))contactAntwoord(500,'Opslaan mislukt.');
+        try{
+            if(!tenantNotificationEnqueue('contact.received',(string)$record['id'])){
+                vpOps46Log(siteConfig(),'notification_enqueue_failed','error',['component'=>'notification','check'=>'contact.received','code'=>'outbox_write_failed']);
+                error_log('[platform] notification enqueue mislukt: outbox_write_failed');
+            }
+        }catch(Throwable $e){
+            vpOps46Log(siteConfig(),'notification_enqueue_failed','error',['component'=>'notification','check'=>'contact.received','code'=>'outbox_exception','error_class'=>get_class($e)]);
+            error_log('[platform] notification enqueue mislukt: outbox_exception '.get_class($e));
+        }
+    }
 }finally{
     dataSlotDicht($slot);
 }
