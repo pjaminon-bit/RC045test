@@ -193,8 +193,10 @@
     });
     document.querySelectorAll('.lang-flag').forEach(btn => { btn.classList.remove('active'); btn.setAttribute('aria-pressed', 'false'); });
     const activeBtn = document.querySelector(`.lang-flag[onclick="setLang('${lang}')"]`);
-    activeBtn.classList.add('active');
-    activeBtn.setAttribute('aria-pressed', 'true');
+    if (activeBtn) {
+      activeBtn.classList.add('active');
+      activeBtn.setAttribute('aria-pressed', 'true');
+    }
     document.documentElement.lang = lang;
     setStoredLanguage(lang);
     updateInternalLinks(lang);

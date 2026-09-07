@@ -26,7 +26,8 @@ test223Require(str_contains($site, "tenantKey + '_lang'"), 'tenantKey-gebaseerde
 test223Require(!str_contains($site, "context.name + '_lang'"), 'displaynaam mag geen storagekey vormen');
 
 // Deze vier inline paginascripts vormden de #223 read/write-mismatch en moeten
-// allemaal uitsluitend de gedeelde write-helper gebruiken.
+// allemaal uitsluitend de gedeelde write-helper gebruiken. De actieve
+// taalbutton is defensief: markupdrift mag een taalwissel niet laten crashen.
 $affectedWriters = [
     'media.php',
     'aanmelden.php',
@@ -38,6 +39,11 @@ foreach ($affectedWriters as $bestand) {
     test223Require(is_string($bron), "{$bestand} kon niet worden gelezen");
     test223Require(str_contains($bron, 'setStoredLanguage(lang);'), "{$bestand} gebruikt de gedeelde write-helper niet");
     test223Require(!str_contains($bron, "localStorage.setItem('rc045_lang', lang)"), "{$bestand} schrijft nog rechtstreeks naar rc045_lang");
+    test223Require(str_contains($bron, 'const activeBtn'), "{$bestand} selecteert de actieve taalbutton niet");
+    test223Require(
+        preg_match('/if\s*\(\s*activeBtn\s*\)\s*\{/', $bron) === 1,
+        "{$bestand} dereferentieert de actieve taalbutton niet null-safe"
+    );
 }
 
 // De homepage had vóór #223 al het correcte stabiele tenantKey-contract voor
