@@ -232,7 +232,7 @@
         'footer.become': 'Mitglied werden', 'footer.rules': 'Streckenreglement', 'footer.sponsor': 'Sponsoring',
         'footer.credit': 'Website von', 'footer.sponsors.title': 'Mit Dank an unsere Sponsoren',
         'status.open': 'Jetzt geöffnet', 'status.closed': 'Jetzt geschlossen', 'status.members': 'Jetzt für Mitglieder geöffnet', 'status.animo': 'Geöffnet bei genügend Andrang', 'status.animo.members': 'Für Mitglieder geöffnet bei genügend Andrang',
-        'meta.description': 'RC045 – Bashers of the South: ein geselliger Verein in Süd-Limburg für Freunde elektrisch angetriebener, ferngesteuerter Autos. Für Anfänger und erfahrene Hobbyisten, jung en alt.'
+        'meta.description': 'RC045 – Bashers of the South: ein geselliger Verein in Süd-Limburg für Freunde elektrisch angetriebener, ferngesteuerter Autos. Für Anfänger und erfahrene Hobbyisten, jung und alt.'
       }
     };
 
@@ -268,7 +268,7 @@
         ? tenantSiteContext.siteUrl.replace(/\/$/, '')
         : 'https://rc045.nl';
       if (canonical) canonical.setAttribute('href', lang === 'nl' ? basisUrl + '/' : basisUrl + '/?lang=' + lang);
-      setStoredLanguage(lang);
+      localStorage.setItem((tenantSiteContext ? tenantSiteContext.tenantKey : 'rc045') + '_lang', lang);
       const currentUrl = new URL(window.location.href);
       if (lang === 'nl') currentUrl.searchParams.delete('lang');
       else currentUrl.searchParams.set('lang', lang);
