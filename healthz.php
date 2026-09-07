@@ -16,6 +16,7 @@ try {
     require_once __DIR__ . '/app/operational-log.php';
     require_once __DIR__ . '/app/storage/private-store.php';
     require_once __DIR__ . '/app/leden/import-preview-store.php';
+    require_once __DIR__ . '/app/notifications/tenant-notifications.php';
 
     $private = trim((string)($config['opslag']['private_root'] ?? ''));
     if ($private === '' || !is_dir($private) || !is_readable($private) || !is_writable($private)) {
@@ -41,6 +42,28 @@ try {
     $probe = $pdo->query('SELECT 1');
     if ($probe === false || (int)$probe->fetchColumn() !== 1) {
         throw new RuntimeException('database-probe-mislukt');
+    }
+
+    // Notificatiedelivery gebruikt dezelfde niet-geprivilegieerde tenant-FPM
+    // runtime. Maximaal één due outbox-item per probe voorkomt dat een trage
+    // provider de healthrequest onbeheerst verlengt. Een transient failure is
+    // zichtbaar in operations maar maakt de app pas ongezond wanneer de
+    // backlog de tenantgebonden stale-grens passeert.
+    $delivery = tenantNotificationDispatchOne($config);
+    if (($delivery['attempted'] ?? false) === true && ($delivery['ok'] ?? false) !== true) {
+        vpOps46Log($config, 'notification_delivery_failed', 'warning', [
+            'component' => 'notifications',
+            'code' => (string)($delivery['state'] ?? 'transport_failed'),
+        ]);
+    }
+    $notificationStatus = tenantNotificationBacklogStatus($config);
+    if (($notificationStatus['ok'] ?? false) !== true) {
+        vpOps46Log($config, 'notification_unhealthy', 'error', [
+            'component' => 'notifications',
+            'code' => (string)($notificationStatus['code'] ?? 'unknown'),
+            'count' => (int)($notificationStatus['pending'] ?? 0),
+        ]);
+        throw new RuntimeException('notification-ongezond');
     }
 
     http_response_code(204);
