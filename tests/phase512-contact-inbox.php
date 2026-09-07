@@ -30,21 +30,23 @@ c512($removed===2,'retentie verwijdert oude open en afgehandelde contactberichte
 c512(!in_array('open-oud',$ids,true),'open contactbericht valt onder maximale bewaartermijn');
 c512(in_array('open-recent',$ids,true)&&in_array('klaar-recent',$ids,true),'recente contactberichten blijven bewaard');
 
-$sample='<!doctype html><html><body><form id="contact-form" action="https://formspree.io/f/legacy" data-tenant-disabled="1"><button type="submit" disabled="disabled">Stuur</button></form></body></html>';
+$sample='<!doctype html><html><body><form id="contact-form" action="https://example.invalid/external" data-tenant-disabled="1"><button type="submit" disabled="disabled">Stuur</button></form></body></html>';
 $uit=contactInboxRuntimeTransform($sample);
 c512(str_contains($uit,'action="contact-ontvangst.php"'),'runtime forceert same-origin contactendpoint');
-c512(!str_contains(strtolower($uit),'formspree.io'),'runtime laat geen externe contact-action door');
+c512(!str_contains($uit,'https://example.invalid/external'),'runtime laat geen externe contact-action door');
 c512(!str_contains($uit,'data-tenant-disabled'),'runtime activeert eerder uitgeschakelde tenantvorm');
 c512(!preg_match('~<button[^>]+disabled~i',$uit),'runtime activeert submitknop');
 $ander='<form id="ander" action="https://example.invalid/"></form>';
 c512(contactInboxRuntimeTransform($ander)===$ander,'runtime raakt andere formulieren niet');
+
+$index=c512txt($root.'/index.php');
+c512(str_contains($index,'<form class="contact-form reveal reveal-delay-2" action="contact-ontvangst.php"'),'contactbron post rechtstreeks naar lokale inbox');
 
 $endpoint=c512txt($root.'/contact-ontvangst.php');
 c512(strpos($endpoint,"\$_POST['website']")!==false,'publiek endpoint bevat honeypot');
 c512(strpos($endpoint,'aanmeldenPogingRegistreer')!==false,'publiek endpoint gebruikt geharde rate limiter');
 c512(strpos($endpoint,"hash('sha256','contact|'")!==false,'contact-rate-limit is logisch gescheiden van aanmeldingen');
 c512(strpos($endpoint,'contactBerichtenSchrijf')!==false,'publiek endpoint schrijft alleen naar private contactinbox');
-c512(stripos($endpoint,'formspree')===false,'same-origin endpoint kent geen externe formprovider');
 
 $platform=require $root.'/app/core/platform-definities.php';
 c512(($platform['beheer']['contactberichten']['capability']??'')==='contact.messages.manage','contactinbox heeft aparte capability');
@@ -58,7 +60,6 @@ c512(strpos($beheer,'contactBerichtenOpschonenBewaartermijn')!==false,'beheer ma
 
 $site=c512txt($root.'/site-config.php');
 c512(strpos($site,'$formAction = "\'self\'"')!==false,'CSP staat formulieractie alleen same-origin toe');
-c512(stripos($site,'formspree.io')===false,'CSP staat Formspree niet meer toe');
 c512(strpos($site,'contactberichten_bewaardagen')!==false,'contactretentie heeft expliciete standaardconfig');
 $ht=c512txt($root.'/.htaccess');$gi=c512txt($root.'/.gitignore');$backups=c512txt($root.'/beheer/backup-registry.php');
 c512(strpos($ht,'contactberichten-data\\.php')!==false,'Apache blokkeert standalone contactinboxdata');
