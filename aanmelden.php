@@ -83,7 +83,7 @@
 
   <!-- Formulier -->
   <div class="form-card">
-    <form id="aanmeld-form" action="https://formspree.io/f/mgobjlkl" method="POST" novalidate>
+    <form id="aanmeld-form" action="aanmelden-ontvangst.php" method="POST" novalidate>
       <div class="hp-field" aria-hidden="true">
         <label for="website">Website</label>
         <input type="text" id="website" name="website" tabindex="-1" autocomplete="off">
@@ -170,7 +170,7 @@
         </div>
       </div>
 
-      <!-- Verborgen velden voor Formspree -->
+      <!-- Afgeleide velden voor lokale aanmelding -->
       <input type="hidden" id="jeugdlid-hidden" name="jeugdlid">
       <input type="hidden" id="contributiebedrag-hidden" name="contributiebedrag">
 
@@ -844,14 +844,6 @@
           window.goatcounter.count({ path: 'aanmelding-verzonden', title: 'Aanmelding verzonden', event: true });
         }
         openBedankt();
-        // Daarnaast naar onze eigen server, zodat de aanmelding meteen in het
-        // ledenbestand komt met de status "in verificatie". Bewust pas hier,
-        // na Formspree: gaat dit mis, dan staat de aanmelding nog steeds in de
-        // mail aan het bestuur en merkt de bezoeker er niets van.
-        fetch('aanmelden-ontvangst.php', {
-          method: 'POST',
-          body: new FormData(form)
-        }).catch(function() { /* stil falen, de mail is al onderweg */ });
       } else {
         throw new Error();
       }
