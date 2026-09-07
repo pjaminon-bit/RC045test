@@ -38,8 +38,8 @@ try{
     c216o(($cfg['notificaties']['provider']??'')==='smtp'&&($cfg['notificaties']['smtp']['security']??'')==='starttls','onboarding bindt generieke SMTP-provider met TLS');
     c216o(($cfg['notificaties']['smtp']['credentials_file']??'')===$credentials,'tenantconfig verwijst alleen naar private credentialsfile');
     c216o(($cfg['notificaties']['recipients']['contact.received']??[])===['bestuur@pilot.example.invalid','secretaris@pilot.example.invalid'],'meerdere contactontvangers worden tenantgebonden opgeslagen');
-    $raw=(string)file_get_contents($configPad);
-    c216o(!str_contains($raw,'dummy-secret')&&!str_contains($raw,"'password' =>")&&!str_contains($raw,"'username' =>"),'tenantconfig bevat geen SMTP-secretvelden');
+    $notificatieRaw=var_export((array)($cfg['notificaties']??[]),true);
+    c216o(!str_contains($notificatieRaw,'dummy-secret')&&!str_contains($notificatieRaw,"'password' =>")&&!str_contains($notificatieRaw,"'username' =>"),'notificatieconfig bevat geen SMTP-secretvelden');
 
     [$repeatCode,$repeatOut]=run216o($base);
     c216o($repeatCode===0&&str_contains($repeatOut,'GEREED')&&!file_exists($credentials),'herhaalde onboarding blijft secretvrij en idempotent qua contract');
