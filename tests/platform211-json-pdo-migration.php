@@ -4,6 +4,7 @@ require_once $root . '/app/core/tenant-runtime.php';
 require_once $root . '/app/storage/private-store-migration-guard.php';
 require_once $root . '/app/storage/private-store-runtime-state.php';
 require_once $root . '/app/storage/private-json-pdo-migration.php';
+require_once $root . '/app/storage/private-store-migration-operational-guard.php';
 
 $ok = 0; $fout = 0;
 function c211b(bool $cond, string $label): void { global $ok,$fout; if($cond){$ok++;echo "OK: {$label}\n";}else{$fout++;fwrite(STDERR,"FOUT: {$label}\n");} }
@@ -105,6 +106,32 @@ try {
     file_put_contents($runtimeDir.'/private-store-migration.active','active');
     c211b(throws211b(fn()=>privateStoreMigrationWriteGuardEnter(),'tijdelijk alleen-lezen'),'active-marker blokkeert nieuwe private-store writes fail-closed');
     unlink($runtimeDir.'/private-store-migration.active');
+
+    // Downstream operationele plannen moeten aan het actuele migration-target databaseplan zijn gebonden.
+    $opsRoot=$tmp.'/ops-tenant';@mkdir($opsRoot.'/database',0750,true);
+    $opsTenant='ops-test';$dbPlan=$opsRoot.'/database/database-plan.json';
+    $none=privateMigrationOperationalPlansValidate($opsRoot,$opsTenant);
+    c211b($none===['monitoring'=>'absent','lifecycle'=>'absent'],'migratieguard laat tenant zonder bestaande monitoring/lifecycleplannen door');
+
+    @mkdir($opsRoot.'/monitoring',0750,true);file_put_contents($opsRoot.'/monitoring/monitoring-plan.json',"{}\n");
+    $monitoringActueel=fn(string $pad):array=>['plan'=>['tenant_key'=>$opsTenant,'source'=>['database_plan_file'=>$dbPlan]]];
+    $monitoringStale=fn(string $pad):array=>['plan'=>['tenant_key'=>$opsTenant,'source'=>['database_plan_file'=>$opsRoot.'/database/oude-database-plan.json']]];
+    $lifecycleOngebruikt=fn(string $pad):array=>['plan'=>[]];
+    c211b(throws211b(fn()=>privateMigrationOperationalPlansValidate($opsRoot,$opsTenant,$monitoringStale,$lifecycleOngebruikt),'actuele migration-target databaseplan'),'stale monitoringbinding blokkeert storage-migratie fail-closed');
+    $alleenMonitoring=privateMigrationOperationalPlansValidate($opsRoot,$opsTenant,$monitoringActueel,$lifecycleOngebruikt);
+    c211b($alleenMonitoring===['monitoring'=>'valid','lifecycle'=>'absent'],'opnieuw gebonden monitoringplan laat migratiepreflight door');
+
+    @mkdir($opsRoot.'/lifecycle',0750,true);file_put_contents($opsRoot.'/lifecycle/lifecycle-plan.json',"{}\n");
+    $lifecycleStale=fn(string $pad):array=>['plan'=>['tenant_key'=>$opsTenant,'source'=>['database_plan_file'=>$opsRoot.'/database/oude-database-plan.json','monitoring_plan_file'=>$opsRoot.'/monitoring/monitoring-plan.json']]];
+    $lifecycleActueel=fn(string $pad):array=>['plan'=>['tenant_key'=>$opsTenant,'source'=>['database_plan_file'=>$dbPlan,'monitoring_plan_file'=>$opsRoot.'/monitoring/monitoring-plan.json']]];
+    c211b(throws211b(fn()=>privateMigrationOperationalPlansValidate($opsRoot,$opsTenant,$monitoringActueel,$lifecycleStale),'actuele monitoring/databaseplannen'),'monitoring vernieuwd maar stale lifecyclebinding blokkeert migratie');
+    $beideActueel=privateMigrationOperationalPlansValidate($opsRoot,$opsTenant,$monitoringActueel,$lifecycleActueel);
+    c211b($beideActueel===['monitoring'=>'valid','lifecycle'=>'valid'],'monitoring en lifecycle opnieuw gebonden aan migration-target worden geaccepteerd');
+    unlink($opsRoot.'/monitoring/monitoring-plan.json');
+    c211b(throws211b(fn()=>privateMigrationOperationalPlansValidate($opsRoot,$opsTenant,$monitoringActueel,$lifecycleActueel),'zonder actueel monitoringplan'),'lifecycleplan zonder monitoringplan wordt fail-closed geweigerd');
+
+    $coordinatorRaw=(string)file_get_contents($root.'/bin/apply-private-store-migration.php');
+    c211b(str_contains($coordinatorRaw,"privateMigrationOperationalPlansValidate(\$tenantRoot, \$tenant);"),'productiecoordinator voert operationele-planbindingcontrole vóór cutover uit');
 } finally {
     putenv('VERENIGING_CONFIG_FILE');
     rr211b($tmp);
