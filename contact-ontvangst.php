@@ -8,6 +8,7 @@ header('Cache-Control: no-store');
 require_once __DIR__.'/app/core/site.php';
 require_once __DIR__.'/contactberichten-opslag.php';
 require_once __DIR__.'/aanmeldingen-opslag.php'; // hergebruik geharde publieke rate-limitopslag
+require_once __DIR__.'/app/notifications/tenant-notifications.php';
 
 function contactAntwoord(int $status,string $tekst): void
 {
@@ -58,8 +59,15 @@ try{
         if($zelfdeContact&&$zelfdeBericht)contactAntwoord(200,'Ontvangen.');
     }
 
-    $inbox['berichten'][]=contactBerichtNormaliseer(['naam'=>$naam,'email'=>$email,'telefoon'=>$telefoon,'onderwerp'=>$onderwerp,'bericht'=>$bericht]);
-    if(!contactBerichtenSchrijf($inbox))contactAntwoord(500,'Opslaan mislukt.');
+    $record=contactBerichtNormaliseer(['naam'=>$naam,'email'=>$email,'telefoon'=>$telefoon,'onderwerp'=>$onderwerp,'bericht'=>$bericht]);
+    $inbox['berichten'][]=$record;
+    if(tenantNotificationShouldEnqueue()){
+        $opgeslagen=privateStoreTransactie(static function()use($inbox,$record){
+            if(!contactBerichtenSchrijf($inbox))return false;
+            return tenantNotificationEnqueue('contact.received',(string)$record['id']);
+        });
+        if($opgeslagen===false)contactAntwoord(500,'Opslaan mislukt.');
+    }elseif(!contactBerichtenSchrijf($inbox))contactAntwoord(500,'Opslaan mislukt.');
 }finally{
     dataSlotDicht($slot);
 }
