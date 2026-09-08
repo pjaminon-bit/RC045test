@@ -26,6 +26,7 @@ cleanup() {
 trap cleanup EXIT
 
 mkdir -p "$tmp/run" "$public"
+: > "$tmp/mime.types"
 chmod 0755 "$tmp" "$tmp/run" "$platform" "$platform/releases" "$release" "$public"
 ln -s 'releases/test-release' "$platform/current"
 cp "$root/public/.htaccess" "$public/.htaccess"
@@ -66,6 +67,9 @@ LoadModule proxy_module /usr/lib/apache2/modules/mod_proxy.so
 </IfModule>
 <IfModule !proxy_fcgi_module>
 LoadModule proxy_fcgi_module /usr/lib/apache2/modules/mod_proxy_fcgi.so
+</IfModule>
+<IfModule mime_module>
+TypesConfig "$tmp/mime.types"
 </IfModule>
 ServerName localhost
 ErrorLog "$errorlog"
