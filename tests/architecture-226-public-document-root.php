@@ -21,13 +21,13 @@ check226(binnen226($public,$root)&&realpath($public)!==realpath($root),'public/ 
 foreach (['app','bin','tests','docs','ops'] as $intern) {
     check226(is_dir($root.'/'.$intern)&&!binnen226($root.'/'.$intern,$public),"{$intern}/ ligt fysiek buiten de documentroot");
 }
-foreach (['auth.php','site-config.php','site.php','paneel-modules.php','beheer/module-registry.php','beheer/fotoboek-lib.php'] as $intern) {
+foreach (['auth.php','site-config.php','app/core/site.php','app/core/site-seo.php','app/beheer/module-registry.php','beheer/fotoboek-lib.php'] as $intern) {
     check226(is_file($root.'/'.$intern)&&!binnen226($root.'/'.$intern,$public),"{$intern} ligt fysiek buiten de documentroot");
 }
 
 $php=[];$symlinks=[];
 $it=new RecursiveIteratorIterator(new RecursiveDirectoryIterator($public,FilesystemIterator::SKIP_DOTS),RecursiveIteratorIterator::SELF_FIRST);
-foreach($it as $info){
+foreach($it as$info){
     $pad=$info->getPathname();
     if(is_link($pad)){$symlinks[]=$pad;continue;}
     if($info->isFile()&&strtolower($info->getExtension())==='php')$php[]=str_replace('\\','/',substr($pad,strlen($root)+1));
