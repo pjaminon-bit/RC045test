@@ -65,10 +65,11 @@ try {
 
     check42(str_contains($httpsA,'DocumentRoot "'.$root.'/public"')&&str_contains($httpsB,'DocumentRoot "'.$root.'/public"'),'HTTPS-routing gebruikt uitsluitend public/ als DocumentRoot');
     check42(str_contains($httpsA,'<Directory "'.$root.'">')&&str_contains($httpsA,'Require all denied'),'volledige immutable release-root blijft server-side geweigerd');
+    check42(str_contains($httpsA,'<Directory "'.dirname($root).'">')&&str_contains($httpsA,'Options +FollowSymLinks')&&str_contains($httpsA,'Require all denied'),'release-parent staat alleen symlinktraversal toe en blijft inhoudelijk geweigerd');
     check42(str_contains($httpsA,'<Directory "'.$root.'/public">')&&str_contains($httpsA,'Require all granted'),'alleen de minimale public-root wordt vrijgegeven');
     check42(str_contains($httpsA,'AllowOverride FileInfo Indexes Options')&&str_contains($httpsA,'Options -Indexes -ExecCGI -MultiViews +FollowSymLinks'),'public-root krijgt uitsluitend de overrides die routing/securityheaders nodig hebben');
     check42(!str_contains($httpsA,'LocationMatch')&&!str_contains($httpsA,'site-config(?:\\.local)?\\.php')&&!str_contains($httpsA,'(?:app|bin|tests|docs'),'gevoelige pad- en bestandsdenylists zijn niet langer de primaire grens');
-    check42(str_contains($httpsA,'<FilesMatch "\\.php$">')&&str_contains($httpsA,'<Files "index.php">'),'defense-in-depth blokkeert iedere toekomstige PHP-file behalve de frontcontroller');
+    check42(str_contains($httpsA,'<FilesMatch "(?i)\\.php$">')&&str_contains($httpsA,'<Files "index.php">')&&str_contains($httpsA,'AuthMerging Off'),'defense-in-depth blokkeert PHP case-insensitive en geeft alleen de frontcontroller expliciete authorization');
     check42(str_contains($httpsA,'proxy:unix:'.($jA['php_fpm']['socket']??'').'|'.($jA['php_fpm']['backend']??'')),'tenant A frontcontroller bindt exact eigen Unix socket en backend');
     check42(str_contains($httpsB,'proxy:unix:'.($jB['php_fpm']['socket']??'').'|'.($jB['php_fpm']['backend']??'')),'tenant B frontcontroller bindt exact eigen Unix socket en backend');
     check42(!str_contains($httpsA,(string)$jB['php_fpm']['socket'])&&!str_contains($httpsB,(string)$jA['php_fpm']['socket']),'HTTPS-fragment kan niet naar de socket van de andere tenant wijzen');
