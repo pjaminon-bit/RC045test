@@ -35,6 +35,71 @@ function dns43IpLijst(string $csv, int $family): array
     $lijst = array_keys($uit); sort($lijst, SORT_STRING); return $lijst;
 }
 
+function dns43ResolverContext(string $mode = 'system', ?string $endpoint = null, int $port = 53): array
+{
+    $mode = strtolower(trim($mode));
+    if ($mode === 'system') {
+        if ($endpoint !== null && trim($endpoint) !== '') throw new RuntimeException('System resolver mag geen expliciet endpoint bevatten.');
+        if ($port !== 53) throw new RuntimeException('System resolver gebruikt het platform-default DNS-poortcontract.');
+        return ['mode' => 'system', 'endpoint' => null, 'port' => 53];
+    }
+    if ($mode !== 'explicit') throw new RuntimeException('DNS-resolvermodus moet system of explicit zijn.');
+    $endpoint = trim((string)$endpoint);
+    if ($endpoint === '' || filter_var($endpoint, FILTER_VALIDATE_IP) === false) {
+        throw new RuntimeException('Expliciete DNS-resolver vereist een geldig IP-adres.');
+    }
+    $bin = @inet_pton($endpoint); $norm = $bin === false ? false : @inet_ntop($bin);
+    if (!is_string($norm) || $norm === '') throw new RuntimeException('DNS-resolver-IP kon niet canoniek worden gemaakt.');
+    if ($port < 1 || $port > 65535) throw new RuntimeException('DNS-resolverpoort moet tussen 1 en 65535 liggen.');
+    return ['mode' => 'explicit', 'endpoint' => strtolower($norm), 'port' => $port];
+}
+
+function dns43ResolverContextVanCli(string $resolver, int $port = 53): array
+{
+    $resolver = trim($resolver);
+    return strtolower($resolver) === 'system'
+        ? dns43ResolverContext('system', null, $port)
+        : dns43ResolverContext('explicit', $resolver, $port);
+}
+
+function dns43ResolverContextValideer(array $resolver): array
+{
+    return dns43ResolverContext(
+        (string)($resolver['mode'] ?? ''),
+        isset($resolver['endpoint']) && $resolver['endpoint'] !== null ? (string)$resolver['endpoint'] : null,
+        (int)($resolver['port'] ?? 0)
+    );
+}
+
+function dns43ResolverContextHash(array $resolver): string
+{
+    return hash('sha256', dns43Json(dns43ResolverContextValideer($resolver)));
+}
+
+function dns43ResolverContextBind(array $resolver): array
+{
+    $resolver = dns43ResolverContextValideer($resolver);
+    $hash = dns43ResolverContextHash($resolver);
+    $key = '__dns43_bound_resolver_context';
+    if (isset($GLOBALS[$key]) && is_array($GLOBALS[$key])) {
+        $bestaand = dns43ResolverContextValideer($GLOBALS[$key]);
+        if (!hash_equals(dns43ResolverContextHash($bestaand), $hash)) {
+            throw new RuntimeException('DNS-resolvercontext drift binnen dezelfde faseketen.');
+        }
+        return $bestaand;
+    }
+    $GLOBALS[$key] = $resolver;
+    return $resolver;
+}
+
+function dns43ResolverContextActief(): array
+{
+    $key = '__dns43_bound_resolver_context';
+    return isset($GLOBALS[$key]) && is_array($GLOBALS[$key])
+        ? dns43ResolverContextValideer($GLOBALS[$key])
+        : dns43ResolverContext();
+}
+
 function dns43WebContext(string $webPlanPad): array
 {
     $web = web42PlanLeesEnValideer($webPlanPad);
@@ -117,7 +182,7 @@ function dns43Plan(array $context, string $outputDir, string $strategy, array $i
             'unexpected_ipv6_forbidden' => true,
             'mixed_cname_and_address_forbidden' => true,
             'cname_chain_depth' => $strategy === 'cname' ? 1 : 0,
-            'live_system_resolver_required_for_readiness' => true,
+            'resolver_context_bound_readiness' => true,
             'minimum_readiness_samples' => 3,
             'minimum_sample_interval_seconds' => 2,
             'readiness_max_age_seconds' => 900,
@@ -183,11 +248,109 @@ function dns43Observatie(array $records): array
     return ['a' => $a, 'aaaa' => $aaaa, 'cname' => $cname, 'ttl_min' => $ttls === [] ? null : min($ttls)];
 }
 
-function dns43Resolve(string $naam): array
+function dns43DnsNaamEncodeer(string $naam): string
 {
-    $naam = dns43Naam($naam);
-    $records = @dns_get_record($naam, DNS_A | DNS_AAAA | DNS_CNAME);
-    if ($records === false) throw new RuntimeException("DNS-query mislukt voor {$naam}.");
+    $uit = '';
+    foreach (explode('.', dns43Naam($naam)) as $label) {
+        $len = strlen($label);
+        if ($len < 1 || $len > 63) throw new RuntimeException('DNS-label heeft ongeldige lengte.');
+        $uit .= chr($len) . $label;
+    }
+    return $uit . "\0";
+}
+
+function dns43DnsNaamLees(string $packet, int &$offset, int $depth = 0): string
+{
+    if ($depth > 20) throw new RuntimeException('DNS-compressieketen is te diep.');
+    $labels = []; $len = strlen($packet);
+    while (true) {
+        if ($offset >= $len) throw new RuntimeException('DNS-response bevat een afgekapt naamveld.');
+        $octet = ord($packet[$offset]);
+        if ($octet === 0) { $offset++; break; }
+        if (($octet & 0xC0) === 0xC0) {
+            if ($offset + 1 >= $len) throw new RuntimeException('DNS-response bevat een afgekorte compressiepointer.');
+            $pointer = (($octet & 0x3F) << 8) | ord($packet[$offset + 1]);
+            $offset += 2; $p = $pointer;
+            $suffix = dns43DnsNaamLees($packet, $p, $depth + 1);
+            if ($suffix !== '') $labels[] = $suffix;
+            break;
+        }
+        if (($octet & 0xC0) !== 0 || $octet > 63 || $offset + 1 + $octet > $len) {
+            throw new RuntimeException('DNS-response bevat een ongeldig naamveld.');
+        }
+        $offset++; $labels[] = substr($packet, $offset, $octet); $offset += $octet;
+    }
+    return strtolower(implode('.', $labels));
+}
+
+function dns43ExplicieteQuery(string $naam, int $type, array $resolver): array
+{
+    $resolver = dns43ResolverContextValideer($resolver);
+    if ($resolver['mode'] !== 'explicit') throw new RuntimeException('Expliciete DNS-query vereist explicit resolvercontext.');
+    $qtype = match ($type) { DNS_A => 1, DNS_AAAA => 28, DNS_CNAME => 5, default => throw new RuntimeException('Niet-ondersteund DNS-querytype.') };
+    $id = random_int(1, 65535);
+    $query = pack('nnnnnn', $id, 0x0100, 1, 0, 0, 0) . dns43DnsNaamEncodeer($naam) . pack('nn', $qtype, 1);
+    $ep = str_contains((string)$resolver['endpoint'], ':') ? '[' . $resolver['endpoint'] . ']' : $resolver['endpoint'];
+    $errno = 0; $errstr = '';
+    $socket = @stream_socket_client('udp://' . $ep . ':' . $resolver['port'], $errno, $errstr, 3, STREAM_CLIENT_CONNECT);
+    if (!is_resource($socket)) throw new RuntimeException('Expliciete DNS-resolver is niet bereikbaar.');
+    stream_set_timeout($socket, 3);
+    try {
+        if (@fwrite($socket, $query) !== strlen($query)) throw new RuntimeException('DNS-query kon niet volledig worden verzonden.');
+        $packet = @fread($socket, 4096);
+        $meta = stream_get_meta_data($socket);
+    } finally { fclose($socket); }
+    if (!is_string($packet) || strlen($packet) < 12 || ($meta['timed_out'] ?? false)) throw new RuntimeException('Expliciete DNS-query gaf geen geldige response.');
+    $head = unpack('nid/nflags/nqd/nan/nns/nar', substr($packet, 0, 12));
+    if (!is_array($head) || (int)$head['id'] !== $id || (((int)$head['flags'] & 0x8000) === 0)) throw new RuntimeException('DNS-response hoort niet bij de uitgevoerde query.');
+    if (((int)$head['flags'] & 0x0200) !== 0) throw new RuntimeException('DNS-response is truncated; readiness faalt gesloten.');
+    $rcode = (int)$head['flags'] & 0x000F;
+    if ($rcode !== 0) throw new RuntimeException('DNS-resolver antwoordde met foutcode ' . $rcode . '.');
+    $offset = 12;
+    for ($i = 0; $i < (int)$head['qd']; $i++) {
+        dns43DnsNaamLees($packet, $offset);
+        if ($offset + 4 > strlen($packet)) throw new RuntimeException('DNS-response bevat een afgekapt questionveld.');
+        $offset += 4;
+    }
+    $records = []; $queryNaam = dns43Naam($naam);
+    for ($i = 0; $i < (int)$head['an']; $i++) {
+        $owner = dns43DnsNaamLees($packet, $offset);
+        if ($offset + 10 > strlen($packet)) throw new RuntimeException('DNS-response bevat een afgekapt answerheader.');
+        $rr = unpack('ntype/nclass/Nttl/nrdlen', substr($packet, $offset, 10)); $offset += 10;
+        $rdlen = (int)$rr['rdlen']; $rstart = $offset;
+        if ($offset + $rdlen > strlen($packet)) throw new RuntimeException('DNS-response bevat afgekapt answerdata.');
+        if ((int)$rr['class'] === 1 && hash_equals($queryNaam, $owner) && (int)$rr['type'] === $qtype) {
+            if ($qtype === 1 && $rdlen === 4) {
+                $ip = @inet_ntop(substr($packet, $offset, 4));
+                if (is_string($ip)) $records[] = ['type'=>'A','ip'=>$ip,'ttl'=>(int)$rr['ttl']];
+            } elseif ($qtype === 28 && $rdlen === 16) {
+                $ip = @inet_ntop(substr($packet, $offset, 16));
+                if (is_string($ip)) $records[] = ['type'=>'AAAA','ipv6'=>$ip,'ttl'=>(int)$rr['ttl']];
+            } elseif ($qtype === 5) {
+                $nameOffset = $offset; $target = dns43DnsNaamLees($packet, $nameOffset);
+                if ($target !== '') $records[] = ['type'=>'CNAME','target'=>$target,'ttl'=>(int)$rr['ttl']];
+            }
+        }
+        $offset = $rstart + $rdlen;
+    }
+    return $records;
+}
+
+function dns43Resolve(string $naam, ?array $resolver = null, ?callable $query = null): array
+{
+    $naam = dns43Naam($naam); $resolver = dns43ResolverContextValideer($resolver ?? dns43ResolverContextActief());
+    if ($query !== null) {
+        $records = $query($naam, $resolver);
+        if (!is_array($records)) throw new RuntimeException('DNS-testquery gaf geen recordlijst terug.');
+        return dns43Observatie($records);
+    }
+    if ($resolver['mode'] === 'system') {
+        $records = @dns_get_record($naam, DNS_A | DNS_AAAA | DNS_CNAME);
+        if ($records === false) throw new RuntimeException("DNS-query mislukt voor {$naam}.");
+        return dns43Observatie($records);
+    }
+    $records = [];
+    foreach ([DNS_A, DNS_AAAA, DNS_CNAME] as $type) $records = array_merge($records, dns43ExplicieteQuery($naam, $type, $resolver));
     return dns43Observatie($records);
 }
 
@@ -232,7 +395,18 @@ function dns43ReadinessLeesEnValideer(string $statusPad, ?int $nu = null): array
     if (!is_array($status) || (int)($status['schema'] ?? 0) !== 1 || ($status['phase'] ?? '') !== '4.3-readiness' || ($status['ready'] ?? false) !== true) {
         throw new RuntimeException('DNS-readiness is niet geldig of niet ready.');
     }
-    if (($status['resolver_mode'] ?? '') !== 'system') throw new RuntimeException('DNS-readiness komt niet van de live systeemresolver.');
+    $legacyResolver = !isset($status['resolver']);
+    if ($legacyResolver) {
+        if (($status['resolver_mode'] ?? '') !== 'system') throw new RuntimeException('Legacy DNS-readiness komt niet van de live systeemresolver.');
+        $resolver = dns43ResolverContext();
+    } else {
+        $resolver = dns43ResolverContextValideer((array)$status['resolver']);
+    }
+    $resolverHash = dns43ResolverContextHash($resolver);
+    if (!hash_equals($resolver['mode'], (string)($status['resolver_mode'] ?? ''))
+        || (!$legacyResolver && !hash_equals($resolverHash, (string)($status['resolver_sha256'] ?? '')))) {
+        throw new RuntimeException('DNS-readiness resolvercontext is intern inconsistent.');
+    }
 
     $planCtx = dns43PlanLeesEnValideer((string)($status['source']['dns_plan_file'] ?? ''));
     $plan = $planCtx['plan'];
@@ -246,10 +420,11 @@ function dns43ReadinessLeesEnValideer(string $statusPad, ?int $nu = null): array
     if (runtime41NormPad($statusPad) !== runtime41NormPad((string)$plan['bundle']['readiness_file'])) throw new RuntimeException('DNS-readiness staat niet op het gebonden tenantpad.');
 
     $samples = (int)($status['propagation']['sample_count'] ?? 0); $interval = (int)($status['propagation']['interval_seconds'] ?? -1);
-    if (($status['propagation']['scope'] ?? '') !== 'configured-system-resolver'
+    $scope = $resolver['mode'] === 'system' ? 'configured-system-resolver' : 'explicit-public-resolver';
+    if (($status['propagation']['scope'] ?? '') !== $scope
         || $samples < (int)$plan['rules']['minimum_readiness_samples']
         || $interval < (int)$plan['rules']['minimum_sample_interval_seconds']) {
-        throw new RuntimeException('DNS-readiness bewijst onvoldoende propagation-stabiliteit.');
+        throw new RuntimeException('DNS-readiness bewijst onvoldoende propagation-stabiliteit of resolvercontext.');
     }
     $checked = dns43Utc((string)($status['checked_at_utc'] ?? '')); $expires = dns43Utc((string)($status['expires_at_utc'] ?? ''));
     if ($expires !== $checked + (int)$plan['rules']['readiness_max_age_seconds']) throw new RuntimeException('DNS-readiness heeft een ongeldige geldigheidsduur.');
@@ -258,5 +433,6 @@ function dns43ReadinessLeesEnValideer(string $statusPad, ?int $nu = null): array
 
     $owner = (array)($status['observed']['owner'] ?? []); $terminal = isset($status['observed']['terminal']) && is_array($status['observed']['terminal']) ? $status['observed']['terminal'] : null;
     if ((dns43Beoordeel($plan, $owner, $terminal)['ready'] ?? false) !== true) throw new RuntimeException('Opgeslagen DNS-observatie voldoet niet meer aan het gebonden plan.');
-    return ['status' => $status, 'plan_context' => $planCtx, 'path' => $statusPad, 'sha256' => hash('sha256', $raw)];
+    $resolver = dns43ResolverContextBind($resolver);
+    return ['status' => $status, 'resolver' => $resolver, 'resolver_sha256' => $resolverHash, 'plan_context' => $planCtx, 'path' => $statusPad, 'sha256' => hash('sha256', $raw)];
 }
