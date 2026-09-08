@@ -14,13 +14,16 @@ function c523(bool $cond, string $label): void
 $tmp = sys_get_temp_dir() . '/rc045-phase523-' . bin2hex(random_bytes(5));
 @mkdir($tmp . '/tenant', 0750, true);
 try {
+    $release = '/srv/verenigingsplatform/releases/' . str_repeat('a', 40);
     $context = [
         'tenant_root' => $tmp . '/tenant',
         'tenant_key' => 'test',
         'pool' => 'vp-test',
         'host' => 'test.example.nl',
-        'document_root' => '/srv/verenigingsplatform/current',
-        'document_root_real' => '/srv/verenigingsplatform/releases/' . str_repeat('a', 40),
+        'app_root' => '/srv/verenigingsplatform/current',
+        'app_root_real' => $release,
+        'document_root' => '/srv/verenigingsplatform/current/public',
+        'document_root_real' => $release . '/public',
         'runtime_plan_path' => $tmp . '/tenant/runtime/runtime-plan.json',
         'runtime_plan_sha256' => str_repeat('b', 64),
         'deployment' => [
@@ -34,6 +37,8 @@ try {
     $binary = (string)($plan['apache']['control_binary'] ?? '');
     c523($binary === '/usr/sbin/apache2ctl', 'fase 4.2 genereert het vaste absolute Ubuntu/Debian apache2ctl-pad');
     c523(str_starts_with($binary, '/'), 'gegenereerde Apache control-binary is absoluut');
+    c523(($plan['shared_code']['app_root'] ?? '') === '/srv/verenigingsplatform/current', 'synthetische first-VPS fixture houdt release-root buiten DocumentRoot');
+    c523(($plan['shared_code']['document_root'] ?? '') === '/srv/verenigingsplatform/current/public', 'synthetische first-VPS fixture gebruikt minimale public-root');
 
     $apply = (string)file_get_contents($root . '/bin/apply-vps-webserver.php');
     c523(
