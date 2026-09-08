@@ -25,7 +25,10 @@ for test_file in "${tests[@]}"; do
   php "$test_file"
 done
 
+printf '\n== Apache #226 runtime-regressie ==\n'
+bash tests/architecture-226-apache-runtime.sh
+
 printf '\n== Repositorygrenzen ==\n'
 test ! -e site-config.local.php
 
-echo "ALLE REGRESSIETESTS GESLAAGD (${#tests[@]} PHP-tests)"
+echo "ALLE REGRESSIETESTS GESLAAGD (${#tests[@]} PHP-tests + Apache #226 runtime)"
