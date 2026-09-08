@@ -32,7 +32,7 @@ $rootBlock = "<Directory \"/\">\n    Options None\n    AllowOverride None\n    R
 $parentBlock = "<Directory \"/srv/verenigingsplatform\">\n    Options +FollowSymLinks\n    AllowOverride None\n    Require all denied\n</Directory>";
 $releaseBlock = "<Directory \"/srv/verenigingsplatform/current\">\n    Options None\n    AllowOverride None\n    Require all denied\n</Directory>";
 $docrootBlock = "<Directory \"/srv/verenigingsplatform/current/public\">\n    Options -Indexes -ExecCGI -MultiViews +FollowSymLinks\n    AllowOverride FileInfo Indexes Options\n    Require all granted\n</Directory>";
-$phpDenyBlock = "<FilesMatch \"(?i)\\.php$\">\n    Require all denied\n</FilesMatch>";
+$phpDenyBlock = "<FilesMatch \"(?i)\\.php$\">\n    <RequireAll>\n        Require all granted\n        Require not expr \"-f '%{REQUEST_FILENAME}'\"\n    </RequireAll>\n</FilesMatch>";
 $frontControllerBlock = "<Files \"index.php\">\n    AuthMerging Off\n    Require all granted\n    SetHandler \"proxy:unix:/run/php/vst-test.sock|fcgi://vst-test/\"\n</Files>";
 
 check528(str_contains($fragment, 'DocumentRoot "/srv/verenigingsplatform/current/public"'), 'DocumentRoot volgt de current-symlink uitsluitend naar de public-subdirectory');
@@ -64,7 +64,7 @@ check528(
 check528(
     str_contains($fragment, $phpDenyBlock)
         && str_contains($fragment, $frontControllerBlock),
-    'PHP wordt case-insensitive geweigerd en alleen exact index.php krijgt expliciete FPM-authorization'
+    'fysieke PHP-bestanden worden case-insensitive geweigerd terwijl virtuele routes en exact index.php gecontroleerd mogen doorlopen'
 );
 
 if ($fout > 0) {
