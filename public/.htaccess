@@ -1,5 +1,4 @@
 RewriteEngine On
-Options -Indexes -MultiViews
 DirectoryIndex index.php
 
 # #226: een later fysiek toegevoegd PHP-bestand mag nooit door alleen zijn
