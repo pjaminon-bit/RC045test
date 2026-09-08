@@ -1,0 +1,252 @@
+#!/usr/bin/bash
+set -Eeuo pipefail
+export PATH='/usr/sbin:/usr/bin:/sbin:/bin'
+umask 077
+
+if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
+  echo 'Public-root cutover moet als root draaien.' >&2
+  exit 77
+fi
+if [[ "$#" -ne 2 || ! "$1" =~ ^[0-9a-f]{40}$ || ! "$2" =~ ^/ ]]; then
+  echo 'Gebruik: finalize-public-root-cutover <40-hex-main-commit> <absolute-schone-checkout>' >&2
+  exit 64
+fi
+
+TARGET="$1"
+REPO="${2%/}"
+TENANT='test'
+TENANT_ROOT="/srv/verenigingen/$TENANT"
+HOSTNAME='test.vps.holox.nl'
+PUBLIC_IPV4='149.143.36.59'
+RESOLVER='1.1.1.1'
+PHP='/usr/bin/php8.5'
+HOST_LAUNCHER='/usr/local/sbin/verenigingsplatform-host-php'
+HOST_CONFIG='/etc/verenigingsplatform/host-engine.path'
+WEB_PLAN="$TENANT_ROOT/webserver-226/web-plan.json"
+DNS_PLAN="$TENANT_ROOT/dns/dns-plan.json"
+DNS_READY="$TENANT_ROOT/dns/dns-readiness.json"
+TLS_PLAN="$TENANT_ROOT/tls/tls-plan.json"
+DB_PLAN="$TENANT_ROOT/database/database-plan.json"
+MON_PLAN="$TENANT_ROOT/monitoring/monitoring-plan.json"
+LIFE_PLAN="$TENANT_ROOT/lifecycle/lifecycle-plan.json"
+TMP_DNS=''
+CUTOVER_STARTED=0
+CUTOVER_COMMITTED=0
+LIVE_FRAGMENT=''
+BACKUP_FRAGMENT=''
+BACKUP_DIR=''
+
+log() { printf '\n=== %s ===\n' "$*"; }
+die() { echo "FOUT #226: $*" >&2; exit 1; }
+
+rollback_fragment() {
+  set +e
+  echo 'ROLLBACK: herstel oorspronkelijk Apache-routingfragment.' >&2
+  if [[ -n "$LIVE_FRAGMENT" && -n "$BACKUP_FRAGMENT" && -f "$BACKUP_FRAGMENT" && ! -L "$LIVE_FRAGMENT" ]]; then
+    local tmp="${LIVE_FRAGMENT}.rollback.$$"
+    /usr/bin/install -o root -g root -m 0644 "$BACKUP_FRAGMENT" "$tmp" && \
+      /usr/bin/mv -f "$tmp" "$LIVE_FRAGMENT" && \
+      /usr/sbin/apache2ctl configtest && \
+      /usr/bin/systemctl reload apache2
+    local rc=$?
+    [[ -e "$tmp" ]] && /usr/bin/rm -f "$tmp"
+    if [[ $rc -eq 0 ]]; then
+      echo 'ROLLBACK OK: oorspronkelijke routing actief.' >&2
+    else
+      echo 'KRITIEK: automatische rollback kon niet volledig worden bevestigd.' >&2
+    fi
+  fi
+  set -e
+}
+
+cleanup() {
+  local rc=$?
+  trap - EXIT
+  [[ -n "$TMP_DNS" && -f "$TMP_DNS" ]] && /usr/bin/rm -f "$TMP_DNS"
+  if [[ $rc -ne 0 && $CUTOVER_STARTED -eq 1 && $CUTOVER_COMMITTED -eq 0 ]]; then
+    rollback_fragment
+  fi
+  exit "$rc"
+}
+trap cleanup EXIT
+
+for exe in /usr/bin/bash /usr/bin/git /usr/bin/jq /usr/bin/curl /usr/bin/sha256sum \
+  /usr/bin/cmp /usr/bin/install /usr/bin/mv /usr/bin/cp /usr/bin/mktemp \
+  /usr/bin/stat /usr/bin/readlink /usr/bin/grep /usr/bin/awk /usr/bin/chown \
+  /usr/bin/chmod /usr/bin/rm /usr/sbin/apache2ctl /usr/bin/systemctl "$PHP"; do
+  [[ -x "$exe" ]] || die "vereiste executable ontbreekt: $exe"
+done
+
+log '1/8 broncheckout en trusted host-engine'
+[[ -d "$REPO" && ! -L "$REPO" ]] || die 'stagingcheckout ontbreekt of is een symlink.'
+[[ "$(cd "$REPO" && pwd -P)" == "$REPO" ]] || die 'stagingcheckout is niet het canonieke fysieke pad.'
+[[ "$(/usr/bin/git -C "$REPO" rev-parse HEAD)" == "$TARGET" ]] || die 'stagingcheckout staat niet op de opgegeven main-commit.'
+[[ -z "$(/usr/bin/git -C "$REPO" status --porcelain=v1 --untracked-files=all)" ]] || die 'stagingcheckout is niet schoon.'
+REMOTE_MAIN="$(/usr/bin/git -C "$REPO" ls-remote origin refs/heads/main | /usr/bin/awk 'NR==1 {print $1}')"
+[[ "$REMOTE_MAIN" == "$TARGET" ]] || die 'opgegeven commit is niet de actuele remote main-tip.'
+/usr/bin/bash "$REPO/ops/vps-test-deploy/install-verenigingsplatform-host-engine" "$TARGET" "$REPO"
+[[ -f "$HOST_CONFIG" && ! -L "$HOST_CONFIG" ]] || die 'host-engine configuratie ontbreekt of is onveilig.'
+IFS= read -r ENGINE < "$HOST_CONFIG"
+[[ "$ENGINE" == "/usr/local/libexec/verenigingsplatform/host-engine/$TARGET" && -d "$ENGINE" && ! -L "$ENGINE" ]] || die 'actieve host-engine is niet exact de opgegeven commit.'
+(
+  cd "$ENGINE"
+  /usr/bin/sha256sum --check --quiet .host-engine-manifest.sha256
+) || die 'host-engine manifestvalidatie faalt.'
+
+log '2/8 #226 webserverkandidaat volledig valideren'
+[[ -f "$WEB_PLAN" && ! -L "$WEB_PLAN" ]] || die '#226 web-plan ontbreekt of is onveilig.'
+"$PHP" "$ENGINE/bin/apply-vps-webserver.php" --plan="$WEB_PLAN" --check
+/usr/bin/jq -e \
+  --arg tenant "$TENANT" \
+  --arg host "$HOSTNAME" \
+  '.tenant_key == $tenant
+   and .canonical_host == $host
+   and .shared_code.app_root == "/srv/verenigingsplatform/current"
+   and .shared_code.document_root == "/srv/verenigingsplatform/current/public"
+   and .security.document_root_is_minimal_public_subdir == true
+   and .security.application_release_root_denied == true
+   and .security.only_public_front_controller_executes_php == true' \
+  "$WEB_PLAN" >/dev/null || die '#226 web-plan is niet de bedoelde minimale public-rootvariant.'
+ROUTING_SRC="$(/usr/bin/jq -er '.bundle.https_routing_fragment' "$WEB_PLAN")"
+[[ -f "$ROUTING_SRC" && ! -L "$ROUTING_SRC" ]] || die 'gebonden #226 routingfragment ontbreekt.'
+/usr/bin/grep -Fq 'DocumentRoot "/srv/verenigingsplatform/current/public"' "$ROUTING_SRC" || die 'routingfragment bevat niet de public DocumentRoot.'
+/usr/bin/grep -Fq 'Options +FollowSymLinks' "$ROUTING_SRC" || die 'routingfragment mist de gecontroleerde current-symlink traversal.'
+
+log '3/8 DNS-plan opnieuw binden aan #226 + publieke resolver preflight'
+TMP_DNS="$(/usr/bin/mktemp /tmp/rc045-226-dns.XXXXXX.json)"
+"$PHP" "$ENGINE/bin/prepare-vps-dns.php" \
+  --web-plan="$WEB_PLAN" \
+  --strategy=direct \
+  --ipv4="$PUBLIC_IPV4" \
+  --dry-run > "$TMP_DNS"
+/usr/bin/jq -e \
+  --arg host "$HOSTNAME" --arg ip "$PUBLIC_IPV4" --arg web "$WEB_PLAN" \
+  '.canonical_host == $host
+   and .source.web_plan_file == $web
+   and .strategy == "direct"
+   and .expected.owner.a == [$ip]
+   and .expected.owner.aaaa == []
+   and .expected.owner.cname == []
+   and .rules.resolver_context_bound_readiness == true
+   and (.rules.live_system_resolver_required_for_readiness? // false) == false' \
+  "$TMP_DNS" >/dev/null || die 'nieuw DNS-plan voldoet niet aan het #239 resolvercontract.'
+"$PHP" "$ENGINE/bin/prepare-vps-dns.php" \
+  --web-plan="$WEB_PLAN" \
+  --strategy=direct \
+  --ipv4="$PUBLIC_IPV4" \
+  --force
+"$PHP" "$ENGINE/bin/check-vps-dns.php" \
+  --plan="$DNS_PLAN" --resolver="$RESOLVER" --samples=3 --interval=2 --no-write
+
+log '4/8 verse resolver-bound DNS-readiness schrijven'
+"$PHP" "$ENGINE/bin/check-vps-dns.php" \
+  --plan="$DNS_PLAN" --resolver="$RESOLVER" --samples=3 --interval=2
+/usr/bin/jq -e \
+  --arg resolver "$RESOLVER" --arg ip "$PUBLIC_IPV4" \
+  '.ready == true
+   and .resolver_mode == "explicit"
+   and .resolver.mode == "explicit"
+   and .resolver.endpoint == $resolver
+   and .resolver.port == 53
+   and .propagation.scope == "explicit-public-resolver"
+   and ((.observed.owner.a // []) == [$ip])
+   and ((.observed.owner.aaaa // []) == [])' \
+  "$DNS_READY" >/dev/null || die 'geschreven readiness bewijst niet exact de publieke resolvercontext.'
+
+log '5/8 TLS, monitoring en lifecycle transitief opnieuw binden'
+"$PHP" "$ENGINE/bin/prepare-vps-tls.php" --dns-readiness="$DNS_READY" --force
+"$PHP" "$ENGINE/bin/apply-vps-tls.php" --plan="$TLS_PLAN" --check
+[[ -f "$DB_PLAN" && ! -L "$DB_PLAN" ]] || die 'database-plan ontbreekt of is onveilig.'
+ALERTS='enabled'
+if [[ -f "$MON_PLAN" && ! -L "$MON_PLAN" ]] && /usr/bin/jq -e '.alerts.enabled == false' "$MON_PLAN" >/dev/null 2>&1; then
+  ALERTS='disabled'
+fi
+"$PHP" "$ENGINE/bin/prepare-vps-monitoring.php" --tls-plan="$TLS_PLAN" --database-plan="$DB_PLAN" --alerts="$ALERTS" --force
+"$PHP" "$ENGINE/bin/apply-vps-monitoring.php" --monitoring-plan="$MON_PLAN" --check
+"$PHP" "$ENGINE/bin/prepare-vps-lifecycle.php" --monitoring-plan="$MON_PLAN" --force
+"$PHP" -r 'require $argv[1]."/app/deployment/lifecycle-contract.php"; lifecycle48PlanLeesEnValideer($argv[2]); echo "CHECK OK lifecycle\n";' "$ENGINE" "$LIFE_PLAN"
+"$HOST_LAUNCHER" health --monitoring-plan="$MON_PLAN" --check
+"$HOST_LAUNCHER" health --monitoring-plan="$MON_PLAN" --probe --write-status
+
+log '6/8 actieve Apache-state veilig back-uppen'
+LIVE_DIR="$(/usr/bin/jq -er '.apache.fragment_dir' "$WEB_PLAN")"
+LIVE_NAME="$(/usr/bin/jq -er '.apache.https_routing_fragment_filename' "$WEB_PLAN")"
+LIVE_FRAGMENT="${LIVE_DIR%/}/$LIVE_NAME"
+[[ -f "$LIVE_FRAGMENT" && ! -L "$LIVE_FRAGMENT" ]] || die 'actief routingfragment ontbreekt of is onveilig.'
+[[ "$(/usr/bin/stat -c '%u:%g:%a' "$LIVE_FRAGMENT")" == '0:0:644' ]] || die 'actief routingfragment is niet root:root 0644.'
+/usr/sbin/apache2ctl configtest >/dev/null || die 'bestaande Apache-config is vóór cutover al ongeldig.'
+/usr/bin/systemctl is-active --quiet apache2 || die 'Apache is vóór cutover niet actief.'
+/usr/bin/install -d -o root -g root -m 0700 /var/lib/verenigingsplatform/226-cutover
+BACKUP_DIR="$(/usr/bin/mktemp -d /var/lib/verenigingsplatform/226-cutover/run.XXXXXX)"
+/usr/bin/chown root:root "$BACKUP_DIR"
+/usr/bin/chmod 0700 "$BACKUP_DIR"
+BACKUP_FRAGMENT="$BACKUP_DIR/https-routing.before.conf"
+/usr/bin/cp --preserve=mode,ownership,timestamps -- "$LIVE_FRAGMENT" "$BACKUP_FRAGMENT"
+OLD_SHA="$(/usr/bin/sha256sum "$BACKUP_FRAGMENT" | /usr/bin/awk '{print $1}')"
+echo "backup=$BACKUP_FRAGMENT"
+echo "old_fragment_sha256=$OLD_SHA"
+
+log '7/8 public-root atomisch live zetten + echte HTTP/securityacceptatie'
+CUTOVER_STARTED=1
+"$HOST_LAUNCHER" webserver-live-fragment --plan="$WEB_PLAN"
+/usr/bin/cmp -s "$ROUTING_SRC" "$LIVE_FRAGMENT" || die 'live routingfragment is niet byte-identiek aan de gevalideerde kandidaat.'
+/usr/sbin/apache2ctl configtest >/dev/null || die 'Apache configtest faalt na cutover.'
+/usr/bin/systemctl is-active --quiet apache2 || die 'Apache is niet actief na cutover.'
+
+expect_code() {
+  local path="$1" expected="$2" code
+  if ! code="$(/usr/bin/curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+      --connect-timeout 5 --max-time 15 \
+      --resolve "$HOSTNAME:443:127.0.0.1" \
+      "https://$HOSTNAME$path")"; then
+    die "curl faalt voor $path"
+  fi
+  printf '%-48s %s\n' "$path" "$code"
+  [[ "$code" == "$expected" ]] || die "$path gaf $code; verwacht $expected."
+}
+
+expect_closed() {
+  local path="$1" code
+  if ! code="$(/usr/bin/curl --path-as-is --silent --show-error --output /dev/null --write-out '%{http_code}' \
+      --connect-timeout 5 --max-time 15 \
+      --resolve "$HOSTNAME:443:127.0.0.1" \
+      "https://$HOSTNAME$path")"; then
+    die "curl faalt voor traversalprobe $path"
+  fi
+  printf '%-48s %s\n' "$path" "$code"
+  case "$code" in
+    400|403|404) ;;
+    *) die "traversalprobe $path is niet fail-closed: HTTP $code." ;;
+  esac
+}
+
+expect_code '/' 200
+expect_code '/index.php' 200
+expect_code '/beheer/' 200
+expect_code '/healthz.php' 204
+expect_code '/styles.css' 200
+expect_code '/favicon.ico' 200
+expect_code '/app/core/platform-definities.php' 404
+expect_code '/bin/apply-vps-release.php' 404
+expect_code '/tests/phase42-apache-vhosts.php' 404
+expect_code '/docs/VPS-DEPLOYMENT.md' 404
+expect_code '/ops/vps-test-deploy/verenigingsplatform-github-deploy' 404
+expect_code '/.git/config' 404
+expect_code '/.github/workflows/full-regression.yml' 404
+expect_closed '/%2e%2e/app/core/platform-definities.php'
+
+log '8/8 live health op de nieuwe grens'
+"$HOST_LAUNCHER" health --monitoring-plan="$MON_PLAN" --probe --write-status
+NEW_SHA="$(/usr/bin/sha256sum "$LIVE_FRAGMENT" | /usr/bin/awk '{print $1}')"
+[[ "$NEW_SHA" != "$OLD_SHA" ]] || die 'routingfragment wijzigde niet; #226 cutover is niet aantoonbaar uitgevoerd.'
+CUTOVER_COMMITTED=1
+
+echo
+echo 'PUBLIC ROOT CUTOVER OK'
+echo "target_main=$TARGET"
+echo "host_engine=$ENGINE"
+echo "active_release=$(/usr/bin/readlink -f /srv/verenigingsplatform/current)"
+echo "new_fragment_sha256=$NEW_SHA"
+echo "rollback_backup=$BACKUP_FRAGMENT"
+echo "dns_readiness_expires=$(/usr/bin/jq -r '.expires_at_utc' "$DNS_READY")"
+echo 'READY_FOR_GITHUB_DEPLOY=1'
