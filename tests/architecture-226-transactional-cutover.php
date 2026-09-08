@@ -22,7 +22,7 @@ $check = static function (bool $conditie, string $melding) use (&$ok, &$fout): v
 $check(str_starts_with($raw, "#!/usr/bin/bash\nset -Eeuo pipefail\n"), 'operator gebruikt fail-fast bash met ERR/EXIT-propagatie');
 $check(str_contains($raw, 'finalize-public-root-cutover <40-hex-main-commit> <absolute-schone-checkout>'), 'operator vereist expliciete commit en schone checkout');
 $check(str_contains($raw, "PUBLIC_IPV4='149.143.36.59'") && str_contains($raw, "RESOLVER='1.1.1.1'"), 'VPS-test cutover bewaart publieke DNS-view en expliciete resolver');
-$check(str_contains($raw, 'ls-remote origin refs/heads/main') && str_contains($raw, "[[ \"$REMOTE_MAIN\" == \"$TARGET\" ]]"), 'operator weigert een commit die niet de actuele remote main-tip is');
+$check(str_contains($raw, 'ls-remote origin refs/heads/main') && str_contains($raw, '[[ "$REMOTE_MAIN" == "$TARGET" ]]'), 'operator weigert een commit die niet de actuele remote main-tip is');
 $check(str_contains($raw, 'install-verenigingsplatform-host-engine') && str_contains($raw, '.host-engine-manifest.sha256'), 'trusted host-engine wordt vóór tenantplannen geïnstalleerd en integraal gevalideerd');
 $check(str_contains($raw, '.shared_code.document_root == "/srv/verenigingsplatform/current/public"'), 'webplan moet expliciet de minimale public-root bewijzen');
 $check(str_contains($raw, 'DocumentRoot "/srv/verenigingsplatform/current/public"') && str_contains($raw, 'Options +FollowSymLinks'), 'routingfragment moet public-root en gecontroleerde current-symlink traversal bevatten');
