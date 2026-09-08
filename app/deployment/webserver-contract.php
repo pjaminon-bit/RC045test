@@ -254,11 +254,17 @@ function web42HttpsRoutingFragment(array $plan): string
 {
     $docroot = $plan['shared_code']['document_root'];
     $releaseRoot = $plan['shared_code']['app_root'];
+    $releaseParent = dirname($releaseRoot);
     $socket = $plan['php_fpm']['socket'];
     $backend = $plan['php_fpm']['backend'];
 
     if (!hash_equals(rtrim($releaseRoot, '/') . '/public', $docroot)) {
         throw new RuntimeException('Apache-fragment weigert een documentroot buiten app_root/public.');
+    }
+    if (!runtime41IsAbsoluutPad($releaseParent)
+        || runtime41HeeftRelatieveSegmenten($releaseParent)
+        || $releaseParent === '/') {
+        throw new RuntimeException('Apache-fragment vereist een veilige parentdirectory voor de atomische release-symlink.');
     }
 
     return implode("\n", [
@@ -275,6 +281,14 @@ function web42HttpsRoutingFragment(array $plan): string
         '    Require all denied',
         '</Directory>',
         '',
+        '# De immutable deploy wisselt app_root atomisch via de current-symlink.',
+        '# Alleen de parent mag die symlink volgen; content blijft hier fail-closed geweigerd.',
+        '<Directory ' . web42ApacheQuote($releaseParent) . '>',
+        '    Options +FollowSymLinks',
+        '    AllowOverride None',
+        '    Require all denied',
+        '</Directory>',
+        '',
         '<Directory ' . web42ApacheQuote($releaseRoot) . '>',
         '    Options None',
         '    AllowOverride None',
@@ -287,11 +301,13 @@ function web42HttpsRoutingFragment(array $plan): string
         '    Require all granted',
         '</Directory>',
         '',
-        '# Defense in depth: alleen de front controller mag ooit als PHP-handler eindigen.',
-        '<FilesMatch "\\.php$">',
+        '# Defense in depth: alle PHP-bestanden worden geweigerd; alleen de exacte frontcontroller',
+        '# krijgt daarna een expliciete authorization override en de tenant-FPM-handler.',
+        '<FilesMatch "(?i)\\.php$">',
         '    Require all denied',
         '</FilesMatch>',
         '<Files "index.php">',
+        '    AuthMerging Off',
         '    Require all granted',
         '    SetHandler ' . web42ApacheQuote('proxy:unix:' . $socket . '|' . $backend),
         '</Files>',
