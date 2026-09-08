@@ -33,14 +33,17 @@ try {
     check42($dryCode===0&&is_array($dry)&&($dry['phase']??'')==='4.2'&&($dry['server']??'')==='apache2'&&!is_dir($a.'/webserver'),'dry-run levert valide Apache-plan zonder filesystemwrite');
     check42(($dry['apache']['platform']??'')==='ubuntu-debian-apache-2.4'&&($dry['apache']['minimum_version']??'')==='2.4.49','4.2 kiest expliciet Apache 2.4 op Ubuntu/Debian met StrictHostCheck-capabele minimumversie');
     check42(($dry['activation']['artifacts_are_inactive']??false)===true&&($dry['activation']['reload_or_restart_forbidden_in_phase_4_2']??false)===true,'fase 4.2 houdt webserverartifacts bewust inactief');
+    check42(($dry['security']['document_root_is_minimal_public_subdir']??false)===true&&($dry['security']['internal_code_outside_document_root']??false)===true,'webserverplan legt minimale public-root en externe applicatiecode vast');
     check42(($dry['security']['default_http_vhost_must_be_first']??false)===true&&str_starts_with((string)($dry['apache']['http_catchall_filename']??''),'000-'),'default/catch-all wordt deterministisch als eerste vhost voorbereid');
 
-    [$prepA,$outA]=prepare42test($root,$runtimeA); [$prepB,$outB]=prepare42test($root,$runtimeB);
+    [$prepA]=$pa=prepare42test($root,$runtimeA); [$prepB]=$pb=prepare42test($root,$runtimeB);
     $planA=$a.'/webserver/web-plan.json'; $planB=$b.'/webserver/web-plan.json';
     $jA=is_file($planA)?json_decode((string)file_get_contents($planA),true):null;
     $jB=is_file($planB)?json_decode((string)file_get_contents($planB),true):null;
     check42($prepA===0&&$prepB===0&&is_array($jA)&&is_array($jB),'Apache webserverbundles worden voor twee tenants geschreven');
     check42(($jA['canonical_host']??'')==='noorderhaven.example'&&($jB['canonical_host']??'')==='duinrand.example','iedere webserverbundle bindt aan exact de eigen canonieke host');
+    check42(($jA['shared_code']['app_root']??'')===$root&&($jA['shared_code']['document_root']??'')===$root.'/public','webplan onderscheidt immutable app-root van minimale documentroot');
+    check42(($jA['shared_code']['document_root_real']??'')===realpath($root.'/public'),'webplan bindt ook fysiek exact aan public/');
     check42(($jA['php_fpm']['socket']??'')!==($jB['php_fpm']['socket']??'')&&($jA['php_fpm']['backend']??'')!==($jB['php_fpm']['backend']??''),'iedere host krijgt eigen FPM socket én unieke FastCGI backendidentity');
 
     $catchA=(string)file_get_contents((string)$jA['bundle']['http_catchall_file']);
@@ -60,16 +63,17 @@ try {
     check42(!str_contains($httpA,'HTTP_HOST')&&!str_contains($httpA,'$host')&&!str_contains($httpB,'HTTP_HOST')&&!str_contains($httpB,'$host'),'geen request Host kan in redirects worden teruggespiegeld');
     check42(!str_contains($httpA,'SetHandler')&&!str_contains($httpA,(string)$jA['php_fpm']['socket'])&&!str_contains($httpB,'SetHandler'),'HTTP-vhost routeert nooit direct naar PHP/FPM');
 
-    check42(str_contains($httpsA,'DocumentRoot "'.$root.'"')&&str_contains($httpsB,'DocumentRoot "'.$root.'"'),'HTTPS-routing gebruikt uitsluitend de gedeelde logische release als DocumentRoot');
-    check42(!str_contains($httpsA,$a.'/private')&&!str_contains($httpsB,$b.'/private')&&!str_contains($httpsA,'Alias '),'private tenantdata wordt niet als DocumentRoot of Alias geëxposeerd');
-    check42(str_contains($httpsA,'proxy:unix:'.($jA['php_fpm']['socket']??'').'|'.($jA['php_fpm']['backend']??'')),'tenant A PHP-handler bindt exact eigen Unix socket en backend');
-    check42(str_contains($httpsB,'proxy:unix:'.($jB['php_fpm']['socket']??'').'|'.($jB['php_fpm']['backend']??'')),'tenant B PHP-handler bindt exact eigen Unix socket en backend');
+    check42(str_contains($httpsA,'DocumentRoot "'.$root.'/public"')&&str_contains($httpsB,'DocumentRoot "'.$root.'/public"'),'HTTPS-routing gebruikt uitsluitend public/ als DocumentRoot');
+    check42(str_contains($httpsA,'<Directory "'.$root.'">')&&str_contains($httpsA,'Require all denied'),'volledige immutable release-root blijft server-side geweigerd');
+    check42(str_contains($httpsA,'<Directory "'.$root.'/public">')&&str_contains($httpsA,'Require all granted'),'alleen de minimale public-root wordt vrijgegeven');
+    check42(str_contains($httpsA,'AllowOverride FileInfo Indexes Options')&&str_contains($httpsA,'Options -Indexes -ExecCGI -MultiViews +FollowSymLinks'),'public-root krijgt uitsluitend de overrides die routing/securityheaders nodig hebben');
+    check42(!str_contains($httpsA,'LocationMatch')&&!str_contains($httpsA,'site-config(?:\\.local)?\\.php')&&!str_contains($httpsA,'(?:app|bin|tests|docs'),'gevoelige pad- en bestandsdenylists zijn niet langer de primaire grens');
+    check42(str_contains($httpsA,'<FilesMatch "\\.php$">')&&str_contains($httpsA,'<Files "index.php">'),'defense-in-depth blokkeert iedere toekomstige PHP-file behalve de frontcontroller');
+    check42(str_contains($httpsA,'proxy:unix:'.($jA['php_fpm']['socket']??'').'|'.($jA['php_fpm']['backend']??'')),'tenant A frontcontroller bindt exact eigen Unix socket en backend');
+    check42(str_contains($httpsB,'proxy:unix:'.($jB['php_fpm']['socket']??'').'|'.($jB['php_fpm']['backend']??'')),'tenant B frontcontroller bindt exact eigen Unix socket en backend');
     check42(!str_contains($httpsA,(string)$jB['php_fpm']['socket'])&&!str_contains($httpsB,(string)$jA['php_fpm']['socket']),'HTTPS-fragment kan niet naar de socket van de andere tenant wijzen');
     check42(!str_contains($httpsA,'ProxyPass ')&&!str_contains($httpsA,'ProxyPassMatch')&&str_contains($httpsA,'ProxyRequests Off'),'geen generieke reverse/forward proxyroute om tenant-FPM-binding heen');
-    check42(str_contains($httpsA,'(?:app|bin|tests|docs|\\.github|\\.git)')&&str_contains($httpsA,'Require all denied'),'serverconfig blokkeert tooling- en VCS-routes onafhankelijk van .htaccess');
-    check42(str_contains($httpsA,'site-config(?:\\.local)?\\.php')&&str_contains($httpsA,'dev-build\\.json'),'serverconfig blokkeert gevoelige config/data-bestandsnamen');
-    check42(str_contains($httpsA,'AllowOverride All')&&str_contains($httpsA,'Options -Indexes -ExecCGI +FollowSymLinks'),'gedeelde immutable release behoudt vertrouwde .htaccess-functionaliteit met beperkte directoryopties');
-    check42(str_contains($httpsA,'<Directory "/">')&&str_contains($httpsA,'AllowOverride None'),'filesystem buiten gedeelde DocumentRoot wordt standaard geweigerd');
+    check42(!str_contains($httpsA,$a.'/private')&&!str_contains($httpsB,$b.'/private')&&!str_contains($httpsA,'Alias '),'private tenantdata wordt nooit via DocumentRoot of Alias geëxposeerd');
     check42(!str_contains($httpsA,'ServerName ')&&!str_contains($httpsA,'ServerAlias'),'HTTPS-routingfragment laat ServerName/TLS-wrapper bewust aan fase 4.4');
 
     $runtimeHash=hash_file('sha256',$runtimeA);
@@ -117,7 +121,7 @@ try {
     check42(!str_contains($applySrc,"apply42Run(['systemctl'")&&!str_contains($applySrc,"apply42Run(['service'")&&!str_contains($applySrc,"apply42Run(['apache2ctl', 'graceful'"),'4.2 voert geen webserver reload/restart uit');
 
     $required=(array)($jA['apache']['required_modules']??[]);
-    check42(in_array('alias_module',$required,true)&&in_array('proxy_module',$required,true)&&in_array('proxy_fcgi_module',$required,true)&&in_array('rewrite_module',$required,true),'plan benoemt alle kernmodules voor redirect, FPM en gedeelde .htaccess-routes');
+    check42(in_array('alias_module',$required,true)&&in_array('proxy_module',$required,true)&&in_array('proxy_fcgi_module',$required,true)&&in_array('rewrite_module',$required,true),'plan benoemt alle kernmodules voor redirect, FPM en public-root-routes');
 } finally { rr42($tmp); }
 
 echo "Phase 4.2 Apache vhosts: $ok OK, $fout fout(en)\n";

@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://rc045.nl/sitemap.xml

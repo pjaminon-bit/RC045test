@@ -110,9 +110,12 @@ $cpOnboarding = cspStyleGitShow($root, 'app/control-plane-web/onboarding.php');
 cspStyleOk(str_contains($cpIndex, 'csp-progress-<?=$ob[\'percent\']?>') && str_contains($cpOnboarding, 'csp-progress-<?=$ob[\'percent\']?>'), 'control-plane progress gebruikt begrensde stylesheetklassen');
 
 $assets = [];
+$publicAssets = [];
 foreach ($tracked as $pad) {
     $pad = str_replace('\\', '/', trim($pad));
-    if (preg_match('#(?:^|/)csp205-[a-z0-9-]+-[0-9a-f]{12}\\.css$#D', $pad) === 1) $assets[] = $pad;
+    if (preg_match('#(?:^|/)csp205-[a-z0-9-]+-[0-9a-f]{12}\\.css$#D', $pad) !== 1) continue;
+    if (str_starts_with($pad, 'public/')) $publicAssets[] = $pad;
+    else $assets[] = $pad;
 }
 $badHash = [];
 foreach ($assets as $asset) {
@@ -120,7 +123,13 @@ foreach ($assets as $asset) {
     preg_match('/-([0-9a-f]{12})\\.css$/D', $asset, $m);
     if (($m[1] ?? '') !== substr(hash('sha256', $css), 0, 12)) $badHash[] = $asset;
 }
-cspStyleOk(count($assets) === 43 && $badHash === [], 'alle 43 csp205-assets blijven content-gehasht en immutable');
+cspStyleOk(count($assets) === 43 && $badHash === [], 'alle 43 canonieke csp205-assets blijven content-gehasht en immutable');
+$badMirrors=[];
+foreach($publicAssets as$publicAsset){
+    $source=substr($publicAsset,strlen('public/'));
+    if(!in_array($source,$assets,true)||!hash_equals(hash('sha256',cspStyleGitShow($root,$source)),hash('sha256',cspStyleGitShow($root,$publicAsset))))$badMirrors[]=$publicAsset;
+}
+cspStyleOk($publicAssets!==[]&&$badMirrors===[],'csp205-assets onder public/ zijn uitsluitend byte-identieke mirrors van canonieke assets');
 
 echo "CSP style regressie: {$ok} OK, {$fout} fout(en)\n";
 exit($fout === 0 ? 0 : 1);

@@ -1,0 +1,170 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Elke pagina staat drie keer in deze sitemap, een keer per taal, en elke
+     ingang somt alle drie de taalversies op inclusief zichzelf. Dat is wat
+     Google voor hreflang in een sitemap verwacht: een ingang die alleen naar
+     de andere talen wijst, of alleen de Nederlandse URL noemt, telt niet. -->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:xhtml="http://www.w3.org/1999/xhtml">
+  <url>
+    <loc>https://rc045.nl/</loc>
+    <xhtml:link rel="alternate" hreflang="nl" href="https://rc045.nl/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://rc045.nl/?lang=en"/>
+    <xhtml:link rel="alternate" hreflang="de" href="https://rc045.nl/?lang=de"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://rc045.nl/"/>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>https://rc045.nl/?lang=en</loc>
+    <xhtml:link rel="alternate" hreflang="nl" href="https://rc045.nl/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://rc045.nl/?lang=en"/>
+    <xhtml:link rel="alternate" hreflang="de" href="https://rc045.nl/?lang=de"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://rc045.nl/"/>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>https://rc045.nl/?lang=de</loc>
+    <xhtml:link rel="alternate" hreflang="nl" href="https://rc045.nl/"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://rc045.nl/?lang=en"/>
+    <xhtml:link rel="alternate" hreflang="de" href="https://rc045.nl/?lang=de"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://rc045.nl/"/>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>https://rc045.nl/aanmelden.html</loc>
+    <xhtml:link rel="alternate" hreflang="nl" href="https://rc045.nl/aanmelden.html"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://rc045.nl/aanmelden.html?lang=en"/>
+    <xhtml:link rel="alternate" hreflang="de" href="https://rc045.nl/aanmelden.html?lang=de"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://rc045.nl/aanmelden.html"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://rc045.nl/aanmelden.html?lang=en</loc>
+    <xhtml:link rel="alternate" hreflang="nl" href="https://rc045.nl/aanmelden.html"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://rc045.nl/aanmelden.html?lang=en"/>
+    <xhtml:link rel="alternate" hreflang="de" href="https://rc045.nl/aanmelden.html?lang=de"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://rc045.nl/aanmelden.html"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://rc045.nl/aanmelden.html?lang=de</loc>
+    <xhtml:link rel="alternate" hreflang="nl" href="https://rc045.nl/aanmelden.html"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://rc045.nl/aanmelden.html?lang=en"/>
+    <xhtml:link rel="alternate" hreflang="de" href="https://rc045.nl/aanmelden.html?lang=de"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://rc045.nl/aanmelden.html"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://rc045.nl/ontstaan.html</loc>
+    <xhtml:link rel="alternate" hreflang="nl" href="https://rc045.nl/ontstaan.html"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://rc045.nl/ontstaan.html?lang=en"/>
+    <xhtml:link rel="alternate" hreflang="de" href="https://rc045.nl/ontstaan.html?lang=de"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://rc045.nl/ontstaan.html"/>
+    <changefreq>yearly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://rc045.nl/ontstaan.html?lang=en</loc>
+    <xhtml:link rel="alternate" hreflang="nl" href="https://rc045.nl/ontstaan.html"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://rc045.nl/ontstaan.html?lang=en"/>
+    <xhtml:link rel="alternate" hreflang="de" href="https://rc045.nl/ontstaan.html?lang=de"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://rc045.nl/ontstaan.html"/>
+    <changefreq>yearly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://rc045.nl/ontstaan.html?lang=de</loc>
+    <xhtml:link rel="alternate" hreflang="nl" href="https://rc045.nl/ontstaan.html"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://rc045.nl/ontstaan.html?lang=en"/>
+    <xhtml:link rel="alternate" hreflang="de" href="https://rc045.nl/ontstaan.html?lang=de"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://rc045.nl/ontstaan.html"/>
+    <changefreq>yearly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://rc045.nl/baanreglement.html</loc>
+    <xhtml:link rel="alternate" hreflang="nl" href="https://rc045.nl/baanreglement.html"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://rc045.nl/baanreglement.html?lang=en"/>
+    <xhtml:link rel="alternate" hreflang="de" href="https://rc045.nl/baanreglement.html?lang=de"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://rc045.nl/baanreglement.html"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://rc045.nl/baanreglement.html?lang=en</loc>
+    <xhtml:link rel="alternate" hreflang="nl" href="https://rc045.nl/baanreglement.html"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://rc045.nl/baanreglement.html?lang=en"/>
+    <xhtml:link rel="alternate" hreflang="de" href="https://rc045.nl/baanreglement.html?lang=de"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://rc045.nl/baanreglement.html"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://rc045.nl/baanreglement.html?lang=de</loc>
+    <xhtml:link rel="alternate" hreflang="nl" href="https://rc045.nl/baanreglement.html"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://rc045.nl/baanreglement.html?lang=en"/>
+    <xhtml:link rel="alternate" hreflang="de" href="https://rc045.nl/baanreglement.html?lang=de"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://rc045.nl/baanreglement.html"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://rc045.nl/media.html</loc>
+    <xhtml:link rel="alternate" hreflang="nl" href="https://rc045.nl/media.html"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://rc045.nl/media.html?lang=en"/>
+    <xhtml:link rel="alternate" hreflang="de" href="https://rc045.nl/media.html?lang=de"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://rc045.nl/media.html"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.4</priority>
+  </url>
+  <url>
+    <loc>https://rc045.nl/media.html?lang=en</loc>
+    <xhtml:link rel="alternate" hreflang="nl" href="https://rc045.nl/media.html"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://rc045.nl/media.html?lang=en"/>
+    <xhtml:link rel="alternate" hreflang="de" href="https://rc045.nl/media.html?lang=de"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://rc045.nl/media.html"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.4</priority>
+  </url>
+  <url>
+    <loc>https://rc045.nl/media.html?lang=de</loc>
+    <xhtml:link rel="alternate" hreflang="nl" href="https://rc045.nl/media.html"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://rc045.nl/media.html?lang=en"/>
+    <xhtml:link rel="alternate" hreflang="de" href="https://rc045.nl/media.html?lang=de"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://rc045.nl/media.html"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.4</priority>
+  </url>
+  <url>
+    <loc>https://rc045.nl/fotoboek.html</loc>
+    <xhtml:link rel="alternate" hreflang="nl" href="https://rc045.nl/fotoboek.html"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://rc045.nl/fotoboek.html?lang=en"/>
+    <xhtml:link rel="alternate" hreflang="de" href="https://rc045.nl/fotoboek.html?lang=de"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://rc045.nl/fotoboek.html"/>
+    <changefreq>weekly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://rc045.nl/fotoboek.html?lang=en</loc>
+    <xhtml:link rel="alternate" hreflang="nl" href="https://rc045.nl/fotoboek.html"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://rc045.nl/fotoboek.html?lang=en"/>
+    <xhtml:link rel="alternate" hreflang="de" href="https://rc045.nl/fotoboek.html?lang=de"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://rc045.nl/fotoboek.html"/>
+    <changefreq>weekly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://rc045.nl/fotoboek.html?lang=de</loc>
+    <xhtml:link rel="alternate" hreflang="nl" href="https://rc045.nl/fotoboek.html"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://rc045.nl/fotoboek.html?lang=en"/>
+    <xhtml:link rel="alternate" hreflang="de" href="https://rc045.nl/fotoboek.html?lang=de"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://rc045.nl/fotoboek.html"/>
+    <changefreq>weekly</changefreq>
+    <priority>0.6</priority>
+  </url>
+</urlset>

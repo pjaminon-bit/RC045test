@@ -44,13 +44,15 @@ try {
     check35(($jsonA['web']['http_redirect_target']??'')==='https://noorderhaven.example'&&($jsonA['web']['redirect_must_not_use_request_host']??false)===true,'HTTP redirectdoel is de vaste canonieke tenant-URL en nooit request-Host');
     check35(($jsonA['web']['reject_unknown_hosts']??false)===true&&($jsonA['web']['default_vhost_must_reject']??false)===true,'VPS-contract vereist onbekende-hostafwijzing en catch-all default vhost');
     check35(($jsonA['shared_code']['app_root_real']??'')===realpath($root)&&($jsonB['shared_code']['app_root_real']??'')===realpath($root),'beide tenants delen exact dezelfde fysieke applicatiecode');
-    check35(($jsonA['shared_code']['document_root']??'')===$root&&($jsonB['shared_code']['document_root']??'')===$root,'web documentroot wijst voor beide tenants naar gedeelde code en niet naar tenantdata');
+    check35(($jsonA['shared_code']['document_root']??'')===$root.'/public'&&($jsonB['shared_code']['document_root']??'')===$root.'/public','web documentroot wijst voor beide tenants uitsluitend naar public/');
+    check35(($jsonA['shared_code']['document_root_real']??'')===realpath($root.'/public')&&($jsonA['shared_code']['document_root_real']??'')!==($jsonA['shared_code']['app_root_real']??''),'fysieke public-root is apart van de applicatierelease vastgelegd');
+    check35(($jsonA['web']['serve_only_minimal_public_root']??false)===true&&($jsonA['web']['application_code_outside_document_root']??false)===true,'deploymentcontract maakt filesystemplaatsing de primaire websecuritygrens');
     check35(($jsonA['tenant']['private_root']??'')!==($jsonB['tenant']['private_root']??''),'private roots blijven per tenant fysiek gescheiden');
     check35(($jsonA['php_fpm']['pool']??'')!==($jsonB['php_fpm']['pool']??'')&&($jsonA['php_fpm']['socket']??'')!==($jsonB['php_fpm']['socket']??''),'iedere tenant krijgt een eigen deterministische PHP-FPM pool en socket');
     check35(($jsonA['php_fpm']['recommended_os_user']??'')!==($jsonB['php_fpm']['recommended_os_user']??''),'aanbevolen OS-runtime identity is per tenant uniek');
     check35(($jsonA['php_fpm']['clear_env']??false)===true&&($jsonA['php_fpm']['one_pool_per_tenant']??false)===true,'PHP-FPM contract vereist clear_env en één pool per tenant');
     check35(($jsonA['runtime_env']['VERENIGING_REQUIRE_TENANT_CONFIG']??'')==='1'&&($jsonA['runtime_env']['VERENIGING_CONFIG_FILE']??'')===$cfgA,'runtimecontract injecteert fail-closed tenantconfig exact');
-    check35(($jsonA['readiness']['admin_bootstrapped']??false)===true&&($jsonA['readiness']['tenant_storage_outside_app_root']??false)===true&&($jsonA['readiness']['canonical_host_contract']??false)===true,'readiness bewijst adminbootstrap, externe opslag en canonical-hostcontract');
+    check35(($jsonA['readiness']['admin_bootstrapped']??false)===true&&($jsonA['readiness']['tenant_storage_outside_app_root']??false)===true&&($jsonA['readiness']['public_document_root_present']??false)===true,'readiness bewijst adminbootstrap, externe opslag en minimale public-root');
     $rawA=(string)file_get_contents($depA);
     check35(!str_contains(strtolower($rawA),'password')&&!str_contains(strtolower($rawA),'dsn')&&!str_contains($rawA,'BEHEER_WACHTWOORD_HASH'),'deploymentdescriptor bevat geen database- of authenticatiesecrets');
     $perm=fileperms($depA); check35($perm!==false&&(($perm&0777)===0640),'deployment.json krijgt server-only bestandsrechten 0640');
@@ -67,7 +69,7 @@ try {
     if(function_exists('symlink')&&@symlink($root,$linkApp)) {
         [$linkCode,$linkOut]=prepare35($root,$cfgA,$linkApp,['--dry-run']);
         $linkJson=json_decode($linkOut,true);
-        check35($linkCode===0&&($linkJson['shared_code']['app_root']??'')===$linkApp&&($linkJson['shared_code']['app_root_real']??'')===realpath($root),'release-symlink current is toegestaan maar fysiek releasepad wordt vastgelegd');
+        check35($linkCode===0&&($linkJson['shared_code']['app_root']??'')===$linkApp&&($linkJson['shared_code']['document_root']??'')===$linkApp.'/public'&&($linkJson['shared_code']['app_root_real']??'')===realpath($root),'release-symlink current blijft app-root terwijl documentroot veilig naar current/public wijst');
         @unlink($linkApp);
     } else { check35(true,'release-symlinktest overgeslagen op platform zonder symlinkondersteuning'); }
 
@@ -121,11 +123,11 @@ try {
     $ht=(string)file_get_contents($root.'/.htaccess');
     check35(!str_contains($ht,'https://rc045.nl%{REQUEST_URI}')&&!str_contains($ht,'RC045_HTTPS'),'gedeelde Apache-laag bevat geen vaste RC045 HTTPS-redirect of tenantnaam meer');
     check35(!str_contains($ht,'%{HTTP_HOST}')&&!str_contains($ht,'https://%1%{REQUEST_URI}')&&!str_contains($ht,'VST_HTTPS'),'gedeelde Apache-laag reflecteert geen request-Host meer in HTTPS-redirects');
-    check35(str_contains($ht,'app|bin|tests|docs|\\.github|\\.git'),'server-only tooling én .git metadata zijn centraal uit HTTP-surface verwijderd');
 
     $src=(string)file_get_contents($root.'/bin/prepare-vps-deployment.php');
     check35(str_contains($src,'read_only_for_tenant_runtime')&&str_contains($src,'one_pool_per_tenant'),'deploymentcontract legt shared-code read-only en per-tenant runtime-isolatie vast');
     check35(str_contains($src,'default_vhost_must_reject')&&str_contains($src,'redirect_must_not_use_request_host'),'deploymentcontract verankert catch-all hostafwijzing en veilige redirects');
+    check35(str_contains($src,'serve_only_minimal_public_root')&&str_contains($src,"'/public'"),'deploymenttool verankert minimale public-root als webgrens');
     check35(!str_contains($src,"'password' =>")&&!str_contains($src,"'dsn' =>"),'deploymenttool serializeert bewust geen secretvelden');
 } finally {
     rrmdir35($tmp);
