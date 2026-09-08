@@ -59,7 +59,7 @@ done
 }
 
 [[ "$#" -ge 1 ]] || {
-  echo 'Gebruik: verenigingsplatform-host-php <health|release-prepare|release-apply|control-plane|lifecycle|provision|storage-migrate|monitoring-prepare|monitoring-apply|lifecycle-prepare|control-plane-prepare|control-plane-apply> [args...]' >&2
+  echo 'Gebruik: verenigingsplatform-host-php <health|release-prepare|release-apply|control-plane|lifecycle|provision|storage-migrate|monitoring-prepare|monitoring-apply|lifecycle-prepare|control-plane-prepare|control-plane-apply|webserver-live-fragment> [args...]' >&2
   exit 64
 }
 command="$1"
@@ -78,6 +78,10 @@ case "$command" in
   lifecycle-prepare) script='bin/prepare-vps-lifecycle.php' ;;
   control-plane-prepare) script='bin/prepare-vps-control-plane.php' ;;
   control-plane-apply) script='bin/apply-vps-control-plane.php' ;;
+  webserver-live-fragment)
+    script='bin/apply-vps-webserver.php'
+    set -- --live-fragment "$@"
+    ;;
   *)
     echo 'Niet-toegestane host-engine actie.' >&2
     exit 64

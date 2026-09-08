@@ -82,7 +82,7 @@ function privilegedOpsContract(): array
         'github-e2e' => 'a416e4cb44a680f20c9bf924ddde2cefec49f715ea542c7c706b4d46db46e32e',
         'github-e2e-sudoers' => '4e74398220aeef8c1307ef8931e726a6e375c911ef4fb6f813673a470199f59d',
         'github-sshd-policy' => '58764f1f024a1b21ab582e71f083125d04900c5aa884fb5382cb3e4f98a14cc7',
-        'host-php' => 'ea19c0eeaf29083a8fe405f74cb3d0b85a4fd9b6961e42ae8351d8d68b7e40de',
+        'host-php' => '42b891968dc4eec4504ee26272b1025ada944a42c55193fdbe69c2be134121a1',
     ];
 
     $tools = [];

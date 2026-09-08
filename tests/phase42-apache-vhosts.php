@@ -102,7 +102,7 @@ try {
     $canary=$tmp.'/web-canary';file_put_contents($canary,'NIET WIJZIGEN');$link=$a.'/web-link';
     if(function_exists('symlink')&&@symlink($canary,$link)){
         [$symCode,$symOut]=prepare42test($root,$runtimeA,['--output-dir='.$link]);
-        check42($symCode!==0&&file_get_contents($canary)==='NIET WIJZIGEN','symlink als webserver outputmap wordt geweigerd zonder extern doel te wijzigen');
+        check42($symCode!==0&&file_get_contents($canary)==='NIET WIJZIGEN','symlink als webserver outputmap wordt geweigerd zonder extern bestand te wijzigen');
         @unlink($link);
     } else check42(true,'webserver output symlinktest overgeslagen op platform zonder symlinkondersteuning');
 
@@ -114,7 +114,7 @@ try {
     check42(str_contains($applySrc,"PHP_OS_FAMILY !== 'Linux'")&&str_contains($applySrc,'posix_geteuid() !== 0'),'Apache root-installatie vereist expliciet Linux EUID 0');
     check42(str_contains($applySrc,"'/etc/apache2/sites-available'")&&str_contains($applySrc,"'/etc/verenigingsplatform/apache/fragments'"),'root-installatie gebruikt alleen vaste Ubuntu/Debian Apache-doelpaden');
     check42(str_contains($applySrc,"'-M'")&&str_contains($applySrc,'required_modules')&&str_contains($contractSrc,"'proxy_fcgi_module'"),'root-installatie controleert vereiste geladen Apache-modules');
-    check42(str_contains($applySrc,'version_compare')&&str_contains($applySrc,'2.4.49'),'root-installatie bewaakt Apache-minimumversie voor StrictHostCheck');
+    check42(str_contains($applySrc,'version_compare')&&str_contains($applySrc,"['apache']['minimum_version']")&&(($jA['apache']['minimum_version']??'')==='2.4.49'),'root-installatie bewaakt Apache-minimumversie voor StrictHostCheck');
     check42(str_contains($applySrc,"'-t'")&&str_contains($applySrc,"'-c'")&&str_contains($applySrc,'Include'),'gegenereerde inactieve artifacts krijgen een echte Apache syntaxtest vóór installatie');
     check42(str_contains($applySrc,'fase 4.2 wijzigt nooit live sites-enabled configuratie'),'afwijkend reeds actief sitebestand wordt nooit door 4.2 overschreven');
     check42(!str_contains($applySrc,"apply42Run(['a2ensite'")&&!str_contains($applySrc,'symlink('),'4.2 activeert sites niet via a2ensite of sites-enabled symlinks');

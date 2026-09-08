@@ -1,11 +1,11 @@
 <?php
 // ============================================================
-// Fase 4.2 — valideer/installeer INACTIEVE Apache artifacts
+// Fase 4.2 — valideer/installeer Apache artifacts
 // ============================================================
 // --check is root-vrij en controleert de complete bundle opnieuw.
-// --apply vereist Linux root, Apache >= 2.4.49 en de vereiste modules.
-// Fase 4.2 activeert GEEN site, schrijft NIET naar sites-enabled en voert
-// GEEN reload/restart uit. DNS/TLS/activatie volgen in fase 4.3/4.4.
+// --apply installeert uitsluitend INACTIEVE fase-4.2 artifacts.
+// --live-fragment vervangt uitsluitend het reeds actieve HTTPS-routingfragment
+// van een bestaande fase-4.4 tenant, met volledige configtest/reload/rollback.
 // ============================================================
 if (PHP_SAPI !== 'cli') {
     http_response_code(403);
@@ -25,13 +25,17 @@ function apply42Help(): void
 {
     echo "Gebruik:\n";
     echo "  php bin/apply-vps-webserver.php --plan=/srv/verenigingen/club/webserver/web-plan.json --check\n";
-    echo "  sudo php bin/apply-vps-webserver.php --plan=... --apply [--force]\n\n";
+    echo "  sudo php bin/apply-vps-webserver.php --plan=... --apply [--force]\n";
+    echo "  sudo php bin/apply-vps-webserver.php --plan=... --live-fragment\n\n";
     echo "Opties:\n";
-    echo "  --check   valideer plan en alle gegenereerde Apache-artifacts; wijzig niets\n";
-    echo "  --apply   installeer artifacts INACTIEF in de vaste Ubuntu/Debian Apache-paden\n";
-    echo "  --force   vervang afwijkend INACTIEF bestand na alle controles; nooit een actief sitebestand\n";
-    echo "  --help    toon deze hulp\n\n";
-    echo "Deze tool gebruikt nooit a2ensite/sites-enabled en reloadt of herstart Apache niet.\n";
+    echo "  --check           valideer plan en alle gegenereerde Apache-artifacts; wijzig niets\n";
+    echo "  --apply           installeer artifacts INACTIEF in de vaste Ubuntu/Debian Apache-paden\n";
+    echo "  --live-fragment   vervang uitsluitend het routingfragment van een reeds actieve HTTPS-tenant\n";
+    echo "                    atomisch, met configtest vóór reload en rollback bij fout\n";
+    echo "  --force           vervang afwijkend INACTIEF bestand na alle controles; nooit een actief sitebestand\n";
+    echo "  --help            toon deze hulp\n\n";
+    echo "--apply gebruikt nooit a2ensite/sites-enabled en reloadt of herstart Apache niet.\n";
+    echo "Alleen --live-fragment mag een bestaande live tenantconfig wijzigen en doet dat uitsluitend voor het gebonden HTTPS-routingfragment.\n";
 }
 
 function apply42Bundle(string $planPad): array
@@ -182,18 +186,131 @@ function apply42SyntaxTest(array $plan, array $artifactPaden): void
     }
 }
 
+function apply42Configtest(array $plan): array
+{
+    [$code, $out, $err] = apply42Run([(string)$plan['apache']['control_binary'], 'configtest']);
+    return [$code === 0, trim($out . "\n" . $err)];
+}
+
+function apply42Reload(): array
+{
+    $systemctl = '/usr/bin/systemctl';
+    if (!is_file($systemctl) || !is_executable($systemctl)) return [false, 'systemctl ontbreekt of is niet uitvoerbaar.'];
+    [$code, $out, $err] = apply42Run([$systemctl, 'reload', 'apache2']);
+    return [$code === 0, trim($out . "\n" . $err)];
+}
+
+function apply42LiveHttpsVhost(array $plan, array $dirs, string $fragment): void
+{
+    $tenant = (string)$plan['tenant_key'];
+    $host = (string)$plan['canonical_host'];
+    $naam = '200-vp-' . $tenant . '-https.conf';
+    $available = $dirs['sitesAvailable'] . '/' . $naam;
+    $enabled = $dirs['sitesEnabled'] . '/' . $naam;
+    if (!is_file($available) || is_link($available) || !is_link($enabled)) {
+        apply42Stop('Live-fragment vereist een reeds actieve fase-4.4 tenant HTTPS-vhost.');
+    }
+    $availableReal = realpath($available);
+    $enabledReal = realpath($enabled);
+    if ($availableReal === false || $enabledReal === false || !hash_equals($availableReal, $enabledReal)) {
+        apply42Stop('Actieve tenant HTTPS-sites-enabled link wijst niet exact naar sites-available.');
+    }
+    $raw = @file_get_contents($available);
+    if (!is_string($raw)
+        || !str_contains($raw, '<VirtualHost *:443>')
+        || preg_match('/^\s*ServerName\s+' . preg_quote($host, '/') . '\s*$/m', $raw) !== 1
+        || substr_count($raw, 'Include "' . $fragment . '"') !== 1) {
+        apply42Stop('Actieve tenant HTTPS-vhost is niet exact aan host en routingfragment gebonden.');
+    }
+}
+
+function apply42LiveFragment(array $context, array $dirs, array $doelen): void
+{
+    $plan = $context['plan'];
+    $doel = $doelen['fragment'];
+    $bron = (string)$plan['bundle']['https_routing_fragment'];
+    $socket = (string)$plan['php_fpm']['socket'];
+
+    if (@filetype($socket) !== 'socket') apply42Stop('Live-fragment vereist een actieve tenant PHP-FPM socket.');
+    if (!is_file($doel) || is_link($doel)) apply42Stop('Geïnstalleerd live routingfragment ontbreekt of is geen regulier bestand.');
+    $meta = @lstat($doel);
+    if (!is_array($meta) || (int)$meta['uid'] !== 0 || (int)$meta['gid'] !== 0 || (((int)$meta['mode'] & 0777) !== 0644)) {
+        apply42Stop('Geïnstalleerd live routingfragment wijkt af van root:root 0644.');
+    }
+    if (!is_file($bron) || is_link($bron)) apply42Stop('Gebonden tenant-routingfragmentbron ontbreekt of is onveilig.');
+
+    apply42LiveHttpsVhost($plan, $dirs, $doel);
+    [$voorOk, $voorMelding] = apply42Configtest($plan);
+    if (!$voorOk) apply42Stop('Bestaande actieve Apache-config is al ongeldig; live-fragment geweigerd: ' . $voorMelding);
+
+    $nieuw = web42HttpsRoutingFragment($plan);
+    $huidig = @file_get_contents($doel);
+    if (!is_string($huidig)) apply42Stop('Bestaand routingfragment kon niet worden gelezen.');
+    if (hash_equals(hash('sha256', $huidig), hash('sha256', $nieuw))) {
+        echo 'LIVE FRAGMENT ONGEWIJZIGD  tenant=' . $plan['tenant_key'] . ' host=' . $plan['canonical_host'] . "\n";
+        return;
+    }
+
+    // De tenant-lokale kandidaat is reeds byte-exact tegen web-plan.json gevalideerd.
+    // Test hem aanvullend tegen de daadwerkelijk geladen Apache-modules vóór de live write.
+    apply42SyntaxTest($plan, [$bron]);
+
+    $map = dirname($doel);
+    $tmp = $map . '/.' . basename($doel) . '.live.' . bin2hex(random_bytes(8));
+    if (runtime41SymlinkInPad($tmp) !== null) apply42Stop('Onveilig tijdelijk live-fragmentpad.');
+    if (@file_put_contents($tmp, $nieuw, LOCK_EX) === false) apply42Stop('Live routingfragment kon niet tijdelijk worden geschreven.');
+    if (!@chown($tmp, 'root') || !@chgrp($tmp, 'root') || !@chmod($tmp, 0644)) {
+        @unlink($tmp); apply42Stop('Tijdelijk live routingfragment kreeg niet root:root 0644.');
+    }
+
+    clearstatcache(true, $doel);
+    if (!is_file($doel) || is_link($doel)) {
+        @unlink($tmp); apply42Stop('Live routingfragmentdoel wijzigde tijdens staging; cutover geweigerd.');
+    }
+    if (!@rename($tmp, $doel)) {
+        @unlink($tmp); apply42Stop('Live routingfragment kon niet atomisch worden vervangen.');
+    }
+
+    [$naOk, $naMelding] = apply42Configtest($plan);
+    if (!$naOk) {
+        apply42SchrijfRootAtomisch($doel, $huidig, true, null);
+        [$herstelOk, $herstelMelding] = apply42Configtest($plan);
+        if (!$herstelOk) {
+            apply42Stop('Nieuwe live config faalde én rollbackconfig is ongeldig; handmatige interventie vereist: ' . $naMelding . ' / rollback: ' . $herstelMelding, 3);
+        }
+        apply42Stop('Nieuwe live routingconfig faalde configtest en is atomisch teruggedraaid: ' . $naMelding, 2);
+    }
+
+    [$reloadOk, $reloadMelding] = apply42Reload();
+    if (!$reloadOk) {
+        apply42SchrijfRootAtomisch($doel, $huidig, true, null);
+        [$herstelOk, $herstelMelding] = apply42Configtest($plan);
+        $herstelReloadOk = false;
+        $herstelReloadMelding = '';
+        if ($herstelOk) [$herstelReloadOk, $herstelReloadMelding] = apply42Reload();
+        if (!$herstelOk || !$herstelReloadOk) {
+            apply42Stop('Apache reload faalde en rollback kon niet volledig worden bewezen; handmatige interventie vereist: ' . $reloadMelding . ' / rollback-config: ' . $herstelMelding . ' / rollback-reload: ' . $herstelReloadMelding, 3);
+        }
+        apply42Stop('Apache reload faalde; vorige routingconfig is hersteld en opnieuw geladen: ' . $reloadMelding, 2);
+    }
+
+    echo 'LIVE FRAGMENT APPLY OK  tenant=' . $plan['tenant_key'] . ' host=' . $plan['canonical_host'] . ' document_root=' . $plan['shared_code']['document_root'] . "\n";
+}
+
 foreach ($_SERVER['argv'] ?? [] as $arg) {
     if (preg_match('/^--(?:password|hash|secret|dsn|db-password|token|key|certificate|private-key)(?:=|$)/i', (string)$arg) === 1) {
         apply42Stop('Secrets horen niet in fase-4.2 CLI-argumenten.');
     }
 }
-$opt = getopt('', ['plan:', 'check', 'apply', 'force', 'help']);
+$opt = getopt('', ['plan:', 'check', 'apply', 'live-fragment', 'force', 'help']);
 if (isset($opt['help'])) { apply42Help(); exit(0); }
 $planPad = trim((string)($opt['plan'] ?? ''));
 if ($planPad === '') apply42Stop('--plan=/absoluut/pad/web-plan.json is verplicht.');
 $check = isset($opt['check']);
 $apply = isset($opt['apply']);
-if ($check === $apply) apply42Stop('Kies exact één van --check of --apply.');
+$liveFragment = isset($opt['live-fragment']);
+if (((int)$check + (int)$apply + (int)$liveFragment) !== 1) apply42Stop('Kies exact één van --check, --apply of --live-fragment.');
+if ($liveFragment && isset($opt['force'])) apply42Stop('--force is niet toegestaan bij --live-fragment; de live write heeft een eigen strikt rollbackcontract.');
 
 $context = apply42Bundle($planPad);
 $plan = $context['plan'];
@@ -203,12 +320,17 @@ if ($check) {
     exit(0);
 }
 
-if (PHP_OS_FAMILY !== 'Linux') apply42Stop('--apply is uitsluitend voor Linux bedoeld.');
-if (!function_exists('posix_geteuid') || posix_geteuid() !== 0) apply42Stop('--apply vereist root (EUID 0).');
+if (PHP_OS_FAMILY !== 'Linux') apply42Stop('Root-apply is uitsluitend voor Linux bedoeld.');
+if (!function_exists('posix_geteuid') || posix_geteuid() !== 0) apply42Stop('Root-apply vereist root (EUID 0).');
 
 apply42ApachePreflight($plan);
 $dirs = apply42VastePaden($plan);
 $doelen = apply42Doelen($plan, $dirs);
+
+if ($liveFragment) {
+    apply42LiveFragment($context, $dirs, $doelen);
+    exit(0);
+}
 
 // Test de gegenereerde, nog tenant-lokale artifacts tegen de daadwerkelijk
 // geladen Apache modules/config vóór er iets onder /etc wordt geplaatst.
