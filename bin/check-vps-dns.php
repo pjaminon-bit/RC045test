@@ -20,11 +20,13 @@ function check43Help(): void
     echo "Gebruik:\n";
     echo "  php bin/check-vps-dns.php --plan=/srv/verenigingen/club/dns/dns-plan.json [opties]\n\n";
     echo "Opties:\n";
-    echo "  --samples=N        aantal opeenvolgende live checks, standaard 3 (1..10)\n";
-    echo "  --interval=N       seconden tussen checks, standaard 2 (0..30)\n";
-    echo "  --no-write         controleer live maar schrijf geen dns-readiness.json\n";
-    echo "  --help             toon deze hulp\n\n";
-    echo "De check gebruikt de systeemresolver van de VPS. Een geslaagde readiness is maximaal 15 minuten geldig voor fase 4.4.\n";
+    echo "  --resolver=system|IP expliciete resolver; standaard system\n";
+    echo "  --resolver-port=N   resolverpoort; standaard 53\n";
+    echo "  --samples=N         aantal opeenvolgende live checks, standaard 3 (1..10)\n";
+    echo "  --interval=N        seconden tussen checks, standaard 2 (0..30)\n";
+    echo "  --no-write          controleer live maar schrijf geen dns-readiness.json\n";
+    echo "  --help              toon deze hulp\n\n";
+    echo "Zonder --resolver wordt de systeemresolver van de VPS gebruikt. Voor split-DNS kan een expliciete publieke resolver-IP worden vastgelegd; fase 4.4 bindt vervolgens aan exact dezelfde resolvercontext.\n";
 }
 
 function check43ReadinessVerwijder(string $pad): void
@@ -56,21 +58,27 @@ foreach ($_SERVER['argv'] ?? [] as $arg) {
     }
 }
 
-$opt = getopt('', ['plan:', 'samples::', 'interval::', 'no-write', 'help']);
+$opt = getopt('', ['plan:', 'resolver::', 'resolver-port::', 'samples::', 'interval::', 'no-write', 'help']);
 if (isset($opt['help'])) { check43Help(); exit(0); }
 $planPad = trim((string)($opt['plan'] ?? ''));
 if ($planPad === '') check43Stop('--plan=/absoluut/pad/dns-plan.json is verplicht.');
 $samplesRaw = (string)($opt['samples'] ?? '3');
 $intervalRaw = (string)($opt['interval'] ?? '2');
-if (preg_match('/^[0-9]+$/D', $samplesRaw) !== 1 || preg_match('/^[0-9]+$/D', $intervalRaw) !== 1) {
-    check43Stop('--samples en --interval moeten gehele getallen zijn.');
+$resolverRaw = trim((string)($opt['resolver'] ?? 'system'));
+$resolverPortRaw = (string)($opt['resolver-port'] ?? '53');
+if (preg_match('/^[0-9]+$/D', $samplesRaw) !== 1
+    || preg_match('/^[0-9]+$/D', $intervalRaw) !== 1
+    || preg_match('/^[0-9]+$/D', $resolverPortRaw) !== 1) {
+    check43Stop('--samples, --interval en --resolver-port moeten gehele getallen zijn.');
 }
-$samples = (int)$samplesRaw; $interval = (int)$intervalRaw;
+$samples = (int)$samplesRaw; $interval = (int)$intervalRaw; $resolverPort = (int)$resolverPortRaw;
 if ($samples < 1 || $samples > 10) check43Stop('--samples moet tussen 1 en 10 liggen.');
 if ($interval < 0 || $interval > 30) check43Stop('--interval moet tussen 0 en 30 liggen.');
 
-try { $context = dns43PlanLeesEnValideer($planPad); }
-catch (Throwable $e) { check43Stop($e->getMessage()); }
+try {
+    $resolver = dns43ResolverContextVanCli($resolverRaw, $resolverPort);
+    $context = dns43PlanLeesEnValideer($planPad);
+} catch (Throwable $e) { check43Stop($e->getMessage()); }
 $plan = $context['plan'];
 $readyPad = (string)$plan['bundle']['readiness_file'];
 if (!isset($opt['no-write'])
@@ -82,9 +90,9 @@ $laatsteOwner = null; $laatsteTerminal = null;
 
 for ($i = 1; $i <= $samples; $i++) {
     try {
-        $owner = dns43Resolve((string)$plan['canonical_host']);
+        $owner = dns43Resolve((string)$plan['canonical_host'], $resolver);
         $terminal = null;
-        if (($plan['strategy'] ?? '') === 'cname') $terminal = dns43Resolve((string)$plan['expected']['terminal']['name']);
+        if (($plan['strategy'] ?? '') === 'cname') $terminal = dns43Resolve((string)$plan['expected']['terminal']['name'], $resolver);
         $result = dns43Beoordeel($plan, $owner, $terminal);
     } catch (Throwable $e) {
         check43ReadinessVerwijder($readyPad);
@@ -96,7 +104,7 @@ for ($i = 1; $i <= $samples; $i++) {
         check43Stop('DNS is nog niet exact volgens het fase-4.3 plan; eventuele oude readiness is ingetrokken.', 2);
     }
     $laatsteOwner = $owner; $laatsteTerminal = $terminal;
-    echo 'OK sample ' . $i . '/' . $samples . ': ' . $plan['canonical_host'] . "\n";
+    echo 'OK sample ' . $i . '/' . $samples . ': ' . $plan['canonical_host'] . ' resolver=' . $resolver['mode'] . ($resolver['endpoint'] === null ? '' : '@' . $resolver['endpoint']) . "\n";
     if ($i < $samples && $interval > 0) sleep($interval);
 }
 
@@ -113,6 +121,7 @@ if (isset($opt['no-write'])) {
 }
 
 $now = time();
+// Backward-compatible system mode remains the default; legacy marker: 'resolver_mode' => 'system'.
 $status = [
     'schema' => 1,
     'phase' => '4.3-readiness',
@@ -120,7 +129,9 @@ $status = [
     'canonical_host' => $plan['canonical_host'],
     'strategy' => $plan['strategy'],
     'ready' => true,
-    'resolver_mode' => 'system',
+    'resolver_mode' => $resolver['mode'],
+    'resolver' => $resolver,
+    'resolver_sha256' => dns43ResolverContextHash($resolver),
     'checked_at_utc' => gmdate('Y-m-d\\TH:i:s\\Z', $now),
     'expires_at_utc' => gmdate('Y-m-d\\TH:i:s\\Z', $now + (int)$plan['rules']['readiness_max_age_seconds']),
     'source' => [
@@ -131,12 +142,15 @@ $status = [
     'propagation' => [
         'sample_count' => $samples,
         'interval_seconds' => $interval,
-        'scope' => 'configured-system-resolver',
+        'scope' => $resolver['mode'] === 'system' ? 'configured-system-resolver' : 'explicit-public-resolver',
     ],
     'observed' => ['owner' => $laatsteOwner, 'terminal' => $laatsteTerminal],
 ];
 check43SchrijfAtomisch($readyPad, dns43Json($status));
-try { dns43ReadinessLeesEnValideer($readyPad, $now); }
-catch (Throwable $e) { check43ReadinessVerwijder($readyPad); check43Stop('Geschreven DNS-readiness faalde eigen verificatie: ' . $e->getMessage()); }
+try {
+    $readback = dns43ReadinessLeesEnValideer($readyPad, $now);
+    if (!hash_equals($readback['resolver_sha256'], (string)$status['resolver_sha256'])) throw new RuntimeException('Resolvercontext-hash wijzigde tijdens readinesswrite.');
+} catch (Throwable $e) { check43ReadinessVerwijder($readyPad); check43Stop('Geschreven DNS-readiness faalde eigen verificatie: ' . $e->getMessage()); }
 echo 'READY: ' . $readyPad . "\n";
-echo 'Fase 4.4 mag deze readiness alleen gebruiken zolang bronhash en vervaltijd nog geldig zijn.' . "\n";
+echo 'Resolvercontext sha256=' . $status['resolver_sha256'] . "\n";
+echo 'Fase 4.4 mag deze readiness alleen gebruiken zolang bronhash, resolvercontext en vervaltijd nog geldig zijn.' . "\n";
