@@ -76,11 +76,14 @@ foreach($traversal as$uri)check226(route226($uri)===null,"traversal/encodingvari
 
 $ht=(string)file_get_contents($public.'/.htaccess');
 check226(str_contains($ht,'RewriteCond %{REQUEST_FILENAME} -f')&&str_contains($ht,'RewriteRule ^ index.php [L,QSA]'),'public/.htaccess serveert alleen echte assets direct en routeert de rest naar de frontcontroller');
-check226(str_contains($ht,'<FilesMatch "\\.php$">')&&str_contains($ht,'<Files "index.php">'),'public/.htaccess blokkeert toevallige toekomstige PHP-files defense-in-depth');
+check226(str_contains($ht,'RewriteCond %{REQUEST_FILENAME} !/index\\.php$')&&str_contains($ht,'RewriteRule \\.php$ - [F,L,NC]'),'public/.htaccess blokkeert fysieke extra PHP-bestanden vóór directe fileserving');
+check226(!str_contains($ht,'<FilesMatch')&&!str_contains($ht,'Require all'),'public/.htaccess heeft geen AuthConfig-afhankelijke authorizationregels meer nodig');
 check226(!str_contains($ht,'app|bin|tests|docs')&&!str_contains($ht,'site-config'),'public/.htaccess onderhoudt geen gevoelige repository-denylist');
 
 $web=(string)file_get_contents($root.'/app/deployment/webserver-contract.php');
 check226(str_contains($web,"'/public'")&&str_contains($web,'application_release_root_denied'),'Apache-contract bindt expliciet aan public/ en weigert de applicatierelease als geheel');
+check226(str_contains($web,'$releaseParent = dirname($releaseRoot)')&&str_contains($web,'Options +FollowSymLinks'),'Apache-contract staat de atomische current-symlink alleen vanaf zijn geweigerde parentdirectory toe');
+check226(str_contains($web,'AuthMerging Off')&&str_contains($web,'<FilesMatch "(?i)\\\\.php$">'),'Apache-contract maakt de frontcontroller-authorization expliciet en blokkeert PHP case-insensitive');
 check226(!str_contains($web,'LocationMatch "^/(?:app|bin|tests|docs')&&!str_contains($web,'site-config(?:\\.local)?'),'Apache-generator bevat geen dubbele gevoelige-pad/filename denylist meer');
 
 echo "Architecture #226 public document root: {$ok} OK, {$fout} fout(en)\n";

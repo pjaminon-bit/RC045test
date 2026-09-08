@@ -1,24 +1,21 @@
 RewriteEngine On
-Options -Indexes -MultiViews
 DirectoryIndex index.php
 
-# #226: alleen reguliere bestanden in deze minimale public/ root worden direct
-# door Apache geserveerd. Alle overige URL's lopen door de positieve router.
+# #226: een later fysiek toegevoegd PHP-bestand mag nooit door alleen zijn
+# filesystemplaatsing rechtstreeks leesbaar/uitvoerbaar worden. Alleen de
+# exacte lower-case frontcontroller public/index.php is de fysieke uitzondering.
+RewriteCond %{REQUEST_FILENAME} -f
+RewriteCond %{REQUEST_FILENAME} !/index\.php$
+RewriteRule \.php$ - [F,L,NC]
+
+# Alleen reguliere bestanden in deze minimale public/ root worden direct door
+# Apache geserveerd. Alle overige URL's lopen door de positieve router.
 RewriteCond %{REQUEST_FILENAME} -f
 RewriteRule ^ - [L]
 
 RewriteRule ^Over-ons/?$ /index.html#over-ons [R=301,L,NC,NE]
 RewriteRule ^Lidmaatschap/?$ /#lidmaatschap [R=301,L,NC,NE]
 RewriteRule ^ index.php [L,QSA]
-
-# Defense in depth voor standalone Apache: een later toegevoegd PHP-bestand
-# mag nooit door alleen zijn filesystemplaatsing uitvoerbaar of leesbaar worden.
-<FilesMatch "\.php$">
-  Require all denied
-</FilesMatch>
-<Files "index.php">
-  Require all granted
-</Files>
 
 <IfModule mod_headers.c>
   Header always set X-Content-Type-Options "nosniff"
