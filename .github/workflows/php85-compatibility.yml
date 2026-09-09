@@ -1,6 +1,9 @@
 name: PHP 8.5 compatibility
 
 on:
+  push:
+    branches:
+      - agent/template-foundation
   pull_request:
     branches:
       - main
@@ -27,6 +30,15 @@ jobs:
           extensions: openssl, pdo_pgsql, mbstring, curl, dom
           coverage: none
 
+      - name: Installeer Apache en PHP 8.5 FPM voor #226
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y apache2 php8.5-fpm
+          test -x /usr/sbin/php-fpm8.5
+          /usr/sbin/php-fpm8.5 -v
+          /usr/sbin/apache2 -v
+
       - name: Bewijs PHP 8.5 en vereiste modules
         run: |
           set -euo pipefail
@@ -47,4 +59,6 @@ jobs:
           done < <(find . -type f -name '*.php' -not -path './node_modules/*' -print0)
 
       - name: Functionele technische en securityregressies op PHP 8.5
+        env:
+          RC045_EXPECT_FPM_VERSION: '8.5'
         run: bash tests/run-all.sh
