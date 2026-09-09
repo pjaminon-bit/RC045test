@@ -36,7 +36,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y apache2 php8.5-fpm
           test -x /usr/sbin/php-fpm8.5
-          /usr/sbin/php-fpm8.5 -v
+          sudo ln -sfn /usr/sbin/php-fpm8.5 /usr/local/bin/php-fpm
+          test "$(readlink -f "$(command -v php-fpm)")" = '/usr/sbin/php-fpm8.5'
+          php-fpm -v 2>&1 | head -n 1 | grep -E '^PHP 8\.5\.'
           /usr/sbin/apache2 -v
 
       - name: Bewijs PHP 8.5 en vereiste modules
@@ -59,6 +61,4 @@ jobs:
           done < <(find . -type f -name '*.php' -not -path './node_modules/*' -print0)
 
       - name: Functionele technische en securityregressies op PHP 8.5
-        env:
-          RC045_EXPECT_FPM_VERSION: '8.5'
         run: bash tests/run-all.sh
