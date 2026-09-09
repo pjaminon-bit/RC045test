@@ -1,0 +1,172 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+export PATH='/usr/sbin:/usr/bin:/sbin:/bin'
+umask 077
+
+WEB_PLAN=''
+TLS_PLAN=''
+for arg in "$@"; do
+  case "$arg" in
+    --web-plan=*) WEB_PLAN="${arg#*=}" ;;
+    --tls-plan=*) TLS_PLAN="${arg#*=}" ;;
+    *) echo "Onbekend argument: $arg" >&2; exit 64 ;;
+  esac
+done
+
+[[ "$WEB_PLAN" == /* && "$TLS_PLAN" == /* ]] || {
+  echo 'Gebruik: check-public-root-shadow --web-plan=/absoluut/web-plan.json --tls-plan=/absoluut/tls-plan.json' >&2
+  exit 64
+}
+
+for exe in /usr/bin/jq /usr/bin/curl /usr/bin/php /usr/bin/sha256sum /usr/bin/mktemp /usr/bin/grep /usr/bin/tail /usr/bin/rm /usr/sbin/apache2; do
+  [[ -x "$exe" ]] || { echo "FOUT SHADOW: executable ontbreekt: $exe" >&2; exit 1; }
+done
+for plan in "$WEB_PLAN" "$TLS_PLAN"; do
+  [[ -f "$plan" && ! -L "$plan" ]] || { echo "FOUT SHADOW: plan ontbreekt of is symlink: $plan" >&2; exit 1; }
+done
+
+HOST="$(/usr/bin/jq -er '.canonical_host' "$WEB_PLAN")"
+[[ "$HOST" =~ ^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$ ]] || { echo 'FOUT SHADOW: onveilige canonical host.' >&2; exit 1; }
+TLS_HOST="$(/usr/bin/jq -er '.canonical_host' "$TLS_PLAN")"
+[[ "$TLS_HOST" == "$HOST" ]] || { echo 'FOUT SHADOW: web- en TLS-plan hebben verschillende hosts.' >&2; exit 1; }
+
+TLS_WEB_PLAN="$(/usr/bin/jq -er '.source.web_plan_file' "$TLS_PLAN")"
+TLS_WEB_SHA="$(/usr/bin/jq -er '.source.web_plan_sha256' "$TLS_PLAN")"
+[[ "$TLS_WEB_PLAN" == "$WEB_PLAN" ]] || { echo 'FOUT SHADOW: TLS-plan bindt niet aan dit web-plan.' >&2; exit 1; }
+ACTUAL_WEB_SHA="$(/usr/bin/sha256sum "$WEB_PLAN" | /usr/bin/awk '{print $1}')"
+[[ "$TLS_WEB_SHA" == "$ACTUAL_WEB_SHA" ]] || { echo 'FOUT SHADOW: TLS-plan web-plan hash wijkt af.' >&2; exit 1; }
+
+ROUTING="$(/usr/bin/jq -er '.bundle.https_routing_fragment' "$WEB_PLAN")"
+TLS_VHOST="$(/usr/bin/jq -er '.bundle.tenant_https' "$TLS_PLAN")"
+RUNTIME_PLAN="$(/usr/bin/jq -er '.source.runtime_plan_file' "$WEB_PLAN")"
+for file in "$ROUTING" "$TLS_VHOST" "$RUNTIME_PLAN"; do
+  [[ -f "$file" && ! -L "$file" ]] || { echo "FOUT SHADOW: gebonden artifact ontbreekt of is symlink: $file" >&2; exit 1; }
+done
+
+DOCROOT="$(/usr/bin/jq -er '.shared_code.document_root' "$WEB_PLAN")"
+[[ "$DOCROOT" == '/srv/verenigingsplatform/current/public' || "${SHADOW_ALLOW_TEST_ROOT:-0}" == '1' ]] || {
+  echo "FOUT SHADOW: onverwachte documentroot: $DOCROOT" >&2
+  exit 1
+}
+/usr/bin/grep -Fq "DocumentRoot \"$DOCROOT\"" "$ROUTING" || { echo 'FOUT SHADOW: routingfragment mist gebonden DocumentRoot.' >&2; exit 1; }
+/usr/bin/grep -Fq 'SetHandler "proxy:unix:' "$ROUTING" || { echo 'FOUT SHADOW: routingfragment mist FPM-handler.' >&2; exit 1; }
+
+WEB_USER="$(/usr/bin/jq -er '.settings.web_user' "$RUNTIME_PLAN")"
+WEB_GROUP="$(/usr/bin/jq -er '.settings.web_group' "$RUNTIME_PLAN")"
+[[ "$WEB_USER" =~ ^[a-z_][a-z0-9_-]*$ && "$WEB_GROUP" =~ ^[a-z_][a-z0-9_-]*$ ]] || {
+  echo 'FOUT SHADOW: onveilige Apache user/group uit runtimeplan.' >&2
+  exit 1
+}
+
+TMP="$(/usr/bin/mktemp -d /tmp/rc045-226-shadow.XXXXXX)"
+APACHE_PID=''
+cleanup() {
+  local rc=$?
+  trap - EXIT
+  if [[ -n "$APACHE_PID" ]]; then
+    /usr/bin/kill -TERM "$APACHE_PID" 2>/dev/null || true
+    /usr/bin/wait "$APACHE_PID" 2>/dev/null || true
+  fi
+  /usr/bin/rm -rf -- "$TMP"
+  exit "$rc"
+}
+trap cleanup EXIT
+
+/usr/bin/chmod 0755 "$TMP"
+/usr/bin/mkdir -p "$TMP/run"
+/usr/bin/chmod 0755 "$TMP/run"
+
+PORT="$(/usr/bin/php -r '
+$s = stream_socket_server("tcp://127.0.0.1:0", $errno, $errstr);
+if ($s === false) { fwrite(STDERR, "poortallocatie faalde\n"); exit(1); }
+$name = stream_socket_get_name($s, false);
+fclose($s);
+if (!is_string($name) || preg_match("/:(\\d+)$/", $name, $m) !== 1) exit(1);
+echo $m[1];
+')"
+[[ "$PORT" =~ ^[0-9]+$ && "$PORT" -ge 1024 && "$PORT" -le 65535 ]] || { echo 'FOUT SHADOW: geen veilige loopbackpoort.' >&2; exit 1; }
+
+SHADOW_VHOST="$TMP/https-vhost.conf"
+/usr/bin/php -r '
+$src=$argv[1]; $routing=$argv[2]; $port=$argv[3]; $out=$argv[4];
+$raw=@file_get_contents($src); if(!is_string($raw)) exit(2);
+$old="<VirtualHost *:443>"; $new="<VirtualHost 127.0.0.1:".$port.">";
+$raw=str_replace($old,$new,$raw,$nVhost); if($nVhost!==1) exit(3);
+if(preg_match_all("~^[[:space:]]*Include[[:space:]]+\"([^\"]+)\"[[:space:]]*$~m",$raw,$m)!==1) exit(4);
+$oldInclude=$m[0][0]; $newInclude="    Include \"".$routing."\"";
+$raw=str_replace($oldInclude,$newInclude,$raw,$nInclude); if($nInclude!==1) exit(5);
+if(@file_put_contents($out,$raw)===false) exit(6);
+' "$TLS_VHOST" "$ROUTING" "$PORT" "$SHADOW_VHOST" || { echo 'FOUT SHADOW: HTTPS-vhost kon niet deterministisch naar loopback worden vertaald.' >&2; exit 1; }
+
+APACHE_CONF="$TMP/apache.conf"
+cat > "$APACHE_CONF" <<EOF
+ServerRoot "/etc/apache2"
+Define APACHE_RUN_DIR "$TMP/run"
+PidFile "$TMP/apache.pid"
+DefaultRuntimeDir "$TMP/run"
+Listen 127.0.0.1:$PORT
+IncludeOptional /etc/apache2/mods-enabled/*.load
+IncludeOptional /etc/apache2/mods-enabled/*.conf
+IncludeOptional /etc/apache2/conf-enabled/*.conf
+ServerName localhost
+ErrorLog "$TMP/error.log"
+LogLevel warn proxy_fcgi:debug rewrite:trace2 authz_core:debug
+EOF
+if [[ "${EUID:-$(/usr/bin/id -u)}" -eq 0 ]]; then
+  printf 'User %s\nGroup %s\n' "$WEB_USER" "$WEB_GROUP" >> "$APACHE_CONF"
+fi
+printf 'Include "%s"\n' "$SHADOW_VHOST" >> "$APACHE_CONF"
+
+if ! /usr/sbin/apache2 -t -f "$APACHE_CONF" >"$TMP/configtest.out" 2>&1; then
+  cat "$TMP/configtest.out" >&2 || true
+  echo 'FOUT SHADOW: tijdelijke Apache-config is ongeldig.' >&2
+  exit 1
+fi
+
+/usr/sbin/apache2 -f "$APACHE_CONF" -DFOREGROUND >"$TMP/stdout.log" 2>&1 &
+APACHE_PID=$!
+
+curl_base=(--resolve "$HOST:$PORT:127.0.0.1" -H "Host: $HOST")
+ready=0
+for _ in $(/usr/bin/seq 1 50); do
+  if ! /usr/bin/kill -0 "$APACHE_PID" 2>/dev/null; then break; fi
+  code="$(/usr/bin/curl "${curl_base[@]}" --silent --show-error --output /dev/null --write-out '%{http_code}' --connect-timeout 1 --max-time 3 "https://$HOST:$PORT/styles.css" 2>/dev/null || true)"
+  if [[ "$code" == '200' ]]; then ready=1; break; fi
+  /usr/bin/sleep 0.1
+done
+if [[ "$ready" != 1 ]]; then
+  /usr/bin/tail -n 160 "$TMP/error.log" >&2 2>/dev/null || true
+  /usr/bin/tail -n 80 "$TMP/stdout.log" >&2 2>/dev/null || true
+  echo 'FOUT SHADOW: tijdelijke loopback-Apache kwam niet gezond beschikbaar.' >&2
+  exit 1
+fi
+
+shadow_expect() {
+  local path="$1" expected="$2" code body="$TMP/body"
+  code="$(/usr/bin/curl "${curl_base[@]}" --path-as-is --silent --show-error --output "$body" --write-out '%{http_code}' --connect-timeout 3 --max-time 20 "https://$HOST:$PORT$path" || true)"
+  printf 'SHADOW %-43s %s\n' "$path" "$code"
+  if [[ "$code" != "$expected" ]]; then
+    echo "FOUT SHADOW: $path gaf $code; verwacht $expected." >&2
+    echo '--- shadow Apache diagnose ---' >&2
+    /usr/bin/tail -n 200 "$TMP/error.log" >&2 2>/dev/null || true
+    echo '--- shadow response (max 2048 bytes) ---' >&2
+    /usr/bin/head -c 2048 "$body" >&2 2>/dev/null || true
+    echo >&2
+    return 1
+  fi
+}
+
+shadow_expect '/' 200
+shadow_expect '/index.php' 200
+shadow_expect '/beheer/' 200
+shadow_expect '/styles.css' 200
+shadow_expect '/favicon.ico' 200
+shadow_expect '/app/core/platform-definities.php' 404
+shadow_expect '/bin/apply-vps-release.php' 404
+shadow_expect '/tests/phase42-apache-vhosts.php' 404
+shadow_expect '/docs/VPS-DEPLOYMENT.md' 404
+shadow_expect '/ops/vps-test-deploy/verenigingsplatform-github-deploy' 404
+shadow_expect '/.git/config' 404
+shadow_expect '/.github/workflows/full-regression.yml' 404
+
+echo "SHADOW PUBLIC ROOT OK host=$HOST port=$PORT document_root=$DOCROOT"
