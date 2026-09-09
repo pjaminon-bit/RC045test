@@ -1,19 +1,16 @@
-name: Validate RC045test
+name: Validate template-foundation DEV
 
 on:
   push:
     branches:
-      - main
-  pull_request:
-    branches:
-      - main
+      - agent/template-foundation
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: rc045test-${{ github.workflow }}-${{ github.ref }}
+  group: rc045-dev-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
