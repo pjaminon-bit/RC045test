@@ -43,6 +43,19 @@ $check(!str_contains($raw, "RESOLVER='1.1.1.1'"), 'transactionele cutover gebrui
 $check(str_contains($raw, 'apply-vps-tls.php" --plan="$TLS_PLAN" --check') && !str_contains($raw, 'apply-vps-tls.php" --plan="$TLS_PLAN" --apply'), 'bestaande TLS wordt gevalideerd zonder onnodige ACME/certificaatmutatie');
 $check(str_contains($raw, 'prepare-vps-monitoring.php') && str_contains($raw, 'prepare-vps-lifecycle.php'), 'monitoring en lifecycle worden transitief opnieuw gebonden vóór cutover');
 $check(str_contains($raw, 'health --monitoring-plan="$MON_PLAN" --probe --write-status'), 'live health wordt vóór en na de public-root cutover geprobed');
+
+$check(str_contains($raw, "RUNUSER='/usr/sbin/runuser'") && str_contains($raw, '"$RUNUSER" -u "$RUNTIME_USER" -- /usr/bin/env -i'), 'cutover herhaalt de tenantprobe als de echte FPM-runtimeuser met schone environment');
+$check(str_contains($raw, ".os.user' \"$RUNTIME_PLAN\"")
+    && str_contains($raw, ".settings.php_version' \"$RUNTIME_PLAN\"")
+    && str_contains($raw, ".php_fpm.runtime_env.VERENIGING_CONFIG_FILE' \"$RUNTIME_PLAN\"")
+    && str_contains($raw, ".php_fpm.runtime_env.VERENIGING_PRIVATE_ROOT' \"$RUNTIME_PLAN\""), 'candidate-probe bindt user, PHP-versie en tenantpaden aan het gevalideerde runtimeplan');
+$check(str_contains($raw, '"$ACTIVE_RELEASE/bin/check-release-tenant.php" --expected-tenant="$TENANT"'), 'cutover gebruikt de centrale candidate-probe van de daadwerkelijk actieve release');
+$check(str_contains($raw, "[[ \"$RUNTIME_PHP_VERSION\" == '8.5' ]]")
+    && str_contains($raw, "[[ \"$RUNTIME_REQUIRE_CONFIG\" == '1' ]]")
+    && str_contains($raw, '[[ "$RUNTIME_CONFIG" == "$TENANT_ROOT/config.php" ]]')
+    && str_contains($raw, '[[ "$RUNTIME_PRIVATE" == "$TENANT_ROOT/private" ]]'), 'runtimepreflight weigert PHP-/tenantconfig-/private-rootdrift vóór mutatie');
+$check(!str_contains($raw, 'extension_loaded(') && !str_contains($raw, "['openssl', 'pdo_pgsql'"), 'cutover dupliceert de centrale PHP-extensionlijst niet');
+
 $check(str_contains($raw, 'rollback_fragment()') && str_contains($raw, 'trap cleanup EXIT') && str_contains($raw, 'ROLLBACK OK: oorspronkelijke routing actief.'), 'post-cutover fouten hebben een automatische Apache-fragmentrollback');
 $check(str_contains($raw, '/usr/sbin/apache2ctl configtest') && str_contains($raw, '/usr/bin/systemctl reload apache2'), 'rollback vereist geldige Apache-config vóór reload');
 
@@ -75,9 +88,11 @@ $check($posDiag !== false && $posRollback !== false && $posDiag < $posRollback, 
 
 $posDns = strpos($raw, "log '3/8 DNS-plan");
 $posTls = strpos($raw, "log '5/8 TLS, monitoring en lifecycle");
+$posRuntimeProbe = strpos($raw, "log '5b/8 actieve tenant-runtime opnieuw bewijzen als FPM-user'");
 $posBackup = strpos($raw, "log '6/8 actieve Apache-state");
 $posLive = strpos($raw, "log '7/8 public-root");
-$check($posDns !== false && $posTls !== false && $posBackup !== false && $posLive !== false && $posDns < $posTls && $posTls < $posBackup && $posBackup < $posLive, 'alle bron-/DNS-/TLS-/healthcontroles gebeuren vóór de eerste live Apache-mutatie');
+$check($posDns !== false && $posTls !== false && $posRuntimeProbe !== false && $posBackup !== false && $posLive !== false
+    && $posDns < $posTls && $posTls < $posRuntimeProbe && $posRuntimeProbe < $posBackup && $posBackup < $posLive, 'DNS/TLS/health én tenant-runtimeprobe slagen vóór backup/live Apache-mutatie');
 
 foreach (['/', '/index.php', '/beheer/', '/healthz.php', '/styles.css', '/favicon.ico'] as $route) {
     $check(str_contains($raw, "expect_code '{$route}'"), "publieke acceptance bevat {$route}");
