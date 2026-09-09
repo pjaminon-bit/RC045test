@@ -101,7 +101,7 @@ try {
     check43(str_contains($contract,'dns_get_record')&&str_contains($checker,"'resolver_mode' => 'system'"),'productiereadiness gebruikt live systeemresolver en markeert dat expliciet');
     check43(str_contains($checker,'check43ReadinessVerwijder($readyPad)'),'mislukte live check trekt bestaande readiness fail-closed in');
     check43(str_contains($checker,'dns43PlanLeesEnValideer($planPad)')&&str_contains($checker,'wijzigde tijdens'),'DNS-check hercontroleert broncontract na queries tegen TOCTOU');
-    check43(!str_contains($checker,'curl ')&&!str_contains($checker,'nsupdate')&&!str_contains($checker,'cloudflare'),'4.3 schrijft bewust niet naar DNS-providers');
+    check43(!str_contains($checker,'nsupdate')&&!str_contains($checker,'api.cloudflare.com')&&!str_contains($checker,'/zones/')&&!str_contains($checker,'dns_records'),'4.3 bevat geen DNS-providerwrites; read-only resolvertransport is toegestaan');
     check43(($jA['next']['tls_phase']??'')==='4.4'&&($jA['next']['fresh_ready_status_required_before_tls']??false)===true,'4.4 is contractueel geblokkeerd zonder verse DNS-readiness');
 
 } finally { rr43($tmp); }
