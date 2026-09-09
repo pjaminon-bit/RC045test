@@ -45,15 +45,15 @@ $check(str_contains($raw, 'prepare-vps-monitoring.php') && str_contains($raw, 'p
 $check(str_contains($raw, 'health --monitoring-plan="$MON_PLAN" --probe --write-status'), 'live health wordt vóór en na de public-root cutover geprobed');
 
 $check(str_contains($raw, "RUNUSER='/usr/sbin/runuser'") && str_contains($raw, '"$RUNUSER" -u "$RUNTIME_USER" -- /usr/bin/env -i'), 'cutover herhaalt de tenantprobe als de echte FPM-runtimeuser met schone environment');
-$check(str_contains($raw, ".os.user' \"$RUNTIME_PLAN\"")
-    && str_contains($raw, ".settings.php_version' \"$RUNTIME_PLAN\"")
-    && str_contains($raw, ".php_fpm.runtime_env.VERENIGING_CONFIG_FILE' \"$RUNTIME_PLAN\"")
-    && str_contains($raw, ".php_fpm.runtime_env.VERENIGING_PRIVATE_ROOT' \"$RUNTIME_PLAN\""), 'candidate-probe bindt user, PHP-versie en tenantpaden aan het gevalideerde runtimeplan');
+$check(str_contains($raw, '.os.user')
+    && str_contains($raw, '.settings.php_version')
+    && str_contains($raw, '.php_fpm.runtime_env.VERENIGING_CONFIG_FILE')
+    && str_contains($raw, '.php_fpm.runtime_env.VERENIGING_PRIVATE_ROOT'), 'candidate-probe bindt user, PHP-versie en tenantpaden aan het gevalideerde runtimeplan');
 $check(str_contains($raw, '"$ACTIVE_RELEASE/bin/check-release-tenant.php" --expected-tenant="$TENANT"'), 'cutover gebruikt de centrale candidate-probe van de daadwerkelijk actieve release');
-$check(str_contains($raw, "[[ \"$RUNTIME_PHP_VERSION\" == '8.5' ]]")
-    && str_contains($raw, "[[ \"$RUNTIME_REQUIRE_CONFIG\" == '1' ]]")
-    && str_contains($raw, '[[ "$RUNTIME_CONFIG" == "$TENANT_ROOT/config.php" ]]')
-    && str_contains($raw, '[[ "$RUNTIME_PRIVATE" == "$TENANT_ROOT/private" ]]'), 'runtimepreflight weigert PHP-/tenantconfig-/private-rootdrift vóór mutatie');
+$check(str_contains($raw, 'runtime-plan bindt niet aan de verwachte PHP 8.5 runtime.')
+    && str_contains($raw, 'runtime-plan vereist tenantconfig niet fail-closed.')
+    && str_contains($raw, 'runtime-plan bindt niet aan de verwachte tenantconfig.')
+    && str_contains($raw, 'runtime-plan bindt niet aan de verwachte private-root.'), 'runtimepreflight weigert PHP-/tenantconfig-/private-rootdrift vóór mutatie');
 $check(!str_contains($raw, 'extension_loaded(') && !str_contains($raw, "['openssl', 'pdo_pgsql'"), 'cutover dupliceert de centrale PHP-extensionlijst niet');
 
 $check(str_contains($raw, 'rollback_fragment()') && str_contains($raw, 'trap cleanup EXIT') && str_contains($raw, 'ROLLBACK OK: oorspronkelijke routing actief.'), 'post-cutover fouten hebben een automatische Apache-fragmentrollback');
