@@ -20,13 +20,13 @@ function check43Help(): void
     echo "Gebruik:\n";
     echo "  php bin/check-vps-dns.php --plan=/srv/verenigingen/club/dns/dns-plan.json [opties]\n\n";
     echo "Opties:\n";
-    echo "  --resolver=system|IP expliciete resolver; standaard system\n";
-    echo "  --resolver-port=N   resolverpoort; standaard 53\n";
+    echo "  --resolver=system|IP|doh:cloudflare resolvercontext; standaard system\n";
+    echo "  --resolver-port=N   optionele resolverpoort; standaard 53 voor UDP en 443 voor DoH\n";
     echo "  --samples=N         aantal opeenvolgende live checks, standaard 3 (1..10)\n";
     echo "  --interval=N        seconden tussen checks, standaard 2 (0..30)\n";
     echo "  --no-write          controleer live maar schrijf geen dns-readiness.json\n";
     echo "  --help              toon deze hulp\n\n";
-    echo "Zonder --resolver wordt de systeemresolver van de VPS gebruikt. Voor split-DNS kan een expliciete publieke resolver-IP worden vastgelegd; fase 4.4 bindt vervolgens aan exact dezelfde resolvercontext.\n";
+    echo "Zonder --resolver wordt de systeemresolver van de VPS gebruikt. Voor split-DNS kan een expliciete publieke UDP-resolver-IP of de vaste Cloudflare DoH-context worden vastgelegd; fase 4.4 bindt vervolgens aan exact dezelfde resolvercontext.\n";
 }
 
 function check43ReadinessVerwijder(string $pad): void
@@ -65,13 +65,13 @@ if ($planPad === '') check43Stop('--plan=/absoluut/pad/dns-plan.json is verplich
 $samplesRaw = (string)($opt['samples'] ?? '3');
 $intervalRaw = (string)($opt['interval'] ?? '2');
 $resolverRaw = trim((string)($opt['resolver'] ?? 'system'));
-$resolverPortRaw = (string)($opt['resolver-port'] ?? '53');
+$resolverPortRaw = isset($opt['resolver-port']) ? (string)$opt['resolver-port'] : null;
 if (preg_match('/^[0-9]+$/D', $samplesRaw) !== 1
     || preg_match('/^[0-9]+$/D', $intervalRaw) !== 1
-    || preg_match('/^[0-9]+$/D', $resolverPortRaw) !== 1) {
-    check43Stop('--samples, --interval en --resolver-port moeten gehele getallen zijn.');
+    || ($resolverPortRaw !== null && preg_match('/^[0-9]+$/D', $resolverPortRaw) !== 1)) {
+    check43Stop('--samples, --interval en een opgegeven --resolver-port moeten gehele getallen zijn.');
 }
-$samples = (int)$samplesRaw; $interval = (int)$intervalRaw; $resolverPort = (int)$resolverPortRaw;
+$samples = (int)$samplesRaw; $interval = (int)$intervalRaw; $resolverPort = $resolverPortRaw === null ? null : (int)$resolverPortRaw;
 if ($samples < 1 || $samples > 10) check43Stop('--samples moet tussen 1 en 10 liggen.');
 if ($interval < 0 || $interval > 30) check43Stop('--interval moet tussen 0 en 30 liggen.');
 
@@ -142,7 +142,7 @@ $status = [
     'propagation' => [
         'sample_count' => $samples,
         'interval_seconds' => $interval,
-        'scope' => $resolver['mode'] === 'system' ? 'configured-system-resolver' : 'explicit-public-resolver',
+        'scope' => dns43ResolverScope($resolver),
     ],
     'observed' => ['owner' => $laatsteOwner, 'terminal' => $laatsteTerminal],
 ];
