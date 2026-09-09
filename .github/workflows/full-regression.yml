@@ -55,6 +55,16 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      - name: Read-only #226 live frontcontrollerdiagnose
+        if: ${{ github.event_name == 'pull_request' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          root_code="$(curl -sS -o /dev/null -w '%{http_code}' --connect-timeout 5 --max-time 20 https://test.vps.holox.nl/)"
+          public_code="$(curl -sS -o /dev/null -w '%{http_code}' --connect-timeout 5 --max-time 20 https://test.vps.holox.nl/public/index.php)"
+          echo "DIAG_ROOT_STATUS=$root_code"
+          echo "DIAG_PUBLIC_INDEX_STATUS=$public_code"
+          test "$root_code" = '200'
       - name: Apache + echte PHP-FPM runtime voor #226
         shell: bash
         run: |
