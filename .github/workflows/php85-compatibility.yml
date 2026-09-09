@@ -33,6 +33,10 @@ jobs:
       - name: Bind Apache aan PHP 8.5 FPM voor #226
         run: |
           set -euo pipefail
+          # Deze job gebruikt geen Google Chrome. De hosted runner kan wel een
+          # Chrome APT-bron bevatten; houd de Apache-installatie onafhankelijk
+          # van tijdelijke inconsistenties in die externe pakketindex.
+          sudo rm -f /etc/apt/sources.list.d/google-chrome.list /etc/apt/sources.list.d/google-chrome.sources
           sudo apt-get update
           sudo apt-get install -y apache2
           fpm_bin="$(command -v php-fpm8.5 2>/dev/null || true)"
