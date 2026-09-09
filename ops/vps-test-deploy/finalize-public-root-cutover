@@ -22,13 +22,16 @@ RESOLVER='1.1.1.1'
 PHP='/usr/bin/php8.5'
 HOST_LAUNCHER='/usr/local/sbin/verenigingsplatform-host-php'
 HOST_CONFIG='/etc/verenigingsplatform/host-engine.path'
-WEB_PLAN="$TENANT_ROOT/webserver-226/web-plan.json"
+RUNTIME_PLAN="$TENANT_ROOT/runtime/runtime-plan.json"
+WEB_DIR="$TENANT_ROOT/webserver-226"
+WEB_PLAN="$WEB_DIR/web-plan.json"
 DNS_PLAN="$TENANT_ROOT/dns/dns-plan.json"
 DNS_READY="$TENANT_ROOT/dns/dns-readiness.json"
 TLS_PLAN="$TENANT_ROOT/tls/tls-plan.json"
 DB_PLAN="$TENANT_ROOT/database/database-plan.json"
 MON_PLAN="$TENANT_ROOT/monitoring/monitoring-plan.json"
 LIFE_PLAN="$TENANT_ROOT/lifecycle/lifecycle-plan.json"
+TMP_WEB=''
 TMP_DNS=''
 CUTOVER_STARTED=0
 CUTOVER_COMMITTED=0
@@ -62,6 +65,7 @@ rollback_fragment() {
 cleanup() {
   local rc=$?
   trap - EXIT
+  [[ -n "$TMP_WEB" && -f "$TMP_WEB" ]] && /usr/bin/rm -f "$TMP_WEB"
   [[ -n "$TMP_DNS" && -f "$TMP_DNS" ]] && /usr/bin/rm -f "$TMP_DNS"
   if [[ $rc -ne 0 && $CUTOVER_STARTED -eq 1 && $CUTOVER_COMMITTED -eq 0 ]]; then
     rollback_fragment
@@ -93,20 +97,46 @@ IFS= read -r ENGINE < "$HOST_CONFIG"
   /usr/bin/sha256sum --check --quiet .host-engine-manifest.sha256
 ) || die 'host-engine manifestvalidatie faalt.'
 
-log '2/8 #226 webserverkandidaat volledig valideren'
-[[ -f "$WEB_PLAN" && ! -L "$WEB_PLAN" ]] || die '#226 web-plan ontbreekt of is onveilig.'
-"$PHP" "$ENGINE/bin/apply-vps-webserver.php" --plan="$WEB_PLAN" --check
+log '2/8 #226 webserverkandidaat deterministisch regenereren en valideren'
+[[ -f "$RUNTIME_PLAN" && ! -L "$RUNTIME_PLAN" ]] || die 'runtime-plan ontbreekt of is onveilig.'
+TMP_WEB="$(/usr/bin/mktemp /tmp/rc045-226-web.XXXXXX.json)"
+"$PHP" "$ENGINE/bin/prepare-vps-webserver.php" \
+  --runtime-plan="$RUNTIME_PLAN" \
+  --output-dir="$WEB_DIR" \
+  --dry-run > "$TMP_WEB"
 /usr/bin/jq -e \
   --arg tenant "$TENANT" \
   --arg host "$HOSTNAME" \
+  --arg runtime "$RUNTIME_PLAN" \
   '.tenant_key == $tenant
    and .canonical_host == $host
+   and .source.runtime_plan_file == $runtime
    and .shared_code.app_root == "/srv/verenigingsplatform/current"
    and .shared_code.document_root == "/srv/verenigingsplatform/current/public"
    and .security.document_root_is_minimal_public_subdir == true
    and .security.application_release_root_denied == true
    and .security.only_public_front_controller_executes_php == true' \
-  "$WEB_PLAN" >/dev/null || die '#226 web-plan is niet de bedoelde minimale public-rootvariant.'
+  "$TMP_WEB" >/dev/null || die 'dry-run web-plan is niet de bedoelde minimale public-rootvariant.'
+"$PHP" "$ENGINE/bin/prepare-vps-webserver.php" \
+  --runtime-plan="$RUNTIME_PLAN" \
+  --output-dir="$WEB_DIR" \
+  --force
+[[ -f "$WEB_PLAN" && ! -L "$WEB_PLAN" ]] || die '#226 web-plan ontbreekt na regeneratie of is onveilig.'
+/usr/bin/cmp -s "$TMP_WEB" "$WEB_PLAN" || die 'geschreven #226 web-plan wijkt af van de vooraf gevalideerde dry-run.'
+"$PHP" "$ENGINE/bin/apply-vps-webserver.php" --plan="$WEB_PLAN" --check
+/usr/bin/jq -e \
+  --arg tenant "$TENANT" \
+  --arg host "$HOSTNAME" \
+  --arg runtime "$RUNTIME_PLAN" \
+  '.tenant_key == $tenant
+   and .canonical_host == $host
+   and .source.runtime_plan_file == $runtime
+   and .shared_code.app_root == "/srv/verenigingsplatform/current"
+   and .shared_code.document_root == "/srv/verenigingsplatform/current/public"
+   and .security.document_root_is_minimal_public_subdir == true
+   and .security.application_release_root_denied == true
+   and .security.only_public_front_controller_executes_php == true' \
+  "$WEB_PLAN" >/dev/null || die '#226 web-plan is na regeneratie niet de bedoelde minimale public-rootvariant.'
 ROUTING_SRC="$(/usr/bin/jq -er '.bundle.https_routing_fragment' "$WEB_PLAN")"
 [[ -f "$ROUTING_SRC" && ! -L "$ROUTING_SRC" ]] || die 'gebonden #226 routingfragment ontbreekt.'
 /usr/bin/grep -Fq 'DocumentRoot "/srv/verenigingsplatform/current/public"' "$ROUTING_SRC" || die 'routingfragment bevat niet de public DocumentRoot.'
