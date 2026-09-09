@@ -18,7 +18,19 @@ done
   exit 64
 }
 
-for exe in /usr/bin/jq /usr/bin/curl /usr/bin/php /usr/bin/sha256sum /usr/bin/mktemp /usr/bin/grep /usr/bin/tail /usr/bin/rm /usr/sbin/apache2; do
+EFFECTIVE_UID="${EUID:-$(/usr/bin/id -u)}"
+if [[ "$EFFECTIVE_UID" -eq 0 && ( "${SHADOW_ALLOW_TEST_ROOT:-0}" != '0' || "${SHADOW_CURL_INSECURE:-0}" != '0' ) ]]; then
+  echo 'FOUT SHADOW: test-only bypassflags zijn als root verboden.' >&2
+  exit 1
+fi
+[[ "${SHADOW_ALLOW_TEST_ROOT:-0}" =~ ^[01]$ && "${SHADOW_CURL_INSECURE:-0}" =~ ^[01]$ ]] || {
+  echo 'FOUT SHADOW: ongeldige testflag.' >&2
+  exit 1
+}
+
+for exe in /usr/bin/jq /usr/bin/curl /usr/bin/php /usr/bin/sha256sum /usr/bin/mktemp \
+  /usr/bin/grep /usr/bin/tail /usr/bin/head /usr/bin/rm /usr/bin/mkdir /usr/bin/chmod \
+  /usr/bin/awk /usr/bin/seq /usr/bin/sleep /usr/bin/kill /usr/bin/id /usr/sbin/apache2; do
   [[ -x "$exe" ]] || { echo "FOUT SHADOW: executable ontbreekt: $exe" >&2; exit 1; }
 done
 for plan in "$WEB_PLAN" "$TLS_PLAN"; do
@@ -26,7 +38,7 @@ for plan in "$WEB_PLAN" "$TLS_PLAN"; do
 done
 
 HOST="$(/usr/bin/jq -er '.canonical_host' "$WEB_PLAN")"
-[[ "$HOST" =~ ^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$ ]] || { echo 'FOUT SHADOW: onveilige canonical host.' >&2; exit 1; }
+[[ "$HOST" =~ ^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$ ]] || { echo 'FOUT SHADOW: onveilige canonical host.' >&2; exit 1; }
 TLS_HOST="$(/usr/bin/jq -er '.canonical_host' "$TLS_PLAN")"
 [[ "$TLS_HOST" == "$HOST" ]] || { echo 'FOUT SHADOW: web- en TLS-plan hebben verschillende hosts.' >&2; exit 1; }
 
@@ -65,7 +77,7 @@ cleanup() {
   trap - EXIT
   if [[ -n "$APACHE_PID" ]]; then
     /usr/bin/kill -TERM "$APACHE_PID" 2>/dev/null || true
-    /usr/bin/wait "$APACHE_PID" 2>/dev/null || true
+    wait "$APACHE_PID" 2>/dev/null || true
   fi
   /usr/bin/rm -rf -- "$TMP"
   exit "$rc"
@@ -112,7 +124,7 @@ ServerName localhost
 ErrorLog "$TMP/error.log"
 LogLevel warn proxy_fcgi:debug rewrite:trace2 authz_core:debug
 EOF
-if [[ "${EUID:-$(/usr/bin/id -u)}" -eq 0 ]]; then
+if [[ "$EFFECTIVE_UID" -eq 0 ]]; then
   printf 'User %s\nGroup %s\n' "$WEB_USER" "$WEB_GROUP" >> "$APACHE_CONF"
 fi
 printf 'Include "%s"\n' "$SHADOW_VHOST" >> "$APACHE_CONF"
@@ -127,6 +139,9 @@ fi
 APACHE_PID=$!
 
 curl_base=(--resolve "$HOST:$PORT:127.0.0.1" -H "Host: $HOST")
+if [[ "${SHADOW_CURL_INSECURE:-0}" == '1' ]]; then
+  curl_base+=(--insecure)
+fi
 ready=0
 for _ in $(/usr/bin/seq 1 50); do
   if ! /usr/bin/kill -0 "$APACHE_PID" 2>/dev/null; then break; fi
