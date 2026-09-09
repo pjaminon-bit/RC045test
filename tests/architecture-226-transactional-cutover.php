@@ -24,6 +24,16 @@ $check(str_contains($raw, 'finalize-public-root-cutover <40-hex-main-commit> <ab
 $check(str_contains($raw, "PUBLIC_IPV4='149.143.36.59'") && str_contains($raw, "RESOLVER='1.1.1.1'"), 'VPS-test cutover bewaart publieke DNS-view en expliciete resolver');
 $check(str_contains($raw, 'ls-remote origin refs/heads/main') && str_contains($raw, '[[ "$REMOTE_MAIN" == "$TARGET" ]]'), 'operator weigert een commit die niet de actuele remote main-tip is');
 $check(str_contains($raw, 'install-verenigingsplatform-host-engine') && str_contains($raw, '.host-engine-manifest.sha256'), 'trusted host-engine wordt vóór tenantplannen geïnstalleerd en integraal gevalideerd');
+
+$check(str_contains($raw, 'RUNTIME_PLAN="$TENANT_ROOT/runtime/runtime-plan.json"') && str_contains($raw, 'WEB_DIR="$TENANT_ROOT/webserver-226"'), 'webserverkandidaat heeft expliciete runtimebron en geïsoleerde outputbundle');
+$check(str_contains($raw, 'prepare-vps-webserver.php"') && str_contains($raw, '--runtime-plan="$RUNTIME_PLAN"') && str_contains($raw, '--output-dir="$WEB_DIR"'), 'operator regenereert de #226 webserverbundle uit het actuele runtimeplan');
+$check(str_contains($raw, '--dry-run > "$TMP_WEB"') && str_contains($raw, '--force'), 'webserverregeneratie valideert eerst een dry-run en schrijft pas daarna gecontroleerd');
+$check(str_contains($raw, 'cmp -s "$TMP_WEB" "$WEB_PLAN"'), 'geschreven web-plan moet byte-identiek zijn aan de vooraf gevalideerde dry-run');
+$posWebPrepare = strpos($raw, 'prepare-vps-webserver.php"');
+$posWebCheck = strpos($raw, 'apply-vps-webserver.php" --plan="$WEB_PLAN" --check');
+$check($posWebPrepare !== false && $posWebCheck !== false && $posWebPrepare < $posWebCheck, 'stale webserverartifacts worden deterministisch geregenereerd vóór bundlevalidatie');
+$check(str_contains($raw, '[[ -n "$TMP_WEB" && -f "$TMP_WEB" ]]') && str_contains($raw, '/usr/bin/rm -f "$TMP_WEB"'), 'tijdelijke web-plan dry-run wordt altijd opgeruimd');
+
 $check(str_contains($raw, '.shared_code.document_root == "/srv/verenigingsplatform/current/public"'), 'webplan moet expliciet de minimale public-root bewijzen');
 $check(str_contains($raw, 'DocumentRoot "/srv/verenigingsplatform/current/public"') && str_contains($raw, 'Options +FollowSymLinks'), 'routingfragment moet public-root en gecontroleerde current-symlink traversal bevatten');
 $check(str_contains($raw, '.rules.resolver_context_bound_readiness == true') && str_contains($raw, 'live_system_resolver_required_for_readiness'), 'DNS-regeneratie bewaakt het nieuwe #239 resolvercontract en weigert de oude regel');
