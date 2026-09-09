@@ -127,7 +127,7 @@ openssl req -x509 -newkey rsa:2048 -nodes -sha256 -days 1 \
 chmod 0600 "$tmp/tls.key"
 chmod 0644 "$tmp/tls.crt"
 
-wrapper="$tmp/https-vhost.conf"
+wrapper_source="$tmp/https-vhost-source.conf"
 php -r '
 require $argv[1] . "/app/deployment/tls-contract.php";
 $plan = [
@@ -136,10 +136,16 @@ $plan = [
   "apache" => ["routing_fragment_installed" => $argv[4]],
   "security" => ["hsts_seconds" => 31536000],
 ];
-$cfg = tls44TenantHttps($plan);
-$cfg = str_replace("<VirtualHost *:443>", "<VirtualHost 127.0.0.1:" . $argv[5] . ">", $cfg);
-echo $cfg;
-' "$root" "$tmp/tls.crt" "$tmp/tls.key" "$fragment" "$port" > "$wrapper"
+echo tls44TenantHttps($plan);
+' "$root" "$tmp/tls.crt" "$tmp/tls.key" "$fragment" > "$wrapper_source"
+
+wrapper="$tmp/https-vhost.conf"
+php -r '
+$raw=file_get_contents($argv[1]);
+$raw=str_replace("<VirtualHost *:443>", "<VirtualHost 127.0.0.1:" . $argv[2] . ">", $raw, $n);
+if($n!==1) exit(1);
+echo $raw;
+' "$wrapper_source" "$port" > "$wrapper"
 
 grep -F 'SSLStrictSNIVHostCheck On' "$wrapper" >/dev/null
 grep -F 'RewriteCond %{SSL:SSL_TLS_SNI}' "$wrapper" >/dev/null
@@ -227,3 +233,37 @@ probe '/app/core/platform-definities.php' 404
 probe '/bin/apply-vps-release.php' 404
 
 echo 'Architecture #226 volledige HTTPS-wrapper + echte PHP-FPM public-root runtime: OK'
+
+# Bewijs daarna dat exact de losstaande shadow-operator dezelfde productie-
+# artifacts op een tweede tijdelijke loopback-Apache kan testen. De twee
+# testflags zijn uitsluitend voor deze niet-root CI-runtime: productie/root
+# weigert ze expliciet.
+if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
+  runtime_plan="$tmp/runtime-plan.json"
+  web_plan="$tmp/web-plan.json"
+  tls_plan="$tmp/tls-plan.json"
+  jq -n --arg user "$fpm_user" --arg group "$fpm_group" \
+    '{settings:{web_user:$user,web_group:$group}}' > "$runtime_plan"
+  jq -n \
+    --arg host 'test.vps.holox.nl' \
+    --arg runtime "$runtime_plan" \
+    --arg routing "$fragment" \
+    --arg docroot "$platform/current/public" \
+    '{canonical_host:$host,source:{runtime_plan_file:$runtime},bundle:{https_routing_fragment:$routing},shared_code:{document_root:$docroot}}' > "$web_plan"
+  web_sha="$(sha256sum "$web_plan" | awk '{print $1}')"
+  jq -n \
+    --arg host 'test.vps.holox.nl' \
+    --arg web "$web_plan" \
+    --arg sha "$web_sha" \
+    --arg vhost "$wrapper_source" \
+    '{canonical_host:$host,source:{web_plan_file:$web,web_plan_sha256:$sha},bundle:{tenant_https:$vhost}}' > "$tls_plan"
+
+  SHADOW_ALLOW_TEST_ROOT=1 SHADOW_CURL_INSECURE=1 \
+    bash "$root/ops/vps-test-deploy/check-public-root-shadow" \
+      --web-plan="$web_plan" \
+      --tls-plan="$tls_plan"
+else
+  echo 'SKIP: shadow-helper testflags zijn bewust verboden onder root.'
+fi
+
+echo 'Architecture #226 shadow-preflight runtime: OK'
