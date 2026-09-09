@@ -146,7 +146,11 @@ grep -F 'env[VERENIGING_REQUIRE_TENANT_CONFIG] = "1"' "$pool_config" >/dev/null
 grep -F "env[VERENIGING_CONFIG_FILE] = \"$tenant/config.php\"" "$pool_config" >/dev/null
 grep -F "php_admin_value[session.save_path] = \"$sessions\"" "$pool_config" >/dev/null
 
-touch "$tmp/php-error.log"
+# De globale FPM-log wordt tijdens initialisatie geopend voordat de poolworker
+# draait. Pre-create hem schrijfbaar voor de tijdelijke testmaster; dit bestand
+# is alleen testharnas en maakt geen deel uit van het productiecontract.
+touch "$tmp/php-fpm.log" "$tmp/php-error.log"
+chmod 0666 "$tmp/php-fpm.log"
 sudo chown "$fpm_user":"$fpm_group" "$tmp/php-error.log"
 sudo chmod 0644 "$tmp/php-error.log"
 cat > "$tmp/php-fpm.conf" <<EOF
@@ -171,7 +175,7 @@ for _ in $(seq 1 50); do
 done
 if [[ ! -S "$socket" ]]; then
   cat "$tmp/fpm-stdout.log" >&2 || true
-  sudo cat "$tmp/php-fpm.log" >&2 || true
+  cat "$tmp/php-fpm.log" >&2 || true
   echo 'FOUT: tijdelijke PHP-FPM voor #226 kwam niet beschikbaar.' >&2
   exit 1
 fi
@@ -284,7 +288,7 @@ probe() {
     echo '--- Apache error log ---' >&2
     cat "$tmp/apache-error.log" >&2 || true
     echo '--- PHP-FPM log ---' >&2
-    sudo cat "$tmp/php-fpm.log" >&2 || true
+    cat "$tmp/php-fpm.log" >&2 || true
     echo '--- PHP error log ---' >&2
     cat "$tmp/php-error.log" >&2 || true
     echo '--- PHP-FPM stdout ---' >&2
