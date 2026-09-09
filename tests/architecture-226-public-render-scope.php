@@ -35,7 +35,15 @@ $check(str_contains($html, 'acceptance-hardening.js'), 'SEO-head laadt acceptanc
 $check(str_contains($html, '<h1'), 'homepage-inhoud blijft aanwezig achter de frontcontroller');
 
 $seo = (string)file_get_contents($root . '/app/content/seo-head.php');
-$check(str_contains($seo, 'global $RC045_SITE, $RC045_TALEN, $RC045_PAGINAS;'), 'regressie dekt expliciet de legacy global-scope afhankelijkheid die #226 brak');
+$check(
+    str_contains($seo, '$RC045_SITE = siteUrl();')
+    && str_contains($seo, '$RC045_TALEN = siteTalen();')
+    && str_contains($seo, '$RC045_PAGINAS = siteSeoDefinitiesVoorRuntime();')
+    && str_contains($seo, 'global $RC045_TALEN;')
+    && str_contains($seo, 'global $RC045_SITE, $RC045_PAGINAS;')
+    && str_contains($seo, 'global $RC045_PAGINAS, $RC045_TALEN;'),
+    'regressie dekt de legacy top-level/global-scope afhankelijkheid die #226 brak'
+);
 
 printf("Architecture #226 public render scope: %d OK, %d fout(en)\n", $ok, $fout);
 exit($fout === 0 ? 0 : 1);
