@@ -30,14 +30,24 @@ jobs:
           extensions: openssl, pdo_pgsql, mbstring, curl, dom
           coverage: none
 
-      - name: Installeer Apache en PHP 8.5 FPM voor #226
+      - name: Bind Apache aan PHP 8.5 FPM voor #226
         run: |
           set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -y apache2 php8.5-fpm
-          test -x /usr/sbin/php-fpm8.5
-          sudo ln -sfn /usr/sbin/php-fpm8.5 /usr/local/bin/php-fpm
-          test "$(readlink -f "$(command -v php-fpm)")" = '/usr/sbin/php-fpm8.5'
+          sudo apt-get install -y apache2
+          fpm_bin="$(command -v php-fpm8.5 2>/dev/null || true)"
+          if [[ -z "$fpm_bin" ]]; then
+            fpm_bin="$(command -v php-fpm 2>/dev/null || true)"
+          fi
+          if [[ -z "$fpm_bin" ]]; then
+            fpm_bin="$(find /usr /opt -type f \( -name 'php-fpm8.5' -o -name 'php-fpm' \) -perm -111 2>/dev/null | head -n 1)"
+          fi
+          if [[ -z "$fpm_bin" || ! -x "$fpm_bin" ]]; then
+            echo 'FOUT: setup-php 8.5 leverde geen uitvoerbare PHP-FPM binary.' >&2
+            find /usr /opt -type f -name 'php-fpm*' 2>/dev/null | sort >&2 || true
+            exit 1
+          fi
+          sudo ln -sfn "$fpm_bin" /usr/local/bin/php-fpm
           php-fpm -v 2>&1 | head -n 1 | grep -E '^PHP 8\.5\.'
           /usr/sbin/apache2 -v
 
