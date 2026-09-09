@@ -288,6 +288,8 @@ RUNTIME_PRIVATE="$(/usr/bin/jq -er '.php_fpm.runtime_env.VERENIGING_PRIVATE_ROOT
 [[ -L /srv/verenigingsplatform/current ]] || die 'actieve release-pointer is geen beheerde current-symlink.'
 ACTIVE_RELEASE="$(/usr/bin/readlink -f /srv/verenigingsplatform/current)"
 [[ "$ACTIVE_RELEASE" =~ ^/srv/verenigingsplatform/releases/[0-9a-f]{40}$ && -d "$ACTIVE_RELEASE" ]] || die 'actieve release kan niet veilig worden opgelost.'
+EXPECTED_RELEASE="/srv/verenigingsplatform/releases/$TARGET"
+[[ "$ACTIVE_RELEASE" == "$EXPECTED_RELEASE" ]] || die 'actieve release wijkt af van target main; voer eerst de immutable release-deploy uit.'
 [[ -f "$ACTIVE_RELEASE/bin/check-release-tenant.php" && ! -L "$ACTIVE_RELEASE/bin/check-release-tenant.php" ]] || die 'actieve release mist de tenant candidate-probe.'
 "$RUNUSER" -u "$RUNTIME_USER" -- /usr/bin/env -i \
   PATH='/usr/sbin:/usr/bin:/sbin:/bin' \
