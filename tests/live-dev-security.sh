@@ -39,11 +39,14 @@ done
 trace="$(curl --silent --show-error --request TRACE --output /dev/null --write-out '%{http_code}' --connect-timeout 10 --max-time 30 "$BASE/" || true)"
 case "$trace" in 403|405|501) ok "TRACE geblokkeerd ($trace)";; *) bad "TRACE onverwacht toegestaan/status $trace";; esac
 
+# Onder de minimale public/ documentroot bestaan interne releasepaden vanuit de
+# publieke namespace niet. Verwacht daarom 404 (geen existence disclosure),
+# niet de pre-cutover 403 die nog uit de oude brede documentroot kwam.
 declare -A expected=(
-  ["$BASE/app/deployment/first-vps-bootstrap-contract.php"]="403"
-  ["$BASE/bin/apply-first-vps-bootstrap.php"]="403"
-  ["$BASE/tests/phase52-first-vps-bootstrap.php"]="403"
-  ["$BASE/dev-build.json"]="403"
+  ["$BASE/app/deployment/first-vps-bootstrap-contract.php"]="404"
+  ["$BASE/bin/apply-first-vps-bootstrap.php"]="404"
+  ["$BASE/tests/phase52-first-vps-bootstrap.php"]="404"
+  ["$BASE/dev-build.json"]="404"
   ["$BASE/public-content.php?key=../auth/users"]="404"
   ["$BASE/public-content.php?key=%2e%2e%2fauth%2fusers"]="404"
   ["$BASE/public-content.php?key=%252e%252e%252fauth%252fusers"]="404"
