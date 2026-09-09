@@ -39,12 +39,12 @@ function diagDoh(string $url): array
 
 $result = [];
 try {
-    $result['system'] = dns43Observatie(dns43Resolve($host, dns43ResolverContext('system')));
+    $result['system'] = dns43Resolve($host, dns43ResolverContext('system'));
 } catch (Throwable $e) {
     $result['system'] = ['error' => $e->getMessage()];
 }
 try {
-    $result['udp_1_1_1_1'] = dns43Observatie(dns43Resolve($host, dns43ResolverContext('explicit', '1.1.1.1', 53)));
+    $result['udp_1_1_1_1'] = dns43Resolve($host, dns43ResolverContext('explicit', '1.1.1.1', 53));
 } catch (Throwable $e) {
     $result['udp_1_1_1_1'] = ['error' => $e->getMessage()];
 }
