@@ -20,15 +20,25 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - name: Apache runtime voor #226
+      - name: Apache en PHP-FPM runtime voor #226
         shell: bash
         run: |
           set -euo pipefail
-          if [[ ! -x /usr/sbin/apache2 ]]; then
+          fpm_bin="$(command -v php-fpm 2>/dev/null || true)"
+          if [[ -z "$fpm_bin" ]]; then
+            fpm_bin="$(find /usr/sbin -maxdepth 1 -type f -name 'php-fpm*' -perm -111 2>/dev/null | sort -V | tail -n 1)"
+          fi
+          if [[ ! -x /usr/sbin/apache2 ]] || [[ -z "$fpm_bin" ]]; then
             sudo apt-get update
-            sudo apt-get install --yes apache2
+            sudo apt-get install --yes apache2 php-fpm
           fi
           /usr/sbin/apache2 -v
+          fpm_bin="$(command -v php-fpm 2>/dev/null || true)"
+          if [[ -z "$fpm_bin" ]]; then
+            fpm_bin="$(find /usr/sbin -maxdepth 1 -type f -name 'php-fpm*' -perm -111 2>/dev/null | sort -V | tail -n 1)"
+          fi
+          test -n "$fpm_bin"
+          "$fpm_bin" -v
 
       - name: Runtimeversies
         run: |
