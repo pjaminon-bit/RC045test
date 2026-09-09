@@ -50,6 +50,9 @@ $check(str_contains($raw, '.os.user')
     && str_contains($raw, '.php_fpm.runtime_env.VERENIGING_CONFIG_FILE')
     && str_contains($raw, '.php_fpm.runtime_env.VERENIGING_PRIVATE_ROOT'), 'candidate-probe bindt user, PHP-versie en tenantpaden aan het gevalideerde runtimeplan');
 $check(str_contains($raw, '"$ACTIVE_RELEASE/bin/check-release-tenant.php" --expected-tenant="$TENANT"'), 'cutover gebruikt de centrale candidate-probe van de daadwerkelijk actieve release');
+$check(str_contains($raw, 'EXPECTED_RELEASE="/srv/verenigingsplatform/releases/$TARGET"')
+    && str_contains($raw, '[[ "$ACTIVE_RELEASE" == "$EXPECTED_RELEASE" ]]')
+    && str_contains($raw, 'actieve release wijkt af van target main; voer eerst de immutable release-deploy uit.'), 'cutover weigert versiescheefstand tussen target main en actieve immutable release');
 $check(str_contains($raw, 'runtime-plan bindt niet aan de verwachte PHP 8.5 runtime.')
     && str_contains($raw, 'runtime-plan vereist tenantconfig niet fail-closed.')
     && str_contains($raw, 'runtime-plan bindt niet aan de verwachte tenantconfig.')
@@ -89,10 +92,11 @@ $check($posDiag !== false && $posRollback !== false && $posDiag < $posRollback, 
 $posDns = strpos($raw, "log '3/8 DNS-plan");
 $posTls = strpos($raw, "log '5/8 TLS, monitoring en lifecycle");
 $posRuntimeProbe = strpos($raw, "log '5b/8 actieve tenant-runtime opnieuw bewijzen als FPM-user'");
+$posReleaseAlignment = strpos($raw, '[[ "$ACTIVE_RELEASE" == "$EXPECTED_RELEASE" ]]');
 $posBackup = strpos($raw, "log '6/8 actieve Apache-state");
 $posLive = strpos($raw, "log '7/8 public-root");
-$check($posDns !== false && $posTls !== false && $posRuntimeProbe !== false && $posBackup !== false && $posLive !== false
-    && $posDns < $posTls && $posTls < $posRuntimeProbe && $posRuntimeProbe < $posBackup && $posBackup < $posLive, 'DNS/TLS/health én tenant-runtimeprobe slagen vóór backup/live Apache-mutatie');
+$check($posDns !== false && $posTls !== false && $posRuntimeProbe !== false && $posReleaseAlignment !== false && $posBackup !== false && $posLive !== false
+    && $posDns < $posTls && $posTls < $posRuntimeProbe && $posRuntimeProbe < $posReleaseAlignment && $posReleaseAlignment < $posBackup && $posBackup < $posLive, 'DNS/TLS/health, tenant-runtimeprobe én release-alignment slagen vóór backup/live Apache-mutatie');
 
 foreach (['/', '/index.php', '/beheer/', '/healthz.php', '/styles.css', '/favicon.ico'] as $route) {
     $check(str_contains($raw, "expect_code '{$route}'"), "publieke acceptance bevat {$route}");
