@@ -1,0 +1,32 @@
+name: Issue 226 post-cutover browser proof
+
+on:
+  push:
+    branches:
+      - agent/template-foundation
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  LIVE_DEV_BASE_URL: https://test.vps.holox.nl
+  PLAYWRIGHT_TEST_BASE_URL: https://test.vps.holox.nl
+
+jobs:
+  post-cutover-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact actieve main-release
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: 4a52597c59c4d5144a878621475127ab804c88cf
+      - name: Installeer gelockte browser zonder OS-package-mutatie
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci --ignore-scripts
+          npx playwright install chromium
+      - name: Bewijs live public-root functioneel en optisch
+        run: npx playwright test tests/live-dev-browser.spec.js tests/platform-223-live-browser.spec.js --workers=1 --reporter=line
