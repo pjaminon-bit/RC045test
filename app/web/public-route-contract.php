@@ -157,7 +157,8 @@ function public226Dispatch(?string $requestUri = null): ?string
         return null;
     }
 
-    $target = realpath($root . '/' . (string)$route['target']);
+    $routeTarget = (string)$route['target'];
+    $target = realpath($root . '/' . $routeTarget);
     $realRoot = realpath($root);
     $publicRoot = realpath($root . '/public');
     if (!is_string($target) || !is_file($target) || !is_string($realRoot) || !is_string($publicRoot)
@@ -166,9 +167,15 @@ function public226Dispatch(?string $requestUri = null): ?string
         return null;
     }
     foreach ((array)($route['get'] ?? []) as $key => $value) $_GET[(string)$key] = (string)$value;
-    $pad = public226RequestPad($requestUri) ?? '/';
-    $_SERVER['SCRIPT_NAME'] = $pad;
-    $_SERVER['PHP_SELF'] = $pad;
+
+    // REQUEST_URI blijft de zichtbare publieke route. SCRIPT_NAME/PHP_SELF
+    // beschrijven daarentegen het gevalideerde legacy PHP-script dat de
+    // frontcontroller daadwerkelijk uitvoert. Dit behoudt de CGI-semantiek
+    // waarop onder meer authHuidigePagina() voor veilige same-route redirects
+    // vertrouwt en voorkomt /beheer/beheer of /leden/leden na login/logout.
+    $scriptName = '/' . ltrim(str_replace('\\', '/', $routeTarget), '/');
+    $_SERVER['SCRIPT_NAME'] = $scriptName;
+    $_SERVER['PHP_SELF'] = $scriptName;
     $_SERVER['SCRIPT_FILENAME'] = $target;
     return $target;
 }
