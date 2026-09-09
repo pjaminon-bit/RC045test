@@ -135,7 +135,7 @@ jobs:
           wacht_op_status "$VPS_TEST_BASE_URL/" 200 ja
           wacht_op_status "$VPS_TEST_BASE_URL/beheer/" 200 ja
           wacht_op_status "$VPS_TEST_BASE_URL/healthz.php" 204 nee
-          wacht_op_status "$VPS_TEST_BASE_URL/bin/apply-vps-release.php" 403 nee
+          wacht_op_status "$VPS_TEST_BASE_URL/bin/apply-vps-release.php" 404 nee
 
   e2e-fixture-setup:
     needs: deploy-vps-test
@@ -266,6 +266,9 @@ jobs:
       - name: Installeer gelockte browsertooling
         run: |
           set -euo pipefail
+          # Deze acceptatie gebruikt Chromium; de aparte Google Chrome
+          # repository van de hosted runner is niet nodig voor Playwright.
+          sudo rm -f /etc/apt/sources.list.d/google-chrome.list /etc/apt/sources.list.d/google-chrome.sources
           npm ci --ignore-scripts
           npx playwright install --with-deps chromium
 
