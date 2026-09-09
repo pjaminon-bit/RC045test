@@ -56,7 +56,7 @@ jobs:
           set -euo pipefail
           while IFS= read -r -d '' bestand; do
             php -l "$bestand"
-          done < <(find . -type f -name '*.php' -not -path './vendor/*' -not -path './node_modules/*' -print0)
+          done < <(find . -type f -name '*.php' -not -path './vendor/*' -not -path './node_modules/*' -not -path './var/phpstan/*' -print0)
           node --check lidmaatschap-aanmelden.js
           node --check tests/live-dev-browser.spec.js
           node --check tests/live-dev-authenticated.spec.js
@@ -67,7 +67,7 @@ jobs:
         run: |
           set -euo pipefail
           php -m | grep -qi '^pdo_sqlite$' || { echo 'pdo_sqlite ontbreekt op de runner' >&2; exit 1; }
-          PS4='+ ${BASH_SOURCE}:${LINENO}: ' bash -x tests/run-all.sh 2>&1 | tee "$RUNNER_TEMP/regression-output.log"
+          bash tests/run-all.sh 2>&1 | tee "$RUNNER_TEMP/regression-output.log"
           test ! -e site-config.local.php
 
       - name: Bewaar regressiediagnose
