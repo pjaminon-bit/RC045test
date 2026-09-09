@@ -43,14 +43,60 @@ $check(!str_contains($raw, "RESOLVER='1.1.1.1'"), 'transactionele cutover gebrui
 $check(str_contains($raw, 'apply-vps-tls.php" --plan="$TLS_PLAN" --check') && !str_contains($raw, 'apply-vps-tls.php" --plan="$TLS_PLAN" --apply'), 'bestaande TLS wordt gevalideerd zonder onnodige ACME/certificaatmutatie');
 $check(str_contains($raw, 'prepare-vps-monitoring.php') && str_contains($raw, 'prepare-vps-lifecycle.php'), 'monitoring en lifecycle worden transitief opnieuw gebonden vóór cutover');
 $check(str_contains($raw, 'health --monitoring-plan="$MON_PLAN" --probe --write-status'), 'live health wordt vóór en na de public-root cutover geprobed');
+
+$check(str_contains($raw, "RUNUSER='/usr/sbin/runuser'") && str_contains($raw, '"$RUNUSER" -u "$RUNTIME_USER" -- /usr/bin/env -i'), 'cutover herhaalt de tenantprobe als de echte FPM-runtimeuser met schone environment');
+$check(str_contains($raw, '.os.user')
+    && str_contains($raw, '.settings.php_version')
+    && str_contains($raw, '.php_fpm.runtime_env.VERENIGING_CONFIG_FILE')
+    && str_contains($raw, '.php_fpm.runtime_env.VERENIGING_PRIVATE_ROOT'), 'candidate-probe bindt user, PHP-versie en tenantpaden aan het gevalideerde runtimeplan');
+$check(str_contains($raw, '"$ACTIVE_RELEASE/bin/check-release-tenant.php" --expected-tenant="$TENANT"'), 'cutover gebruikt de centrale candidate-probe van de daadwerkelijk actieve release');
+$check(str_contains($raw, 'EXPECTED_RELEASE="/srv/verenigingsplatform/releases/$TARGET"')
+    && str_contains($raw, '[[ "$ACTIVE_RELEASE" == "$EXPECTED_RELEASE" ]]')
+    && str_contains($raw, 'actieve release wijkt af van target main; voer eerst de immutable release-deploy uit.'), 'cutover weigert versiescheefstand tussen target main en actieve immutable release');
+$check(str_contains($raw, 'runtime-plan bindt niet aan de verwachte PHP 8.5 runtime.')
+    && str_contains($raw, 'runtime-plan vereist tenantconfig niet fail-closed.')
+    && str_contains($raw, 'runtime-plan bindt niet aan de verwachte tenantconfig.')
+    && str_contains($raw, 'runtime-plan bindt niet aan de verwachte private-root.'), 'runtimepreflight weigert PHP-/tenantconfig-/private-rootdrift vóór mutatie');
+$check(!str_contains($raw, 'extension_loaded(') && !str_contains($raw, "['openssl', 'pdo_pgsql'"), 'cutover dupliceert de centrale PHP-extensionlijst niet');
+
 $check(str_contains($raw, 'rollback_fragment()') && str_contains($raw, 'trap cleanup EXIT') && str_contains($raw, 'ROLLBACK OK: oorspronkelijke routing actief.'), 'post-cutover fouten hebben een automatische Apache-fragmentrollback');
 $check(str_contains($raw, '/usr/sbin/apache2ctl configtest') && str_contains($raw, '/usr/bin/systemctl reload apache2'), 'rollback vereist geldige Apache-config vóór reload');
 
+$check(str_contains($raw, 'capture_failure_diagnostics()') && str_contains($raw, 'FAILURE_DIAGNOSTICS=$BACKUP_DIR'), 'mislukte post-cutovertransactie bewaart een vindbare root-private diagnosebundle');
+$check(str_contains($raw, 'failure_path=${FAILURE_PATH:-unknown}')
+    && str_contains($raw, 'failure_expected_http=${FAILURE_EXPECTED:-unknown}')
+    && str_contains($raw, 'failure_observed_http=${FAILURE_OBSERVED:-unknown}'), 'diagnose legt de falende HTTP-acceptance vast');
+$check(str_contains($raw, 'candidate_fragment_sha256=')
+    && str_contains($raw, 'active_fragment_sha256=')
+    && str_contains($raw, 'runtime_plan_sha256=')
+    && str_contains($raw, 'php_fpm_pool_sha256='), 'diagnose bindt actieve/candidate/runtime/FPM-state met digests zonder configuratie-inhoud te dumpen');
+$check(str_contains($raw, 'apache-error.filtered.log')
+    && str_contains($raw, 'php-fpm.filtered.log')
+    && str_contains($raw, "/usr/bin/tail -n 200"), 'Apache/FPM failurelogs zijn inhoudelijk gefilterd en hard begrensd');
+$check(str_contains($raw, '--output "$probe_body" --stderr "$probe_stderr"')
+    && str_contains($raw, '--max-filesize 10485760')
+    && str_contains($raw, '/usr/bin/head -c 65536 "$probe_body"')
+    && str_contains($raw, '/usr/bin/head -c 16384 "$probe_stderr"'), 'eerste falende HTTP-response wordt atomair bewaard en vervolgens begrensd');
+$check(str_contains($raw, '/usr/bin/rm -f "$probe_body" "$probe_stderr"'), 'geslaagde HTTP-probes laten geen response-artifacts achter');
+$check(!str_contains($raw, 'cat "$pool_file"') && !str_contains($raw, 'env[VERENIGING_'), 'failurediagnose dumpt geen FPM-configinhoud of tenant-runtime-environment');
+
+$cleanupStart = strpos($raw, "cleanup() {");
+$cleanupEnd = $cleanupStart === false ? false : strpos($raw, "}\ntrap cleanup EXIT", $cleanupStart);
+$cleanupRaw = ($cleanupStart !== false && $cleanupEnd !== false)
+    ? substr($raw, $cleanupStart, $cleanupEnd - $cleanupStart)
+    : '';
+$posDiag = strpos($cleanupRaw, 'capture_failure_diagnostics');
+$posRollback = strpos($cleanupRaw, 'rollback_fragment');
+$check($posDiag !== false && $posRollback !== false && $posDiag < $posRollback, 'failurediagnostiek wordt vóór automatische rollback vastgelegd');
+
 $posDns = strpos($raw, "log '3/8 DNS-plan");
 $posTls = strpos($raw, "log '5/8 TLS, monitoring en lifecycle");
+$posRuntimeProbe = strpos($raw, "log '5b/8 actieve tenant-runtime opnieuw bewijzen als FPM-user'");
+$posReleaseAlignment = strpos($raw, '[[ "$ACTIVE_RELEASE" == "$EXPECTED_RELEASE" ]]');
 $posBackup = strpos($raw, "log '6/8 actieve Apache-state");
 $posLive = strpos($raw, "log '7/8 public-root");
-$check($posDns !== false && $posTls !== false && $posBackup !== false && $posLive !== false && $posDns < $posTls && $posTls < $posBackup && $posBackup < $posLive, 'alle bron-/DNS-/TLS-/healthcontroles gebeuren vóór de eerste live Apache-mutatie');
+$check($posDns !== false && $posTls !== false && $posRuntimeProbe !== false && $posReleaseAlignment !== false && $posBackup !== false && $posLive !== false
+    && $posDns < $posTls && $posTls < $posRuntimeProbe && $posRuntimeProbe < $posReleaseAlignment && $posReleaseAlignment < $posBackup && $posBackup < $posLive, 'DNS/TLS/health, tenant-runtimeprobe én release-alignment slagen vóór backup/live Apache-mutatie');
 
 foreach (['/', '/index.php', '/beheer/', '/healthz.php', '/styles.css', '/favicon.ico'] as $route) {
     $check(str_contains($raw, "expect_code '{$route}'"), "publieke acceptance bevat {$route}");

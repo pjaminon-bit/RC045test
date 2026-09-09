@@ -21,6 +21,7 @@ PUBLIC_IPV4='149.143.36.59'
 RESOLVER='doh:cloudflare'
 DOH_ENDPOINT='cloudflare-dns.com'
 PHP='/usr/bin/php8.5'
+RUNUSER='/usr/sbin/runuser'
 HOST_LAUNCHER='/usr/local/sbin/verenigingsplatform-host-php'
 HOST_CONFIG='/etc/verenigingsplatform/host-engine.path'
 RUNTIME_PLAN="$TENANT_ROOT/runtime/runtime-plan.json"
@@ -39,9 +40,81 @@ CUTOVER_COMMITTED=0
 LIVE_FRAGMENT=''
 BACKUP_FRAGMENT=''
 BACKUP_DIR=''
+FAILURE_PATH=''
+FAILURE_EXPECTED=''
+FAILURE_OBSERVED=''
 
 log() { printf '\n=== %s ===\n' "$*"; }
 die() { echo "FOUT #226: $*" >&2; exit 1; }
+
+capture_failure_diagnostics() {
+  [[ -n "$BACKUP_DIR" && -d "$BACKUP_DIR" ]] || return 0
+  set +e
+  local report="$BACKUP_DIR/failure-diagnostics.txt"
+  local php_version='' pool='' pool_file='' active_release='unresolved'
+  php_version="$(/usr/bin/jq -er '.settings.php_version // empty' "$RUNTIME_PLAN" 2>/dev/null)"
+  pool="$(/usr/bin/jq -er '.php_fpm.pool // empty' "$RUNTIME_PLAN" 2>/dev/null)"
+  active_release="$(/usr/bin/readlink -f /srv/verenigingsplatform/current 2>/dev/null)"
+
+  {
+    echo "captured_at_utc=$(/usr/bin/date -u '+%Y-%m-%dT%H:%M:%SZ')"
+    echo "target_main=$TARGET"
+    echo "active_release=${active_release:-unresolved}"
+    echo "failure_path=${FAILURE_PATH:-unknown}"
+    echo "failure_expected_http=${FAILURE_EXPECTED:-unknown}"
+    echo "failure_observed_http=${FAILURE_OBSERVED:-unknown}"
+    if [[ -f "$ROUTING_SRC" && ! -L "$ROUTING_SRC" ]]; then
+      echo "candidate_fragment_sha256=$(/usr/bin/sha256sum "$ROUTING_SRC" | /usr/bin/awk '{print $1}')"
+    fi
+    if [[ -f "$LIVE_FRAGMENT" && ! -L "$LIVE_FRAGMENT" ]]; then
+      echo "active_fragment_sha256=$(/usr/bin/sha256sum "$LIVE_FRAGMENT" | /usr/bin/awk '{print $1}')"
+    fi
+    if [[ -f "$RUNTIME_PLAN" && ! -L "$RUNTIME_PLAN" ]]; then
+      echo "runtime_plan_sha256=$(/usr/bin/sha256sum "$RUNTIME_PLAN" | /usr/bin/awk '{print $1}')"
+    fi
+    if [[ "$php_version" =~ ^[0-9]{1,2}\.[0-9]{1,2}$ && "$pool" =~ ^[a-z0-9_-]{1,80}$ ]]; then
+      pool_file="/etc/php/$php_version/fpm/pool.d/$pool.conf"
+      echo "php_version=$php_version"
+      echo "php_fpm_pool=$pool"
+      echo "php_fpm_pool_file=$pool_file"
+      if [[ -f "$pool_file" && ! -L "$pool_file" ]]; then
+        echo "php_fpm_pool_sha256=$(/usr/bin/sha256sum "$pool_file" | /usr/bin/awk '{print $1}')"
+      else
+        echo 'php_fpm_pool_sha256=unavailable'
+      fi
+    else
+      echo 'php_fpm_pool=unresolved'
+    fi
+    /usr/bin/systemctl is-active apache2 2>/dev/null | /usr/bin/awk '{print "apache_state=" $0}'
+  } > "$report" 2>&1
+
+  /usr/sbin/apache2ctl configtest > "$BACKUP_DIR/apache-configtest.txt" 2>&1
+  /usr/bin/grep -E 'proxy_fcgi|AH010|PHP Fatal|Fatal error|Uncaught|Permission denied|Primary script|open_basedir' \
+    /var/log/apache2/error.log 2>/dev/null | /usr/bin/tail -n 200 > "$BACKUP_DIR/apache-error.filtered.log"
+  if [[ "$php_version" =~ ^[0-9]{1,2}\.[0-9]{1,2}$ ]]; then
+    /usr/bin/grep -E "${pool:-vst-test}|PHP Fatal error|Fatal error|Uncaught|Permission denied|Primary script|open_basedir|ERROR|WARNING" \
+      "/var/log/php${php_version}-fpm.log" 2>/dev/null | /usr/bin/tail -n 200 > "$BACKUP_DIR/php-fpm.filtered.log"
+  fi
+  for evidence in "$report" "$BACKUP_DIR/apache-configtest.txt" "$BACKUP_DIR/apache-error.filtered.log" "$BACKUP_DIR/php-fpm.filtered.log"; do
+    [[ -f "$evidence" ]] && /usr/bin/chmod 0600 "$evidence"
+  done
+  echo "FAILURE_DIAGNOSTICS=$BACKUP_DIR" >&2
+  set -e
+  return 0
+}
+
+preserve_http_failure() {
+  local probe_body="$1" probe_stderr="$2"
+  if [[ -f "$probe_body" ]]; then
+    /usr/bin/head -c 65536 "$probe_body" > "$BACKUP_DIR/http-failure.body" 2>/dev/null || true
+    /usr/bin/chmod 0600 "$BACKUP_DIR/http-failure.body" 2>/dev/null || true
+  fi
+  if [[ -f "$probe_stderr" ]]; then
+    /usr/bin/head -c 16384 "$probe_stderr" > "$BACKUP_DIR/http-failure.curl-stderr" 2>/dev/null || true
+    /usr/bin/chmod 0600 "$BACKUP_DIR/http-failure.curl-stderr" 2>/dev/null || true
+  fi
+  /usr/bin/rm -f "$probe_body" "$probe_stderr"
+}
 
 rollback_fragment() {
   set +e
@@ -69,6 +142,7 @@ cleanup() {
   [[ -n "$TMP_WEB" && -f "$TMP_WEB" ]] && /usr/bin/rm -f "$TMP_WEB"
   [[ -n "$TMP_DNS" && -f "$TMP_DNS" ]] && /usr/bin/rm -f "$TMP_DNS"
   if [[ $rc -ne 0 && $CUTOVER_STARTED -eq 1 && $CUTOVER_COMMITTED -eq 0 ]]; then
+    capture_failure_diagnostics
     rollback_fragment
   fi
   exit "$rc"
@@ -78,7 +152,8 @@ trap cleanup EXIT
 for exe in /usr/bin/bash /usr/bin/git /usr/bin/jq /usr/bin/curl /usr/bin/sha256sum \
   /usr/bin/cmp /usr/bin/install /usr/bin/mv /usr/bin/cp /usr/bin/mktemp \
   /usr/bin/stat /usr/bin/readlink /usr/bin/grep /usr/bin/awk /usr/bin/chown \
-  /usr/bin/chmod /usr/bin/rm /usr/sbin/apache2ctl /usr/bin/systemctl "$PHP"; do
+  /usr/bin/chmod /usr/bin/rm /usr/bin/head /usr/bin/tail /usr/bin/date /usr/bin/env \
+  /usr/sbin/apache2ctl /usr/bin/systemctl "$PHP" "$RUNUSER"; do
   [[ -x "$exe" ]] || die "vereiste executable ontbreekt: $exe"
 done
 
@@ -199,6 +274,31 @@ fi
 "$HOST_LAUNCHER" health --monitoring-plan="$MON_PLAN" --check
 "$HOST_LAUNCHER" health --monitoring-plan="$MON_PLAN" --probe --write-status
 
+log '5b/8 actieve tenant-runtime opnieuw bewijzen als FPM-user'
+RUNTIME_USER="$(/usr/bin/jq -er '.os.user' "$RUNTIME_PLAN")"
+RUNTIME_PHP_VERSION="$(/usr/bin/jq -er '.settings.php_version' "$RUNTIME_PLAN")"
+RUNTIME_REQUIRE_CONFIG="$(/usr/bin/jq -er '.php_fpm.runtime_env.VERENIGING_REQUIRE_TENANT_CONFIG' "$RUNTIME_PLAN")"
+RUNTIME_CONFIG="$(/usr/bin/jq -er '.php_fpm.runtime_env.VERENIGING_CONFIG_FILE' "$RUNTIME_PLAN")"
+RUNTIME_PRIVATE="$(/usr/bin/jq -er '.php_fpm.runtime_env.VERENIGING_PRIVATE_ROOT' "$RUNTIME_PLAN")"
+[[ "$RUNTIME_USER" =~ ^[a-z_][a-z0-9_-]{0,30}$ ]] || die 'runtime-plan bevat geen veilige tenant-runtimeuser.'
+[[ "$RUNTIME_PHP_VERSION" == '8.5' ]] || die 'runtime-plan bindt niet aan de verwachte PHP 8.5 runtime.'
+[[ "$RUNTIME_REQUIRE_CONFIG" == '1' ]] || die 'runtime-plan vereist tenantconfig niet fail-closed.'
+[[ "$RUNTIME_CONFIG" == "$TENANT_ROOT/config.php" ]] || die 'runtime-plan bindt niet aan de verwachte tenantconfig.'
+[[ "$RUNTIME_PRIVATE" == "$TENANT_ROOT/private" ]] || die 'runtime-plan bindt niet aan de verwachte private-root.'
+[[ -L /srv/verenigingsplatform/current ]] || die 'actieve release-pointer is geen beheerde current-symlink.'
+ACTIVE_RELEASE="$(/usr/bin/readlink -f /srv/verenigingsplatform/current)"
+[[ "$ACTIVE_RELEASE" =~ ^/srv/verenigingsplatform/releases/[0-9a-f]{40}$ && -d "$ACTIVE_RELEASE" ]] || die 'actieve release kan niet veilig worden opgelost.'
+EXPECTED_RELEASE="/srv/verenigingsplatform/releases/$TARGET"
+[[ "$ACTIVE_RELEASE" == "$EXPECTED_RELEASE" ]] || die 'actieve release wijkt af van target main; voer eerst de immutable release-deploy uit.'
+[[ -f "$ACTIVE_RELEASE/bin/check-release-tenant.php" && ! -L "$ACTIVE_RELEASE/bin/check-release-tenant.php" ]] || die 'actieve release mist de tenant candidate-probe.'
+"$RUNUSER" -u "$RUNTIME_USER" -- /usr/bin/env -i \
+  PATH='/usr/sbin:/usr/bin:/sbin:/bin' \
+  VERENIGING_REQUIRE_TENANT_CONFIG="$RUNTIME_REQUIRE_CONFIG" \
+  VERENIGING_CONFIG_FILE="$RUNTIME_CONFIG" \
+  VERENIGING_PRIVATE_ROOT="$RUNTIME_PRIVATE" \
+  "$PHP" "$ACTIVE_RELEASE/bin/check-release-tenant.php" --expected-tenant="$TENANT" \
+  || die 'actieve release/runtime faalt de tenant candidate-probe vóór public-root cutover.'
+
 log '6/8 actieve Apache-state veilig back-uppen'
 LIVE_DIR="$(/usr/bin/jq -er '.apache.fragment_dir' "$WEB_PLAN")"
 LIVE_NAME="$(/usr/bin/jq -er '.apache.https_routing_fragment_filename' "$WEB_PLAN")"
@@ -226,14 +326,27 @@ CUTOVER_STARTED=1
 
 expect_code() {
   local path="$1" expected="$2" code
-  if ! code="$(/usr/bin/curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
-      --connect-timeout 5 --max-time 15 \
+  local probe_body="$BACKUP_DIR/http-probe.body" probe_stderr="$BACKUP_DIR/http-probe.stderr"
+  /usr/bin/rm -f "$probe_body" "$probe_stderr"
+  if ! code="$(/usr/bin/curl --silent --show-error --output "$probe_body" --stderr "$probe_stderr" --write-out '%{http_code}' \
+      --connect-timeout 5 --max-time 15 --max-filesize 10485760 \
       --resolve "$HOSTNAME:443:127.0.0.1" \
       "https://$HOSTNAME$path")"; then
+    FAILURE_PATH="$path"
+    FAILURE_EXPECTED="$expected"
+    FAILURE_OBSERVED='curl-error'
+    preserve_http_failure "$probe_body" "$probe_stderr"
     die "curl faalt voor $path"
   fi
   printf '%-48s %s\n' "$path" "$code"
-  [[ "$code" == "$expected" ]] || die "$path gaf $code; verwacht $expected."
+  if [[ "$code" != "$expected" ]]; then
+    FAILURE_PATH="$path"
+    FAILURE_EXPECTED="$expected"
+    FAILURE_OBSERVED="$code"
+    preserve_http_failure "$probe_body" "$probe_stderr"
+    die "$path gaf $code; verwacht $expected."
+  fi
+  /usr/bin/rm -f "$probe_body" "$probe_stderr"
 }
 
 expect_closed() {
@@ -242,12 +355,20 @@ expect_closed() {
       --connect-timeout 5 --max-time 15 \
       --resolve "$HOSTNAME:443:127.0.0.1" \
       "https://$HOSTNAME$path")"; then
+    FAILURE_PATH="$path"
+    FAILURE_EXPECTED='400|403|404'
+    FAILURE_OBSERVED='curl-error'
     die "curl faalt voor traversalprobe $path"
   fi
   printf '%-48s %s\n' "$path" "$code"
   case "$code" in
     400|403|404) ;;
-    *) die "traversalprobe $path is niet fail-closed: HTTP $code." ;;
+    *)
+      FAILURE_PATH="$path"
+      FAILURE_EXPECTED='400|403|404'
+      FAILURE_OBSERVED="$code"
+      die "traversalprobe $path is niet fail-closed: HTTP $code."
+      ;;
   esac
 }
 

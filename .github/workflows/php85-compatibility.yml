@@ -1,6 +1,9 @@
 name: PHP 8.5 compatibility
 
 on:
+  push:
+    branches:
+      - agent/template-foundation
   pull_request:
     branches:
       - main
@@ -26,6 +29,31 @@ jobs:
           php-version: '8.5'
           extensions: openssl, pdo_pgsql, mbstring, curl, dom
           coverage: none
+
+      - name: Bind Apache aan PHP 8.5 FPM voor #226
+        run: |
+          set -euo pipefail
+          # Deze job gebruikt geen Google Chrome. De hosted runner kan wel een
+          # Chrome APT-bron bevatten; houd de Apache-installatie onafhankelijk
+          # van tijdelijke inconsistenties in die externe pakketindex.
+          sudo rm -f /etc/apt/sources.list.d/google-chrome.list /etc/apt/sources.list.d/google-chrome.sources
+          sudo apt-get update
+          sudo apt-get install -y apache2
+          fpm_bin="$(command -v php-fpm8.5 2>/dev/null || true)"
+          if [[ -z "$fpm_bin" ]]; then
+            fpm_bin="$(command -v php-fpm 2>/dev/null || true)"
+          fi
+          if [[ -z "$fpm_bin" ]]; then
+            fpm_bin="$(find /usr /opt -type f \( -name 'php-fpm8.5' -o -name 'php-fpm' \) -perm -111 2>/dev/null | head -n 1)"
+          fi
+          if [[ -z "$fpm_bin" || ! -x "$fpm_bin" ]]; then
+            echo 'FOUT: setup-php 8.5 leverde geen uitvoerbare PHP-FPM binary.' >&2
+            find /usr /opt -type f -name 'php-fpm*' 2>/dev/null | sort >&2 || true
+            exit 1
+          fi
+          sudo ln -sfn "$fpm_bin" /usr/local/bin/php-fpm
+          php-fpm -v 2>&1 | head -n 1 | grep -E '^PHP 8\.5\.'
+          /usr/sbin/apache2 -v
 
       - name: Bewijs PHP 8.5 en vereiste modules
         run: |

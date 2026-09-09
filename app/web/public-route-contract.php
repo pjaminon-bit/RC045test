@@ -120,7 +120,14 @@ function public226CliServerStatic(string $publicRoot, string $requestUri): bool
     return is_string($candidate) && is_string($realRoot) && public226PadBinnen($candidate, $realRoot) && is_file($candidate);
 }
 
-function public226Dispatch(?string $requestUri = null): void
+/**
+ * Bereidt één publieke request voor en retourneert uitsluitend het fysieke
+ * PHP-target. Het target wordt hier bewust NIET geïnclude: een require binnen
+ * deze functie zou legacy routebestanden in lokale functiescope uitvoeren,
+ * terwijl zij vóór #226 als top-level scripts in globale PHP-scope draaiden.
+ * public/index.php voert het geretourneerde target daarom op top-level uit.
+ */
+function public226Dispatch(?string $requestUri = null): ?string
 {
     $root = public226AppRoot();
     $requestUri ??= (string)($_SERVER['REQUEST_URI'] ?? '/');
@@ -129,25 +136,25 @@ function public226Dispatch(?string $requestUri = null): void
         http_response_code(404);
         header('Content-Type: text/plain; charset=UTF-8');
         echo "Niet gevonden.\n";
-        return;
+        return null;
     }
     if (($route['type'] ?? '') === 'redirect') {
         header('Location: ' . $route['location'], true, (int)$route['status']);
-        return;
+        return null;
     }
     if (($route['type'] ?? '') === 'placeholder') {
         $host = strtolower((string)($_SERVER['HTTP_HOST'] ?? ''));
         if (($host === '127.0.0.1' || $host === 'localhost') && str_contains($requestUri, '_asset404=1')) {
             http_response_code(404);
-            return;
+            return null;
         }
         header('Content-Type: image/svg+xml');
         readfile($root . '/public/images/template-placeholder.svg');
-        return;
+        return null;
     }
     if (($route['type'] ?? '') !== 'php') {
         http_response_code(404);
-        return;
+        return null;
     }
 
     $target = realpath($root . '/' . (string)$route['target']);
@@ -156,12 +163,12 @@ function public226Dispatch(?string $requestUri = null): void
     if (!is_string($target) || !is_file($target) || !is_string($realRoot) || !is_string($publicRoot)
         || !public226PadBinnen($target, $realRoot) || public226PadBinnen($target, $publicRoot)) {
         http_response_code(404);
-        return;
+        return null;
     }
     foreach ((array)($route['get'] ?? []) as $key => $value) $_GET[(string)$key] = (string)$value;
     $pad = public226RequestPad($requestUri) ?? '/';
     $_SERVER['SCRIPT_NAME'] = $pad;
     $_SERVER['PHP_SELF'] = $pad;
     $_SERVER['SCRIPT_FILENAME'] = $target;
-    require $target;
+    return $target;
 }

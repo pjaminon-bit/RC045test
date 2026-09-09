@@ -36,6 +36,15 @@ sort($php,SORT_STRING);
 check226($symlinks===[],'public/ bevat geen symlinks die de filesystemgrens kunnen omzeilen');
 check226($php===['public/index.php'],'alleen public/index.php is fysiek PHP-bereikbaar');
 
+$frontController=(string)file_get_contents($public.'/index.php');
+$routeContract=(string)file_get_contents($root.'/app/web/public-route-contract.php');
+check226(str_contains($frontController, '$public226Target = public226Dispatch();')
+    && str_contains($frontController, 'require $public226Target;'), 'frontcontroller voert het gerouteerde PHP-target zelf op top-level uit');
+check226(!str_contains($routeContract, 'require $target;')
+    && str_contains($routeContract, 'return $target;'), 'routecontract retourneert het PHP-target zonder include in lokale functiescope');
+check226(str_contains($routeContract, 'legacy routebestanden in lokale functiescope uitvoeren')
+    && str_contains($routeContract, 'globale PHP-scope'), 'global-scope compatibiliteitsgrens is expliciet gedocumenteerd');
+
 $rootAssets=['acceptance-hardening.css','acceptance-hardening.js','android-chrome-192x192.png','android-chrome-512x512.png','apple-touch-icon.png','csp205-aanmelden-b31d17f20682.css','csp205-bedankt-d8aa6cfe465f.css','csp205-content-renderer-1-3035699392f1.css','csp205-content-renderer-2-935f1f35b2f9.css','csp205-fotoboek-0315ba62e094.css','csp205-index-f6f06d63c77b.css','csp205-media-abe69927c5b8.css','favicon-16x16.png','favicon-32x32.png','favicon-48x48.png','favicon.ico','homepage.js','iframe-placeholder.css','lidmaatschap-aanmelden.js','paneel-thema.js','paneel.css','paneel.js','rc045-logo.png','robots.txt','site-i18n.js','site.webmanifest','sitemap.xml','styles.css'];
 $allMirrored=true;foreach($rootAssets as$a){if(!mirrored226($root.'/'.$a,$public.'/'.$a)){$allMirrored=false;fwrite(STDERR,"FOUT DETAIL: asset mirror wijkt af: {$a}\n");}}
 check226($allMirrored,'alle expliciete root-browserassets zijn byte-identiek onder public/ gematerialiseerd');

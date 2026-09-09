@@ -31,7 +31,14 @@ bash -n ops/vps-test-deploy/finalize-public-root-cutover
 printf '\n== Apache #226 runtime-regressie ==\n'
 bash tests/architecture-226-apache-runtime.sh
 
+printf '\n== Apache + echte PHP-FPM #226 runtime-regressie ==\n'
+# De geïsoleerde tenant-FPM-user moet de tijdelijke parent kunnen traverseren,
+# zoals in productie onder /srv. GitHub RUNNER_TEMP kan runner-private ancestors
+# hebben; /tmp geeft hier alleen de systeem-parent, terwijl de fixture zelf haar
+# productieachtige ownership en modes behoudt.
+RUNNER_TEMP=/tmp bash tests/architecture-226-apache-fpm-runtime.sh
+
 printf '\n== Repositorygrenzen ==\n'
 test ! -e site-config.local.php
 
-echo "ALLE REGRESSIETESTS GESLAAGD (${#tests[@]} PHP-tests + #226 operator syntax + Apache #226 runtime)"
+echo "ALLE REGRESSIETESTS GESLAAGD (${#tests[@]} PHP-tests + #226 operator syntax + Apache #226 runtime + echte PHP-FPM runtime)"
