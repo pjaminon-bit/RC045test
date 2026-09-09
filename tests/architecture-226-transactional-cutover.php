@@ -46,6 +46,33 @@ $check(str_contains($raw, 'health --monitoring-plan="$MON_PLAN" --probe --write-
 $check(str_contains($raw, 'rollback_fragment()') && str_contains($raw, 'trap cleanup EXIT') && str_contains($raw, 'ROLLBACK OK: oorspronkelijke routing actief.'), 'post-cutover fouten hebben een automatische Apache-fragmentrollback');
 $check(str_contains($raw, '/usr/sbin/apache2ctl configtest') && str_contains($raw, '/usr/bin/systemctl reload apache2'), 'rollback vereist geldige Apache-config vóór reload');
 
+$check(str_contains($raw, 'capture_failure_diagnostics()') && str_contains($raw, 'FAILURE_DIAGNOSTICS=$BACKUP_DIR'), 'mislukte post-cutovertransactie bewaart een vindbare root-private diagnosebundle');
+$check(str_contains($raw, 'failure_path=${FAILURE_PATH:-unknown}')
+    && str_contains($raw, 'failure_expected_http=${FAILURE_EXPECTED:-unknown}')
+    && str_contains($raw, 'failure_observed_http=${FAILURE_OBSERVED:-unknown}'), 'diagnose legt de falende HTTP-acceptance vast');
+$check(str_contains($raw, 'candidate_fragment_sha256=')
+    && str_contains($raw, 'active_fragment_sha256=')
+    && str_contains($raw, 'runtime_plan_sha256=')
+    && str_contains($raw, 'php_fpm_pool_sha256='), 'diagnose bindt actieve/candidate/runtime/FPM-state met digests zonder configuratie-inhoud te dumpen');
+$check(str_contains($raw, 'apache-error.filtered.log')
+    && str_contains($raw, 'php-fpm.filtered.log')
+    && str_contains($raw, "/usr/bin/tail -n 200"), 'Apache/FPM failurelogs zijn inhoudelijk gefilterd en hard begrensd');
+$check(str_contains($raw, '--output "$probe_body" --stderr "$probe_stderr"')
+    && str_contains($raw, '--max-filesize 10485760')
+    && str_contains($raw, '/usr/bin/head -c 65536 "$probe_body"')
+    && str_contains($raw, '/usr/bin/head -c 16384 "$probe_stderr"'), 'eerste falende HTTP-response wordt atomair bewaard en vervolgens begrensd');
+$check(str_contains($raw, '/usr/bin/rm -f "$probe_body" "$probe_stderr"'), 'geslaagde HTTP-probes laten geen response-artifacts achter');
+$check(!str_contains($raw, 'cat "$pool_file"') && !str_contains($raw, 'env[VERENIGING_'), 'failurediagnose dumpt geen FPM-configinhoud of tenant-runtime-environment');
+
+$cleanupStart = strpos($raw, "cleanup() {");
+$cleanupEnd = $cleanupStart === false ? false : strpos($raw, "}\ntrap cleanup EXIT", $cleanupStart);
+$cleanupRaw = ($cleanupStart !== false && $cleanupEnd !== false)
+    ? substr($raw, $cleanupStart, $cleanupEnd - $cleanupStart)
+    : '';
+$posDiag = strpos($cleanupRaw, 'capture_failure_diagnostics');
+$posRollback = strpos($cleanupRaw, 'rollback_fragment');
+$check($posDiag !== false && $posRollback !== false && $posDiag < $posRollback, 'failurediagnostiek wordt vóór automatische rollback vastgelegd');
+
 $posDns = strpos($raw, "log '3/8 DNS-plan");
 $posTls = strpos($raw, "log '5/8 TLS, monitoring en lifecycle");
 $posBackup = strpos($raw, "log '6/8 actieve Apache-state");
