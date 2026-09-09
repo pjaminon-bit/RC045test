@@ -1,4 +1,4 @@
-name: Issue 226 post-cutover browser proof
+name: Issue 226 front-controller browser proof
 
 on:
   push:
@@ -10,23 +10,44 @@ permissions:
   contents: read
 
 env:
-  LIVE_DEV_BASE_URL: https://test.vps.holox.nl
-  PLAYWRIGHT_TEST_BASE_URL: https://test.vps.holox.nl
+  PLAYWRIGHT_TEST_BASE_URL: http://127.0.0.1:8080
 
 jobs:
-  post-cutover-browser:
+  front-controller-browser:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - name: Checkout exact actieve main-release
+      - name: Checkout branchfix
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          ref: 4a52597c59c4d5144a878621475127ab804c88cf
       - name: Installeer gelockte browser zonder OS-package-mutatie
         shell: bash
         run: |
           set -euo pipefail
           npm ci --ignore-scripts
           npx playwright install chromium
-      - name: Bewijs live public-root functioneel en optisch
-        run: npx playwright test tests/live-dev-browser.spec.js tests/platform-223-live-browser.spec.js --workers=1 --reporter=line
+      - name: Start public-root frontcontroller lokaal
+        shell: bash
+        run: |
+          set -euo pipefail
+          php -S 127.0.0.1:8080 -t public public/index.php > /tmp/issue-226-php-server.log 2>&1 &
+          echo $! > /tmp/issue-226-php-server.pid
+          for poging in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:8080/ >/dev/null; then
+              exit 0
+            fi
+            sleep 0.25
+          done
+          cat /tmp/issue-226-php-server.log >&2 || true
+          exit 1
+      - name: Bewijs publieke rendersemantiek achter branchfrontcontroller
+        run: npx playwright test tests/architecture-226-frontcontroller-browser.spec.js --workers=1 --reporter=line
+      - name: Stop lokale frontcontroller
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f /tmp/issue-226-php-server.pid ]]; then
+            kill "$(cat /tmp/issue-226-php-server.pid)" 2>/dev/null || true
+          fi
+          if [[ -f /tmp/issue-226-php-server.log ]]; then
+            tail -n 200 /tmp/issue-226-php-server.log
+          fi
