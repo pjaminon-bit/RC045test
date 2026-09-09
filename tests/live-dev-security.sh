@@ -15,7 +15,7 @@ curl --silent --show-error --dump-header "$TMP/headers" --output "$TMP/home" --c
 tr -d '\r' < "$TMP/headers" > "$TMP/headers.clean"
 
 if grep -Eqi '^strict-transport-security:[[:space:]]*.+max-age=' "$TMP/headers.clean"; then ok 'HSTS actief'; else bad 'HSTS ontbreekt'; fi
-if grep -Eqi '^x-content-type-options:[[:space:]]*nosniff' "$TMP/headers.clean"; then ok 'X-Content-Type-Options nosniff actief'; else bad 'X-Content-Type-Options ontbreekt'; fi
+if grep -Eqi '^x-content-type-options:[[:space:]]*nosniff' "$TMP/headers.clean"; then ok 'X-Content-Type-Options nosniff actief'; else bad 'X-Content-Type-Options nosniff ontbreekt'; fi
 if grep -Eqi '^referrer-policy:' "$TMP/headers.clean"; then ok 'Referrer-Policy actief'; else bad 'Referrer-Policy ontbreekt'; fi
 if grep -Eqi '^x-frame-options:[[:space:]]*(deny|sameorigin)' "$TMP/headers.clean"; then ok 'legacy clickjackingheader actief'; else bad 'X-Frame-Options ontbreekt'; fi
 if ! grep -Eqi '^x-powered-by:' "$TMP/headers.clean"; then ok 'geen X-Powered-By disclosure'; else bad 'X-Powered-By lekt runtimeinformatie'; fi
