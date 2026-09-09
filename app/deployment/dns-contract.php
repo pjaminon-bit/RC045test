@@ -43,7 +43,15 @@ function dns43ResolverContext(string $mode = 'system', ?string $endpoint = null,
         if ($port !== 53) throw new RuntimeException('System resolver gebruikt het platform-default DNS-poortcontract.');
         return ['mode' => 'system', 'endpoint' => null, 'port' => 53];
     }
-    if ($mode !== 'explicit') throw new RuntimeException('DNS-resolvermodus moet system of explicit zijn.');
+    if ($mode === 'doh') {
+        $endpoint = strtolower(rtrim(trim((string)$endpoint), '.'));
+        if ($endpoint !== 'cloudflare-dns.com') {
+            throw new RuntimeException('DoH-resolverendpoint is niet toegestaan.');
+        }
+        if ($port !== 443) throw new RuntimeException('DoH-resolver gebruikt uitsluitend HTTPS-poort 443.');
+        return ['mode' => 'doh', 'endpoint' => $endpoint, 'port' => 443];
+    }
+    if ($mode !== 'explicit') throw new RuntimeException('DNS-resolvermodus moet system, explicit of doh zijn.');
     $endpoint = trim((string)$endpoint);
     if ($endpoint === '' || filter_var($endpoint, FILTER_VALIDATE_IP) === false) {
         throw new RuntimeException('Expliciete DNS-resolver vereist een geldig IP-adres.');
@@ -54,12 +62,14 @@ function dns43ResolverContext(string $mode = 'system', ?string $endpoint = null,
     return ['mode' => 'explicit', 'endpoint' => strtolower($norm), 'port' => $port];
 }
 
-function dns43ResolverContextVanCli(string $resolver, int $port = 53): array
+function dns43ResolverContextVanCli(string $resolver, ?int $port = null): array
 {
-    $resolver = trim($resolver);
-    return strtolower($resolver) === 'system'
-        ? dns43ResolverContext('system', null, $port)
-        : dns43ResolverContext('explicit', $resolver, $port);
+    $resolver = trim($resolver); $lower = strtolower($resolver);
+    if ($lower === 'system') return dns43ResolverContext('system', null, $port ?? 53);
+    if ($lower === 'doh:cloudflare' || $lower === 'doh:cloudflare-dns.com') {
+        return dns43ResolverContext('doh', 'cloudflare-dns.com', $port ?? 443);
+    }
+    return dns43ResolverContext('explicit', $resolver, $port ?? 53);
 }
 
 function dns43ResolverContextValideer(array $resolver): array
@@ -74,6 +84,17 @@ function dns43ResolverContextValideer(array $resolver): array
 function dns43ResolverContextHash(array $resolver): string
 {
     return hash('sha256', dns43Json(dns43ResolverContextValideer($resolver)));
+}
+
+function dns43ResolverScope(array $resolver): string
+{
+    $resolver = dns43ResolverContextValideer($resolver);
+    return match ($resolver['mode']) {
+        'system' => 'configured-system-resolver',
+        'explicit' => 'explicit-public-resolver',
+        'doh' => 'doh-public-resolver',
+        default => throw new RuntimeException('Onbekende DNS-resolvercontext.'),
+    };
 }
 
 function dns43ResolverContextBind(array $resolver): array
@@ -336,6 +357,79 @@ function dns43ExplicieteQuery(string $naam, int $type, array $resolver): array
     return $records;
 }
 
+function dns43DohQuery(string $naam, int $type, array $resolver, ?callable $fetch = null): array
+{
+    $resolver = dns43ResolverContextValideer($resolver);
+    if ($resolver['mode'] !== 'doh') throw new RuntimeException('DoH-query vereist doh resolvercontext.');
+    $qtype = match ($type) { DNS_A => 1, DNS_AAAA => 28, DNS_CNAME => 5, default => throw new RuntimeException('Niet-ondersteund DNS-querytype.') };
+    $naam = dns43Naam($naam);
+    $url = 'https://' . $resolver['endpoint'] . '/dns-query?name=' . rawurlencode($naam) . '&type=' . $qtype;
+
+    if ($fetch !== null) {
+        $response = $fetch($url, $resolver);
+        if (!is_array($response) || (int)($response['status'] ?? 0) !== 200 || !is_string($response['body'] ?? null)) {
+            throw new RuntimeException('DoH-testfetch gaf geen geldige HTTPS-response.');
+        }
+        $raw = $response['body'];
+    } else {
+        $context = stream_context_create([
+            'http' => [
+                'method' => 'GET',
+                'header' => "Accept: application/dns-json\r\nUser-Agent: RC045test-DNS43\r\nConnection: close\r\n",
+                'timeout' => 5,
+                'ignore_errors' => true,
+                'follow_location' => 0,
+                'protocol_version' => 1.1,
+            ],
+            'ssl' => [
+                'verify_peer' => true,
+                'verify_peer_name' => true,
+                'SNI_enabled' => true,
+            ],
+        ]);
+        $handle = @fopen($url, 'rb', false, $context);
+        if (!is_resource($handle)) throw new RuntimeException('DoH-resolver is niet via gevalideerde HTTPS bereikbaar.');
+        try {
+            $meta = stream_get_meta_data($handle);
+            $raw = stream_get_contents($handle);
+        } finally { fclose($handle); }
+        $headers = (array)($meta['wrapper_data'] ?? []);
+        $status = (string)($headers[0] ?? '');
+        if (preg_match('#^HTTP/\\S+\\s+200(?:\\s|$)#', $status) !== 1 || !is_string($raw)) {
+            throw new RuntimeException('DoH-resolver gaf geen HTTP 200-response.');
+        }
+    }
+
+    try { $json = json_decode($raw, true, 512, JSON_THROW_ON_ERROR); }
+    catch (JsonException $e) { throw new RuntimeException('DoH-resolver gaf ongeldige JSON.'); }
+    if (!is_array($json) || (int)($json['Status'] ?? -1) !== 0) {
+        throw new RuntimeException('DoH-resolver antwoordde met een DNS-foutstatus.');
+    }
+
+    $records = [];
+    foreach ((array)($json['Answer'] ?? []) as $rr) {
+        if (!is_array($rr)) throw new RuntimeException('DoH-response bevat een ongeldig answerrecord.');
+        $ownerRaw = (string)($rr['name'] ?? '');
+        $data = rtrim(trim((string)($rr['data'] ?? '')), '.');
+        $rrType = (int)($rr['type'] ?? -1);
+        $ttl = (int)($rr['TTL'] ?? $rr['ttl'] ?? 0);
+        if ($ownerRaw === '' || $ttl < 0) throw new RuntimeException('DoH-response bevat een ongeldig answerrecord.');
+        $owner = dns43Naam($ownerRaw);
+        if (!hash_equals($naam, $owner) || $rrType !== $qtype) continue;
+        if ($qtype === 1) {
+            if (filter_var($data, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) === false) throw new RuntimeException('DoH-response bevat een ongeldig A-record.');
+            $records[] = ['type'=>'A','ip'=>dns43Ip($data,4),'ttl'=>$ttl];
+        } elseif ($qtype === 28) {
+            if (filter_var($data, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) === false) throw new RuntimeException('DoH-response bevat een ongeldig AAAA-record.');
+            $records[] = ['type'=>'AAAA','ipv6'=>dns43Ip($data,6),'ttl'=>$ttl];
+        } elseif ($qtype === 5) {
+            if ($data === '') throw new RuntimeException('DoH-response bevat een leeg CNAME-record.');
+            $records[] = ['type'=>'CNAME','target'=>dns43Naam($data),'ttl'=>$ttl];
+        }
+    }
+    return $records;
+}
+
 function dns43Resolve(string $naam, ?array $resolver = null, ?callable $query = null): array
 {
     $naam = dns43Naam($naam); $resolver = dns43ResolverContextValideer($resolver ?? dns43ResolverContextActief());
@@ -350,7 +444,11 @@ function dns43Resolve(string $naam, ?array $resolver = null, ?callable $query = 
         return dns43Observatie($records);
     }
     $records = [];
-    foreach ([DNS_A, DNS_AAAA, DNS_CNAME] as $type) $records = array_merge($records, dns43ExplicieteQuery($naam, $type, $resolver));
+    foreach ([DNS_A, DNS_AAAA, DNS_CNAME] as $type) {
+        $records = array_merge($records, $resolver['mode'] === 'doh'
+            ? dns43DohQuery($naam, $type, $resolver)
+            : dns43ExplicieteQuery($naam, $type, $resolver));
+    }
     return dns43Observatie($records);
 }
 
@@ -420,7 +518,7 @@ function dns43ReadinessLeesEnValideer(string $statusPad, ?int $nu = null): array
     if (runtime41NormPad($statusPad) !== runtime41NormPad((string)$plan['bundle']['readiness_file'])) throw new RuntimeException('DNS-readiness staat niet op het gebonden tenantpad.');
 
     $samples = (int)($status['propagation']['sample_count'] ?? 0); $interval = (int)($status['propagation']['interval_seconds'] ?? -1);
-    $scope = $resolver['mode'] === 'system' ? 'configured-system-resolver' : 'explicit-public-resolver';
+    $scope = dns43ResolverScope($resolver);
     if (($status['propagation']['scope'] ?? '') !== $scope
         || $samples < (int)$plan['rules']['minimum_readiness_samples']
         || $interval < (int)$plan['rules']['minimum_sample_interval_seconds']) {

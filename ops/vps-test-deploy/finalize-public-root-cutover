@@ -18,7 +18,8 @@ TENANT='test'
 TENANT_ROOT="/srv/verenigingen/$TENANT"
 HOSTNAME='test.vps.holox.nl'
 PUBLIC_IPV4='149.143.36.59'
-RESOLVER='1.1.1.1'
+RESOLVER='doh:cloudflare'
+DOH_ENDPOINT='cloudflare-dns.com'
 PHP='/usr/bin/php8.5'
 HOST_LAUNCHER='/usr/local/sbin/verenigingsplatform-host-php'
 HOST_CONFIG='/etc/verenigingsplatform/host-engine.path'
@@ -142,7 +143,7 @@ ROUTING_SRC="$(/usr/bin/jq -er '.bundle.https_routing_fragment' "$WEB_PLAN")"
 /usr/bin/grep -Fq 'DocumentRoot "/srv/verenigingsplatform/current/public"' "$ROUTING_SRC" || die 'routingfragment bevat niet de public DocumentRoot.'
 /usr/bin/grep -Fq 'Options +FollowSymLinks' "$ROUTING_SRC" || die 'routingfragment mist de gecontroleerde current-symlink traversal.'
 
-log '3/8 DNS-plan opnieuw binden aan #226 + publieke resolver preflight'
+log '3/8 DNS-plan opnieuw binden aan #226 + publieke DoH-resolverpreflight'
 TMP_DNS="$(/usr/bin/mktemp /tmp/rc045-226-dns.XXXXXX.json)"
 "$PHP" "$ENGINE/bin/prepare-vps-dns.php" \
   --web-plan="$WEB_PLAN" \
@@ -168,20 +169,20 @@ TMP_DNS="$(/usr/bin/mktemp /tmp/rc045-226-dns.XXXXXX.json)"
 "$PHP" "$ENGINE/bin/check-vps-dns.php" \
   --plan="$DNS_PLAN" --resolver="$RESOLVER" --samples=3 --interval=2 --no-write
 
-log '4/8 verse resolver-bound DNS-readiness schrijven'
+log '4/8 verse DoH-resolver-bound DNS-readiness schrijven'
 "$PHP" "$ENGINE/bin/check-vps-dns.php" \
   --plan="$DNS_PLAN" --resolver="$RESOLVER" --samples=3 --interval=2
 /usr/bin/jq -e \
-  --arg resolver "$RESOLVER" --arg ip "$PUBLIC_IPV4" \
+  --arg endpoint "$DOH_ENDPOINT" --arg ip "$PUBLIC_IPV4" \
   '.ready == true
-   and .resolver_mode == "explicit"
-   and .resolver.mode == "explicit"
-   and .resolver.endpoint == $resolver
-   and .resolver.port == 53
-   and .propagation.scope == "explicit-public-resolver"
+   and .resolver_mode == "doh"
+   and .resolver.mode == "doh"
+   and .resolver.endpoint == $endpoint
+   and .resolver.port == 443
+   and .propagation.scope == "doh-public-resolver"
    and ((.observed.owner.a // []) == [$ip])
    and ((.observed.owner.aaaa // []) == [])' \
-  "$DNS_READY" >/dev/null || die 'geschreven readiness bewijst niet exact de publieke resolvercontext.'
+  "$DNS_READY" >/dev/null || die 'geschreven readiness bewijst niet exact de publieke DoH-resolvercontext.'
 
 log '5/8 TLS, monitoring en lifecycle transitief opnieuw binden'
 "$PHP" "$ENGINE/bin/prepare-vps-tls.php" --dns-readiness="$DNS_READY" --force
