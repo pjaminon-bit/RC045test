@@ -20,6 +20,16 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
+      - name: Apache runtime voor #226
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! -x /usr/sbin/apache2 ]]; then
+            sudo apt-get update
+            sudo apt-get install --yes apache2
+          fi
+          /usr/sbin/apache2 -v
+
       - name: Runtimeversies
         run: |
           set -euo pipefail
@@ -50,11 +60,21 @@ jobs:
           node --check lidmaatschap-aanmelden.js
           node --check tests/live-dev-browser.spec.js
           node --check tests/live-dev-authenticated.spec.js
+          node --check tests/platform-223-live-browser.spec.js
 
       - name: Volledige bronregressie
         shell: bash
         run: |
           set -euo pipefail
           php -m | grep -qi '^pdo_sqlite$' || { echo 'pdo_sqlite ontbreekt op de runner' >&2; exit 1; }
-          bash tests/run-all.sh
+          bash tests/run-all.sh 2>&1 | tee "$RUNNER_TEMP/regression-output.log"
           test ! -e site-config.local.php
+
+      - name: Bewaar regressiediagnose
+        if: ${{ always() }}
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: template-foundation-regression-${{ github.run_id }}
+          path: ${{ runner.temp }}/regression-output.log
+          if-no-files-found: warn
+          retention-days: 14
