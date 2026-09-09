@@ -60,6 +60,8 @@ c58(str_contains($deploy,'environment: vps-test')&&str_contains($deploy,'secrets
 c58(str_contains($deploy,'StrictHostKeyChecking=yes')&&!str_contains($deploy,'ssh-keyscan'),'workflow gebruikt geen trust-on-first-use voor SSH');
 c58(str_contains($deploy,'deploy $DEPLOY_SHA')&&str_contains($deploy,'DEPLOYED $DEPLOY_SHA'),'workflow vraagt alleen exacte commitdeploy en verifieert serverbevestiging');
 c58(str_contains($deploy,'https://test.vps.holox.nl')&&str_contains($deploy,'healthz.php')&&str_contains($deploy,'204 nee'),'post-deploy smoke test bewijst VPS-testhealth');
+c58(str_contains($deploy,'wacht_op_status "$VPS_TEST_BASE_URL/bin/apply-vps-release.php" 404 nee')&&!str_contains($deploy,'wacht_op_status "$VPS_TEST_BASE_URL/bin/apply-vps-release.php" 403 nee'),'post-deploy smoke volgt de minimale public-rootgrens: intern bin-pad is 404');
+c58(substr_count($deploy,'google-chrome.list')>=1&&substr_count($full,'google-chrome.list')>=1,'Chromium-acceptatie is onafhankelijk van de overbodige Google Chrome APT-bron');
 
 c58(str_contains($deploy,'id-token: write'),'deployworkflow kan een GitHub OIDC-token voor workload identity aanvragen');
 c58(str_contains($deploy,'tailscale/github-action@306e68a486fd2350f2bfc3b19fcd143891a4a2d8')&&str_contains($deploy,'version: 1.94.2'),'Tailscale GitHub Action en clientversie zijn deterministisch gepind');
