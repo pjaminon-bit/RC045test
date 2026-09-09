@@ -1,4 +1,5 @@
 <?php
+// Tijdelijke CI-only live proof; deze file wordt nooit naar main gemerged.
 $root = dirname(__DIR__);
 require_once $root . '/app/deployment/dns-contract.php';
 
