@@ -1,4 +1,4 @@
-name: Validate template-foundation DEV
+name: Validate RC045test
 
 on:
   push:
