@@ -122,6 +122,10 @@ jobs:
       - name: Installeer gelockte browserdependencies
         run: |
           set -euo pipefail
+          # Playwright gebruikt Chromium en Ubuntu-pakketten; de aparte Google
+          # Chrome APT-bron van hosted runners is niet nodig en kan tijdelijk
+          # inconsistente metadata publiceren.
+          sudo rm -f /etc/apt/sources.list.d/google-chrome.list /etc/apt/sources.list.d/google-chrome.sources
           npm ci --ignore-scripts
           npx playwright install --with-deps chromium
       - name: Functionele en optische VPS-testacceptatie
