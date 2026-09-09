@@ -67,7 +67,7 @@ jobs:
         run: |
           set -euo pipefail
           php -m | grep -qi '^pdo_sqlite$' || { echo 'pdo_sqlite ontbreekt op de runner' >&2; exit 1; }
-          bash tests/run-all.sh 2>&1 | tee "$RUNNER_TEMP/regression-output.log"
+          PS4='+ ${BASH_SOURCE}:${LINENO}: ' bash -x tests/run-all.sh 2>&1 | tee "$RUNNER_TEMP/regression-output.log"
           test ! -e site-config.local.php
 
       - name: Bewaar regressiediagnose
