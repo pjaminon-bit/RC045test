@@ -55,15 +55,16 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
-      - name: Apache runtime voor #226
+      - name: Apache + echte PHP-FPM runtime voor #226
         shell: bash
         run: |
           set -euo pipefail
-          if [[ ! -x /usr/sbin/apache2 ]]; then
-            sudo apt-get update
-            sudo apt-get install --yes apache2
-          fi
+          sudo apt-get update
+          sudo apt-get install --yes apache2 php-fpm php-curl php-mbstring php-xml php-pgsql
           /usr/sbin/apache2 -v
+          fpm_bin="$(find /usr/sbin -maxdepth 1 -type f -name 'php-fpm*' -perm -111 | sort -V | tail -n 1)"
+          test -n "$fpm_bin"
+          "$fpm_bin" -v
       - name: Runtimeversies
         run: |
           set -euo pipefail
