@@ -21,6 +21,7 @@ PUBLIC_IPV4='149.143.36.59'
 RESOLVER='doh:cloudflare'
 DOH_ENDPOINT='cloudflare-dns.com'
 PHP='/usr/bin/php8.5'
+RUNUSER='/usr/sbin/runuser'
 HOST_LAUNCHER='/usr/local/sbin/verenigingsplatform-host-php'
 HOST_CONFIG='/etc/verenigingsplatform/host-engine.path'
 RUNTIME_PLAN="$TENANT_ROOT/runtime/runtime-plan.json"
@@ -151,8 +152,8 @@ trap cleanup EXIT
 for exe in /usr/bin/bash /usr/bin/git /usr/bin/jq /usr/bin/curl /usr/bin/sha256sum \
   /usr/bin/cmp /usr/bin/install /usr/bin/mv /usr/bin/cp /usr/bin/mktemp \
   /usr/bin/stat /usr/bin/readlink /usr/bin/grep /usr/bin/awk /usr/bin/chown \
-  /usr/bin/chmod /usr/bin/rm /usr/bin/head /usr/bin/tail /usr/bin/date \
-  /usr/sbin/apache2ctl /usr/bin/systemctl "$PHP"; do
+  /usr/bin/chmod /usr/bin/rm /usr/bin/head /usr/bin/tail /usr/bin/date /usr/bin/env \
+  /usr/sbin/apache2ctl /usr/bin/systemctl "$PHP" "$RUNUSER"; do
   [[ -x "$exe" ]] || die "vereiste executable ontbreekt: $exe"
 done
 
@@ -272,6 +273,29 @@ fi
 "$PHP" -r 'require $argv[1]."/app/deployment/lifecycle-contract.php"; lifecycle48PlanLeesEnValideer($argv[2]); echo "CHECK OK lifecycle\n";' "$ENGINE" "$LIFE_PLAN"
 "$HOST_LAUNCHER" health --monitoring-plan="$MON_PLAN" --check
 "$HOST_LAUNCHER" health --monitoring-plan="$MON_PLAN" --probe --write-status
+
+log '5b/8 actieve tenant-runtime opnieuw bewijzen als FPM-user'
+RUNTIME_USER="$(/usr/bin/jq -er '.os.user' "$RUNTIME_PLAN")"
+RUNTIME_PHP_VERSION="$(/usr/bin/jq -er '.settings.php_version' "$RUNTIME_PLAN")"
+RUNTIME_REQUIRE_CONFIG="$(/usr/bin/jq -er '.php_fpm.runtime_env.VERENIGING_REQUIRE_TENANT_CONFIG' "$RUNTIME_PLAN")"
+RUNTIME_CONFIG="$(/usr/bin/jq -er '.php_fpm.runtime_env.VERENIGING_CONFIG_FILE' "$RUNTIME_PLAN")"
+RUNTIME_PRIVATE="$(/usr/bin/jq -er '.php_fpm.runtime_env.VERENIGING_PRIVATE_ROOT' "$RUNTIME_PLAN")"
+[[ "$RUNTIME_USER" =~ ^[a-z_][a-z0-9_-]{0,30}$ ]] || die 'runtime-plan bevat geen veilige tenant-runtimeuser.'
+[[ "$RUNTIME_PHP_VERSION" == '8.5' ]] || die 'runtime-plan bindt niet aan de verwachte PHP 8.5 runtime.'
+[[ "$RUNTIME_REQUIRE_CONFIG" == '1' ]] || die 'runtime-plan vereist tenantconfig niet fail-closed.'
+[[ "$RUNTIME_CONFIG" == "$TENANT_ROOT/config.php" ]] || die 'runtime-plan bindt niet aan de verwachte tenantconfig.'
+[[ "$RUNTIME_PRIVATE" == "$TENANT_ROOT/private" ]] || die 'runtime-plan bindt niet aan de verwachte private-root.'
+[[ -L /srv/verenigingsplatform/current ]] || die 'actieve release-pointer is geen beheerde current-symlink.'
+ACTIVE_RELEASE="$(/usr/bin/readlink -f /srv/verenigingsplatform/current)"
+[[ "$ACTIVE_RELEASE" =~ ^/srv/verenigingsplatform/releases/[0-9a-f]{40}$ && -d "$ACTIVE_RELEASE" ]] || die 'actieve release kan niet veilig worden opgelost.'
+[[ -f "$ACTIVE_RELEASE/bin/check-release-tenant.php" && ! -L "$ACTIVE_RELEASE/bin/check-release-tenant.php" ]] || die 'actieve release mist de tenant candidate-probe.'
+"$RUNUSER" -u "$RUNTIME_USER" -- /usr/bin/env -i \
+  PATH='/usr/sbin:/usr/bin:/sbin:/bin' \
+  VERENIGING_REQUIRE_TENANT_CONFIG="$RUNTIME_REQUIRE_CONFIG" \
+  VERENIGING_CONFIG_FILE="$RUNTIME_CONFIG" \
+  VERENIGING_PRIVATE_ROOT="$RUNTIME_PRIVATE" \
+  "$PHP" "$ACTIVE_RELEASE/bin/check-release-tenant.php" --expected-tenant="$TENANT" \
+  || die 'actieve release/runtime faalt de tenant candidate-probe vóór public-root cutover.'
 
 log '6/8 actieve Apache-state veilig back-uppen'
 LIVE_DIR="$(/usr/bin/jq -er '.apache.fragment_dir' "$WEB_PLAN")"
