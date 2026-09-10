@@ -13,6 +13,7 @@
 // ============================================================
 require_once __DIR__ . '/storage/domein-repositories.php';
 require_once __DIR__ . '/storage/private-store-batch-transaction.php';
+require_once __DIR__ . '/leden/account-binding.php';
 
 function dataIntegriteitId($waarde): string
 {
@@ -253,14 +254,23 @@ function dataIntegriteitDetecteerSnapshot(array $taken, array $vergaderingen, ar
     return $rapport;
 }
 
-function dataIntegriteitDetecteer(): array
+function dataIntegriteitDetecteer(?array $gebruikers = null): array
 {
-    return dataIntegriteitDetecteerSnapshot(
+    $rapport = dataIntegriteitDetecteerSnapshot(
         repoTakenLees(),
         repoVergaderingenLees(),
         repoEvenementenLees(),
         repoGroepenLees()
     );
+    if ($gebruikers === null) return $rapport;
+
+    $accounts = ledenAccountIntegriteit((array)(repoLedenLees()['leden'] ?? []), $gebruikers);
+    $rapport['accounts'] = $accounts;
+    $rapport['aantallen']['account_ontbrekende_user_ids'] = (int)($accounts['aantallen']['ontbrekende_user_ids'] ?? 0);
+    $rapport['aantallen']['account_ontbrekende_legacy'] = (int)($accounts['aantallen']['ontbrekende_legacy_accounts'] ?? 0);
+    $rapport['aantallen']['account_conflicten'] = (int)($accounts['aantallen']['conflicten'] ?? 0);
+    $rapport['totaal'] = array_sum($rapport['aantallen']);
+    return $rapport;
 }
 
 /**
