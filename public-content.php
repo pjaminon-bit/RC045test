@@ -57,9 +57,9 @@ try {
 }
 
 if ($data === null) {
-    // Voor een externe tenant betekent een werkelijk ontbrekende optionele
-    // publieke dataset: nog geen beheerinhoud. Dat is geen kapotte URL. Lever
-    // daarom een lege JSON-dataset met HTTP 200; geen fallback naar de
+    // Voor een externe tenant betekent een ontbrekende optionele publieke
+    // dataset: nog geen beheerinhoud. Dat is geen kapotte URL. Lever daarom een
+    // lege JSON-dataset met HTTP 200; geen fallback naar de
     // voorbeeldvereniging of /data. De private tenantopslag blijft de enige bron.
     $data = [];
 }
