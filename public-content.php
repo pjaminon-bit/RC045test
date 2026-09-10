@@ -40,30 +40,26 @@ try {
     $data = publicContentLees($sleutel);
 } catch (Throwable $e) {
     error_log('[platform] publieke content-store faalde voor dataset ' . $sleutel . ': ' . $e->getMessage());
+    if ($externPad === null && !$configVerplicht) {
+        // Standalone houdt de ingebouwde template-default actief wanneer een
+        // optionele override wel bestaat maar ongeldig/onleesbaar is.
+        http_response_code(204);
+        header('Cache-Control: no-store');
+        header('X-Content-Type-Options: nosniff');
+        exit;
+    }
+    // Een bestaande defecte externe tenantdataset is geen "missing" content:
+    // maskeer storagecorruptie nooit als een normale lege HTTP-200 response.
     http_response_code(500);
     header('Cache-Control: no-store');
     exit;
 }
 
 if ($data === null) {
-    // Standalone/DEV heeft voor deze datasets altijd server-side template-
-    // defaults. Een bestaand maar ongeldig/onleesbaar legacybestand is daar
-    // dus een onbruikbare optionele override, niet een reden om de publieke
-    // pagina met 500-responses te vervuilen. Log de afwijking wel zodat beheer
-    // hem kan herstellen, maar geef de browser expliciet "geen override".
-    if ($externPad === null && !$configVerplicht) {
-        error_log('[platform] standalone override is ongeldig voor dataset ' . $sleutel . '; template-default blijft actief');
-        http_response_code(204);
-        header('Cache-Control: no-store');
-        header('X-Content-Type-Options: nosniff');
-        exit;
-    }
-
-    // Voor een externe tenant betekent een ontbrekende optionele publieke
-    // dataset: nog geen beheerinhoud. Dat is geen kapotte URL. Lever daarom een
-    // lege JSON-dataset met HTTP 200. Er is nadrukkelijk geen fallback naar de
-    // voorbeeldvereniging of /data; private tenantopslag blijft de enige bron.
-    // Een echte store-/configuratiefout is hierboven al als 500 afgevangen.
+    // Voor een externe tenant betekent een werkelijk ontbrekende optionele
+    // publieke dataset: nog geen beheerinhoud. Dat is geen kapotte URL. Lever
+    // daarom een lege JSON-dataset met HTTP 200. Er is nadrukkelijk geen
+    // fallback naar de voorbeeldvereniging of /data.
     $data = [];
 }
 
