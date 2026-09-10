@@ -80,6 +80,13 @@ try {
     }
     check264(privateFilesystemMode($dataBackupMap) === 0750, 'private restore hardt legacy backupdirectory naar 0750');
 
+    $private0640 = $tmp . '/taken-data.php';
+    file_put_contents($private0640, "<?php exit; ?>\n{\"versie\":1}");
+    chmod($private0640, 0640);
+    check264(buSchrijfBestand($private0640, ['versie' => 2], 'phpjson'), 'restore van bestaand 0640 private bestand slaagt');
+    $mode0640 = privateFilesystemMode($private0640);
+    check264($mode0640 === 0640 && ($mode0640 & 0007) === 0, 'bestaand 0640 bestand wordt door restore niet world-readable');
+
     $privateBron = (string) file_get_contents($root . '/app/storage/private-filesystem.php');
     $tempCheck = strpos($privateBron, 'privateFilesystemBeveiligBestand($tmp, $mode)');
     $rename = strpos($privateBron, '@rename($tmp, $pad)');
