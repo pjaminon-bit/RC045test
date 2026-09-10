@@ -35,12 +35,13 @@ function mediaVulStandaard(array $standaard,array $opgeslagen): array { $r=$stan
 function mediaSchrijf(string $pad,array $data): bool {
  global $dataBackupMap,$dataBackupBewaardagen,$dataBackupMaxPerBestand;
  $tenant=publicContentIsTenantPad($pad);
- if(!$tenant&&function_exists('maakDataBackup'))maakDataBackup($pad,$dataBackupMap,$dataBackupBewaardagen,$dataBackupMaxPerBestand);
- $map=dirname($pad);$mode=$tenant?0750:0755;if(!is_dir($map)&&!@mkdir($map,$mode,true))return false;
+ if($tenant){$sleutel=publicContentSleutelVoorPad($pad);return $sleutel!==null&&publicContentSchrijfTenant($sleutel,$data,true);}
+ if(function_exists('maakDataBackup'))maakDataBackup($pad,$dataBackupMap,$dataBackupBewaardagen,$dataBackupMaxPerBestand);
+ $map=dirname($pad);if(!is_dir($map)&&!@mkdir($map,0755,true))return false;
  $j=json_encode($data,JSON_UNESCAPED_UNICODE|JSON_PRETTY_PRINT);if($j===false)return false;
  try{$suffix=bin2hex(random_bytes(4));}catch(Throwable $e){$suffix=(string)mt_rand(100000,999999);}$tmp=$pad.'.tmp.'.$suffix;
- if(@file_put_contents($tmp,$j,LOCK_EX)===false)return false;if($tenant)@chmod($tmp,0640);
- if(!@rename($tmp,$pad)){@unlink($tmp);return false;}if($tenant)@chmod($pad,0640);return true;
+ if(@file_put_contents($tmp,$j,LOCK_EX)===false)return false;
+ if(!@rename($tmp,$pad)){@unlink($tmp);return false;}return true;
 }
 
 $items=mediaLees($mediaBestand,$mediaStandaard);
