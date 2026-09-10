@@ -43,6 +43,7 @@ try {
     if ($externPad === null && !$configVerplicht) {
         // Standalone houdt de ingebouwde template-default actief wanneer een
         // optionele override wel bestaat maar ongeldig/onleesbaar is.
+        error_log('[platform] standalone override is ongeldig voor dataset ' . $sleutel . '; template-default blijft actief');
         http_response_code(204);
         header('Cache-Control: no-store');
         header('X-Content-Type-Options: nosniff');
