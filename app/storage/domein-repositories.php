@@ -8,6 +8,7 @@
 // tenant in de database opgeslagen.
 // ============================================================
 require_once __DIR__ . '/private-store.php';
+require_once __DIR__ . '/private-filesystem.php';
 require_once dirname(__DIR__,2) . '/leden-opslag.php';
 require_once dirname(__DIR__,2) . '/vergaderingen-opslag.php';
 require_once dirname(__DIR__,2) . '/taken-opslag.php';
@@ -18,19 +19,14 @@ require_once dirname(__DIR__,2) . '/ledenlabels-opslag.php';
 
 function repoPhpJsonSchrijf(string $pad, string $voorloop, array $data, ?callable $backupMaker = null, bool $backup = true): bool
 {
-    if ($backup && $backupMaker !== null) $backupMaker();
+    if ($backup && $backupMaker !== null) {
+        $backupMaker();
+        if (!privateFilesystemBeveiligLegacyBackups($pad, dirname($pad) . DIRECTORY_SEPARATOR . 'data-backups')) return false;
+    }
     $data['updated'] = date('c');
     $json = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
     if ($json === false) return false;
-
-    $map = dirname($pad);
-    if (!is_dir($map) && !@mkdir($map, 0755, true)) return false;
-    try { $suffix = bin2hex(random_bytes(5)); }
-    catch (Throwable $e) { $suffix = str_replace('.', '', (string) microtime(true)); }
-    $tmp = $pad . '.tmp.' . $suffix;
-    if (@file_put_contents($tmp, $voorloop . $json, LOCK_EX) === false) return false;
-    if (!@rename($tmp, $pad)) { @unlink($tmp); return false; }
-    return true;
+    return privateFilesystemAtomischSchrijf($pad, $voorloop . $json, 0640);
 }
 
 function repoLedenLees(): array{return privateStoreLees('leden', 'ledenLees');}

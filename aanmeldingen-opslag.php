@@ -5,6 +5,7 @@
 require_once __DIR__ . '/app/data-slot.php';
 require_once __DIR__ . '/app/storage/private-store.php';
 require_once __DIR__ . '/app/storage/legacy-private-json.php';
+require_once __DIR__ . '/app/storage/private-filesystem.php';
 
 define('AANMELDINGEN_VOORLOOP', "<?php exit; ?>\n");
 function aanmeldingenBestandPad(): string{return __DIR__.'/aanmeldingen-data.php';}
@@ -12,7 +13,7 @@ function aanmeldingenLeeg(): array{return['updated'=>date('c'),'aanmeldingen'=>[
 function aanmeldingNieuwId(): string{return'app_'.bin2hex(random_bytes(10));}
 function aanmeldingenBewaardagen(): int{$config=require __DIR__.'/site-config.php';$dagen=(int)($config['privacy']['aanmeldingen_bewaardagen']??90);return max(7,min(730,$dagen));}
 function aanmeldingenJsonLees(): array{$data=legacyPrivateJsonLees(aanmeldingenBestandPad(),'aanmeldingen',['aanmeldingen']);return $data===null?aanmeldingenLeeg():$data;}
-function aanmeldingenJsonSchrijf(array $data): bool{$data['updated']=date('c');$json=json_encode($data,JSON_UNESCAPED_UNICODE|JSON_PRETTY_PRINT);if($json===false)return false;$pad=aanmeldingenBestandPad();if(function_exists('maakDataBackup')){global$dataBackupMap,$dataBackupBewaardagen,$dataBackupMaxPerBestand;maakDataBackup($pad,$dataBackupMap,$dataBackupBewaardagen,$dataBackupMaxPerBestand);}try{$suffix=bin2hex(random_bytes(5));}catch(Throwable $e){$suffix=str_replace('.','',(string)microtime(true));}$tmp=$pad.'.tmp.'.$suffix;if(@file_put_contents($tmp,AANMELDINGEN_VOORLOOP.$json,LOCK_EX)===false)return false;if(!@rename($tmp,$pad)){@unlink($tmp);return false;}return true;}
+function aanmeldingenJsonSchrijf(array $data): bool{$data['updated']=date('c');$json=json_encode($data,JSON_UNESCAPED_UNICODE|JSON_PRETTY_PRINT);if($json===false)return false;$pad=aanmeldingenBestandPad();if(function_exists('maakDataBackup')){global$dataBackupMap,$dataBackupBewaardagen,$dataBackupMaxPerBestand;maakDataBackup($pad,$dataBackupMap,$dataBackupBewaardagen,$dataBackupMaxPerBestand);}return privateFilesystemAtomischSchrijf($pad,AANMELDINGEN_VOORLOOP.$json,0640);}
 function aanmeldingenLees(): array{$data=privateStoreLees('aanmeldingen','aanmeldingenJsonLees');return isset($data['aanmeldingen'])&&is_array($data['aanmeldingen'])?$data:aanmeldingenLeeg();}
 function aanmeldingenSchrijf(array $data): bool{return privateStoreSchrijf('aanmeldingen',$data,'aanmeldingenJsonSchrijf');}
 function aanmeldingKort($waarde,int $max): string{$tekst=trim(is_scalar($waarde)?(string)$waarde:'');return function_exists('mb_substr')?mb_substr($tekst,0,$max,'UTF-8'):substr($tekst,0,$max);}
@@ -34,9 +35,6 @@ function aanmeldenPogingenPad(): string
     if($privateRoot!==null)return $privateRoot.DIRECTORY_SEPARATOR.'security'.DIRECTORY_SEPARATOR.'aanmelden-pogingen.json';
 
     $map=__DIR__.DIRECTORY_SEPARATOR.'data-backups';
-    // Standalone installaties kunnen deze gitignored runtime-map nog niet
-    // hebben. Alleen het exacte lokale childpad wordt aangemaakt; een symlink
-    // of ander bestaand bestand wordt niet gevolgd en faalt verderop gesloten.
     if(!is_dir($map)&&!is_link($map)&&!file_exists($map)){
         if(@mkdir($map,0750,true))@chmod($map,0750);
     }
@@ -74,13 +72,7 @@ function aanmeldenPogingenSchrijf(string $pad,array $pogingen): bool
 {
     if(!aanmeldenPogingenPadVeilig($pad))return false;
     $json=json_encode($pogingen,JSON_UNESCAPED_UNICODE|JSON_PRETTY_PRINT);if($json===false)return false;
-    try{$suffix=bin2hex(random_bytes(5));}catch(Throwable $e){return false;}
-    $tmp=$pad.'.tmp.'.$suffix;
-    if(is_link($tmp)||@file_put_contents($tmp,$json,LOCK_EX)===false)return false;
-    @chmod($tmp,0640);
-    if(!aanmeldenPogingenPadVeilig($pad)||is_link($pad)||!@rename($tmp,$pad)){@unlink($tmp);return false;}
-    @chmod($pad,0640);
-    return true;
+    return privateFilesystemAtomischSchrijf($pad,$json,0640);
 }
 
 /** Consumeert één poging. false betekent limiet bereikt; opslagfouten gooien. */
@@ -96,7 +88,6 @@ function aanmeldenPogingRegistreer(string $ipSleutel,int $nu,int $drempel=5,int 
     }
     $recent=(array)($pogingen[$ipSleutel]??[]);
     if(count($recent)>=$drempel){
-        // Pruning ook bij blokkade duurzaam opslaan; kan dit niet, dan fail-closed.
         if(!aanmeldenPogingenSchrijf($pad,$pogingen))throw new RuntimeException('Aanmeld-rate-limitopslag kon niet worden bijgewerkt.');
         return false;
     }
@@ -113,9 +104,6 @@ function aanmeldingenPasRetentieToe(array &$data,?int $nu=null): int
     $data['aanmeldingen']=array_values(array_filter((array)($data['aanmeldingen']??[]),static function($a)use($grens){
         if(!is_array($a))return false;
         $status=(string)($a['status']??'nieuw');
-        // Onbeoordeelde persoonsgegevens hebben eveneens een maximale termijn,
-        // gerekend vanaf ontvangst. Een latere wijziging mag die termijn niet
-        // ongemerkt verlengen. Beoordeelde records rekenen vanaf beoordeling.
         $bron=$status==='nieuw'?($a['aangemaakt']??''):($a['beoordeeld_op']??$a['gewijzigd']??$a['aangemaakt']??'');
         $moment=strtotime((string)$bron);
         return $moment!==false&&$moment>=$grens;
