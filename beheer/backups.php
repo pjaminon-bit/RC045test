@@ -7,6 +7,7 @@ require_once dirname(__DIR__) . '/app/data-slot.php';
 require_once dirname(__DIR__) . '/app/auth-capabilities.php';
 require_once dirname(__DIR__) . '/app/auth-restore.php';
 require_once dirname(__DIR__) . '/app/storage/tenant-backup-store.php';
+require_once dirname(__DIR__) . '/app/storage/private-filesystem.php';
 
 if (!$ingelogd) { header('Location: ./'); exit; }
 if (!authHeeftCapability('system.backups.manage', true)) {
@@ -31,8 +32,13 @@ function buSchrijfBestand(string $pad, $data, string $type): bool {
     if ($json === false) return false;
     $inhoud = $type === 'phpjson' ? "<?php exit; ?>\n" . $json : $json;
     $map = dirname($pad);
-    if (!is_dir($map) && !@mkdir($map, 0755, true)) return false;
+    if ($type === 'phpjson') {
+        if (!privateFilesystemBeveiligMap($map)) return false;
+    } elseif (!is_dir($map) && !@mkdir($map, 0755, true)) return false;
     maakDataBackup($pad, $dataBackupMap, $dataBackupBewaardagen, $dataBackupMaxPerBestand);
+    if ($type === 'phpjson') {
+        return privateFilesystemAtomischSchrijf($pad, $inhoud, 0640);
+    }
     try { $suffix = bin2hex(random_bytes(5)); } catch (Throwable $e) { $suffix = str_replace('.','',(string)microtime(true)); }
     $tmp = $pad . '.restore.' . $suffix;
     if (@file_put_contents($tmp, $inhoud, LOCK_EX) === false) return false;
