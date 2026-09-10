@@ -49,10 +49,44 @@ function privateFilesystemBeveiligBestand(string $pad, int $mode = 0640): bool
     return true;
 }
 
+/** Backup mag nooit ruimer zijn dan bron én nooit ruimer dan 0640. */
+function privateFilesystemBackupMode(string $bron): int
+{
+    $bronMode = privateFilesystemMode($bron);
+    if ($bronMode === null) return 0600;
+    return ($bronMode & 0640) ?: 0600;
+}
+
+/**
+ * Legacy backuphelpers maken zelf de snapshotnaam. Na zo'n helpercall hardt
+ * de writer alle snapshots van exact dit bronbestand en de backupmap. Zo is
+ * ook bestaande compatibilitycode onafhankelijk van de process-umask.
+ */
+function privateFilesystemBeveiligLegacyBackups(string $bron, string $backupMap): bool
+{
+    if (!is_dir($backupMap)) return true;
+    if (!privateFilesystemBeveiligMap($backupMap)) return false;
+    $basis = basename($bron);
+    $matches = @glob(rtrim($backupMap, '/\\') . DIRECTORY_SEPARATOR . '*' . $basis);
+    if ($matches === false) return false;
+    $mode = privateFilesystemBackupMode($bron);
+    foreach ($matches as $bestand) {
+        if (!is_file($bestand) || is_link($bestand) || !privateFilesystemBeveiligBestand($bestand, $mode)) {
+            error_log('[platform] private legacy backup kon niet veilig worden gehard: ' . basename((string)$bestand));
+            return false;
+        }
+    }
+    return true;
+}
+
 /**
  * Schrijf bytes via een nieuw tempbestand met restrictieve mode en rename.
  * De tempinode wordt vóór rename gecontroleerd; de uiteindelijke inode wordt
  * daarna opnieuw geverifieerd. Een chmod-/modefout mag nooit als succes gelden.
+ *
+ * Standalone backuphelpers schrijven direct vóór deze primitive naar de vaste
+ * siblingmap data-backups/. Als die map bestaat, wordt de snapshot van exact
+ * dit bronbestand eerst gecontroleerd/gehard; een modefout blokkeert de write.
  */
 function privateFilesystemAtomischSchrijf(string $pad, string $inhoud, int $mode = 0640): bool
 {
@@ -60,6 +94,12 @@ function privateFilesystemAtomischSchrijf(string $pad, string $inhoud, int $mode
     if (!privateFilesystemBeveiligMap($map)) return false;
     if (is_link($pad)) {
         error_log('[platform] private opslagdoel is een symlink: ' . basename($pad));
+        return false;
+    }
+
+    $legacyBackupMap = $map . DIRECTORY_SEPARATOR . 'data-backups';
+    if (is_dir($legacyBackupMap) && !privateFilesystemBeveiligLegacyBackups($pad, $legacyBackupMap)) {
+        error_log('[platform] private write geweigerd omdat legacy backupmodes niet veilig konden worden afgedwongen');
         return false;
     }
 
@@ -81,14 +121,6 @@ function privateFilesystemAtomischSchrijf(string $pad, string $inhoud, int $mode
     return privateFilesystemBeveiligBestand($pad, $mode);
 }
 
-/** Backup mag nooit ruimer zijn dan bron én nooit ruimer dan 0640. */
-function privateFilesystemBackupMode(string $bron): int
-{
-    $bronMode = privateFilesystemMode($bron);
-    if ($bronMode === null) return 0600;
-    return ($bronMode & 0640) ?: 0600;
-}
-
 function privateFilesystemKopieerBackup(string $bron, string $doel): bool
 {
     if (!is_file($bron) || is_link($bron)) return false;
@@ -97,28 +129,6 @@ function privateFilesystemKopieerBackup(string $bron, string $doel): bool
     if (!privateFilesystemBeveiligBestand($doel, privateFilesystemBackupMode($bron))) {
         @unlink($doel);
         return false;
-    }
-    return true;
-}
-
-/**
- * Legacy backuphelpers maken zelf de snapshotnaam. Na zo'n helpercall hardt
- * de writer alle snapshots van exact dit bronbestand en de backupmap. Zo is
- * ook bestaande compatibilitycode onafhankelijk van de process-umask.
- */
-function privateFilesystemBeveiligLegacyBackups(string $bron, string $backupMap): bool
-{
-    if (!is_dir($backupMap)) return true;
-    if (!privateFilesystemBeveiligMap($backupMap)) return false;
-    $basis = basename($bron);
-    $matches = @glob(rtrim($backupMap, '/\\') . DIRECTORY_SEPARATOR . '*' . $basis);
-    if ($matches === false) return false;
-    $mode = privateFilesystemBackupMode($bron);
-    foreach ($matches as $bestand) {
-        if (!is_file($bestand) || is_link($bestand) || !privateFilesystemBeveiligBestand($bestand, $mode)) {
-            error_log('[platform] private legacy backup kon niet veilig worden gehard: ' . basename((string)$bestand));
-            return false;
-        }
     }
     return true;
 }
