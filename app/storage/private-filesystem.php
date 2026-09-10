@@ -10,16 +10,28 @@ function privateFilesystemMode(string $pad): ?int
     return is_int($mode) ? ($mode & 0777) : null;
 }
 
-function privateFilesystemBeveiligMap(string $map): bool
+/**
+ * Maak zo nodig een private directory aan. Bestaande applicatieparents (zoals
+ * /tmp in tests of een bestaande documentroot) worden alleen gevalideerd en
+ * nooit door deze helper van mode veranderd. Voor echte private backupdirs kan
+ * expliciet worden gevraagd de bestaande directory naar 0750 te harden.
+ */
+function privateFilesystemBeveiligMap(string $map, bool $hardBestaand = false): bool
 {
     if (is_link($map)) {
         error_log('[platform] private opslagmap is een symlink: ' . basename($map));
         return false;
     }
-    if (!is_dir($map) && !@mkdir($map, 0750, true) && !is_dir($map)) {
+
+    $bestond = is_dir($map);
+    if (!$bestond && !@mkdir($map, 0750, true) && !is_dir($map)) {
         error_log('[platform] private opslagmap kon niet worden aangemaakt: ' . basename($map));
         return false;
     }
+    if (!is_dir($map) || is_link($map)) return false;
+
+    if ($bestond && !$hardBestaand) return true;
+
     if (!@chmod($map, 0750)) {
         error_log('[platform] private opslagmap kon niet naar 0750 worden gezet: ' . basename($map));
         return false;
@@ -65,7 +77,7 @@ function privateFilesystemBackupMode(string $bron): int
 function privateFilesystemBeveiligLegacyBackups(string $bron, string $backupMap): bool
 {
     if (!is_dir($backupMap)) return true;
-    if (!privateFilesystemBeveiligMap($backupMap)) return false;
+    if (!privateFilesystemBeveiligMap($backupMap, true)) return false;
     $basis = basename($bron);
     $matches = @glob(rtrim($backupMap, '/\\') . DIRECTORY_SEPARATOR . '*' . $basis);
     if ($matches === false) return false;
@@ -124,7 +136,7 @@ function privateFilesystemAtomischSchrijf(string $pad, string $inhoud, int $mode
 function privateFilesystemKopieerBackup(string $bron, string $doel): bool
 {
     if (!is_file($bron) || is_link($bron)) return false;
-    if (!privateFilesystemBeveiligMap(dirname($doel))) return false;
+    if (!privateFilesystemBeveiligMap(dirname($doel), true)) return false;
     if (is_link($doel) || !@copy($bron, $doel)) return false;
     if (!privateFilesystemBeveiligBestand($doel, privateFilesystemBackupMode($bron))) {
         @unlink($doel);
