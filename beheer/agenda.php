@@ -43,17 +43,17 @@ function agendaLees(string $pad): array {
 }
 function agendaSchrijf(string $pad, array $data): bool {
     global $dataBackupMap, $dataBackupBewaardagen, $dataBackupMaxPerBestand;
-    if (!publicContentIsTenantPad($pad)) {
-        maakDataBackup($pad, $dataBackupMap, $dataBackupBewaardagen, $dataBackupMaxPerBestand);
+    if (publicContentIsTenantPad($pad)) {
+        $sleutel = publicContentSleutelVoorPad($pad);
+        return $sleutel !== null && publicContentSchrijfTenant($sleutel, $data, true);
     }
+    maakDataBackup($pad, $dataBackupMap, $dataBackupBewaardagen, $dataBackupMaxPerBestand);
     $json = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
     if ($json === false || !is_dir(dirname($pad))) return false;
     try { $suffix = bin2hex(random_bytes(4)); } catch (Throwable $e) { $suffix = (string) mt_rand(100000, 999999); }
     $tmp = $pad . '.tmp.' . $suffix;
     if (@file_put_contents($tmp, $json, LOCK_EX) === false) return false;
-    if (publicContentIsTenantPad($pad)) @chmod($tmp, 0640);
     if (!@rename($tmp, $pad)) { @unlink($tmp); return false; }
-    if (publicContentIsTenantPad($pad)) @chmod($pad, 0640);
     return true;
 }
 
