@@ -111,20 +111,84 @@ function publicContentMapLegacyPad(string $pad): string
     return $pad;
 }
 
-function publicContentLees(string $sleutel): ?array
+function publicContentIsLijst(array $data): bool
+{
+    return function_exists('array_is_list') ? array_is_list($data) : array_keys($data) === range(0, count($data) - 1);
+}
+
+/**
+ * Minimale documentschemavalidatie voor datasets waarvoor de rootvorm deel
+ * uitmaakt van het storagecontract. Dit voorkomt dat geldige JSON met een
+ * onbruikbare root stil als een lege/default dataset wordt behandeld.
+ */
+function publicContentStructuurGeldig(string $sleutel, array $data): bool
+{
+    if (in_array($sleutel, ['agenda', 'media'], true)) {
+        return publicContentIsLijst($data);
+    }
+    if (in_array($sleutel, ['media-pagina', 'fotoboek-pagina'], true)) {
+        return isset($data['hero_sub']) && is_array($data['hero_sub']);
+    }
+    if ($sleutel === 'sponsors') {
+        return isset($data['items']) && is_array($data['items']);
+    }
+    if ($sleutel === 'fotoboek') {
+        return publicContentIsLijst($data) || (isset($data['albums']) && is_array($data['albums']));
+    }
+    if ($sleutel === 'lidmaatschapstypen') {
+        return isset($data['types']) && is_array($data['types']);
+    }
+    return true;
+}
+
+/**
+ * Getypeerde publieke-contentread. Alleen een werkelijk ontbrekend bestand is
+ * "missing". Een bestaand maar onleesbaar, syntactisch ongeldig of voor een
+ * bekende dataset structureel ongeldig document is "invalid".
+ *
+ * @return array{status:string,data:?array,code:?string,message:?string}
+ */
+function publicContentLeesResult(string $sleutel): array
 {
     $pad = publicContentPad($sleutel);
-    if ($pad === null || !is_file($pad) || !is_readable($pad)) return null;
+    if ($pad === null) {
+        return ['status' => 'missing', 'data' => null, 'code' => 'onbekende_dataset', 'message' => null];
+    }
+    if (!is_file($pad)) {
+        return ['status' => 'missing', 'data' => null, 'code' => null, 'message' => null];
+    }
+    if (!is_readable($pad)) {
+        return ['status' => 'invalid', 'data' => null, 'code' => 'onleesbaar', 'message' => 'bestaand bestand is niet leesbaar'];
+    }
 
     $raw = @file_get_contents($pad);
-    if ($raw === false) return null;
+    if ($raw === false) {
+        return ['status' => 'invalid', 'data' => null, 'code' => 'leesfout', 'message' => 'bestaand bestand kon niet worden gelezen'];
+    }
     try {
         $data = json_decode($raw, true, 512, JSON_THROW_ON_ERROR);
     } catch (JsonException $e) {
-        error_log('[platform] ongeldige publieke content voor dataset ' . $sleutel);
-        return null;
+        return ['status' => 'invalid', 'data' => null, 'code' => 'ongeldige_json', 'message' => 'JSON is syntactisch ongeldig'];
     }
-    return is_array($data) ? $data : null;
+    if (!is_array($data)) {
+        return ['status' => 'invalid', 'data' => null, 'code' => 'ongeldige_root', 'message' => 'JSON-root is geen object of lijst'];
+    }
+    if (!publicContentStructuurGeldig($sleutel, $data)) {
+        return ['status' => 'invalid', 'data' => null, 'code' => 'ongeldig_schema', 'message' => 'dataset heeft een ongeldige documentstructuur'];
+    }
+    return ['status' => 'valid', 'data' => $data, 'code' => null, 'message' => null];
+}
+
+function publicContentLees(string $sleutel): ?array
+{
+    $result = publicContentLeesResult($sleutel);
+    if (($result['status'] ?? '') === 'missing') return null;
+    if (($result['status'] ?? '') !== 'valid') {
+        $code = (string) ($result['code'] ?? 'ongeldig');
+        error_log('[platform] ongeldige publieke content voor dataset ' . $sleutel . ' (' . $code . ')');
+        throw new RuntimeException('Publieke contentdataset ' . $sleutel . ' is ongeldig of onleesbaar.');
+    }
+    return is_array($result['data'] ?? null) ? $result['data'] : null;
 }
 
 function publicContentMaakBackupVoorPad(string $pad): ?string
@@ -132,9 +196,9 @@ function publicContentMaakBackupVoorPad(string $pad): ?string
     if (!publicContentIsTenantPad($pad) || !is_file($pad)) return null;
     $sleutel = publicContentSleutelVoorPad($pad);
     if ($sleutel === null) return null;
-    $data = publicContentLees($sleutel);
-    if ($data === null) return null;
-    return tenantBackupMaakArray('public-' . $sleutel, $data);
+    $result = publicContentLeesResult($sleutel);
+    if (($result['status'] ?? '') !== 'valid' || !is_array($result['data'] ?? null)) return null;
+    return tenantBackupMaakArray('public-' . $sleutel, $result['data']);
 }
 
 /**
@@ -147,6 +211,7 @@ function publicContentSchrijfTenant(string $sleutel, array $data, bool $maakBack
 {
     $pad = publicContentPad($sleutel);
     if ($pad === null || !publicContentIsTenantPad($pad) || !tenantBackupPadVeilig($pad)) return false;
+    if (!publicContentStructuurGeldig($sleutel, $data)) return false;
     if ($maakBackup && is_file($pad)) {
         $snapshot = publicContentMaakBackupVoorPad($pad);
         if ($snapshot === null) {

@@ -70,17 +70,18 @@ function fbLees(string $pad): array {
 }
 function fbSchrijf(string $pad,array $data): bool {
     global $dataBackupMap,$dataBackupBewaardagen,$dataBackupMaxPerBestand;
-    if(function_exists('maakDataBackup')&&!publicContentIsTenantPad($pad))maakDataBackup($pad,$dataBackupMap,$dataBackupBewaardagen,$dataBackupMaxPerBestand);
-    $mode=publicContentIsTenantPad($pad)?0750:0755;
-    if(!is_dir(dirname($pad))&&!@mkdir(dirname($pad),$mode,true))return false;
+    if(publicContentIsTenantPad($pad)){
+        $sleutel=publicContentSleutelVoorPad($pad);
+        return $sleutel!==null&&publicContentSchrijfTenant($sleutel,$data,true);
+    }
+    if(function_exists('maakDataBackup'))maakDataBackup($pad,$dataBackupMap,$dataBackupBewaardagen,$dataBackupMaxPerBestand);
+    if(!is_dir(dirname($pad))&&!@mkdir(dirname($pad),0755,true))return false;
     $j=json_encode($data,JSON_UNESCAPED_UNICODE|JSON_PRETTY_PRINT);
     if($j===false)return false;
     try{$suffix=bin2hex(random_bytes(4));}catch(Throwable $e){$suffix=str_replace('.','',(string)microtime(true));}
     $tmp=$pad.'.tmp.'.$suffix;
     if(file_put_contents($tmp,$j,LOCK_EX)===false)return false;
-    if(publicContentIsTenantPad($pad))@chmod($tmp,0640);
     if(!@rename($tmp,$pad)){@unlink($tmp);return false;}
-    if(publicContentIsTenantPad($pad))@chmod($pad,0640);
     return true;
 }
 function fbSchaalAf($bron,int $b,int $h,int $max){
