@@ -102,7 +102,7 @@ try {
     check264(!str_starts_with((string) file_get_contents($publiekPad), '<?php exit; ?>'), 'publieke json restore krijgt geen private phpjson-voorloop');
 
     check264(
-        str_contains($beheerBron, "if ($type === 'phpjson')") && str_contains($beheerBron, 'privateFilesystemAtomischSchrijf($pad, $inhoud, 0640)'),
+        str_contains($beheerBron, "if (\$type === 'phpjson')") && str_contains($beheerBron, 'privateFilesystemAtomischSchrijf($pad, $inhoud, 0640)'),
         'beheer restore routeert alleen phpjson expliciet naar centrale private writer'
     );
 } finally {
