@@ -78,10 +78,7 @@ function privateFilesystemAtomischSchrijf(string $pad, string $inhoud, int $mode
         @unlink($tmp);
         return false;
     }
-    if (!privateFilesystemBeveiligBestand($pad, $mode)) {
-        return false;
-    }
-    return true;
+    return privateFilesystemBeveiligBestand($pad, $mode);
 }
 
 /** Backup mag nooit ruimer zijn dan bron én nooit ruimer dan 0640. */
@@ -100,6 +97,28 @@ function privateFilesystemKopieerBackup(string $bron, string $doel): bool
     if (!privateFilesystemBeveiligBestand($doel, privateFilesystemBackupMode($bron))) {
         @unlink($doel);
         return false;
+    }
+    return true;
+}
+
+/**
+ * Legacy backuphelpers maken zelf de snapshotnaam. Na zo'n helpercall hardt
+ * de writer alle snapshots van exact dit bronbestand en de backupmap. Zo is
+ * ook bestaande compatibilitycode onafhankelijk van de process-umask.
+ */
+function privateFilesystemBeveiligLegacyBackups(string $bron, string $backupMap): bool
+{
+    if (!is_dir($backupMap)) return true;
+    if (!privateFilesystemBeveiligMap($backupMap)) return false;
+    $basis = basename($bron);
+    $matches = @glob(rtrim($backupMap, '/\\') . DIRECTORY_SEPARATOR . '*' . $basis);
+    if ($matches === false) return false;
+    $mode = privateFilesystemBackupMode($bron);
+    foreach ($matches as $bestand) {
+        if (!is_file($bestand) || is_link($bestand) || !privateFilesystemBeveiligBestand($bestand, $mode)) {
+            error_log('[platform] private legacy backup kon niet veilig worden gehard: ' . basename((string)$bestand));
+            return false;
+        }
     }
     return true;
 }
