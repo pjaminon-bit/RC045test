@@ -580,7 +580,7 @@ function authRechten(array $alleTabs, array $tabsViaRol = []) {
   }
 
   $eigenRol = ($ingelogd && !$isMaster)
-    ? ledenRolVanGebruiker($huidigeGebruiker)
+    ? authRolVoorAccount(authHuidigeGebruikerId(), $huidigeGebruiker)
     : ['lid' => null, 'bestuurslid' => false, 'functie' => '', 'commissies' => []];
   $isBestuurslid = $isMaster || $eigenRol['bestuurslid'];
 
