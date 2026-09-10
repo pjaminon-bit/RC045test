@@ -19,7 +19,10 @@ require_once dirname(__DIR__,2) . '/ledenlabels-opslag.php';
 
 function repoPhpJsonSchrijf(string $pad, string $voorloop, array $data, ?callable $backupMaker = null, bool $backup = true): bool
 {
-    if ($backup && $backupMaker !== null) $backupMaker();
+    if ($backup && $backupMaker !== null) {
+        $backupMaker();
+        if (!privateFilesystemBeveiligLegacyBackups($pad, dirname($pad) . DIRECTORY_SEPARATOR . 'data-backups')) return false;
+    }
     $data['updated'] = date('c');
     $json = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
     if ($json === false) return false;
