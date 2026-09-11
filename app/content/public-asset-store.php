@@ -261,6 +261,28 @@ function publicAssetMaakPreWriteSnapshot(string $scope): void
     if ($root !== null && is_dir($root)) tenantBackupMaakAssetSnapshot($scope);
 }
 
+/**
+ * Een fotoboek heeft één directorylaag per album en optioneel een `thumbs`-
+ * submap. Bestaande tenantdirectories worden vóór iedere beheerwrite centraal
+ * naar 0750 gehard. Nieuwe directories worden door de beheerlaag al met 0750
+ * aangemaakt; umask kan gevraagde rechten alleen beperken, nooit verruimen.
+ */
+function publicAssetBeveiligFotoboekMappen(string $root): bool
+{
+    if (!is_dir($root) || is_link($root)) return false;
+    foreach ((array) @scandir($root) as $item) {
+        if ($item === '.' || $item === '..') continue;
+        $album = $root . DIRECTORY_SEPARATOR . $item;
+        if (is_link($album)) return false;
+        if (!is_dir($album)) continue;
+        if (!publicAssetTenantPadVeilig($album) || !privateFilesystemBeveiligMap($album, true)) return false;
+        $thumbs = $album . DIRECTORY_SEPARATOR . 'thumbs';
+        if (is_link($thumbs)) return false;
+        if (is_dir($thumbs) && (!publicAssetTenantPadVeilig($thumbs) || !privateFilesystemBeveiligMap($thumbs, true))) return false;
+    }
+    return true;
+}
+
 function publicAssetMaakNamespaceMap(string $scope): ?string
 {
     $root = publicAssetNamespaceRoot($scope);
@@ -277,6 +299,7 @@ function publicAssetMaakNamespaceMap(string $scope): ?string
             || !privateFilesystemBeveiligMap($root, true)) {
             return null;
         }
+        if ($scope === 'fotoboek' && !publicAssetBeveiligFotoboekMappen($root)) return null;
     } else {
         if (!is_dir($root) && !@mkdir($root, 0755, true)) return null;
     }
