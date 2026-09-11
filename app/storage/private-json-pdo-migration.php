@@ -5,6 +5,8 @@
 // Pure data-/prooflogica. De privileged cutover staat bewust elders.
 // ============================================================
 
+require_once __DIR__ . '/private-filesystem.php';
+
 function privateMigrationAssoc(array $waarde): bool
 {
     return $waarde !== [] && !array_is_list($waarde);
@@ -53,8 +55,8 @@ function privateMigrationCollectiesDir(string $privateRoot): string
     if (!tenantRuntimeIsAbsoluutPad($privateRoot)) throw new RuntimeException('Migratie-private-root is niet absoluut.');
     if (is_link($privateRoot) || !is_dir($privateRoot)) throw new RuntimeException('Migratie-private-root is niet veilig beschikbaar.');
     $dir = rtrim($privateRoot, '/\\') . DIRECTORY_SEPARATOR . 'collections';
-    if (!file_exists($dir)) {
-        if (!@mkdir($dir, 0750, true)) throw new RuntimeException('Private collectie-root kon niet worden aangemaakt.');
+    if (!privateFilesystemBeveiligMap($dir, true)) {
+        throw new RuntimeException('Private collectie-root kon niet met veilige mode worden aangemaakt of gevalideerd.');
     }
     if (is_link($dir) || !is_dir($dir)) throw new RuntimeException('Private collectie-root is geen veilige map.');
     return $dir;
@@ -118,21 +120,27 @@ function privateMigrationSamenvatting(array $inventory): array
 
 function privateMigrationSnapshot(string $privateRoot, string $tenant, array $inventory): array
 {
-    $migratieRoot = rtrim($privateRoot, '/\\') . DIRECTORY_SEPARATOR . 'migrations' . DIRECTORY_SEPARATOR . 'private-json-to-pdo';
-    if (!is_dir($migratieRoot) && !@mkdir($migratieRoot, 0700, true)) throw new RuntimeException('Migratiesnapshot-root kon niet worden aangemaakt.');
+    $migrationsDir = rtrim($privateRoot, '/\\') . DIRECTORY_SEPARATOR . 'migrations';
+    $migratieRoot = $migrationsDir . DIRECTORY_SEPARATOR . 'private-json-to-pdo';
+    if (!privateFilesystemBeveiligMapMetMode($migrationsDir, 0700, true)
+        || !privateFilesystemBeveiligMapMetMode($migratieRoot, 0700, true)) {
+        throw new RuntimeException('Migratiesnapshot-root kon niet met veilige mode worden aangemaakt.');
+    }
     if (is_link($migratieRoot) || !is_dir($migratieRoot)) throw new RuntimeException('Migratiesnapshot-root is onveilig.');
     $seed = $tenant . "\0" . microtime(true) . "\0" . bin2hex(random_bytes(12));
     $id = gmdate('Ymd\THis\Z') . '-' . substr(hash('sha256', $seed), 0, 16);
     $dir = $migratieRoot . DIRECTORY_SEPARATOR . $id;
     $sourceDir = $dir . DIRECTORY_SEPARATOR . 'source';
-    if (!@mkdir($sourceDir, 0700, true)) throw new RuntimeException('Migratiesnapshot kon niet worden aangemaakt.');
+    if (!privateFilesystemBeveiligMapMetMode($dir, 0700, true)
+        || !privateFilesystemBeveiligMapMetMode($sourceDir, 0700, true)) {
+        throw new RuntimeException('Migratiesnapshot kon niet met veilige mode worden aangemaakt.');
+    }
 
     foreach ($inventory as $key => $entry) {
         $doel = $sourceDir . DIRECTORY_SEPARATOR . $key . '.json';
-        if (@file_put_contents($doel, (string)$entry['raw'], LOCK_EX) === false) {
-            throw new RuntimeException('Migratiesnapshot kon collectie niet opslaan: ' . $key);
+        if (!privateFilesystemAtomischSchrijf($doel, (string)$entry['raw'], 0600)) {
+            throw new RuntimeException('Migratiesnapshot kon collectie niet veilig opslaan: ' . $key);
         }
-        @chmod($doel, 0600);
         $hash = @hash_file('sha256', $doel);
         if (!is_string($hash) || !hash_equals((string)$entry['raw_sha256'], $hash)) {
             throw new RuntimeException('Migratiesnapshot wijkt direct na schrijven af: ' . $key);
@@ -252,8 +260,7 @@ function privateMigrationProofSchrijf(
     ];
     $json = json_encode($proof, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR) . "\n";
     $pad = $snapshot['dir'] . DIRECTORY_SEPARATOR . 'migration-proof.json';
-    if (@file_put_contents($pad, $json, LOCK_EX) === false) throw new RuntimeException('Migratiebewijs kon niet worden opgeslagen.');
-    @chmod($pad, 0600);
+    if (!privateFilesystemAtomischSchrijf($pad, $json, 0600)) throw new RuntimeException('Migratiebewijs kon niet veilig worden opgeslagen.');
     $hash = @hash_file('sha256', $pad);
     if (!is_string($hash)) throw new RuntimeException('Migratiebewijs kon niet worden gehasht.');
     return ['path' => $pad, 'sha256' => $hash, 'data' => $proof];
