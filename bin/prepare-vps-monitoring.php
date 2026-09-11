@@ -1,6 +1,7 @@
 <?php
 if (PHP_SAPI !== 'cli') { http_response_code(403); exit('Alleen via CLI beschikbaar.'); }
 require_once dirname(__DIR__) . '/app/deployment/monitoring-contract.php';
+require_once dirname(__DIR__) . '/app/storage/private-filesystem.php';
 
 function prep46Stop(string $melding, int $code = 1): void { fwrite(STDERR, "FOUT: {$melding}\n"); exit($code); }
 function prep46Help(): void
@@ -14,15 +15,18 @@ function prep46Write(string $pad, string $inhoud, int $mode, bool $force): strin
     if (is_link($pad)) prep46Stop("Symlinkdoel geweigerd: {$pad}");
     if (is_file($pad)) {
         $huidig = @file_get_contents($pad);
-        if (is_string($huidig) && hash_equals(hash('sha256', $huidig), hash('sha256', $inhoud))) return 'ongewijzigd';
+        if (is_string($huidig) && hash_equals(hash('sha256', $huidig), hash('sha256', $inhoud))) {
+            if (!privateFilesystemBeveiligBestand($pad, $mode)) prep46Stop("Ongewijzigd bestand kon niet veilig op de vereiste mode worden gezet: {$pad}");
+            return 'ongewijzigd';
+        }
         if (!$force) prep46Stop("Afwijkend bestand bestaat al: {$pad}; gebruik --force na controle.");
     } elseif (file_exists($pad)) prep46Stop("Doel is geen regulier bestand: {$pad}");
     $tmp = $pad . '.tmp.' . bin2hex(random_bytes(6));
     if (@file_put_contents($tmp, $inhoud, LOCK_EX) === false) prep46Stop("Tijdelijk bestand kon niet worden geschreven: {$pad}");
-    @chmod($tmp, $mode);
+    if (!privateFilesystemBeveiligBestand($tmp, $mode)) { @unlink($tmp); prep46Stop("Tijdelijk monitoringbestand kon niet veilig op de vereiste mode worden gezet: {$pad}"); }
     if (is_link($pad)) { @unlink($tmp); prep46Stop("Doel werd tijdens write een symlink: {$pad}"); }
     if (!@rename($tmp, $pad)) { @unlink($tmp); prep46Stop("Bestand kon niet atomisch worden geplaatst: {$pad}"); }
-    @chmod($pad, $mode);
+    if (!privateFilesystemBeveiligBestand($pad, $mode)) prep46Stop("Monitoringbestand heeft na plaatsing niet de vereiste mode: {$pad}");
     return 'geschreven';
 }
 foreach ($_SERVER['argv'] ?? [] as $arg) {
@@ -41,7 +45,7 @@ if (isset($opt['dry-run'])) { echo monitoring46Json($plan); exit(0); }
 $out = (string)$plan['bundle']['output_dir'];
 if (is_link($out)) prep46Stop('Monitoring outputmap mag geen symlink zijn.');
 if (!is_dir($out) && !@mkdir($out, 0750, true) && !is_dir($out)) prep46Stop('Monitoring outputmap kon niet worden aangemaakt.');
-@chmod($out, 0750);
+if (!privateFilesystemBeveiligMap($out, true)) prep46Stop('Monitoring outputmap kon niet veilig op 0750 worden gezet.');
 $force = isset($opt['force']);
 prep46Write((string)$plan['bundle']['plan_file'], monitoring46Json($plan), 0640, $force);
 foreach (monitoring46Artifacts($plan) as $pad => $inhoud) prep46Write((string)$pad, $inhoud, 0640, $force);
