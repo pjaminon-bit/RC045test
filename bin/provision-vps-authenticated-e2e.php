@@ -27,6 +27,7 @@ if ($expectedTenant==='' || $expectedSite==='' || $adminUser==='' || $memberUser
 putenv('VERENIGING_REQUIRE_TENANT_CONFIG=1');
 putenv('VERENIGING_CONFIG_FILE='.$configPad);
 require_once $root.'/app/deployment/authenticated-e2e-fixture.php';
+require_once $root.'/app/storage/private-filesystem.php';
 require_once $root.'/app/auth-storage.php';
 require_once $root.'/app/storage/domein-repositories.php';
 require_once $root.'/app/leden/contributies.php';
@@ -40,13 +41,13 @@ function e2e510AuthLees(string $pad):array{
     $data=json_decode($raw,true,64,JSON_THROW_ON_ERROR);if(!is_array($data)||!array_is_list($data))throw new RuntimeException('Authstore is geen geldige gebruikerslijst.');return$data;
 }
 function e2e510AuthSchrijf(string $pad,array $users,string $backupDir):void{
-    $dir=dirname($pad);foreach([$dir,$backupDir]as$map){if(is_link($map))throw new RuntimeException('E2E authpad bevat een symlink.');if(!is_dir($map)&&!mkdir($map,0750,true)&&!is_dir($map))throw new RuntimeException('E2E authmap kon niet worden aangemaakt.');@chmod($map,0750);}
-    if(file_exists($pad)){if(!is_file($pad)||is_link($pad))throw new RuntimeException('Authstore is geen veilig regulier bestand.');$backup=$backupDir.'/e2e-pre-'.gmdate('Ymd-His').'-'.bin2hex(random_bytes(4)).'-users.json';if(!copy($pad,$backup))throw new RuntimeException('Authstore-backup kon niet worden gemaakt.');@chmod($backup,0640);}
-    $json=json_encode($users,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_PRETTY_PRINT|JSON_THROW_ON_ERROR)."\n";$tmp=$dir.'/.users.e2e.'.bin2hex(random_bytes(6)).'.tmp';
-    if(file_put_contents($tmp,$json,LOCK_EX)===false)throw new RuntimeException('Tijdelijke authstore kon niet worden geschreven.');@chmod($tmp,0640);if(is_link($pad)||!rename($tmp,$pad)){@unlink($tmp);throw new RuntimeException('Authstore kon niet atomisch worden geplaatst.');}@chmod($pad,0640);
+    $dir=dirname($pad);foreach([$dir,$backupDir]as$map){if(!privateFilesystemBeveiligMap($map,true))throw new RuntimeException('E2E authmap kon niet veilig op 0750 worden afgedwongen.');}
+    if(file_exists($pad)){if(!is_file($pad)||is_link($pad))throw new RuntimeException('Authstore is geen veilig regulier bestand.');$backup=$backupDir.'/e2e-pre-'.gmdate('Ymd-His').'-'.bin2hex(random_bytes(4)).'-users.json';if(!privateFilesystemKopieerBackup($pad,$backup))throw new RuntimeException('Authstore-backup kon niet veilig worden gemaakt.');}
+    $json=json_encode($users,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_PRETTY_PRINT|JSON_THROW_ON_ERROR)."\n";
+    if(!privateFilesystemAtomischSchrijf($pad,$json,0640))throw new RuntimeException('Authstore kon niet veilig atomisch op 0640 worden geplaatst.');
 }
 function e2e510AuthHerstel(string $pad,bool $bestond,?string $raw):void{
-    if($bestond){if(!is_string($raw))throw new RuntimeException('Originele authstore ontbreekt voor herstel.');$tmp=dirname($pad).'/.users.e2e.restore.'.bin2hex(random_bytes(6)).'.tmp';if(file_put_contents($tmp,$raw,LOCK_EX)===false)throw new RuntimeException('Authstore-herstel kon niet worden voorbereid.');@chmod($tmp,0640);if(!rename($tmp,$pad)){@unlink($tmp);throw new RuntimeException('Authstore-herstel kon niet atomisch worden geplaatst.');}@chmod($pad,0640);}elseif(file_exists($pad)&&!is_link($pad)){@unlink($pad);}
+    if($bestond){if(!is_string($raw))throw new RuntimeException('Originele authstore ontbreekt voor herstel.');if(!privateFilesystemAtomischSchrijf($pad,$raw,0640))throw new RuntimeException('Authstore-herstel kon niet veilig atomisch op 0640 worden geplaatst.');}elseif(file_exists($pad)&&!is_link($pad)){@unlink($pad);}
 }
 
 try{

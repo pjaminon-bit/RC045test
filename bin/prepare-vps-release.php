@@ -1,6 +1,7 @@
 <?php
 if (PHP_SAPI !== 'cli') { http_response_code(403); exit('Alleen via CLI beschikbaar.'); }
 require_once dirname(__DIR__) . '/app/deployment/release-contract.php';
+require_once dirname(__DIR__) . '/app/storage/private-filesystem.php';
 
 function prep47Stop(string $m, int $c = 1): void { fwrite(STDERR, "FOUT: {$m}\n"); exit($c); }
 foreach ($_SERVER['argv'] ?? [] as $arg) {
@@ -29,18 +30,20 @@ try {
 if (isset($opt['dry-run'])) { echo $json; exit(0); }
 $dir = dirname($output);
 if (!is_dir($dir) && !@mkdir($dir, 0750, true) && !is_dir($dir)) prep47Stop('Outputmap kon niet worden aangemaakt.');
+if (!privateFilesystemBeveiligMap($dir, true)) prep47Stop('Outputmap kon niet veilig op 0750 worden gezet.');
 if (is_link($output)) prep47Stop('Releaseplan output is een symlink.');
 if (is_file($output)) {
     $oud = @file_get_contents($output);
     if (is_string($oud) && hash_equals(hash('sha256', $oud), hash('sha256', $json))) {
-        @chmod($output, 0640); echo "ONGEWIJZIGD  {$output}\n"; exit(0);
+        if (!privateFilesystemBeveiligBestand($output, 0640)) prep47Stop('Ongewijzigd releaseplan kon niet veilig op 0640 worden gezet.');
+        echo "ONGEWIJZIGD  {$output}\n"; exit(0);
     }
     if (!isset($opt['force'])) prep47Stop('Afwijkend releaseplan bestaat al; gebruik --force na controle.');
 } elseif (file_exists($output)) prep47Stop('Releaseplan output is geen regulier bestand.');
 $tmp = $output . '.tmp.' . bin2hex(random_bytes(6));
 if (@file_put_contents($tmp, $json, LOCK_EX) === false) prep47Stop('Releaseplan kon niet tijdelijk worden geschreven.');
-@chmod($tmp, 0640);
+if (!privateFilesystemBeveiligBestand($tmp, 0640)) { @unlink($tmp); prep47Stop('Tijdelijk releaseplan kon niet veilig op 0640 worden gezet.'); }
 if (is_link($output)) { @unlink($tmp); prep47Stop('Releaseplan output werd tijdens write een symlink.'); }
 if (!@rename($tmp, $output)) { @unlink($tmp); prep47Stop('Releaseplan kon niet atomisch worden geplaatst.'); }
-@chmod($output, 0640);
+if (!privateFilesystemBeveiligBestand($output, 0640)) prep47Stop('Releaseplan heeft na plaatsing niet de vereiste mode.');
 echo "GESCHREVEN  {$output}\n";

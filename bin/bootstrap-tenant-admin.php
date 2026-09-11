@@ -8,6 +8,7 @@ if (PHP_SAPI !== 'cli') {
 }
 
 require_once dirname(__DIR__) . '/app/core/tenant-runtime.php';
+require_once dirname(__DIR__) . '/app/storage/private-filesystem.php';
 
 function bootstrap34Stop(string $melding, int $code = 1): void
 {
@@ -209,8 +210,7 @@ function bootstrap34BackupMaster(string $masterPad, string $backupMap): void
     if (!is_file($masterPad)) return;
     $backup = $backupMap . DIRECTORY_SEPARATOR . bootstrap34MicroTijd() . '_' . bin2hex(random_bytes(4)) . '_master.php';
     if (bootstrap34SymlinkInPad($backup) !== null) bootstrap34Stop('Onveilige symlink in authbackup-pad.');
-    if (!@copy($masterPad, $backup)) bootstrap34Stop('Bestaande masterconfig kon niet veilig worden geback-upt.');
-    @chmod($backup, 0640);
+    if (!privateFilesystemKopieerBackup($masterPad, $backup)) bootstrap34Stop('Bestaande masterconfig kon niet veilig met restrictieve mode worden geback-upt.');
 
     $bestanden = glob($backupMap . DIRECTORY_SEPARATOR . '*_master.php') ?: [];
     sort($bestanden, SORT_STRING);
@@ -253,16 +253,10 @@ function bootstrap34TrekSessiesIn(string $sessionMap): int
 
 function bootstrap34SchrijfAtomisch(string $masterPad, string $inhoud): void
 {
-    $authMap = dirname($masterPad);
-    if (is_link($masterPad)) bootstrap34Stop('Masterconfig mag geen symlink zijn.');
-    $tmp = $authMap . DIRECTORY_SEPARATOR . '.master.php.tmp.' . bin2hex(random_bytes(8));
-    if (bootstrap34SymlinkInPad($tmp) !== null) bootstrap34Stop('Onveilig tijdelijk pad voor masterconfig.');
-    if (@file_put_contents($tmp, $inhoud, LOCK_EX) === false) bootstrap34Stop('Tijdelijke masterconfig kon niet worden geschreven.');
-    @chmod($tmp, 0640);
-    clearstatcache(true, $masterPad);
-    if (is_link($masterPad)) { @unlink($tmp); bootstrap34Stop('Masterconfig werd tijdens bootstrap een symlink.'); }
-    if (!@rename($tmp, $masterPad)) { @unlink($tmp); bootstrap34Stop('Masterconfig kon niet atomisch worden geplaatst.'); }
-    @chmod($masterPad, 0640);
+    if (bootstrap34SymlinkInPad($masterPad) !== null) bootstrap34Stop('Onveilig pad voor masterconfig.');
+    if (!privateFilesystemAtomischSchrijf($masterPad, $inhoud, 0640)) {
+        bootstrap34Stop('Masterconfig kon niet atomisch met restrictieve mode worden geplaatst.');
+    }
     clearstatcache(true, $masterPad);
     if (!is_file($masterPad) || is_link($masterPad)) bootstrap34Stop('Geplaatste masterconfig is niet veilig.');
 }
@@ -280,7 +274,7 @@ if (is_link($lockPad)) bootstrap34Stop('Bootstrap-lock mag geen symlink zijn.');
 
 $lock = @fopen($lockPad, 'c');
 if ($lock === false) bootstrap34Stop('Bootstrap-lock kon niet worden geopend.');
-@chmod($lockPad, 0640);
+if (!privateFilesystemBeveiligBestand($lockPad, 0640)) { fclose($lock); bootstrap34Stop('Bootstrap-lock kon niet naar restrictieve mode worden gezet.'); }
 if (!flock($lock, LOCK_EX)) { fclose($lock); bootstrap34Stop('Bootstrap-lock kon niet exclusief worden verkregen.'); }
 
 try {

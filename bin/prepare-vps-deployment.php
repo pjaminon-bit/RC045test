@@ -13,6 +13,7 @@ if (PHP_SAPI !== 'cli') {
 }
 
 require_once dirname(__DIR__) . '/app/core/tenant-runtime.php';
+require_once dirname(__DIR__) . '/app/storage/private-filesystem.php';
 
 function deploy35Stop(string $melding, int $code = 1): void
 {
@@ -302,7 +303,12 @@ function deploy35Schrijf(string $pad, string $inhoud, string $tenantRoot, bool $
 
     if (is_file($pad)) {
         $huidig = (string)file_get_contents($pad);
-        if (hash_equals(hash('sha256', $huidig), hash('sha256', $inhoud))) return 'ongewijzigd';
+        if (hash_equals(hash('sha256', $huidig), hash('sha256', $inhoud))) {
+            if (!$dryRun && !privateFilesystemBeveiligBestand($pad, 0640)) {
+                deploy35Stop('Ongewijzigde deployment-output kon niet naar restrictieve mode worden gezet.');
+            }
+            return 'ongewijzigd';
+        }
         if (!$force) deploy35Stop('Deployment-output bestaat al met andere inhoud; gebruik --force na controle.');
     } elseif (file_exists($pad)) {
         deploy35Stop('Deployment-output bestaat maar is geen regulier bestand.');
@@ -310,14 +316,9 @@ function deploy35Schrijf(string $pad, string $inhoud, string $tenantRoot, bool $
 
     if ($dryRun) return is_file($pad) ? 'zou vervangen' : 'zou aanmaken';
 
-    $tmp = $parentReal . DIRECTORY_SEPARATOR . '.deployment.json.tmp.' . bin2hex(random_bytes(8));
-    if (is_link($tmp) || deploy35SymlinkInPad($tmp) !== null) deploy35Stop('Onveilig tijdelijk deploymentpad.');
-    if (@file_put_contents($tmp, $inhoud, LOCK_EX) === false) deploy35Stop('Deployment-output kon niet tijdelijk worden geschreven.');
-    @chmod($tmp, 0640);
-    clearstatcache(true, $pad);
-    if (is_link($pad)) { @unlink($tmp); deploy35Stop('Deployment-output werd tijdens write een symlink.'); }
-    if (!@rename($tmp, $pad)) { @unlink($tmp); deploy35Stop('Deployment-output kon niet atomisch worden geplaatst.'); }
-    @chmod($pad, 0640);
+    if (!privateFilesystemAtomischSchrijf($pad, $inhoud, 0640)) {
+        deploy35Stop('Deployment-output kon niet atomisch met restrictieve mode worden geplaatst.');
+    }
     return 'geschreven';
 }
 

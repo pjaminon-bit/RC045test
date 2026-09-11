@@ -7,6 +7,8 @@
 // uit requestdata. Vóór de eerste mutatie wordt de oude toestand gekopieerd;
 // bij false/exception wordt die toestand volledig teruggezet.
 
+require_once dirname(__DIR__) . '/storage/private-filesystem.php';
+
 function atomicFileTxVerwijder(string $pad): bool
 {
     if (is_link($pad)) return @unlink($pad);
@@ -25,14 +27,13 @@ function atomicFileTxKopieer(string $bron, string $doel): bool
     if (is_link($bron)) return false;
     if (is_file($bron)) {
         $map = dirname($doel);
-        if (!is_dir($map) && !@mkdir($map, 0700, true)) return false;
+        if (!privateFilesystemBeveiligMapMetMode($map, 0700, true)) return false;
         if (!@copy($bron, $doel)) return false;
-        @chmod($doel, 0600);
+        if (!privateFilesystemBeveiligBestand($doel, 0600)) { @unlink($doel); return false; }
         return true;
     }
     if (!is_dir($bron)) return false;
-    if (!is_dir($doel) && !@mkdir($doel, 0700, true)) return false;
-    @chmod($doel, 0700);
+    if (!privateFilesystemBeveiligMapMetMode($doel, 0700, true)) return false;
     foreach ((array)@scandir($bron) as $item) {
         if ($item === '.' || $item === '..') continue;
         if (!atomicFileTxKopieer($bron . DIRECTORY_SEPARATOR . $item, $doel . DIRECTORY_SEPARATOR . $item)) return false;
@@ -44,12 +45,15 @@ function atomicFileTxStagingRoot(): string
 {
     $basis = rtrim(sys_get_temp_dir(), DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'verenigingsplatform-transactions';
     if (is_link($basis)) throw new RuntimeException('Transactiestaging mag geen symlink zijn.');
-    if (!is_dir($basis) && !@mkdir($basis, 0700, true)) throw new RuntimeException('Transactiestaging kon niet worden aangemaakt.');
-    @chmod($basis, 0700);
+    if (!privateFilesystemBeveiligMapMetMode($basis, 0700, true)) {
+        throw new RuntimeException('Transactiestaging kon niet aantoonbaar met mode 0700 worden voorbereid.');
+    }
     try { $suffix = bin2hex(random_bytes(12)); }
     catch (Throwable $e) { throw new RuntimeException('Veilige transactienaam kon niet worden gemaakt.', 0, $e); }
     $root = $basis . DIRECTORY_SEPARATOR . $suffix;
-    if (!@mkdir($root, 0700)) throw new RuntimeException('Transactiemap kon niet worden aangemaakt.');
+    if (!privateFilesystemBeveiligMapMetMode($root, 0700, true)) {
+        throw new RuntimeException('Transactiemap kon niet aantoonbaar met mode 0700 worden aangemaakt.');
+    }
     return $root;
 }
 

@@ -38,7 +38,11 @@ try {
     $publicBron=(string)file_get_contents($root.'/app/content/public-content-store.php');
     check259(str_contains($repoBron,'privateFilesystemAtomischSchrijf($pad, $voorloop . $json, 0640)'),'repoPhpJsonSchrijf gebruikt centrale private writer');
     check259(str_contains($aanmeldBron,'privateFilesystemAtomischSchrijf($pad,AANMELDINGEN_VOORLOOP.$json,0640)'),'aanmeldingenJsonSchrijf gebruikt centrale private writer');
-    check259(!str_contains($publicBron,'private-filesystem.php'),'publieke contentstore gebruikt private-modebeleid niet');
+    check259(
+        str_contains($publicBron,'privateFilesystemBeveiligMap($map, true)')
+        && str_contains($publicBron,'privateFilesystemAtomischSchrijf($pad, $json, 0640)'),
+        'tenant publieke contentstore gebruikt centraal fail-closed modecontract'
+    );
 } finally { umask($oudUmask); rrmdir259($tmp); }
 echo "Security #259 private file modes: {$ok} OK, {$fout} fout(en)\n";
 exit($fout===0?0:1);

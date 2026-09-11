@@ -15,6 +15,17 @@ function prepare42Stop(string $melding, int $code = 1): void
     exit($code);
 }
 
+function prepare42ModeExact(string $pad, int $mode, bool $map = false): void
+{
+    $mode &= 0777;
+    if (!@chmod($pad, $mode)) prepare42Stop('Webserverartifactmode kon niet exact worden gezet: ' . $pad);
+    clearstatcache(true, $pad);
+    $st = @lstat($pad);
+    if (!is_array($st) || is_link($pad) || ($map ? !is_dir($pad) : !is_file($pad)) || (((int)$st['mode'] & 0777) !== $mode)) {
+        prepare42Stop('Webserverartifactmode wijkt na chmod af: ' . $pad);
+    }
+}
+
 function prepare42Help(): void
 {
     echo "Gebruik:\n";
@@ -36,7 +47,10 @@ function prepare42SchrijfAtomisch(string $pad, string $inhoud, bool $force): str
     if (is_file($pad)) {
         $huidig = @file_get_contents($pad);
         if (!is_string($huidig)) prepare42Stop("Bestaand webserverbestand is niet leesbaar: {$pad}");
-        if (hash_equals(hash('sha256', $huidig), hash('sha256', $inhoud))) return 'ongewijzigd';
+        if (hash_equals(hash('sha256', $huidig), hash('sha256', $inhoud))) {
+            prepare42ModeExact($pad, 0640);
+            return 'ongewijzigd';
+        }
         if (!$force) prepare42Stop('Webserverbundle bestaat al met andere inhoud; gebruik --force na controle.');
     } elseif (file_exists($pad)) {
         prepare42Stop('Webserverbundledoel bestaat maar is geen regulier bestand.');
@@ -45,11 +59,11 @@ function prepare42SchrijfAtomisch(string $pad, string $inhoud, bool $force): str
     $tmp = $map . '/.' . basename($pad) . '.tmp.' . bin2hex(random_bytes(8));
     if (runtime41SymlinkInPad($tmp) !== null) prepare42Stop('Onveilig tijdelijk webserverbundlepad.');
     if (@file_put_contents($tmp, $inhoud, LOCK_EX) === false) prepare42Stop('Webserverbundle kon niet tijdelijk worden geschreven.');
-    @chmod($tmp, 0640);
+    prepare42ModeExact($tmp, 0640);
     clearstatcache(true, $pad);
     if (is_link($pad)) { @unlink($tmp); prepare42Stop('Webserverbundledoel werd tijdens write een symlink.'); }
     if (!@rename($tmp, $pad)) { @unlink($tmp); prepare42Stop('Webserverbundle kon niet atomisch worden geplaatst.'); }
-    @chmod($pad, 0640);
+    prepare42ModeExact($pad, 0640);
     return 'geschreven';
 }
 
@@ -87,7 +101,7 @@ if (!is_dir($outputDir)) {
     catch (Throwable $e) { prepare42Stop($e->getMessage()); }
     if (!@mkdir($outputDir, 0750) && !is_dir($outputDir)) prepare42Stop('Webserver outputmap kon niet worden aangemaakt.');
 }
-@chmod($outputDir, 0750);
+prepare42ModeExact($outputDir, 0750, true);
 try {
     $outputDirReal = runtime41BestaandPad($outputDir, 'Webserver outputmap', true);
     if (!runtime41Binnen($outputDirReal, $context['tenant_root'])) prepare42Stop('Webserver outputmap valt buiten de tenantroot.');

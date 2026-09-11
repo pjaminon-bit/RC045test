@@ -2,6 +2,7 @@
 if (PHP_SAPI !== 'cli') { http_response_code(403); exit('Alleen via CLI beschikbaar.'); }
 require_once dirname(__DIR__) . '/app/deployment/first-vps-bootstrap-contract.php';
 require_once dirname(__DIR__) . '/app/deployment/php-runtime-requirements.php';
+require_once dirname(__DIR__) . '/app/storage/private-filesystem.php';
 
 function prep52Stop(string $m, int $c=1): never { fwrite(STDERR,"FOUT: {$m}\n"); exit($c); }
 function prep52Help(): void
@@ -20,12 +21,19 @@ function prep52Help(): void
 function prep52Write(string $pad,string $inhoud,bool $force,int $mode=0640): string
 {
     $dir=dirname($pad);if(runtime41SymlinkInPad($dir)!==null)prep52Stop('Bootstrap outputmap bevat een symlink.');
-    if(!is_dir($dir)&&!@mkdir($dir,0750,true)&&!is_dir($dir))prep52Stop('Bootstrap outputmap kon niet worden aangemaakt.');@chmod($dir,0750);
+    if(!privateFilesystemBeveiligMap($dir,true))prep52Stop('Bootstrap outputmap kon niet met restrictieve mode worden aangemaakt of gehard.');
     if(is_link($pad))prep52Stop('Bootstrapartifact mag geen symlinkdoel overschrijven.');
-    if(is_file($pad)){$old=@file_get_contents($pad);if(is_string($old)&&hash_equals(hash('sha256',$old),hash('sha256',$inhoud))){@chmod($pad,$mode);return'ongewijzigd';}if(!$force)prep52Stop('Afwijkend bootstrapartifact bestaat al: '.basename($pad).'; gebruik --force na controle.');}
+    if(is_file($pad)){
+        $old=@file_get_contents($pad);
+        if(is_string($old)&&hash_equals(hash('sha256',$old),hash('sha256',$inhoud))){
+            if(!privateFilesystemBeveiligBestand($pad,$mode))prep52Stop('Ongewijzigd bootstrapartifact kon niet naar de vereiste mode worden gezet.');
+            return'ongewijzigd';
+        }
+        if(!$force)prep52Stop('Afwijkend bootstrapartifact bestaat al: '.basename($pad).'; gebruik --force na controle.');
+    }
     elseif(file_exists($pad))prep52Stop('Bootstrapartifactdoel is geen regulier bestand: '.$pad);
-    $tmp=$dir.'/.'.basename($pad).'.tmp.'.bin2hex(random_bytes(6));if(runtime41SymlinkInPad($tmp)!==null||@file_put_contents($tmp,$inhoud,LOCK_EX)===false)prep52Stop('Tijdelijke bootstrapwrite faalde.');@chmod($tmp,$mode);
-    if(is_link($pad)||!@rename($tmp,$pad)){@unlink($tmp);prep52Stop('Bootstrapartifact kon niet atomisch worden geplaatst.');}@chmod($pad,$mode);return'geschreven';
+    if(!privateFilesystemAtomischSchrijf($pad,$inhoud,$mode))prep52Stop('Bootstrapartifact kon niet atomisch met de vereiste mode worden geplaatst.');
+    return'geschreven';
 }
 foreach($_SERVER['argv']??[]as$a){if(preg_match('/^--(?:password|pass|secret|token|credential|api-key|key-file|email)(?:=|$)/i',(string)$a)===1)prep52Stop('Secrets/contactdata horen niet in fase-5.2 planargumenten.');}
 $o=getopt('',['source:','commit:','output:','platform-root::','tenant-base::','php-version::','platform-host:','platform-strategy:','platform-ipv4::','platform-ipv6::','platform-cname::','tenant-key:','tenant-name:','tenant-host:','tenant-strategy:','tenant-ipv4::','tenant-ipv6::','tenant-cname::','operator-user:','modules::','cert-name::','force','dry-run','help']);
@@ -56,7 +64,7 @@ try{
     $json=bootstrap52Json($plan);$art=bootstrap52Artifacts($plan);
 }catch(Throwable$e){prep52Stop($e->getMessage());}
 if(isset($o['dry-run'])){echo$json;exit(0);} $force=isset($o['force']);
-$out=(string)$plan['paths']['output_dir'];if(!is_dir($out)&&!@mkdir($out,0750,true)&&!is_dir($out))prep52Stop('Fase-5.2 outputmap kon niet worden aangemaakt.');@chmod($out,0750);
+$out=(string)$plan['paths']['output_dir'];if(!privateFilesystemBeveiligMap($out,true))prep52Stop('Fase-5.2 outputmap kon niet met restrictieve mode worden aangemaakt of gehard.');
 foreach($art as$pad=>$inhoud)echo strtoupper(prep52Write((string)$pad,$inhoud,$force,basename((string)$pad)==='50-verenigingsplatform-apache-reload'?0750:0640)).'  '.$pad."\n";
 echo strtoupper(prep52Write((string)$plan['bundle']['plan_file'],$json,$force,0640)).'  '.$plan['bundle']['plan_file']."\n";
 echo 'Fase 5.2 bootstrapbundle gereed. Voer eerst --check uit; DNS-records blijven een expliciete provider-side operatorhandeling.'."\n";

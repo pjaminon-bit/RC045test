@@ -6,6 +6,16 @@ if (PHP_SAPI !== 'cli') { http_response_code(403); exit('Alleen via CLI beschikb
 require_once dirname(__DIR__) . '/app/deployment/tls-contract.php';
 
 function prepare44Stop(string $m, int $c = 1): void { fwrite(STDERR, "FOUT: {$m}\n"); exit($c); }
+function prepare44ModeExact(string $pad, int $mode, bool $map = false): void
+{
+    $mode &= 0777;
+    if (!@chmod($pad, $mode)) prepare44Stop('TLS-artifactmode kon niet exact worden gezet: ' . $pad);
+    clearstatcache(true, $pad);
+    $st = @lstat($pad);
+    if (!is_array($st) || is_link($pad) || ($map ? !is_dir($pad) : !is_file($pad)) || (((int)$st['mode'] & 0777) !== $mode)) {
+        prepare44Stop('TLS-artifactmode wijkt na chmod af: ' . $pad);
+    }
+}
 function prepare44Help(): void
 {
     echo "Gebruik:\n  php bin/prepare-vps-tls.php --dns-readiness=/srv/verenigingen/club/dns/dns-readiness.json [opties]\n\n";
@@ -19,16 +29,21 @@ function prepare44Schrijf(string $pad, string $inhoud, bool $force, int $mode = 
     if (is_link($pad)) prepare44Stop('TLS-bundle mag geen symlinkdoel overschrijven.');
     if (is_file($pad)) {
         $h = @file_get_contents($pad); if (!is_string($h)) prepare44Stop("Bestaand TLS-bestand is niet leesbaar: {$pad}");
-        if (hash_equals(hash('sha256', $h), hash('sha256', $inhoud))) return 'ongewijzigd';
+        if (hash_equals(hash('sha256', $h), hash('sha256', $inhoud))) {
+            prepare44ModeExact($pad, $mode);
+            return 'ongewijzigd';
+        }
         if (!$force) prepare44Stop('TLS-bundle bestaat al met andere inhoud; gebruik --force na controle.');
     } elseif (file_exists($pad)) prepare44Stop('TLS-bundledoel bestaat maar is geen regulier bestand.');
     $tmp = $map . '/.' . basename($pad) . '.tmp.' . bin2hex(random_bytes(8));
     if (runtime41SymlinkInPad($tmp) !== null) prepare44Stop('Onveilig tijdelijk TLS-pad.');
     if (@file_put_contents($tmp, $inhoud, LOCK_EX) === false) prepare44Stop('TLS-bundle kon niet tijdelijk worden geschreven.');
-    @chmod($tmp, $mode); clearstatcache(true, $pad);
+    prepare44ModeExact($tmp, $mode);
+    clearstatcache(true, $pad);
     if (is_link($pad)) { @unlink($tmp); prepare44Stop('TLS-doel werd tijdens write een symlink.'); }
     if (!@rename($tmp, $pad)) { @unlink($tmp); prepare44Stop('TLS-bundle kon niet atomisch worden geplaatst.'); }
-    @chmod($pad, $mode); return 'geschreven';
+    prepare44ModeExact($pad, $mode);
+    return 'geschreven';
 }
 foreach ($_SERVER['argv'] ?? [] as $arg) {
     if (preg_match('/^--(?:password|hash|secret|dsn|db-password|token|key|certificate|private-key|email)(?:=|$)/i', (string)$arg) === 1) prepare44Stop('Secrets/contactdata horen niet in fase-4.4 tenant CLI-argumenten.');
@@ -48,7 +63,7 @@ if (!is_dir($out)) {
     catch (Throwable $e) { prepare44Stop($e->getMessage()); }
     if (!@mkdir($out, 0750) && !is_dir($out)) prepare44Stop('TLS outputmap kon niet worden aangemaakt.');
 }
-@chmod($out, 0750);
+prepare44ModeExact($out, 0750, true);
 try { $real = runtime41BestaandPad($out, 'TLS outputmap', true); if (!runtime41Binnen($real, $ctx['tenant_root'])) prepare44Stop('TLS outputmap valt buiten tenantroot.'); }
 catch (Throwable $e) { prepare44Stop($e->getMessage()); }
 $force = isset($opt['force']);

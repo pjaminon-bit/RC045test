@@ -6,6 +6,7 @@
 // geen request-URI/query, IP, user-agent, gebruiker, e-mail, cookie, sessie,
 // token, password of vrije exceptiontekst wordt naar dit log geschreven.
 // ============================================================
+require_once __DIR__ . '/storage/private-filesystem.php';
 
 function vpOps46ExternTenant(array $config): ?array
 {
@@ -44,9 +45,7 @@ function vpOps46Log(array $config, string $event, string $level = 'info', array 
     if (!in_array($level, ['info', 'warning', 'error'], true)) $level = 'error';
 
     $map = $tenant['private_root'] . '/monitoring';
-    if (is_link($map)) return false;
-    if (!is_dir($map) && !@mkdir($map, 0750, true) && !is_dir($map)) return false;
-    @chmod($map, 0750);
+    if (!privateFilesystemBeveiligMap($map, true)) return false;
     $pad = $map . '/operations.jsonl';
     if (is_link($pad)) return false;
 
@@ -59,9 +58,25 @@ function vpOps46Log(array $config, string $event, string $level = 'info', array 
     ];
     $json = json_encode($regel, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     if (!is_string($json)) return false;
-    $ok = @file_put_contents($pad, $json . "\n", FILE_APPEND | LOCK_EX) !== false;
-    if ($ok) @chmod($pad, 0640);
-    return $ok;
+
+    // Open eerst, dwing daarna de private eindmode af en schrijf pas vervolgens
+    // bytes. Zo kan een permissieve umask of chmod-failure nooit eerst data in
+    // een onbewezen bestand publiceren.
+    $h = @fopen($pad, 'ab');
+    if (!is_resource($h)) return false;
+    $ok = false;
+    try {
+        if (!privateFilesystemBeveiligBestand($pad, 0640)) return false;
+        if (!flock($h, LOCK_EX)) return false;
+        $regelBytes = $json . "\n";
+        $geschreven = fwrite($h, $regelBytes);
+        if ($geschreven !== strlen($regelBytes) || !fflush($h)) return false;
+        $ok = privateFilesystemBeveiligBestand($pad, 0640);
+        return $ok;
+    } finally {
+        @flock($h, LOCK_UN);
+        fclose($h);
+    }
 }
 
 function vpOps46RegisterFatalLogger(array $config): void

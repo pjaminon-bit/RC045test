@@ -7,6 +7,8 @@ if (PHP_SAPI !== 'cli') {
     exit;
 }
 
+require_once dirname(__DIR__) . '/app/storage/private-filesystem.php';
+
 function msmFout(string $melding, int $code = 1): never
 {
     fwrite(STDERR, $melding . PHP_EOL);
@@ -174,26 +176,14 @@ if (!$candidateOk) {
     msmFout('Nieuwe hash-only kandidaatconfig doorstaat de credentialcontrole niet.');
 }
 
-$tmp = $config . '.tmp.' . bin2hex(random_bytes(6));
-if (file_put_contents($tmp, $nieuw, LOCK_EX) !== strlen($nieuw)) {
-    @unlink($tmp);
-    msmFout('Tijdelijke hash-only config kon niet volledig worden geschreven.');
+if (!privateFilesystemAtomischSchrijf($config, $nieuw, 0640)) {
+    msmFout('Hash-only config kon niet atomisch met de vereiste server-only rechten worden geplaatst; oorspronkelijke config is niet gewijzigd.');
 }
-@chmod($tmp, 0640);
-if (!is_file($tmp) || (fileperms($tmp) & 0777) !== 0640) {
-    @unlink($tmp);
-    msmFout('Tijdelijke hash-only config kreeg niet de vereiste server-only rechten.');
-}
-if (!rename($tmp, $config)) {
-    @unlink($tmp);
-    msmFout('Hash-only config kon niet atomisch worden geplaatst; oorspronkelijke config is niet gewijzigd.');
-}
-@chmod($config, 0640);
 
 $controle = file_get_contents($config);
 $controlePlain = is_string($controle) ? msmVindAssignment($controle, '$BEHEER_WACHTWOORD') : null;
 $controleHash = is_string($controle) ? msmVindAssignment($controle, '$BEHEER_WACHTWOORD_HASH') : null;
-$eindMode = fileperms($config) & 0777;
+$eindMode = privateFilesystemMode($config);
 $eindCredentialOk = $controleHash !== null
     && ($hashGeldig
         ? hash_equals($hashAssignment['value'], $controleHash['value'])
@@ -202,8 +192,8 @@ if (!is_string($controle)
     || $controlePlain !== null
     || !$eindCredentialOk
     || $eindMode !== 0640) {
-    // De kandidaat was vóór rename al inhoudelijk bewezen. Een fout hier wijst
-    // op filesystemdrift/race; schrijf het oude secret niet opnieuw naar disk.
+    // De kandidaat was vóór de atomische write al inhoudelijk bewezen. Een fout
+    // hier wijst op filesystemdrift/race; schrijf het oude secret niet opnieuw naar disk.
     msmFout('Nacontrole van de geplaatste hash-only config faalde; handmatige beoordeling vereist.');
 }
 

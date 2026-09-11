@@ -7,6 +7,7 @@
 // root, zodat schrijfverkeer van vereniging A vereniging B niet blokkeert.
 // ============================================================
 require_once __DIR__ . '/core/tenant-runtime.php';
+require_once __DIR__ . '/storage/private-filesystem.php';
 
 function dataSlotConfig(): array {
   static $config = null;
@@ -49,14 +50,17 @@ function dataSlotStop($reden) {
 function dataSlotOpen() {
   $pad = dataSlotPad();
   $map = dirname($pad);
-  if (!is_dir($map) && !@mkdir($map, 0750, true)) {
-    dataSlotStop('lockmap kon niet worden aangemaakt');
+  if (!privateFilesystemBeveiligMap($map, true)) {
+    dataSlotStop('lockmap kon niet aantoonbaar met private mode worden voorbereid');
   }
   $handvat = @fopen($pad, 'c');
   if ($handvat === false) {
     dataSlotStop('lockbestand kon niet worden geopend');
   }
-  @chmod($pad, 0640);
+  if (!privateFilesystemBeveiligBestand($pad, 0640)) {
+    fclose($handvat);
+    dataSlotStop('lockbestand kon niet aantoonbaar met private mode worden beveiligd');
+  }
   if (!flock($handvat, LOCK_EX)) {
     fclose($handvat);
     dataSlotStop('flock(LOCK_EX) mislukt');

@@ -28,8 +28,52 @@ function apply46Deps(array$p):string
     $php=PHP_BINARY;if(!preg_match('#^/usr/bin/php[0-9]{1,2}\.[0-9]{1,2}$#D',$php)||!is_file($php)||!is_executable($php))throw new RuntimeException('Host-engine PHP CLI is niet exact gepind.');
     return$php;
 }
-function apply46SafeDir(string$p,string$owner,string$group,int$mode):void{$l=runtime41SymlinkInPad($p);if($l!==null)apply46Stop("Symlink in monitoringpad: {$l}");if(!is_dir($p)&&!@mkdir($p,$mode,true)&&!is_dir($p))apply46Stop("Map kon niet worden aangemaakt: {$p}");if(!@chown($p,$owner)||!@chgrp($p,$group)||!@chmod($p,$mode))apply46Stop("Rechten konden niet worden gezet: {$p}");}
-function apply46Install(string$src,string$dst,int$mode,bool$force):string{if(is_link($dst))apply46Stop("Symlinkdoel geweigerd: {$dst}");$inh=@file_get_contents($src);if(!is_string($inh))apply46Stop("Bron onleesbaar: {$src}");if(is_file($dst)){$oud=@file_get_contents($dst);if(is_string($oud)&&hash_equals(hash('sha256',$oud),hash('sha256',$inh)))return'ongewijzigd';if(!$force)apply46Stop("Afwijkend bestaand bestand: {$dst}; gebruik --force na controle.");}elseif(file_exists($dst))apply46Stop("Doel is geen regulier bestand: {$dst}");$tmp=dirname($dst).'/.'.basename($dst).'.tmp.'.bin2hex(random_bytes(5));if(@file_put_contents($tmp,$inh,LOCK_EX)===false)apply46Stop("Tijdelijk bestand mislukt: {$dst}");@chown($tmp,'root');@chgrp($tmp,'root');@chmod($tmp,$mode);if(is_link($dst)){@unlink($tmp);apply46Stop("Doel werd symlink: {$dst}");}if(!@rename($tmp,$dst)){@unlink($tmp);apply46Stop("Installatie mislukt: {$dst}");}@chown($dst,'root');@chgrp($dst,'root');@chmod($dst,$mode);return'geschreven';}
+function apply46Uid(string|int$owner):int
+{
+    if(is_int($owner)||ctype_digit((string)$owner))return(int)$owner;
+    if(!function_exists('posix_getpwnam'))throw new RuntimeException('Monitoring ownercontrole vereist posix_getpwnam.');
+    $u=@posix_getpwnam((string)$owner);if(!is_array($u))throw new RuntimeException('Verwachte monitoring-owner bestaat niet: '.$owner);return(int)$u['uid'];
+}
+function apply46Gid(string|int$group):int
+{
+    if(is_int($group)||ctype_digit((string)$group))return(int)$group;
+    if(!function_exists('posix_getgrnam'))throw new RuntimeException('Monitoring groepscontrole vereist posix_getgrnam.');
+    $g=@posix_getgrnam((string)$group);if(!is_array($g))throw new RuntimeException('Verwachte monitoring-groep bestaat niet: '.$group);return(int)$g['gid'];
+}
+function apply46Meta(string$p,int$mode,bool$dir,string|int$owner,string|int$group):void
+{
+    clearstatcache(true,$p);$s=@lstat($p);
+    if(!is_array($s)||is_link($p)||($dir?!is_dir($p):!is_file($p))||(int)$s['uid']!==apply46Uid($owner)||(int)$s['gid']!==apply46Gid($group)||(((int)$s['mode']&0777)!==($mode&0777)))throw new RuntimeException('Monitoring owner/group/mode wijkt af: '.$p);
+}
+function apply46SafeDir(string$p,string$owner,string$group,int$mode):void
+{
+    $l=runtime41SymlinkInPad($p);if($l!==null)apply46Stop("Symlink in monitoringpad: {$l}");
+    if(!is_dir($p)&&!@mkdir($p,$mode,true)&&!is_dir($p))apply46Stop("Map kon niet worden aangemaakt: {$p}");
+    if(!@chown($p,$owner)||!@chgrp($p,$group)||!@chmod($p,$mode))apply46Stop("Rechten konden niet worden gezet: {$p}");
+    try{apply46Meta($p,$mode,true,$owner,$group);}catch(Throwable$e){apply46Stop($e->getMessage());}
+}
+function apply46RootFile(string$p,int$mode):void
+{
+    if(!@chown($p,'root')||!@chgrp($p,'root')||!@chmod($p,$mode))apply46Stop('Monitoringbestand kon niet veilig root-owned worden gemaakt: '.$p);
+    try{apply46Meta($p,$mode,false,'root','root');}catch(Throwable$e){apply46Stop($e->getMessage());}
+}
+function apply46Install(string$src,string$dst,int$mode,bool$force):string
+{
+    if(is_link($dst))apply46Stop("Symlinkdoel geweigerd: {$dst}");
+    $inh=@file_get_contents($src);if(!is_string($inh))apply46Stop("Bron onleesbaar: {$src}");
+    if(is_file($dst)){
+        $oud=@file_get_contents($dst);
+        if(is_string($oud)&&hash_equals(hash('sha256',$oud),hash('sha256',$inh))){apply46RootFile($dst,$mode);return'ongewijzigd';}
+        if(!$force)apply46Stop("Afwijkend bestaand bestand: {$dst}; gebruik --force na controle.");
+    }elseif(file_exists($dst))apply46Stop("Doel is geen regulier bestand: {$dst}");
+    $tmp=dirname($dst).'/.'.basename($dst).'.tmp.'.bin2hex(random_bytes(5));
+    if(@file_put_contents($tmp,$inh,LOCK_EX)===false)apply46Stop("Tijdelijk bestand mislukt: {$dst}");
+    apply46RootFile($tmp,$mode);
+    if(is_link($dst)){@unlink($tmp);apply46Stop("Doel werd symlink: {$dst}");}
+    if(!@rename($tmp,$dst)){@unlink($tmp);apply46Stop("Installatie mislukt: {$dst}");}
+    apply46RootFile($dst,$mode);
+    return'geschreven';
+}
 function apply46RollbackNieuweApacheLink(string$enabled,bool$nieuw):void{if($nieuw&&is_link($enabled))@unlink($enabled);}
 
 foreach($_SERVER['argv']??[]as$a){if(preg_match('/^--(?:password|secret|token|key|dsn|webhook)(?:=|$)/i',(string)$a)===1)apply46Stop('Secrets horen niet in fase-4.6 CLI-argumenten.');}

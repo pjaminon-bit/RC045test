@@ -8,6 +8,7 @@ if (PHP_SAPI !== 'cli') {
 }
 
 require_once dirname(__DIR__) . '/app/deployment/dns-contract.php';
+require_once dirname(__DIR__) . '/app/storage/private-filesystem.php';
 
 function check43Stop(string $melding, int $code = 1): void
 {
@@ -40,16 +41,11 @@ function check43ReadinessVerwijder(string $pad): void
 function check43SchrijfAtomisch(string $pad, string $inhoud): void
 {
     $map = dirname($pad);
-    if (!is_dir($map) || is_link($map)) check43Stop('DNS outputmap is niet veilig beschikbaar.');
+    if (!privateFilesystemBeveiligMap($map, true)) check43Stop('DNS outputmap kon niet naar restrictieve mode worden gezet.');
     if (is_link($pad)) check43Stop('Readiness mag geen symlinkdoel overschrijven.');
-    $tmp = $map . '/.' . basename($pad) . '.tmp.' . bin2hex(random_bytes(8));
-    if (runtime41SymlinkInPad($tmp) !== null) check43Stop('Onveilig tijdelijk readinesspad.');
-    if (@file_put_contents($tmp, $inhoud, LOCK_EX) === false) check43Stop('DNS-readiness kon niet tijdelijk worden geschreven.');
-    @chmod($tmp, 0640);
-    clearstatcache(true, $pad);
-    if (is_link($pad)) { @unlink($tmp); check43Stop('Readinessdoel werd tijdens write een symlink.'); }
-    if (!@rename($tmp, $pad)) { @unlink($tmp); check43Stop('DNS-readiness kon niet atomisch worden geplaatst.'); }
-    @chmod($pad, 0640);
+    if (!privateFilesystemAtomischSchrijf($pad, $inhoud, 0640)) {
+        check43Stop('DNS-readiness kon niet atomisch met restrictieve mode worden geplaatst.');
+    }
 }
 
 foreach ($_SERVER['argv'] ?? [] as $arg) {

@@ -36,11 +36,23 @@ function health46Deps(array $plan): void
     $apache=(string)$plan['apache']['control_binary'];if(!str_starts_with($apache,'/')||!is_file($apache)||!is_executable($apache))throw new RuntimeException('Apache health control-binary ontbreekt of is niet absoluut.');
 }
 function health46Check(bool $ok, string $code, array &$checks): void { $checks[$code]=$ok?'ok':'fail'; }
+function health46ModeExact(string $pad, int $mode, bool $dir, bool $rootOwned = false): void
+{
+    $mode &= 0777;
+    if (!@chmod($pad, $mode)) health46Stop('Statuspadmode kon niet exact worden gezet: ' . $pad);
+    if ($rootOwned && (!@chown($pad, 0) || !@chgrp($pad, 0))) health46Stop('Statusbestand kon niet root-owned worden gemaakt: ' . $pad);
+    clearstatcache(true, $pad);
+    $st = @lstat($pad);
+    if (!is_array($st) || is_link($pad) || ($dir ? !is_dir($pad) : !is_file($pad)) || (((int)$st['mode'] & 0777) !== $mode)
+        || ($rootOwned && ((int)$st['uid'] !== 0 || (int)$st['gid'] !== 0))) {
+        health46Stop('Statuspadmetadata wijkt na normalisatie af: ' . $pad);
+    }
+}
 function health46SafeDir(string $dir, int $mode = 0750): void
 {
     $link=runtime41SymlinkInPad($dir); if($link!==null) health46Stop("Symlink in statuspad geweigerd: {$link}");
     if(!is_dir($dir)&&!@mkdir($dir,$mode,true)&&!is_dir($dir)) health46Stop("Statusmap kon niet worden aangemaakt: {$dir}");
-    @chmod($dir,$mode);
+    health46ModeExact($dir,$mode,true);
 }
 function health46AtomicJson(string $pad, array $data, int $mode = 0640): void
 {
@@ -49,10 +61,10 @@ function health46AtomicJson(string $pad, array $data, int $mode = 0640): void
     if(!is_string($json)) health46Stop('Status kon niet als JSON worden opgebouwd.');
     $tmp=$pad.'.tmp.'.bin2hex(random_bytes(6));
     if(@file_put_contents($tmp,$json."\n",LOCK_EX)===false) health46Stop('Status kon niet tijdelijk worden geschreven.');
-    @chmod($tmp,$mode); @chown($tmp,'root'); @chgrp($tmp,'root');
+    health46ModeExact($tmp,$mode,false,true);
     if(is_link($pad)){@unlink($tmp);health46Stop('Statusdoel werd tijdens write een symlink.');}
     if(!@rename($tmp,$pad)){@unlink($tmp);health46Stop('Status kon niet atomisch worden geplaatst.');}
-    @chmod($pad,$mode); @chown($pad,'root'); @chgrp($pad,'root');
+    health46ModeExact($pad,$mode,false,true);
 }
 function health46CertBinnenEigenLineage(string $pad): bool
 {

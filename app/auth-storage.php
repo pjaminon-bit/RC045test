@@ -3,6 +3,7 @@
 // Tenant- en installatiebewuste auth storage
 // ============================================================
 require_once __DIR__ . '/core/tenant-runtime.php';
+require_once __DIR__ . '/storage/private-filesystem.php';
 
 /**
  * Externe tenantmasters accepteren uitsluitend een geldige password_hash en
@@ -136,13 +137,9 @@ function authStorageActiveerSessieIsolatie(array $siteConfig, string $projectRoo
     $context = authStorageSessieContext($siteConfig, $projectRoot, $privateRoot);
     $sessiePad = $context['path'];
 
-    if (is_link($sessiePad)) {
-        tenantRuntimeConfiguratieFout('Sessiemap mag geen symlink zijn.');
+    if (!privateFilesystemBeveiligMap($sessiePad, true)) {
+        tenantRuntimeConfiguratieFout('Installatie-eigen sessiemap kon niet naar restrictieve mode worden gezet.');
     }
-    if (!is_dir($sessiePad) && !@mkdir($sessiePad, 0750, true) && !is_dir($sessiePad)) {
-        tenantRuntimeConfiguratieFout('Installatie-eigen sessiemap kon niet worden aangemaakt.');
-    }
-    @chmod($sessiePad, 0750);
     if (!is_dir($sessiePad) || !is_writable($sessiePad)) {
         tenantRuntimeConfiguratieFout('Installatie-eigen sessiemap is niet schrijfbaar.');
     }
@@ -221,7 +218,5 @@ function authStoragePaden(array $siteConfig, string $projectRoot): array
 
 function authStorageMaakSchrijfmap(string $bestand): bool
 {
-    $map = dirname($bestand);
-    if (is_dir($map)) return !is_link($map);
-    return (@mkdir($map, 0750, true) || is_dir($map)) && !is_link($map);
+    return privateFilesystemBeveiligMap(dirname($bestand), true);
 }

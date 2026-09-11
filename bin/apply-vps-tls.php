@@ -31,6 +31,13 @@ function apply44Deps(array$plan):void
     foreach(['certbot','openssl','systemctl']as$n)apply44Binary($n);
     $apache=(string)$plan['apache']['control_binary'];if(!is_file($apache)||!is_executable($apache))throw new RuntimeException('Apache control-binary ontbreekt: '.$apache);
 }
+function apply44RootMode(string $pad,int $mode,bool $dir=false):void
+{
+    $mode&=0777;
+    if(!@chown($pad,0)||!@chgrp($pad,0)||!@chmod($pad,$mode))apply44Stop('TLS rootpadmetadata kon niet exact worden gezet: '.$pad);
+    clearstatcache(true,$pad);$st=@lstat($pad);
+    if(!is_array($st)||is_link($pad)||($dir?!is_dir($pad):!is_file($pad))||(int)$st['uid']!==0||(int)$st['gid']!==0||(((int)$st['mode']&0777)!==$mode))apply44Stop('TLS rootpadmetadata wijkt na normalisatie af: '.$pad);
+}
 function apply44Bundle(string $planPad, bool $vers): array
 {
     try {
@@ -58,7 +65,7 @@ function apply44Dirs(array $plan): array
     try{$sa=runtime41BestaandPad($plan['apache']['sites_available_dir'],'sites-available',true);$se=runtime41BestaandPad($plan['apache']['sites_enabled_dir'],'sites-enabled',true);}catch(Throwable $e){apply44Stop($e->getMessage());}
     if($sa!=='/etc/apache2/sites-available'||$se!=='/etc/apache2/sites-enabled')apply44Stop('Alleen vaste Ubuntu/Debian Apache-paden zijn toegestaan.');
     $dirs=[$plan['apache']['default_tls_dir'],$plan['acme']['webroot'],$plan['acme']['webroot'].'/.well-known',$plan['acme']['webroot'].'/.well-known/acme-challenge',dirname($plan['apache']['renewal_hook'])];
-    foreach($dirs as $dir){if(runtime41SymlinkInPad($dir)!==null)apply44Stop('VPS TLS/ACME-pad mag niet via symlink lopen: '.$dir);if(!is_dir($dir)&&!@mkdir($dir,0755,true)&&!is_dir($dir))apply44Stop('VPS TLS/ACME-map kon niet worden aangemaakt: '.$dir);@chown($dir,'root');@chgrp($dir,'root');@chmod($dir,0755);}
+    foreach($dirs as $dir){if(runtime41SymlinkInPad($dir)!==null)apply44Stop('VPS TLS/ACME-pad mag niet via symlink lopen: '.$dir);if(!is_dir($dir)&&!@mkdir($dir,0755,true)&&!is_dir($dir))apply44Stop('VPS TLS/ACME-map kon niet worden aangemaakt: '.$dir);apply44RootMode($dir,0755,true);}
     return ['sa'=>$sa,'se'=>$se];
 }
 function apply44RootWrite(string $doel,string $inhoud,int $mode,bool $force,?string $toegestaneVoorganger=null,?string $actiefPad=null): string
@@ -66,13 +73,13 @@ function apply44RootWrite(string $doel,string $inhoud,int $mode,bool $force,?str
     if(is_link($doel))apply44Stop('Root-configdoel mag geen symlink zijn: '.$doel);$map=dirname($doel);if(!is_dir($map)||is_link($map))apply44Stop('Onveilige root-configmap.');
     $actief=$actiefPad!==null&&(is_link($actiefPad)||file_exists($actiefPad));
     if(is_file($doel)){
-        $h=@file_get_contents($doel);if(!is_string($h))apply44Stop('Bestaand root-configbestand is onleesbaar.');if(hash_equals(hash('sha256',$h),hash('sha256',$inhoud)))return'ongewijzigd';
+        $h=@file_get_contents($doel);if(!is_string($h))apply44Stop('Bestaand root-configbestand is onleesbaar.');if(hash_equals(hash('sha256',$h),hash('sha256',$inhoud))){apply44RootMode($doel,$mode);return'ongewijzigd';}
         if($actief)apply44Stop('Afwijkend Apache-vhostbestand is al actief en wordt nooit in-place overschreven: '.$doel);
         $voorganger=$toegestaneVoorganger!==null&&hash_equals(hash('sha256',$h),hash('sha256',$toegestaneVoorganger));if(!$voorganger&&!$force)apply44Stop('Afwijkend root-configbestand bestaat; gebruik --force na controle: '.$doel);
     }elseif(file_exists($doel))apply44Stop('Root-configdoel bestaat maar is geen regulier bestand.');
     elseif($actief)apply44Stop('sites-enabled bevat een actief/dangling doel zonder veilig sites-available bronbestand.');
     $tmp=$map.'/.'.basename($doel).'.tmp.'.bin2hex(random_bytes(8));if(runtime41SymlinkInPad($tmp)!==null)apply44Stop('Onveilig tijdelijk root-configpad.');if(@file_put_contents($tmp,$inhoud,LOCK_EX)===false)apply44Stop('Root-config kon niet tijdelijk worden geschreven.');
-    if(!@chown($tmp,'root')||!@chgrp($tmp,'root')||!@chmod($tmp,$mode)){@unlink($tmp);apply44Stop('Root-config kreeg niet de vereiste rechten.');}clearstatcache(true,$doel);if(is_link($doel)){@unlink($tmp);apply44Stop('Root-configdoel werd tijdens write een symlink.');}if(!@rename($tmp,$doel)){@unlink($tmp);apply44Stop('Root-config kon niet atomisch worden geplaatst.');}return'geschreven';
+    apply44RootMode($tmp,$mode);clearstatcache(true,$doel);if(is_link($doel)){@unlink($tmp);apply44Stop('Root-configdoel werd tijdens write een symlink.');}if(!@rename($tmp,$doel)){@unlink($tmp);apply44Stop('Root-config kon niet atomisch worden geplaatst.');}apply44RootMode($doel,$mode);return'geschreven';
 }
 function apply44LinkVoorbereid(string $source,string $link): bool
 {
@@ -122,9 +129,9 @@ function apply44DefaultCertValideer(array $plan): bool
 }
 function apply44DefaultCert(array $plan): void
 {
-    $crt=$plan['apache']['default_cert'];$key=$plan['apache']['default_key'];if(apply44DefaultCertValideer($plan))return;if(file_exists($crt)||file_exists($key)||is_link($crt)||is_link($key))apply44Stop('Bestaand default reject-certificaat/key is ongeldig; verwijder het na handmatige inspectie.');
+    $crt=$plan['apache']['default_cert'];$key=$plan['apache']['default_key'];if(apply44DefaultCertValideer($plan)){apply44RootMode($crt,0644);apply44RootMode($key,0600);return;}if(file_exists($crt)||file_exists($key)||is_link($crt)||is_link($key))apply44Stop('Bestaand default reject-certificaat/key is ongeldig; verwijder het na handmatige inspectie.');
     $tmpC=$crt.'.tmp.'.bin2hex(random_bytes(5));$tmpK=$key.'.tmp.'.bin2hex(random_bytes(5));[$c,$o,$e]=apply44Run(['openssl','req','-x509','-newkey','rsa:2048','-sha256','-days','3650','-nodes','-subj','/CN=invalid.verenigingsplatform.invalid','-addext','subjectAltName=DNS:invalid.verenigingsplatform.invalid','-keyout',$tmpK,'-out',$tmpC]);
-    if($c!==0){@unlink($tmpC);@unlink($tmpK);apply44Stop('Neutraal default TLS-certificaat kon niet worden gemaakt: '.trim($o."\n".$e));}@chown($tmpC,'root');@chgrp($tmpC,'root');@chmod($tmpC,0644);@chown($tmpK,'root');@chgrp($tmpK,'root');@chmod($tmpK,0600);if(!@rename($tmpC,$crt)||!@rename($tmpK,$key)||!apply44DefaultCertValideer($plan))apply44Stop('Default reject-certificaat kon niet veilig worden geplaatst/gevalideerd.');
+    if($c!==0){@unlink($tmpC);@unlink($tmpK);apply44Stop('Neutraal default TLS-certificaat kon niet worden gemaakt: '.trim($o."\n".$e));}apply44RootMode($tmpC,0644);apply44RootMode($tmpK,0600);if(!@rename($tmpC,$crt)||!@rename($tmpK,$key)){@unlink($tmpC);@unlink($tmpK);apply44Stop('Default reject-certificaat kon niet atomisch worden geplaatst.');}apply44RootMode($crt,0644);apply44RootMode($key,0600);if(!apply44DefaultCertValideer($plan))apply44Stop('Default reject-certificaat kon niet veilig worden gevalideerd.');
 }
 function apply44DnsNu(array $ctx): void
 {

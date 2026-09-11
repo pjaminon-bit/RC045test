@@ -205,12 +205,35 @@ function apply41SymlinksVerboden(string $root): void
     }
 }
 
+function apply41Uid(string $owner): int
+{
+    if (ctype_digit($owner)) return (int)$owner;
+    if (!function_exists('posix_getpwnam')) apply41Stop('Runtime ownercontrole vereist posix_getpwnam.');
+    $record = @posix_getpwnam($owner);
+    if (!is_array($record) || !isset($record['uid'])) apply41Stop('Verwachte runtime-owner bestaat niet: ' . $owner);
+    return (int)$record['uid'];
+}
+
+function apply41Gid(string $groep): int
+{
+    if (ctype_digit($groep)) return (int)$groep;
+    if (!function_exists('posix_getgrnam')) apply41Stop('Runtime groepscontrole vereist posix_getgrnam.');
+    $record = @posix_getgrnam($groep);
+    if (!is_array($record) || !isset($record['gid'])) apply41Stop('Verwachte runtime-groep bestaat niet: ' . $groep);
+    return (int)$record['gid'];
+}
+
 function apply41ChownMode(string $pad, string $owner, string $groep, int $mode): void
 {
     if (is_link($pad) || (!is_file($pad) && !is_dir($pad))) apply41Stop("Onveilig filesystemdoel: {$pad}");
     if (!@chown($pad, $owner)) apply41Stop("Owner kon niet worden gezet op {$pad}");
     if (!@chgrp($pad, $groep)) apply41Stop("Group kon niet worden gezet op {$pad}");
     if (!@chmod($pad, $mode)) apply41Stop("Mode kon niet worden gezet op {$pad}");
+    clearstatcache(true, $pad);
+    $stat = @lstat($pad);
+    if (!is_array($stat) || is_link($pad) || (int)$stat['uid'] !== apply41Uid($owner) || (int)$stat['gid'] !== apply41Gid($groep) || (((int)$stat['mode'] & 0777) !== ($mode & 0777))) {
+        apply41Stop("Owner/group/mode wijkt na normalisatie af op {$pad}");
+    }
 }
 
 function apply41PrivateRechten(array $plan): void
@@ -305,18 +328,21 @@ function apply41FpmInstall(array $plan, string $fpmPoolDir, bool $force): string
     $inhoud = runtime41FpmConfig($plan);
     if (is_file($doel)) {
         $huidig = (string)file_get_contents($doel);
-        if (hash_equals(hash('sha256', $huidig), hash('sha256', $inhoud))) return 'ongewijzigd';
+        if (hash_equals(hash('sha256', $huidig), hash('sha256', $inhoud))) {
+            apply41ChownMode($doel, 'root', 'root', 0644);
+            return 'ongewijzigd';
+        }
         if (!$force) apply41Stop('Afwijkende PHP-FPM poolconfig bestaat al; gebruik --force na controle.');
     } elseif (file_exists($doel)) {
         apply41Stop('PHP-FPM poolconfigdoel is geen regulier bestand.');
     }
     $tmp = $dir . '/.' . basename($doel) . '.tmp.' . bin2hex(random_bytes(8));
     if (@file_put_contents($tmp, $inhoud, LOCK_EX) === false) apply41Stop('PHP-FPM poolconfig kon niet tijdelijk worden geschreven.');
-    @chown($tmp, 'root'); @chgrp($tmp, 'root'); @chmod($tmp, 0644);
+    apply41ChownMode($tmp, 'root', 'root', 0644);
     clearstatcache(true, $doel);
     if (is_link($doel)) { @unlink($tmp); apply41Stop('PHP-FPM poolconfig werd tijdens write een symlink.'); }
     if (!@rename($tmp, $doel)) { @unlink($tmp); apply41Stop('PHP-FPM poolconfig kon niet atomisch worden geplaatst.'); }
-    @chown($doel, 'root'); @chgrp($doel, 'root'); @chmod($doel, 0644);
+    apply41ChownMode($doel, 'root', 'root', 0644);
     return 'geschreven';
 }
 

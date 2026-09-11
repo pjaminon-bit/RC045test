@@ -7,6 +7,8 @@
 // `e2e cleanup` herstelt daarna byte-voor-byte de oorspronkelijke tenantinhoud
 // (of verwijdert het bestand weer wanneer het oorspronkelijk niet bestond).
 
+require_once dirname(__DIR__) . '/storage/private-filesystem.php';
+
 function e2e159MembershipFixtureId(): string
 {
     return 'e2e-authenticated-test';
@@ -28,12 +30,9 @@ function e2e159MembershipFixturePaths(string $privateRoot): array
 
 function e2e159MembershipSafeDir(string $dir): void
 {
-    if (file_exists($dir)) {
-        if (!is_dir($dir) || is_link($dir)) throw new RuntimeException('E2E lidmaatschapstypefixture weigert een onveilige map.');
-    } else {
-        if (!mkdir($dir, 0750, true) && !is_dir($dir)) throw new RuntimeException('E2E lidmaatschapstypefixture kon map niet aanmaken.');
+    if (!privateFilesystemBeveiligMap($dir, true)) {
+        throw new RuntimeException('E2E lidmaatschapstypefixture kon map niet veilig met restrictieve mode beschikbaar maken.');
     }
-    @chmod($dir, 0750);
 }
 
 function e2e159MembershipReadRegular(string $path): ?string
@@ -52,14 +51,9 @@ function e2e159MembershipAtomicWrite(string $path, string $raw, int $mode = 0640
     $dir = dirname($path);
     e2e159MembershipSafeDir($dir);
     if (is_link($path)) throw new RuntimeException('E2E lidmaatschapstypefixture weigert een symlinkdoel.');
-    $tmp = $dir . '/.' . basename($path) . '.e2e.' . bin2hex(random_bytes(6)) . '.tmp';
-    if (file_put_contents($tmp, $raw, LOCK_EX) === false) throw new RuntimeException('E2E lidmaatschapstypefixture kon tijdelijk bestand niet schrijven.');
-    @chmod($tmp, $mode);
-    if (is_link($path) || !rename($tmp, $path)) {
-        @unlink($tmp);
-        throw new RuntimeException('E2E lidmaatschapstypefixture kon bestand niet atomisch plaatsen.');
+    if (!privateFilesystemAtomischSchrijf($path, $raw, $mode)) {
+        throw new RuntimeException('E2E lidmaatschapstypefixture kon bestand niet atomisch met restrictieve mode plaatsen.');
     }
-    @chmod($path, $mode);
 }
 
 function e2e159MembershipDocument(string $raw): array

@@ -10,6 +10,7 @@
 // ============================================================
 require_once dirname(__DIR__, 2) . '/contactberichten-opslag.php';
 require_once dirname(__DIR__, 2) . '/aanmeldingen-opslag.php';
+require_once dirname(__DIR__) . '/storage/private-filesystem.php';
 
 function privacyRetentionTenantDag(array $config, ?int $nu = null): string
 {
@@ -61,23 +62,8 @@ function privacyRetentionMarkerSchrijf(string $pad, array $data): void
 {
     if (is_link($pad)) throw new RuntimeException('Tenant-retentiemarker mag geen symlink zijn.');
     $json = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR);
-    try {
-        $suffix = bin2hex(random_bytes(6));
-    } catch (Throwable $e) {
-        throw new RuntimeException('Tenant-retentiemarker kon geen veilige tijdelijke naam maken.', 0, $e);
-    }
-    $tmp = $pad . '.tmp.' . $suffix;
-    try {
-        if (is_link($tmp) || @file_put_contents($tmp, $json, LOCK_EX) === false) {
-            throw new RuntimeException('Tenant-retentiemarker kon niet worden voorbereid.');
-        }
-        @chmod($tmp, 0640);
-        if (is_link($pad) || !@rename($tmp, $pad)) {
-            throw new RuntimeException('Tenant-retentiemarker kon niet atomair worden opgeslagen.');
-        }
-        @chmod($pad, 0640);
-    } finally {
-        if (is_file($tmp) || is_link($tmp)) @unlink($tmp);
+    if (!privateFilesystemAtomischSchrijf($pad, $json, 0640)) {
+        throw new RuntimeException('Tenant-retentiemarker kon niet atomair met veilige mode worden opgeslagen.');
     }
 }
 
@@ -95,7 +81,10 @@ function privacyRetentionMaintenanceRun(array $config, ?int $nu = null): array
     if (is_link($lockPad)) throw new RuntimeException('Tenant-retentielock mag geen symlink zijn.');
     $lock = @fopen($lockPad, 'c');
     if ($lock === false) throw new RuntimeException('Tenant-retentielock kon niet worden geopend.');
-    @chmod($lockPad, 0640);
+    if (!privateFilesystemBeveiligBestand($lockPad, 0640)) {
+        fclose($lock);
+        throw new RuntimeException('Tenant-retentielock kon niet aantoonbaar met private mode worden beveiligd.');
+    }
 
     try {
         if (!flock($lock, LOCK_EX)) throw new RuntimeException('Tenant-retentielock kon niet exclusief worden verkregen.');

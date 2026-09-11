@@ -13,6 +13,9 @@ $apply = (string)file_get_contents($root . '/bin/apply-vps-webserver.php');
 $start = strpos($apply, 'function apply42LiveFragment');
 $end = $start === false ? false : strpos($apply, "foreach (\$_SERVER['argv']", $start);
 $live = ($start !== false && $end !== false) ? substr($apply, $start, $end - $start) : '';
+$metaStart = strpos($apply, 'function apply42RootMeta');
+$metaEnd = $metaStart === false ? false : strpos($apply, 'function apply42ApachePreflight', $metaStart);
+$meta = ($metaStart !== false && $metaEnd !== false) ? substr($apply, $metaStart, $metaEnd - $metaStart) : '';
 
 check226live(str_contains($apply, "'live-fragment'") && str_contains($apply, '--live-fragment'), 'webserver-applier heeft een expliciete live-fragmentmodus');
 check226live(str_contains($apply, 'Kies exact één van --check, --apply of --live-fragment.'), 'live cutover is wederzijds exclusief met check en inactieve apply');
@@ -21,7 +24,14 @@ check226live(str_contains($apply, "'200-vp-' . \$tenant . '-https.conf'") && str
 check226live(str_contains($apply, "substr_count(\$raw, 'Include \"' . \$fragment . '\"') !== 1"), 'actieve HTTPS-vhost moet exact één include naar het gebonden routingfragment hebben');
 check226live(str_contains($live, "\$doel = \$doelen['fragment'];") && !str_contains($live, "\$doelen['http']") && !str_contains($live, "\$doelen['catchall']"), 'live modus schrijft uitsluitend het HTTPS-routingfragment');
 check226live(str_contains($live, "@filetype(\$socket) !== 'socket'"), 'live cutover vereist dat de tenant-FPM-socket daadwerkelijk actief is');
-check226live(str_contains($live, "(int)\$meta['uid'] !== 0") && str_contains($live, "(int)\$meta['gid'] !== 0") && str_contains($live, '!== 0644'), 'bestaand live fragment moet root:root 0644 zijn');
+check226live(
+    str_contains($live, 'apply42RootMeta($doel, 0644)')
+    && str_contains($meta, '@lstat($pad)')
+    && str_contains($meta, "(int)\$meta['uid'] !== 0")
+    && str_contains($meta, "(int)\$meta['gid'] !== 0")
+    && str_contains($meta, "((int)\$meta['mode'] & 0777) !== (\$mode & 0777)"),
+    'bestaand live fragment moet root:root 0644 zijn'
+);
 
 $voor = strpos($live, 'apply42Configtest($plan)');
 $rename = strpos($live, '@rename($tmp, $doel)');
