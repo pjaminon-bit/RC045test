@@ -98,6 +98,27 @@ function apply45Marker(string $soort, string $naam): string
     throw new RuntimeException('Onbekend PostgreSQL objecttype.');
 }
 
+function apply45Gid(int|string|null $gid): ?int
+{
+    if ($gid === null) return null;
+    if (is_int($gid) || ctype_digit((string)$gid)) return (int)$gid;
+    if (!function_exists('posix_getgrnam')) throw new RuntimeException('Database groepscontrole vereist posix_getgrnam.');
+    $groep = @posix_getgrnam((string)$gid);
+    if (!is_array($groep) || !isset($groep['gid'])) throw new RuntimeException('Verwachte databasegroep bestaat niet: ' . $gid);
+    return (int)$groep['gid'];
+}
+
+function apply45Meta(string $pad, int $mode, bool $map = false, ?int $uid = null, int|string|null $gid = null): void
+{
+    clearstatcache(true, $pad);
+    $stat = @lstat($pad);
+    $verwachteGid = apply45Gid($gid);
+    if (!is_array($stat) || is_link($pad) || ($map ? !is_dir($pad) : !is_file($pad)) || (((int)$stat['mode'] & 0777) !== ($mode & 0777))
+        || ($uid !== null && (int)$stat['uid'] !== $uid) || ($verwachteGid !== null && (int)$stat['gid'] !== $verwachteGid)) {
+        throw new RuntimeException('Database owner/group/mode wijkt af: ' . $pad);
+    }
+}
+
 function apply45VeiligSchrijf(string $pad, string $inhoud, int $mode, ?int $uid = null, int|string|null $gid = null): void
 {
     $link = runtime41SymlinkInPad($pad);
@@ -106,13 +127,17 @@ function apply45VeiligSchrijf(string $pad, string $inhoud, int $mode, ?int $uid 
     if (!is_dir($map)) throw new RuntimeException('Schrijfmap bestaat niet: ' . $map);
     $tmp = $map . '/.' . basename($pad) . '.tmp.' . bin2hex(random_bytes(8));
     if (runtime41SymlinkInPad($tmp) !== null || @file_put_contents($tmp, $inhoud, LOCK_EX) === false) throw new RuntimeException('Tijdelijk bestand kon niet veilig worden geschreven: ' . $pad);
-    @chmod($tmp, $mode);
+    if (!@chmod($tmp, $mode)) { @unlink($tmp); throw new RuntimeException('Mode kon niet worden gezet op tijdelijk databasebestand.'); }
     if ($uid !== null && !@chown($tmp, $uid)) { @unlink($tmp); throw new RuntimeException('Owner kon niet worden gezet op tijdelijk bestand.'); }
     if ($gid !== null && !@chgrp($tmp, $gid)) { @unlink($tmp); throw new RuntimeException('Group kon niet worden gezet op tijdelijk bestand.'); }
+    try { apply45Meta($tmp, $mode, false, $uid, $gid); } catch (Throwable $e) { @unlink($tmp); throw $e; }
     clearstatcache(true, $pad);
     if (runtime41SymlinkInPad($pad) !== null) { @unlink($tmp); throw new RuntimeException('Doelpad werd tijdens write onveilig.'); }
     if (!@rename($tmp, $pad)) { @unlink($tmp); throw new RuntimeException('Bestand kon niet atomisch worden geplaatst: ' . $pad); }
-    @chmod($pad, $mode);
+    if (!@chmod($pad, $mode)) throw new RuntimeException('Mode kon niet worden genormaliseerd op databasebestand.');
+    if ($uid !== null && !@chown($pad, $uid)) throw new RuntimeException('Owner kon niet worden genormaliseerd op databasebestand.');
+    if ($gid !== null && !@chgrp($pad, $gid)) throw new RuntimeException('Group kon niet worden genormaliseerd op databasebestand.');
+    apply45Meta($pad, $mode, false, $uid, $gid);
 }
 
 function apply45HbaInstalleer(array $plan): array
@@ -136,10 +161,12 @@ function apply45HbaInstalleer(array $plan): array
         || !@chmod('/etc/verenigingsplatform', 0711)) {
         throw new RuntimeException('/etc/verenigingsplatform kon niet veilig root:root 0711 worden gemaakt als gedeelde traverse-only platformconfig-parent.');
     }
+    apply45Meta('/etc/verenigingsplatform', 0711, true, 0, 0);
     if (!is_dir('/etc/verenigingsplatform/postgresql') && !@mkdir('/etc/verenigingsplatform/postgresql', 0750)) throw new RuntimeException('PostgreSQL platformconfigmap kon niet worden aangemaakt.');
     if (!is_dir($includeDir) && !@mkdir($includeDir, 0750)) throw new RuntimeException('PostgreSQL HBA include_dir kon niet worden aangemaakt.');
     foreach (['/etc/verenigingsplatform/postgresql', $includeDir] as $dir) {
         if (runtime41SymlinkInPad($dir) !== null || !@chown($dir, 0) || !@chgrp($dir, $pgGid) || !@chmod($dir, 0750)) throw new RuntimeException('PostgreSQL platformconfigmap heeft onveilige ownership/rechten: ' . $dir);
+        apply45Meta($dir, 0750, true, 0, $pgGid);
     }
 
     $oudeTenantBestond = is_file($tenantHba) && runtime41SymlinkInPad($tenantHba) === null;
@@ -261,7 +288,12 @@ try {
 
     $bundleDir = (string)$plan['bundle']['output_dir'];
     if (runtime41SymlinkInPad($bundleDir) !== null || !@chown($bundleDir, 0) || !@chgrp($bundleDir, (int)$gr['gid']) || !@chmod($bundleDir, 0750)) throw new RuntimeException('Databasebundle ownership kon niet veilig worden gezet.');
-    foreach (['plan_file','runtime_file','migration_file','hba_file'] as $key) { $pad = (string)$plan['bundle'][$key]; if (runtime41SymlinkInPad($pad) !== null || !is_file($pad) || !@chown($pad, 0) || !@chgrp($pad, (int)$gr['gid']) || !@chmod($pad, 0640)) throw new RuntimeException('Databaseartifact ownership kon niet veilig worden gezet: ' . basename($pad)); }
+    apply45Meta($bundleDir, 0750, true, 0, (int)$gr['gid']);
+    foreach (['plan_file','runtime_file','migration_file','hba_file'] as $key) {
+        $pad = (string)$plan['bundle'][$key];
+        if (runtime41SymlinkInPad($pad) !== null || !is_file($pad) || !@chown($pad, 0) || !@chgrp($pad, (int)$gr['gid']) || !@chmod($pad, 0640)) throw new RuntimeException('Databaseartifact ownership kon niet veilig worden gezet: ' . basename($pad));
+        apply45Meta($pad, 0640, false, 0, (int)$gr['gid']);
+    }
 } catch (Throwable $e) {
     if ($appRoleTenantGebonden) { try { apply45PgQuery('ALTER ROLE ' . $appUser . ' NOLOGIN PASSWORD NULL'); } catch (Throwable $ignored) {} }
     $extra = $hbaBeschermingActief ? ' Beschermende tenant-HBA blijft actief; app-role is zo mogelijk NOLOGIN gezet.' : '';
