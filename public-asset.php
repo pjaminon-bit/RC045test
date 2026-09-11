@@ -2,6 +2,7 @@
 // Publieke, read-only assetgateway. Externe tenants bewaren uploads buiten de
 // documentroot; alleen expliciet toegestane namespaces/paden worden geserveerd.
 require_once __DIR__ . '/app/content/public-asset-store.php';
+require_once __DIR__ . '/app/core/http-file-validator.php';
 
 function publicAssetHttpFout(int $status): void
 {
@@ -53,28 +54,14 @@ if ($pad === null && $scope === 'sponsors' && $devSponsorRoute) {
 }
 if ($pad === null) publicAssetHttpFout(404);
 
-// Open eenmaal en gebruik dezelfde filehandle voor validator én responsebody.
-// Daarmee blijft de sterke ETag inhoudsgebonden, ook wanneer het pad tijdens
-// een request atomair door een nieuwe upload wordt vervangen.
-$handle = @fopen($pad, 'rb');
-if ($handle === false) publicAssetHttpFout(404);
-$stat = @fstat($handle);
-$grootte = is_array($stat) && isset($stat['size']) ? (int) $stat['size'] : -1;
-if ($grootte < 0) {
-    fclose($handle);
-    publicAssetHttpFout(404);
-}
-$hashContext = hash_init('sha256');
-$hashBytes = @hash_update_stream($hashContext, $handle);
-if ($hashBytes !== $grootte) {
-    fclose($handle);
-    publicAssetHttpFout(404);
-}
-$etag = '"sha256-' . hash_final($hashContext) . '"';
-if (!rewind($handle)) {
-    fclose($handle);
-    publicAssetHttpFout(404);
-}
+// Validator en responsebody komen uit exact dezelfde geopende inode. De
+// validator gebruikt uitsluitend fstat-metadata en leest dus geen assetbytes.
+// Daardoor blijven HEAD, 304 en kleine ranges O(1) vóór de echte body-read.
+$geopend = httpFileOpenMetValidator($pad);
+if ($geopend === null) publicAssetHttpFout(404);
+$handle = $geopend['handle'];
+$grootte = (int) $geopend['size'];
+$etag = (string) $geopend['etag'];
 
 header('Content-Type: ' . $mime);
 header('X-Content-Type-Options: nosniff');
