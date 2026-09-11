@@ -34,6 +34,7 @@ foreach (['config','from','contact-to','membership-to','smtp-host'] as $key) {
 
 require_once dirname(__DIR__) . '/app/core/tenant-runtime.php';
 require_once dirname(__DIR__) . '/app/notifications/tenant-notifications.php';
+require_once dirname(__DIR__) . '/app/storage/private-filesystem.php';
 
 $configPad = trim((string)$opt['config']);
 if (!tenantRuntimeIsAbsoluutPad($configPad) || is_link($configPad) || !is_file($configPad) || !is_readable($configPad)) {
@@ -101,18 +102,16 @@ $config['notificaties'] = [
 $inhoud = "<?php\n// Gegenereerd/bijgewerkt door tenant onboardingtools.\nreturn " . var_export($config, true) . ";\n";
 $dryRun = isset($opt['dry-run']);
 if (!$dryRun) {
-    if (!is_dir($secretsDir) && !@mkdir($secretsDir, 0750, false)) notifProvisionStop('private/secrets kon niet worden aangemaakt.');
+    if (!privateFilesystemBeveiligMap($secretsDir, true)) {
+        notifProvisionStop('private/secrets kon niet met restrictieve mode worden aangemaakt of gehard.');
+    }
     clearstatcache(true, $secretsDir);
     if (!is_dir($secretsDir) || is_link($secretsDir) || realpath(dirname($secretsDir)) !== $privateReal) {
         notifProvisionStop('private/secrets voldoet na aanmaak niet aan de tenantgrens.');
     }
-    @chmod($secretsDir, 0750);
-
-    $tmp = $configReal . '.tmp.' . bin2hex(random_bytes(6));
-    if (@file_put_contents($tmp, $inhoud, LOCK_EX) === false) notifProvisionStop('Tijdelijke tenantconfig kon niet worden geschreven.');
-    @chmod($tmp, 0640);
-    if (is_link($configReal) || !@rename($tmp, $configReal)) { @unlink($tmp); notifProvisionStop('Tenantconfig kon niet atomisch worden vervangen.'); }
-    @chmod($configReal, 0640);
+    if (!privateFilesystemAtomischSchrijf($configReal, $inhoud, 0640)) {
+        notifProvisionStop('Tenantconfig kon niet atomisch met restrictieve mode worden vervangen.');
+    }
 }
 
 echo ($dryRun ? 'DRY-RUN' : 'GEREED') . ": notification transportconfig voor " . (string)($config['vereniging']['sleutel'] ?? 'tenant') . "\n";
