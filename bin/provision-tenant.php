@@ -8,6 +8,7 @@ if (PHP_SAPI !== 'cli') {
 }
 require_once dirname(__DIR__) . '/app/core/tenant-runtime.php';
 require_once dirname(__DIR__) . '/app/content/tenant-content-policy.php';
+require_once dirname(__DIR__) . '/app/storage/private-filesystem.php';
 
 function provisionStop(string $melding, int $code = 1): void
 {
@@ -261,7 +262,9 @@ function provisionMaakMap(string $pad, string $tenantRoot, bool $dryRun): void
     }
     clearstatcache(true, $pad);
     if (is_link($pad) || !is_dir($pad)) provisionStop("map {$pad} is na aanmaak geen veilige gewone map.");
-    @chmod($pad, 0750);
+    if (!privateFilesystemBeveiligMap($pad, true)) {
+        provisionStop("map {$pad} kon niet aantoonbaar op mode 0750 worden gezet.");
+    }
     provisionControleerTenantpad($pad, $tenantRoot);
 }
 
@@ -289,7 +292,10 @@ function provisionSchrijf(string $pad, string $inhoud, bool $force, bool $dryRun
     $tmp = $pad . '.tmp.' . bin2hex(random_bytes(4));
     provisionControleerTenantpad($tmp, $tenantRoot);
     if (@file_put_contents($tmp, $inhoud, LOCK_EX) === false) provisionStop("tijdelijk bestand voor {$pad} kon niet worden geschreven.");
-    @chmod($tmp, 0640);
+    if (!privateFilesystemBeveiligBestand($tmp, 0640)) {
+        @unlink($tmp);
+        provisionStop("tijdelijk bestand voor {$pad} kon niet aantoonbaar op mode 0640 worden gezet.");
+    }
 
     provisionControleerTenantpad($pad, $tenantRoot);
     if (is_link($pad)) {
@@ -300,7 +306,9 @@ function provisionSchrijf(string $pad, string $inhoud, bool $force, bool $dryRun
         @unlink($tmp);
         provisionStop("{$pad} kon niet atomisch worden geplaatst.");
     }
-    @chmod($pad, 0640);
+    if (!privateFilesystemBeveiligBestand($pad, 0640)) {
+        provisionStop("{$pad} is geplaatst maar de vereiste mode 0640 kon niet aantoonbaar worden bevestigd.");
+    }
     return is_file($pad) ? 'geschreven' : 'aangemaakt';
 }
 
@@ -385,7 +393,8 @@ $contactStart = json_encode(
     JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES
 ) . "\n";
 
-if (!$dryRun && !is_dir($baseRoot)) {
+$baseRootNieuw = !$dryRun && !is_dir($baseRoot);
+if ($baseRootNieuw) {
     if (!@mkdir($baseRoot, 0750, true) && !is_dir($baseRoot)) provisionStop("basisroot {$baseRoot} kon niet worden aangemaakt.");
     clearstatcache(true, $baseRoot);
     $symlinkBase = provisionSymlinkInPad($baseRoot);
@@ -394,7 +403,9 @@ if (!$dryRun && !is_dir($baseRoot)) {
     if ($baseReal === false || provisionPadVoorVergelijk($baseReal) !== provisionPadVoorVergelijk($baseRoot)) {
         provisionStop('Basisroot wijst na aanmaak niet naar het vooraf gecontroleerde fysieke pad.');
     }
-    @chmod($baseRoot, 0750);
+    if (!privateFilesystemBeveiligMap($baseRoot, true)) {
+        provisionStop('Nieuw aangemaakte basisroot kon niet aantoonbaar op mode 0750 worden gezet.');
+    }
 }
 
 $dirs = [
