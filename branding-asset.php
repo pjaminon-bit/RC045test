@@ -2,6 +2,7 @@
 // Read-only gateway voor logo/favicon die buiten de documentroot staan.
 $config = require __DIR__ . '/site-config.php';
 require_once __DIR__ . '/app/core/tenant-branding-assets.php';
+require_once __DIR__ . '/app/core/http-file-validator.php';
 
 function brandingAssetFout(int $status): void
 {
@@ -24,16 +25,35 @@ if ($pad === null) brandingAssetFout(404);
 $ext = strtolower((string)pathinfo($naam, PATHINFO_EXTENSION));
 $mime = tenantBrandingAssetMimeVoorExt($ext);
 if ($mime === null) brandingAssetFout(404);
-$grootte = @filesize($pad);
-$mtime = @filemtime($pad);
-if ($grootte === false) brandingAssetFout(404);
-$etag = '"' . dechex((int)$mtime) . '-' . dechex((int)$grootte) . '"';
+
+// Gebruik dezelfde geopende inode voor validator en body. De validator leest
+// geen assetbytes en atomische brandingvervanging krijgt altijd een nieuwe
+// versie-identiteit, ook bij gelijke grootte en mtime.
+$geopend = httpFileOpenMetValidator($pad);
+if ($geopend === null) brandingAssetFout(404);
+$handle = $geopend['handle'];
+$grootte = (int)$geopend['size'];
+$etag = (string)$geopend['etag'];
+
 header('Content-Type: ' . $mime);
 header('X-Content-Type-Options: nosniff');
 header('Cross-Origin-Resource-Policy: same-site');
 header('Cache-Control: public, max-age=3600, stale-while-revalidate=86400');
 header('ETag: ' . $etag);
-header('Content-Length: ' . (int)$grootte);
-if (trim((string)($_SERVER['HTTP_IF_NONE_MATCH'] ?? '')) === $etag) { http_response_code(304); exit; }
-if ($methode === 'HEAD') exit;
-readfile($pad);
+header('Content-Length: ' . $grootte);
+if (trim((string)($_SERVER['HTTP_IF_NONE_MATCH'] ?? '')) === $etag) {
+    fclose($handle);
+    http_response_code(304);
+    exit;
+}
+if ($methode === 'HEAD') {
+    fclose($handle);
+    exit;
+}
+while (!feof($handle)) {
+    $blok = fread($handle, 65536);
+    if ($blok === false || $blok === '') break;
+    echo $blok;
+    if (connection_aborted()) break;
+}
+fclose($handle);
