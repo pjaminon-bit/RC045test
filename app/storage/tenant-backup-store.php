@@ -15,6 +15,7 @@
 
 require_once dirname(__DIR__) . '/core/site.php';
 require_once __DIR__ . '/backup-attestation.php';
+require_once __DIR__ . '/private-filesystem.php';
 
 function tenantBackupActief(): bool
 {
@@ -124,11 +125,9 @@ function tenantBackupPadVeilig(string $pad): bool
 function tenantBackupMaakMap(string $map): bool
 {
     if (!tenantBackupPadVeilig($map)) return false;
-    if (!is_dir($map) && !@mkdir($map, 0750, true)) return false;
+    if (!privateFilesystemBeveiligMap($map, true)) return false;
     clearstatcache(true, $map);
-    if (!is_dir($map) || is_link($map) || !tenantBackupPadVeilig($map)) return false;
-    @chmod($map, 0750);
-    return true;
+    return is_dir($map) && !is_link($map) && tenantBackupPadVeilig($map);
 }
 
 function tenantBackupMicroTijd(): string
@@ -196,12 +195,7 @@ function tenantBackupMaakArray(string $sleutel, array $data): ?string
     catch (Throwable $e) { $rand = substr(hash('sha256', (string) microtime(true)), 0, 8); }
     $naam = tenantBackupMicroTijd() . '_' . $rand . '.json';
     $pad = $map . DIRECTORY_SEPARATOR . $naam;
-    $tmp = $pad . '.tmp';
-    if (!tenantBackupPadVeilig($tmp)) return null;
-    if (@file_put_contents($tmp, $json, LOCK_EX) === false) return null;
-    @chmod($tmp, 0640);
-    if (!tenantBackupPadVeilig($pad) || !@rename($tmp, $pad)) { @unlink($tmp); return null; }
-    @chmod($pad, 0640);
+    if (!tenantBackupPadVeilig($pad) || !privateFilesystemAtomischSchrijf($pad, $json, 0640)) return null;
 
     if ($attestatieActief && !backupAttestatieMaakData($pad, tenantBackupTenantKey(), $sleutel)) {
         tenantBackupVerwijderDataSnapshot($pad);
@@ -256,7 +250,7 @@ function tenantBackupHardenGebruikersHerstel(array $hersteld): array
 
     foreach ($hersteld as $i => $account) {
         if (!is_array($account)) continue;
-        $naam = strtolower(trim((string)($account['gebruikersnaam'] ?? '')));
+        $naam = strtolower(trim((string)($account['gebruikersnaam'] ?? ''));
         $snapshotVersie = max(1, (int)($account['sessie_versie'] ?? 1));
         $actueel = $naam !== '' ? max(1, (int)($versies[$naam] ?? 1)) : 1;
         $basis = max($snapshotVersie, $actueel);
@@ -358,7 +352,7 @@ function tenantBackupKopieerMap(string $bron, string $doel): bool
             if (!tenantBackupKopieerMap($src, $dst)) return false;
         } elseif (is_file($src)) {
             if (!tenantBackupPadVeilig($dst) || !@copy($src, $dst)) return false;
-            @chmod($dst, 0640);
+            if (!privateFilesystemBeveiligBestand($dst, 0640)) { @unlink($dst); return false; }
         }
     }
     return true;
@@ -449,8 +443,7 @@ function tenantBackupMaakAssetSnapshot(string $scope): ?string
     ];
     $json = json_encode($manifest, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
     $manifestPad = $snapshot . DIRECTORY_SEPARATOR . 'manifest.json';
-    if ($json === false || @file_put_contents($manifestPad, $json, LOCK_EX) === false) { tenantBackupVerwijderMap($snapshot); return null; }
-    @chmod($manifestPad, 0640);
+    if ($json === false || !privateFilesystemAtomischSchrijf($manifestPad, $json, 0640)) { tenantBackupVerwijderMap($snapshot); return null; }
 
     if ($attestatieActief && !backupAttestatieMaakAsset($snapshot, tenantBackupTenantKey(), $scope)) {
         tenantBackupVerwijderMap($snapshot);
@@ -553,7 +546,23 @@ function tenantBackupHerstelAssetSnapshot(string $scope, string $naam, ?string &
         $fout='Herstelde assetmap kon niet atomisch worden geplaatst; de vorige toestand is automatisch teruggezet.';
         return false;
     }
-    @chmod($doel, 0750);
+    if (!privateFilesystemBeveiligMap($doel, true)) {
+        $rollbackOk = true;
+        if ($hadDoel) {
+            $mislukt = $parent . DIRECTORY_SEPARATOR . basename($doel) . '.failed-mode.' . $rand;
+            $rollbackOk = @rename($doel, $mislukt) && @rename($oud, $doel);
+            if ($rollbackOk) tenantBackupVerwijderMap($mislukt);
+        } else {
+            tenantBackupVerwijderMap($doel);
+        }
+        if (!$rollbackOk) {
+            error_log('[platform] CRITICAL assetrestore modefailure rollback mislukt; geparkeerde map: ' . $oud);
+            $fout='Assetherstel kreeg geen veilige directorymode en automatische rollback mislukte. De duurzame rollback-snapshot is bewaard.';
+            return false;
+        }
+        $fout='Assetherstel kreeg geen veilige directorymode; de vorige toestand is automatisch teruggezet.';
+        return false;
+    }
     if ($hadDoel) tenantBackupVerwijderMap($oud);
     return true;
 }
