@@ -1,6 +1,7 @@
 <?php
 if (PHP_SAPI !== 'cli') { http_response_code(403); exit('Alleen via CLI beschikbaar.'); }
 require_once dirname(__DIR__) . '/app/deployment/lifecycle-contract.php';
+require_once dirname(__DIR__) . '/app/storage/private-filesystem.php';
 
 function prepare48Stop(string $m, int $c = 1): never { fwrite(STDERR, "FOUT: {$m}\n"); exit($c); }
 function prepare48Help(): void
@@ -13,18 +14,16 @@ function prepare48Schrijf(string $pad, string $inhoud, bool $force): string
 {
     if (runtime41SymlinkInPad($pad) !== null) prepare48Stop('Lifecycle-output mag geen symlink bevatten.');
     $dir = dirname($pad);
-    if (!is_dir($dir) && !@mkdir($dir, 0750, true) && !is_dir($dir)) prepare48Stop('Lifecycle outputmap kon niet worden aangemaakt.');
+    if (!privateFilesystemBeveiligMap($dir, true)) prepare48Stop('Lifecycle outputmap kon niet met restrictieve mode worden aangemaakt of gehard.');
     if (runtime41SymlinkInPad($dir) !== null) prepare48Stop('Lifecycle outputmap bevat een symlink.');
     if (is_file($pad)) {
         $oud = @file_get_contents($pad);
         if (is_string($oud) && hash_equals(hash('sha256', $oud), hash('sha256', $inhoud))) return 'ongewijzigd';
         if (!$force) prepare48Stop('Afwijkend lifecycle-plan bestaat al; gebruik --force na controle.');
     } elseif (file_exists($pad)) prepare48Stop('Lifecycle-plandoel is geen regulier bestand.');
-    $tmp = $dir . '/.' . basename($pad) . '.tmp.' . bin2hex(random_bytes(6));
-    if (@file_put_contents($tmp, $inhoud, LOCK_EX) === false) prepare48Stop('Lifecycle-plan kon niet tijdelijk worden geschreven.');
-    @chmod($tmp, 0640);
-    if (is_link($pad) || !@rename($tmp, $pad)) { @unlink($tmp); prepare48Stop('Lifecycle-plan kon niet atomisch worden geplaatst.'); }
-    @chmod($pad, 0640);
+    if (!privateFilesystemAtomischSchrijf($pad, $inhoud, 0640)) {
+        prepare48Stop('Lifecycle-plan kon niet atomisch met restrictieve mode worden geplaatst.');
+    }
     return 'geschreven';
 }
 
