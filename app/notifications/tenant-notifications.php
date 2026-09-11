@@ -181,9 +181,14 @@ function tenantNotificationCredentials(array $status): array
     return ['username'=>(string)($data['username'] ?? ''),'password'=>(string)($data['password'] ?? '')];
 }
 
+function tenantNotificationDispatchIntervalSeconds(): int
+{
+    return 60;
+}
+
 function tenantNotificationOutboxLeeg(): array
 {
-    return ['schema'=>1,'updated'=>date('c'),'items'=>[]];
+    return ['schema'=>1,'updated'=>date('c'),'dispatch_not_before'=>null,'items'=>[]];
 }
 
 function tenantNotificationOutboxLees(): array
@@ -193,6 +198,10 @@ function tenantNotificationOutboxLees(): array
     if ((int)($data['schema'] ?? 0) !== 1 || !is_array($data['items'] ?? null)) {
         throw new RuntimeException('Notification outbox heeft een ongeldig schema.');
     }
+    if (isset($data['dispatch_not_before']) && !is_string($data['dispatch_not_before'])) {
+        throw new RuntimeException('Notification outbox cadence heeft een ongeldig schema.');
+    }
+    if (!array_key_exists('dispatch_not_before', $data)) $data['dispatch_not_before'] = null;
     return $data;
 }
 
@@ -261,6 +270,9 @@ function tenantNotificationClaim(?int $now = null): ?array
     $slot = dataSlotOpen();
     try {
         $outbox = tenantNotificationOutboxLees();
+        $dispatchNotBefore = tenantNotificationTimestamp(isset($outbox['dispatch_not_before']) ? (string)$outbox['dispatch_not_before'] : null);
+        if ($dispatchNotBefore > $now) return null;
+
         foreach ($outbox['items'] as $i => $item) {
             if (!is_array($item) || ($item['status'] ?? '') !== 'pending') continue;
             $next = tenantNotificationTimestamp(isset($item['next_attempt_at']) ? (string)$item['next_attempt_at'] : null);
@@ -270,6 +282,7 @@ function tenantNotificationClaim(?int $now = null): ?array
             $item['lease_token'] = $token;
             $item['lease_until'] = gmdate('Y-m-d\TH:i:s\Z', $now + 30);
             $outbox['items'][$i] = $item;
+            $outbox['dispatch_not_before'] = gmdate('Y-m-d\TH:i:s\Z', $now + tenantNotificationDispatchIntervalSeconds());
             if (!tenantNotificationOutboxSchrijf($outbox)) throw new RuntimeException('Notification outbox claim kon niet worden opgeslagen.');
             return $item;
         }
