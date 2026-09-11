@@ -126,10 +126,26 @@ function sponsorsVerwerkLogo(string $veld, int $slot, string $huidig): array
         if (is_file($oud)) @unlink($oud);
     }
 
-    if (!@move_uploaded_file($tmp, $doel)) {
-        return ['ok' => false, 'fout' => 'logo kon niet worden opgeslagen.'];
+    // Upload eerst naar een unieke sibling-tempfile. Daarmee is activatie via
+    // rename altijd een nieuwe inode-versie en blijft de O(1) ETag-validator
+    // deterministisch, ook wanneer upload_tmp_dir op een ander filesystem staat.
+    try { $suffix = bin2hex(random_bytes(5)); }
+    catch (Throwable $e) { return ['ok' => false, 'fout' => 'veilige tijdelijke logonaam kon niet worden gemaakt.']; }
+    $staging = $doel . '.tmp.' . $suffix;
+    if (!@move_uploaded_file($tmp, $staging)) {
+        return ['ok' => false, 'fout' => 'logo kon niet veilig worden gestaged.'];
     }
-    publicAssetBeveiligBestand($doel);
+    try {
+        publicAssetBeveiligBestand($staging);
+        if (!@rename($staging, $doel)) {
+            @unlink($staging);
+            return ['ok' => false, 'fout' => 'logo kon niet atomair worden geactiveerd.'];
+        }
+        publicAssetBeveiligBestand($doel);
+    } catch (Throwable $e) {
+        @unlink($staging);
+        return ['ok' => false, 'fout' => 'logo kon niet veilig worden opgeslagen.'];
+    }
 
     return [
         'ok' => true,

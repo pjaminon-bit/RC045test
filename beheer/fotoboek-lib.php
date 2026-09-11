@@ -122,7 +122,19 @@ function fbVerwerkFoto(string $tmp,string $vol,string $thumb,bool $watermerk,str
     publicAssetBeveiligBestand($vol);publicAssetBeveiligBestand($thumb);
     return ['ok'=>true,'width'=>$ow,'height'=>$oh];
 }
-function fbWatermerkBestaand(string $pad,string $logo,string $watermerkTekst='rc045.nl'): bool { $info=@getimagesize($pad);if($info===false||$info[2]!==IMAGETYPE_JPEG)return false;$img=@imagecreatefromjpeg($pad);if(!$img)return false;fbWatermerk($img,$logo,$watermerkTekst);$ok=@imagejpeg($img,$pad,82);imagedestroy($img);if($ok)publicAssetBeveiligBestand($pad);return (bool)$ok; }
+function fbWatermerkBestaand(string $pad,string $logo,string $watermerkTekst='rc045.nl'): bool {
+    $info=@getimagesize($pad);if($info===false||$info[2]!==IMAGETYPE_JPEG)return false;
+    $img=@imagecreatefromjpeg($pad);if(!$img)return false;
+    fbWatermerk($img,$logo,$watermerkTekst);
+    try{$suffix=bin2hex(random_bytes(5));}catch(Throwable $e){imagedestroy($img);return false;}
+    $tmp=$pad.'.tmp.'.$suffix;
+    $ok=@imagejpeg($img,$tmp,82);imagedestroy($img);
+    if(!$ok){@unlink($tmp);return false;}
+    try{publicAssetBeveiligBestand($tmp);}catch(Throwable $e){@unlink($tmp);return false;}
+    if(is_link($pad)||!@rename($tmp,$pad)){@unlink($tmp);return false;}
+    publicAssetBeveiligBestand($pad);
+    return true;
+}
 function fbVerwijderBestanden(string $albumPad,array $foto): void {
     $file=basename((string)($foto['file']??''));if($file!==''){@unlink($albumPad.'/'.$file);@unlink($albumPad.'/thumbs/'.$file);}
     $poster=basename((string)($foto['poster']??''));if($poster!==''){@unlink($albumPad.'/'.$poster);@unlink($albumPad.'/thumbs/'.$poster);}
