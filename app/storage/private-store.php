@@ -6,6 +6,7 @@ require_once dirname(__DIR__) . '/core/tenant-runtime.php';
 require_once dirname(__DIR__) . '/core/atomic-file-transaction.php';
 require_once __DIR__ . '/tenant-backup-store.php';
 require_once __DIR__ . '/private-store-prewrite.php';
+require_once __DIR__ . '/private-filesystem.php';
 require_once __DIR__ . '/pdo-runtime.php';
 require_once __DIR__ . '/private-store-migration-guard.php';
 require_once __DIR__ . '/private-store-runtime-state.php';
@@ -176,15 +177,9 @@ function privateStoreJsonLees(string $collectie): array
 function privateStoreJsonSchrijf(string $collectie,array $data): bool
 {
     $root=privateStoreJsonRoot();if($root===null)return false;$pad=tenantRuntimeCollectiePad($root,$collectie);$map=dirname($pad);
-    if(!is_dir($map)&&!@mkdir($map,0750,true))throw new RuntimeException('Private tenantopslag kon niet worden aangemaakt.');
+    if(!privateFilesystemBeveiligMap($map,true))throw new RuntimeException('Private tenantopslag kon niet veilig worden aangemaakt.');
     $json=json_encode($data,JSON_UNESCAPED_UNICODE|JSON_PRETTY_PRINT);if($json===false)return false;
-    try{$suffix=bin2hex(random_bytes(5));}catch(Throwable $e){$suffix=str_replace('.','',(string)microtime(true));}
-    $tmp=$pad.'.tmp.'.$suffix;
-    if(@file_put_contents($tmp,$json,LOCK_EX)===false)return false;
-    @chmod($tmp,0640);
-    if(!@rename($tmp,$pad)){@unlink($tmp);return false;}
-    @chmod($pad,0640);
-    return true;
+    return privateFilesystemAtomischSchrijf($pad,$json,0640);
 }
 
 function privateStorePdoVerbindingsdata(): array
