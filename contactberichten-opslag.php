@@ -9,6 +9,7 @@
 require_once __DIR__ . '/app/data-slot.php';
 require_once __DIR__ . '/app/storage/private-store.php';
 require_once __DIR__ . '/app/storage/legacy-private-json.php';
+require_once __DIR__ . '/app/storage/private-filesystem.php';
 
 define('CONTACTBERICHTEN_VOORLOOP', "<?php exit; ?>\n");
 
@@ -54,14 +55,11 @@ function contactBerichtenJsonSchrijf(array $data): bool
     $data['updated']=date('c');
     $json=json_encode($data,JSON_UNESCAPED_UNICODE|JSON_PRETTY_PRINT);
     if($json===false)return false;
-    $pad=contactBerichtenBestandPad();
-    try{$suffix=bin2hex(random_bytes(5));}catch(Throwable $e){return false;}
-    $tmp=$pad.'.tmp.'.$suffix;
-    if(@file_put_contents($tmp,CONTACTBERICHTEN_VOORLOOP.$json,LOCK_EX)===false)return false;
-    @chmod($tmp,0640);
-    if(!@rename($tmp,$pad)){@unlink($tmp);return false;}
-    @chmod($pad,0640);
-    return true;
+    return privateFilesystemAtomischSchrijf(
+        contactBerichtenBestandPad(),
+        CONTACTBERICHTEN_VOORLOOP.$json,
+        0640
+    );
 }
 
 function contactBerichtenLees(): array
@@ -82,7 +80,7 @@ function contactBerichtenPasRetentieToe(array &$data,?int $nu=null): int
         $status=(string)($b['status']??'nieuw');
         $bron=$status==='nieuw'?($b['aangemaakt']??''):($b['afgehandeld_op']??$b['gewijzigd']??$b['aangemaakt']??'');
         $moment=strtotime((string)$bron);
-        return $moment!==false&&$moment>=$grens;
+        return$moment!==false&&$moment>=$grens;
     }));
     return$voor-count($data['berichten']);
 }
