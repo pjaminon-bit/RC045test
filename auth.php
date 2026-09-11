@@ -128,13 +128,10 @@ $dataBackupMaxPerBestand    = 200;
 // oude kopieën van datzelfde bestand op: alles ouder dan $bewaardagen weg,
 // en als er dan nog meer dan $maxPerBestand over zijn, gaan de oudste eruit.
 function maakDataBackup($pad, $backupMap, $bewaardagen, $maxPerBestand) {
-  if (!file_exists($pad)) return; // nieuw bestand, er is nog niets te bewaren
+  if (!file_exists($pad)) return true; // nieuw bestand, er is nog niets te bewaren
+  if (!is_file($pad) || is_link($pad)) return false;
+  if (!privateFilesystemBeveiligMap($backupMap, true)) return false;
 
-  if (!is_dir($backupMap)) {
-    @mkdir($backupMap, 0750, true);
-  }
-  if (!is_dir($backupMap)) return;
-  @chmod($backupMap, 0750);
   $basisnaam = basename($pad);
   // Eén tijdmeting voedt zowel seconden als microseconden. Daardoor kan een
   // secondewisseling tussen twee microtime()-calls nooit een negatieve of
@@ -144,10 +141,10 @@ function maakDataBackup($pad, $backupMap, $bewaardagen, $maxPerBestand) {
   $micro = (int) floor(($nu - $seconde) * 1000000);
   $micro = max(0, min(999999, $micro));
   $doelpad = $backupMap . '/' . date('Y-m-d_His', $seconde) . '_' . sprintf('%06d', $micro) . '_' . $basisnaam;
-  if (@copy($pad, $doelpad)) @chmod($doelpad, 0640);
+  if (!privateFilesystemKopieerBackup($pad, $doelpad)) return false;
 
   $bestanden = @glob($backupMap . '/*_' . $basisnaam);
-  if ($bestanden === false || count($bestanden) === 0) return;
+  if ($bestanden === false || count($bestanden) === 0) return true;
   sort($bestanden); // tijdstempel voorop => alfabetisch is ook chronologisch
 
   $grens = time() - $bewaardagen * 24 * 60 * 60;
@@ -164,6 +161,7 @@ function maakDataBackup($pad, $backupMap, $bewaardagen, $maxPerBestand) {
   for ($i = 0; $i < $teveel; $i++) {
     @unlink($overgebleven[$i]);
   }
+  return true;
 }
 
 // ===== Gebruikers en logboek =====
@@ -178,23 +176,10 @@ function laadGebruikers($pad) {
 function schrijfGebruikers($pad, $gebruikers) {
   global $authBackupMap, $dataBackupBewaardagen, $dataBackupMaxPerBestand;
   if (!authStorageMaakSchrijfmap($pad)) return false;
-  maakDataBackup($pad, $authBackupMap, $dataBackupBewaardagen, $dataBackupMaxPerBestand);
+  if (!maakDataBackup($pad, $authBackupMap, $dataBackupBewaardagen, $dataBackupMaxPerBestand)) return false;
   $json = json_encode($gebruikers, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
   if ($json === false) return false;
-  try {
-    $suffix = bin2hex(random_bytes(4));
-  } catch (Throwable $e) {
-    $suffix = str_replace('.', '', (string) microtime(true));
-  }
-  $tmp = $pad . '.tmp.' . $suffix;
-  if (file_put_contents($tmp, $json, LOCK_EX) === false) return false;
-  @chmod($tmp, 0640);
-  if (!@rename($tmp, $pad)) {
-    @unlink($tmp);
-    return false;
-  }
-  @chmod($pad, 0640);
-  return true;
+  return privateFilesystemAtomischSchrijf($pad, $json, 0640);
 }
 
 // Auditlog is een read-modify-write-bestand. LOCK_EX alleen op de uiteindelijke
@@ -205,7 +190,10 @@ function schrijfLog($pad, $gebruiker, $actie, $details = '') {
   if (!authStorageMaakSchrijfmap($pad)) return false;
   $handvat = @fopen($pad, 'c+');
   if ($handvat === false) return false;
-  @chmod($pad, 0640);
+  if (!privateFilesystemBeveiligBestand($pad, 0640)) {
+    fclose($handvat);
+    return false;
+  }
   if (!flock($handvat, LOCK_EX)) {
     fclose($handvat);
     return false;
@@ -238,7 +226,8 @@ function schrijfLog($pad, $gebruiker, $actie, $details = '') {
     if (!ftruncate($handvat, 0)) return false;
     $geschreven = fwrite($handvat, $json);
     if ($geschreven === false || $geschreven < strlen($json)) return false;
-    return fflush($handvat);
+    if (!fflush($handvat)) return false;
+    return privateFilesystemBeveiligBestand($pad, 0640);
   } finally {
     flock($handvat, LOCK_UN);
     fclose($handvat);
@@ -265,9 +254,7 @@ function schrijfLoginPogingen($pad, $pogingen) {
   if (!authStorageMaakSchrijfmap($pad)) return false;
   $json = json_encode($pogingen, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
   if ($json === false) return false;
-  $ok = file_put_contents($pad, $json, LOCK_EX) !== false;
-  if ($ok) @chmod($pad, 0640);
-  return $ok;
+  return privateFilesystemAtomischSchrijf($pad, $json, 0640);
 }
 
 function loginPogingenSlotOpen() {
@@ -275,7 +262,10 @@ function loginPogingenSlotOpen() {
   if (!authStorageMaakSchrijfmap($loginPogingenSlotBestand)) return false;
   $slot = @fopen($loginPogingenSlotBestand, 'c');
   if ($slot === false) return false;
-  @chmod($loginPogingenSlotBestand, 0640);
+  if (!privateFilesystemBeveiligBestand($loginPogingenSlotBestand, 0640)) {
+    fclose($slot);
+    return false;
+  }
   if (!flock($slot, LOCK_EX)) {
     fclose($slot);
     return false;
