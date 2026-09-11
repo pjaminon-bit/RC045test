@@ -7,6 +7,8 @@
 // een installatie-/tenantprivate tempmap en laat de sessie alleen een random
 // preview-id onthouden.
 
+require_once dirname(__DIR__) . '/storage/private-filesystem.php';
+
 const LEDEN_IMPORT_PREVIEW_SCHEMA = 1;
 const LEDEN_IMPORT_PREVIEW_TTL = 3600;
 const LEDEN_IMPORT_PREVIEW_MAX_RIJEN = 5000;
@@ -79,7 +81,8 @@ function ledenImportPreviewStoreMaakRoot(array $context): bool
 
     // De store kent maximaal twee eigen submappen. Maak iedere component apart
     // zodat een bestaande symlink in de private tempnamespace nooit door een
-    // recursive mkdir wordt gevolgd.
+    // recursive mkdir wordt gevolgd. Iedere eigen map moet aantoonbaar 0750
+    // zijn voordat preview-PII erin mag worden geschreven.
     $rel = substr($root, strlen($boundary) + 1);
     $parts = preg_split('~[/\\\\]+~', $rel, -1, PREG_SPLIT_NO_EMPTY);
     if (!is_array($parts) || $parts === [] || count($parts) > 2) return false;
@@ -88,8 +91,7 @@ function ledenImportPreviewStoreMaakRoot(array $context): bool
         if ($part === '.' || $part === '..') return false;
         $current .= DIRECTORY_SEPARATOR . $part;
         if (is_link($current)) return false;
-        if (!is_dir($current) && !@mkdir($current, 0750) && !is_dir($current)) return false;
-        @chmod($current, 0750);
+        if (!privateFilesystemBeveiligMap($current, true)) return false;
         if (!is_dir($current) || is_link($current)) return false;
     }
 
@@ -290,9 +292,9 @@ function ledenImportPreviewStoreBewaar(array $context, array $preview, ?int $nu 
         $tmp = $root . DIRECTORY_SEPARATOR . '.tmp-' . $suffix;
         $h = @fopen($tmp, 'x+b');
         if ($h === false) continue;
-        @chmod($tmp, 0640);
         $ok = false;
         try {
+            if (!privateFilesystemBeveiligBestand($tmp, 0640)) continue;
             $lengte = strlen($json);
             $offset = 0;
             while ($offset < $lengte) {
@@ -302,16 +304,20 @@ function ledenImportPreviewStoreBewaar(array $context, array $preview, ?int $nu 
             }
             if ($offset === $lengte && fflush($h)) {
                 if (function_exists('fsync')) @fsync($h);
-                $ok = true;
+                $ok = privateFilesystemBeveiligBestand($tmp, 0640);
             }
         } finally {
             fclose($h);
+            if (!$ok) @unlink($tmp);
         }
         if (!$ok || !@rename($tmp, $pad)) {
             @unlink($tmp);
             continue;
         }
-        @chmod($pad, 0640);
+        if (!privateFilesystemBeveiligBestand($pad, 0640)) {
+            @unlink($pad);
+            continue;
+        }
         return $id;
     }
 

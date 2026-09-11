@@ -11,20 +11,33 @@ function privateFilesystemMode(string $pad): ?int
 }
 
 /**
- * Maak zo nodig een private directory aan. Bestaande applicatieparents (zoals
- * /tmp in tests of een bestaande documentroot) worden alleen gevalideerd en
- * nooit door deze helper van mode veranderd. Voor echte private backupdirs kan
- * expliciet worden gevraagd de bestaande directory naar 0750 te harden.
+ * Kleine syscall-seam zodat regressietests een echte chmod-failure kunnen
+ * afdwingen. Een override kan de modecontrole nooit omzeilen: iedere caller
+ * verifieert na een succesvolle return altijd opnieuw de effectieve eindmode.
  */
-function privateFilesystemBeveiligMap(string $map, bool $hardBestaand = false): bool
+if (!function_exists('privateFilesystemChmod')) {
+    function privateFilesystemChmod(string $pad, int $mode): bool
+    {
+        return @chmod($pad, $mode & 0777);
+    }
+}
+
+/**
+ * Maak zo nodig een private directory aan met de gevraagde mode. Bestaande
+ * applicatieparents worden alleen gevalideerd en nooit impliciet gewijzigd;
+ * callers die een private runtime-directory bezitten kunnen met $hardBestaand
+ * de effectieve mode expliciet opnieuw fail-closed afdwingen.
+ */
+function privateFilesystemBeveiligMapMetMode(string $map, int $mode = 0750, bool $hardBestaand = false): bool
 {
-    if (is_link($map)) {
-        error_log('[platform] private opslagmap is een symlink: ' . basename($map));
+    $mode &= 0777;
+    if ($mode === 0 || is_link($map)) {
+        error_log('[platform] private opslagmap is ongeldig of een symlink: ' . basename($map));
         return false;
     }
 
     $bestond = is_dir($map);
-    if (!$bestond && !@mkdir($map, 0750, true) && !is_dir($map)) {
+    if (!$bestond && !@mkdir($map, $mode, true) && !is_dir($map)) {
         error_log('[platform] private opslagmap kon niet worden aangemaakt: ' . basename($map));
         return false;
     }
@@ -32,15 +45,23 @@ function privateFilesystemBeveiligMap(string $map, bool $hardBestaand = false): 
 
     if ($bestond && !$hardBestaand) return true;
 
-    if (!@chmod($map, 0750)) {
-        error_log('[platform] private opslagmap kon niet naar 0750 worden gezet: ' . basename($map));
+    if (!privateFilesystemChmod($map, $mode)) {
+        error_log('[platform] private opslagmap kon niet naar restrictieve mode worden gezet: ' . basename($map));
         return false;
     }
-    if (privateFilesystemMode($map) !== 0750) {
-        error_log('[platform] private opslagmap heeft na chmod niet mode 0750: ' . basename($map));
+    if (privateFilesystemMode($map) !== $mode) {
+        error_log('[platform] private opslagmap heeft na chmod niet de vereiste mode: ' . basename($map));
         return false;
     }
     return true;
+}
+
+/**
+ * Backward-compatible 0750-wrapper voor de bestaande private-storagecallers.
+ */
+function privateFilesystemBeveiligMap(string $map, bool $hardBestaand = false): bool
+{
+    return privateFilesystemBeveiligMapMetMode($map, 0750, $hardBestaand);
 }
 
 function privateFilesystemBeveiligBestand(string $pad, int $mode = 0640): bool
@@ -50,7 +71,7 @@ function privateFilesystemBeveiligBestand(string $pad, int $mode = 0640): bool
         error_log('[platform] private opslagbestand is geen veilig regulier bestand: ' . basename($pad));
         return false;
     }
-    if (!@chmod($pad, $mode)) {
+    if (!privateFilesystemChmod($pad, $mode)) {
         error_log('[platform] private opslagbestand kon niet naar restrictieve mode worden gezet: ' . basename($pad));
         return false;
     }

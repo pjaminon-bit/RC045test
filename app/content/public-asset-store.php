@@ -9,6 +9,7 @@
 
 require_once dirname(__DIR__) . '/core/site.php';
 require_once dirname(__DIR__) . '/storage/tenant-backup-store.php';
+require_once dirname(__DIR__) . '/storage/private-filesystem.php';
 
 function publicAssetDefinities(): array
 {
@@ -264,17 +265,37 @@ function publicAssetMaakNamespaceMap(string $scope): ?string
 {
     $root = publicAssetNamespaceRoot($scope);
     if ($root === null || !publicAssetTenantPadVeilig($root)) return null;
-    $tenant = publicAssetTenantRoot() !== null;
-    if ($tenant) publicAssetMaakPreWriteSnapshot($scope);
-    $mode = $tenant ? 0750 : 0755;
-    if (!is_dir($root) && !@mkdir($root, $mode, true)) return null;
+
+    $tenantRoot = publicAssetTenantRoot();
+    $tenant = $tenantRoot !== null;
+    if ($tenant) {
+        publicAssetMaakPreWriteSnapshot($scope);
+        // Beveilig zowel de gedeelde public-assets-parent als de concrete scope.
+        // Zo kan een permissieve process-umask ook bij eerste aanmaak geen
+        // tussenliggende tenantdirectory world-readable achterlaten.
+        if (!privateFilesystemBeveiligMap($tenantRoot, true)
+            || !privateFilesystemBeveiligMap($root, true)) {
+            return null;
+        }
+    } else {
+        if (!is_dir($root) && !@mkdir($root, 0755, true)) return null;
+    }
+
     clearstatcache(true, $root);
     if (!publicAssetTenantPadVeilig($root) || is_link($root) || !is_dir($root)) return null;
-    if ($tenant) @chmod($root, 0750);
     return $root;
 }
 
 function publicAssetBeveiligBestand(string $pad): void
 {
-    if (publicAssetIsTenantPad($pad) && publicAssetTenantPadVeilig($pad) && is_file($pad) && !is_link($pad)) @chmod($pad, 0640);
+    if (!publicAssetIsTenantPad($pad)) return;
+    if (!publicAssetTenantPadVeilig($pad) || !is_file($pad) || is_link($pad)) {
+        throw new RuntimeException('Tenantasset is niet veilig beschikbaar voor rechtenhardening.');
+    }
+    if (!privateFilesystemBeveiligBestand($pad, 0640)) {
+        // Een nieuw geactiveerd bestand met onbewezen rechten mag niet blijven
+        // bestaan. Verwijderen is fail-closed veiliger dan stil doorpubliceren.
+        @unlink($pad);
+        throw new RuntimeException('Tenantasset kon niet met veilige bestandsrechten worden opgeslagen.');
+    }
 }

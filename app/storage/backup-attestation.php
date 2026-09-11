@@ -10,6 +10,8 @@
 // verplicht en worden legacy schema-1 snapshots fail-closed geweigerd.
 // ============================================================
 
+require_once __DIR__ . '/private-filesystem.php';
+
 function backupAttestatiePublicKeyPad(): string
 {
     if (PHP_SAPI === 'cli') {
@@ -177,7 +179,6 @@ function backupAttestatiePublicKey(): array
     if ($key === false) return [null, null];
     return [$key, hash('sha256', $raw)];
 }
-
 function backupAttestatieOndertekendeStatement(array $attestatie): ?array
 {
     if ((int) ($attestatie['schema'] ?? 0) !== 1
@@ -314,19 +315,20 @@ function backupAttestatieSchrijfSidecar(string $pad, array $attestatie): bool
     if (!is_resource($h)) return false;
     $ok = false;
     try {
+        if (!privateFilesystemBeveiligBestand($tmp, 0640)) return false;
         if (!flock($h, LOCK_EX)) return false;
         $written = fwrite($h, $json);
         if ($written !== strlen($json) || !fflush($h)) return false;
         if (function_exists('fsync') && !fsync($h)) return false;
-        $ok = true;
+        $ok = privateFilesystemBeveiligBestand($tmp, 0640);
     } finally {
         @flock($h, LOCK_UN);
         fclose($h);
         if (!$ok) @unlink($tmp);
     }
-    if (!$ok || !@chmod($tmp, 0640) || !@rename($tmp, $pad)) { @unlink($tmp); return false; }
-    @chmod($pad, 0640);
-    return is_file($pad) && !is_link($pad);
+    if (!$ok || !@rename($tmp, $pad)) { @unlink($tmp); return false; }
+    if (!privateFilesystemBeveiligBestand($pad, 0640)) { @unlink($pad); return false; }
+    return true;
 }
 
 function backupAttestatieMaakData(string $pad, string $tenantKey, string $binding): bool

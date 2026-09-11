@@ -8,6 +8,7 @@
 // modulegrenzen blijven daardoor buiten bereik van het webbeheer.
 // ============================================================
 require_once __DIR__ . '/tenant-runtime.php';
+require_once dirname(__DIR__) . '/storage/private-filesystem.php';
 
 final class TenantSettingsStorageException extends InvalidArgumentException {}
 
@@ -180,22 +181,13 @@ function tenantSettingsSchrijf(array $basisConfig, array $input): bool
 
         $map = dirname($pad);
         if (is_link($map)) return false;
-        if (!is_dir($map) && !@mkdir($map, 0750, true)) return false;
-        clearstatcache(true, $map);
-        if (!is_dir($map) || is_link($map)) return false;
-        @chmod($map, 0750);
+        if (!privateFilesystemBeveiligMap($map, true)) return false;
 
         $data = tenantSettingsNormaliseer($input, $huidig);
         $json = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
         if ($json === false) return false;
+        if (!privateFilesystemAtomischSchrijf($pad, $json, 0640)) return false;
 
-        try { $suffix = bin2hex(random_bytes(6)); }
-        catch (Throwable $e) { $suffix = substr(hash('sha256', (string)microtime(true)), 0, 12); }
-        $tmp = $pad . '.tmp.' . $suffix;
-        if (@file_put_contents($tmp, $json, LOCK_EX) === false) return false;
-        @chmod($tmp, 0640);
-        if (!@rename($tmp, $pad)) { @unlink($tmp); return false; }
-        @chmod($pad, 0640);
         $geslaagd = true;
         return true;
     } finally {

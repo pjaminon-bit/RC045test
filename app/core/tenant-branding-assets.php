@@ -5,6 +5,7 @@
 require_once __DIR__ . '/tenant-runtime.php';
 require_once __DIR__ . '/tenant-settings.php';
 require_once __DIR__ . '/atomic-file-transaction.php';
+require_once dirname(__DIR__) . '/storage/private-filesystem.php';
 
 function tenantBrandingAssetTypes(): array
 {
@@ -142,19 +143,28 @@ function tenantBrandingAssetUpload(array $config, array $upload, string $type): 
     if ($root === null) throw new RuntimeException('Brandinguploads zijn alleen beschikbaar voor tenants met private opslag.');
     tenantBrandingAssetTransactieBegin($config);
     if (is_link($root)) throw new RuntimeException('Brandingopslag is onveilig geconfigureerd.');
-    if (!is_dir($root) && !@mkdir($root, 0750, true)) throw new RuntimeException('Brandingmap kon niet worden aangemaakt.');
-    clearstatcache(true, $root);
-    if (!is_dir($root) || is_link($root)) throw new RuntimeException('Brandingmap is niet veilig beschikbaar.');
-    @chmod($root, 0750);
+    // Branding deelt de public-assets-parent met sponsor-/fotoboekuploads.
+    // Een historisch permissieve parent moet daarom eveneens aantoonbaar 0750
+    // zijn voordat nieuwe brandingbytes worden geschreven.
+    if (!privateFilesystemBeveiligMap(dirname($root), true)
+        || !privateFilesystemBeveiligMap($root, true)) {
+        throw new RuntimeException('Brandingmap kon niet aantoonbaar met private mode worden aangemaakt.');
+    }
 
     $naam = $type . '.' . $ext;
     $doel = $root . DIRECTORY_SEPARATOR . $naam;
     if (is_link($doel)) throw new RuntimeException('Brandingdoel mag geen symlink zijn.');
     $tijdelijk = $doel . '.tmp.' . bin2hex(random_bytes(5));
     if (!@move_uploaded_file($tmp, $tijdelijk)) throw new RuntimeException('Upload kon niet veilig worden opgeslagen.');
-    @chmod($tijdelijk, 0640);
+    if (!privateFilesystemBeveiligBestand($tijdelijk, 0640)) {
+        @unlink($tijdelijk);
+        throw new RuntimeException('Upload kon niet aantoonbaar met private mode worden opgeslagen.');
+    }
     if (!@rename($tijdelijk, $doel)) { @unlink($tijdelijk); throw new RuntimeException('Upload kon niet worden geactiveerd.'); }
-    @chmod($doel, 0640);
+    if (!privateFilesystemBeveiligBestand($doel, 0640)) {
+        @unlink($doel);
+        throw new RuntimeException('Geactiveerde upload heeft niet de vereiste private mode.');
+    }
     tenantBrandingAssetVerwijderVarianten($config, $type, $naam);
     return tenantBrandingAssetUrl($config, $naam);
 }
