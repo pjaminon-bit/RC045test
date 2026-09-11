@@ -5,6 +5,7 @@
 require_once dirname(__DIR__) . '/auth.php';
 require_once dirname(__DIR__) . '/app/core/site.php';
 require_once dirname(__DIR__) . '/app/data-slot.php';
+require_once dirname(__DIR__) . '/app/storage/private-filesystem.php';
 require_once __DIR__ . '/fotoboek-lib.php';
 
 if (!$ingelogd) { header('Location: ../beheer.php'); exit; }
@@ -33,7 +34,7 @@ function fbMaakTenantAlbumMap(string $fotoRoot,string $slug): ?string {
     $map=$fotoRoot.'/'.$slug;$thumbs=$map.'/thumbs';$tenant=publicAssetIsTenantPad($map);$mode=$tenant?0750:0755;
     if(!is_dir($thumbs)&&!@mkdir($thumbs,$mode,true))return null;
     if(is_link($map)||is_link($thumbs)||!is_dir($map)||!is_dir($thumbs))return null;
-    if($tenant){@chmod($map,0750);@chmod($thumbs,0750);}
+    if($tenant&&(!privateFilesystemBeveiligMap($map,true)||!privateFilesystemBeveiligMap($thumbs,true)))return null;
     return $map;
 }
 
