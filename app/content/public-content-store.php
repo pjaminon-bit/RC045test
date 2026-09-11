@@ -9,6 +9,7 @@
 
 require_once dirname(__DIR__) . '/core/site.php';
 require_once dirname(__DIR__) . '/storage/tenant-backup-store.php';
+require_once dirname(__DIR__) . '/storage/private-filesystem.php';
 
 function publicContentDefinities(): array
 {
@@ -221,19 +222,10 @@ function publicContentSchrijfTenant(string $sleutel, array $data, bool $maakBack
     }
 
     $map = dirname($pad);
-    if (!is_dir($map) && !@mkdir($map, 0750, true)) return false;
-    clearstatcache(true, $map);
-    if (!is_dir($map) || is_link($map) || !tenantBackupPadVeilig($map)) return false;
-    @chmod($map, 0750);
+    if (!privateFilesystemBeveiligMap($map, true) || !tenantBackupPadVeilig($map)) return false;
 
     $json = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
     if ($json === false) return false;
-    try { $suffix = bin2hex(random_bytes(5)); }
-    catch (Throwable $e) { $suffix = substr(hash('sha256', (string) microtime(true)), 0, 10); }
-    $tmp = $pad . '.tmp.' . $suffix;
-    if (!tenantBackupPadVeilig($tmp) || @file_put_contents($tmp, $json, LOCK_EX) === false) return false;
-    @chmod($tmp, 0640);
-    if (!tenantBackupPadVeilig($pad) || !@rename($tmp, $pad)) { @unlink($tmp); return false; }
-    @chmod($pad, 0640);
-    return true;
+    if (!tenantBackupPadVeilig($pad)) return false;
+    return privateFilesystemAtomischSchrijf($pad, $json, 0640);
 }
