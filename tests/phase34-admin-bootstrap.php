@@ -173,10 +173,14 @@ try {
     $scriptBron = (string)file_get_contents($bootstrap);
     check34(str_contains($scriptBron, '--password-stdin') && !str_contains($scriptBron, "getopt('', ['password:"), 'bootstrapcontract heeft geen plaintext password-optie');
     check34(str_contains($scriptBron, 'password_hash($wachtwoord, PASSWORD_DEFAULT)'), 'bootstrap gebruikt PHP password_hash met PASSWORD_DEFAULT');
-    check34(str_contains($scriptBron, 'flock($lock, LOCK_EX)') && str_contains($scriptBron, 'rename($tmp, $masterPad)'), 'bootstrap serializeert writes en plaatst masterconfig atomisch');
+    check34(
+        str_contains($scriptBron, 'flock($lock, LOCK_EX)')
+        && str_contains($scriptBron, "require_once dirname(__DIR__) . '/app/storage/private-filesystem.php'")
+        && str_contains($scriptBron, 'privateFilesystemAtomischSchrijf($masterPad, $inhoud, 0640)'),
+        'bootstrap serializeert writes en gebruikt centrale atomische fail-closed private writer'
+    );
 } finally {
     rr34($tmp);
 }
-
 echo "Phase 3.4 admin bootstrap: {$ok} OK, {$fout} fout(en)\n";
 exit($fout === 0 ? 0 : 1);
