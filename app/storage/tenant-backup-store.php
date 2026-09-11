@@ -250,7 +250,7 @@ function tenantBackupHardenGebruikersHerstel(array $hersteld): array
 
     foreach ($hersteld as $i => $account) {
         if (!is_array($account)) continue;
-        $naam = strtolower(trim((string)($account['gebruikersnaam'] ?? ''));
+        $naam = strtolower(trim((string)($account['gebruikersnaam'] ?? '')));
         $snapshotVersie = max(1, (int)($account['sessie_versie'] ?? 1));
         $actueel = $naam !== '' ? max(1, (int)($versies[$naam] ?? 1)) : 1;
         $basis = max($snapshotVersie, $actueel);
