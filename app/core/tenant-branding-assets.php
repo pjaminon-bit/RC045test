@@ -143,7 +143,13 @@ function tenantBrandingAssetUpload(array $config, array $upload, string $type): 
     if ($root === null) throw new RuntimeException('Brandinguploads zijn alleen beschikbaar voor tenants met private opslag.');
     tenantBrandingAssetTransactieBegin($config);
     if (is_link($root)) throw new RuntimeException('Brandingopslag is onveilig geconfigureerd.');
-    if (!privateFilesystemBeveiligMap($root, true)) throw new RuntimeException('Brandingmap kon niet aantoonbaar met private mode worden aangemaakt.');
+    // Branding deelt de public-assets-parent met sponsor-/fotoboekuploads.
+    // Een historisch permissieve parent moet daarom eveneens aantoonbaar 0750
+    // zijn voordat nieuwe brandingbytes worden geschreven.
+    if (!privateFilesystemBeveiligMap(dirname($root), true)
+        || !privateFilesystemBeveiligMap($root, true)) {
+        throw new RuntimeException('Brandingmap kon niet aantoonbaar met private mode worden aangemaakt.');
+    }
 
     $naam = $type . '.' . $ext;
     $doel = $root . DIRECTORY_SEPARATOR . $naam;
