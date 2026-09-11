@@ -8,6 +8,7 @@ if (PHP_SAPI !== 'cli') {
 }
 
 require_once dirname(__DIR__) . '/app/deployment/runtime-contract.php';
+require_once dirname(__DIR__) . '/app/storage/private-filesystem.php';
 
 function prepare41Stop(string $melding, int $code = 1): void
 {
@@ -34,11 +35,14 @@ function prepare41Help(): void
 function prepare41SchrijfAtomisch(string $pad, string $inhoud, bool $force): string
 {
     $map = dirname($pad);
-    if (!is_dir($map) || is_link($map)) prepare41Stop('Runtime outputmap is niet veilig beschikbaar.');
+    if (!is_dir($map) || is_link($map) || !privateFilesystemBeveiligMap($map, true)) prepare41Stop('Runtime outputmap is niet veilig beschikbaar op mode 0750.');
     if (is_link($pad)) prepare41Stop('Runtimebundle mag geen symlinkdoel overschrijven.');
     if (is_file($pad)) {
         $huidig = (string)file_get_contents($pad);
-        if (hash_equals(hash('sha256', $huidig), hash('sha256', $inhoud))) return 'ongewijzigd';
+        if (hash_equals(hash('sha256', $huidig), hash('sha256', $inhoud))) {
+            if (!privateFilesystemBeveiligBestand($pad, 0640)) prepare41Stop('Ongewijzigd runtimeartifact kon niet veilig op 0640 worden gezet.');
+            return 'ongewijzigd';
+        }
         if (!$force) prepare41Stop('Runtimebundle bestaat al met andere inhoud; gebruik --force na controle.');
     } elseif (file_exists($pad)) {
         prepare41Stop('Runtimebundledoel bestaat maar is geen regulier bestand.');
@@ -46,11 +50,11 @@ function prepare41SchrijfAtomisch(string $pad, string $inhoud, bool $force): str
     $tmp = $map . '/.' . basename($pad) . '.tmp.' . bin2hex(random_bytes(8));
     if (is_link($tmp) || runtime41SymlinkInPad($tmp) !== null) prepare41Stop('Onveilig tijdelijk runtimebundlepad.');
     if (@file_put_contents($tmp, $inhoud, LOCK_EX) === false) prepare41Stop('Runtimebundle kon niet tijdelijk worden geschreven.');
-    @chmod($tmp, 0640);
+    if (!privateFilesystemBeveiligBestand($tmp, 0640)) { @unlink($tmp); prepare41Stop('Tijdelijk runtimeartifact kon niet veilig op 0640 worden gezet.'); }
     clearstatcache(true, $pad);
     if (is_link($pad)) { @unlink($tmp); prepare41Stop('Runtimebundledoel werd tijdens write een symlink.'); }
     if (!@rename($tmp, $pad)) { @unlink($tmp); prepare41Stop('Runtimebundle kon niet atomisch worden geplaatst.'); }
-    @chmod($pad, 0640);
+    if (!privateFilesystemBeveiligBestand($pad, 0640)) prepare41Stop('Runtimeartifact heeft na plaatsing niet de vereiste mode.');
     return 'geschreven';
 }
 
@@ -92,7 +96,7 @@ if (!is_dir($outputDir)) {
     catch (Throwable $e) { prepare41Stop($e->getMessage()); }
     if (!@mkdir($outputDir, 0750) && !is_dir($outputDir)) prepare41Stop('Runtime outputmap kon niet worden aangemaakt.');
 }
-@chmod($outputDir, 0750);
+if (!privateFilesystemBeveiligMap($outputDir, true)) prepare41Stop('Runtime outputmap kon niet veilig op 0750 worden gezet.');
 try {
     $outputDirReal = runtime41BestaandPad($outputDir, 'Runtime outputmap', true);
     if (!runtime41Binnen($outputDirReal, $deployment['tenant_root'])) prepare41Stop('Runtime outputmap valt buiten de tenantroot.');
