@@ -8,6 +8,7 @@ if (PHP_SAPI !== 'cli') {
 }
 
 require_once dirname(__DIR__) . '/app/deployment/database-contract.php';
+require_once dirname(__DIR__) . '/app/storage/private-filesystem.php';
 
 function prepare45Stop(string $melding, int $code = 1): void
 {
@@ -29,14 +30,9 @@ function prepare45SchrijfAtomisch(string $pad, string $inhoud): void
     $map = dirname($pad);
     if (!is_dir($map) || is_link($map)) prepare45Stop('Database outputmap is niet veilig beschikbaar.');
     if (is_link($pad)) prepare45Stop('Databaseartifact mag geen symlinkdoel overschrijven: ' . $pad);
-    $tmp = $map . '/.' . basename($pad) . '.tmp.' . bin2hex(random_bytes(8));
-    if (runtime41SymlinkInPad($tmp) !== null) prepare45Stop('Onveilig tijdelijk databaseartifactpad.');
-    if (@file_put_contents($tmp, $inhoud, LOCK_EX) === false) prepare45Stop('Databaseartifact kon niet tijdelijk worden geschreven.');
-    @chmod($tmp, 0640);
-    clearstatcache(true, $pad);
-    if (is_link($pad)) { @unlink($tmp); prepare45Stop('Databaseartifactdoel werd tijdens write een symlink.'); }
-    if (!@rename($tmp, $pad)) { @unlink($tmp); prepare45Stop('Databaseartifact kon niet atomisch worden geplaatst.'); }
-    @chmod($pad, 0640);
+    if (!privateFilesystemAtomischSchrijf($pad, $inhoud, 0640)) {
+        prepare45Stop('Databaseartifact kon niet atomisch met restrictieve mode worden geplaatst.');
+    }
 }
 
 foreach ($_SERVER['argv'] ?? [] as $arg) {
@@ -72,9 +68,10 @@ if (!is_dir($outputDir)) {
     $parent = dirname($outputDir);
     try { runtime41BestaandPad($parent, 'Parent van database outputmap', true); }
     catch (Throwable $e) { prepare45Stop($e->getMessage()); }
-    if (!@mkdir($outputDir, 0750) && !is_dir($outputDir)) prepare45Stop('Database outputmap kon niet worden aangemaakt.');
 }
-@chmod($outputDir, 0750);
+if (!privateFilesystemBeveiligMap($outputDir, true)) {
+    prepare45Stop('Database outputmap kon niet met restrictieve mode worden aangemaakt of gehard.');
+}
 try {
     $real = runtime41BestaandPad($outputDir, 'Database outputmap', true);
     if (!hash_equals(runtime41NormPad($real), runtime41NormPad($context['tenant_root'] . '/database'))) {
@@ -92,6 +89,8 @@ foreach ($bestanden as $pad => $inhoud) {
         if (!hash_equals(hash('sha256', $huidig), hash('sha256', $inhoud))) {
             if (!$force) prepare45Stop('Databasebundle wijkt af; gebruik --force pas na controle. Afwijking: ' . basename($pad));
             $wijzigingen[$pad] = $inhoud;
+        } elseif (!privateFilesystemBeveiligBestand($pad, 0640)) {
+            prepare45Stop('Ongewijzigd databaseartifact kon niet naar restrictieve mode worden gezet: ' . basename($pad));
         }
     } elseif (file_exists($pad)) {
         prepare45Stop('Databaseartifactdoel bestaat maar is geen regulier bestand: ' . $pad);
