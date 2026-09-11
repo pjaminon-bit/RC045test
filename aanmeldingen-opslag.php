@@ -32,11 +32,11 @@ function aanmeldenPogingenPad(): string
 {
     $config=require __DIR__.'/site-config.php';
     $privateRoot=tenantRuntimePrivateRoot(is_array($config)?$config:[]);
-    if($privateRoot!==null)return $privateRoot.DIRECTORY_SEPARATOR.'security'.DIRECTORY_SEPARATOR.'aanmelden-pogingen.json';
-
-    $map=__DIR__.DIRECTORY_SEPARATOR.'data-backups';
-    if(!is_dir($map)&&!is_link($map)&&!file_exists($map)){
-        if(@mkdir($map,0750,true))@chmod($map,0750);
+    $map=$privateRoot!==null
+        ?$privateRoot.DIRECTORY_SEPARATOR.'security'
+        :__DIR__.DIRECTORY_SEPARATOR.'data-backups';
+    if(!privateFilesystemBeveiligMap($map,true)){
+        throw new RuntimeException('Aanmeld-rate-limitopslag kon niet naar restrictieve directorymode worden gezet.');
     }
     return $map.DIRECTORY_SEPARATOR.'aanmelden-pogingen.json';
 }
