@@ -2,6 +2,7 @@
 if (PHP_SAPI !== 'cli') { http_response_code(403); exit('Alleen via CLI beschikbaar.'); }
 require_once dirname(__DIR__) . '/app/deployment/control-plane-contract.php';
 require_once dirname(__DIR__) . '/app/deployment/root-release-boundary.php';
+require_once dirname(__DIR__) . '/app/storage/private-filesystem.php';
 
 function cp51Stop(string $m, int $c = 1): never { fwrite(STDERR, "FOUT: {$m}\n"); exit($c); }
 foreach ($_SERVER['argv'] ?? [] as $a) {
@@ -42,21 +43,24 @@ try {
     if (isset($o['dry-run'])) { echo control51Json($plan); exit(0); }
     $dir = (string)$plan['bundle']['output_dir'];
     if (!is_dir($dir) && !@mkdir($dir, 0750, true) && !is_dir($dir)) throw new RuntimeException('Outputmap kon niet worden aangemaakt.');
-    if (runtime41SymlinkInPad($dir) !== null) throw new RuntimeException('Outputmap bevat een symlink.');
+    if (runtime41SymlinkInPad($dir) !== null || !privateFilesystemBeveiligMap($dir, true)) throw new RuntimeException('Outputmap kon niet veilig op 0750 worden gezet.');
     $artifacts = control51Artifacts($plan);
     $files = $artifacts + [$plan['bundle']['plan_file'] => control51Json($plan)];
     foreach ($files as $pad => $inhoud) {
         if (is_link($pad)) throw new RuntimeException('Outputdoel is een symlink: ' . $pad);
         if (is_file($pad)) {
             $actueel = @file_get_contents($pad);
-            if (is_string($actueel) && hash_equals(hash('sha256',$actueel), hash('sha256',$inhoud))) continue;
+            if (is_string($actueel) && hash_equals(hash('sha256',$actueel), hash('sha256',$inhoud))) {
+                if (!privateFilesystemBeveiligBestand($pad, 0640)) throw new RuntimeException('Bestaand control-plane artifact kon niet veilig op 0640 worden gezet: ' . $pad);
+                continue;
+            }
             if (!isset($o['force'])) throw new RuntimeException('Bestaand control-plane artifact wijkt af; gebruik alleen bewust --force: ' . $pad);
         }
         $tmp = dirname($pad) . '/.' . basename($pad) . '.tmp.' . bin2hex(random_bytes(5));
         if (@file_put_contents($tmp, $inhoud, LOCK_EX) === false) throw new RuntimeException('Tijdelijke write faalde: ' . $pad);
-        @chmod($tmp, 0640);
+        if (!privateFilesystemBeveiligBestand($tmp, 0640)) { @unlink($tmp); throw new RuntimeException('Tijdelijk control-plane artifact kon niet veilig op 0640 worden gezet: ' . $pad); }
         if (!@rename($tmp, $pad)) { @unlink($tmp); throw new RuntimeException('Artifact kon niet atomisch worden geplaatst: ' . $pad); }
-        @chmod($pad, 0640);
+        if (!privateFilesystemBeveiligBestand($pad, 0640)) throw new RuntimeException('Control-plane artifact heeft na plaatsing niet de vereiste mode: ' . $pad);
     }
     echo 'CONTROL-PLANE BUNDLE OK host=' . $plan['host'] . ' output=' . $dir . "\n";
 } catch (Throwable $e) { cp51Stop($e->getMessage()); }
