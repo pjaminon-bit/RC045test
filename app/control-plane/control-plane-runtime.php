@@ -3,6 +3,8 @@
 // Deze laag leest alleen de veilige snapshot en schrijft strikt geschematiseerde
 // verzoeken. Er staan bewust geen proc_open/exec/system/shell_exec-aanroepen in.
 
+require_once dirname(__DIR__) . '/storage/private-filesystem.php';
+
 function cp51Fail(string $intern, int $status = 503): never
 {
     error_log('[control-plane] ' . $intern);
@@ -242,10 +244,22 @@ function cp51QueueSchrijf(array $r): string
     $pad = $dir . '/' . $id . '.json';
     $h = @fopen($pad, 'x');
     if (!is_resource($h)) throw new RuntimeException('Aanvraag kon niet exclusief worden aangemaakt.');
+    $geslaagd = false;
     try {
-        if (!flock($h, LOCK_EX) || fwrite($h, $json . "\n") === false || !fflush($h)) throw new RuntimeException('Aanvraagwrite faalde.');
-    } finally { fclose($h); }
-    @chmod($pad, 0640);
+        if (!privateFilesystemBeveiligBestand($pad, 0640)) {
+            throw new RuntimeException('Aanvraagbestand kon niet veilig worden afgeschermd.');
+        }
+        if (!flock($h, LOCK_EX) || fwrite($h, $json . "\n") === false || !fflush($h)) {
+            throw new RuntimeException('Aanvraagwrite faalde.');
+        }
+        if (!privateFilesystemBeveiligBestand($pad, 0640)) {
+            throw new RuntimeException('Aanvraagbestand verloor de vereiste private mode tijdens de write.');
+        }
+        $geslaagd = true;
+    } finally {
+        fclose($h);
+        if (!$geslaagd) @unlink($pad);
+    }
     return $id;
 }
 
