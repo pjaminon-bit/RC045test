@@ -8,6 +8,7 @@ if (PHP_SAPI !== 'cli') {
 }
 
 require_once dirname(__DIR__) . '/app/deployment/dns-contract.php';
+require_once dirname(__DIR__) . '/app/storage/private-filesystem.php';
 
 function prepare43Stop(string $melding, int $code = 1): void
 {
@@ -39,19 +40,17 @@ function prepare43SchrijfAtomisch(string $pad, string $inhoud, bool $force): str
     if (is_file($pad)) {
         $huidig = @file_get_contents($pad);
         if (!is_string($huidig)) prepare43Stop('Bestaand DNS-plan is niet leesbaar.');
-        if (hash_equals(hash('sha256', $huidig), hash('sha256', $inhoud))) return 'ongewijzigd';
+        if (hash_equals(hash('sha256', $huidig), hash('sha256', $inhoud))) {
+            if (!privateFilesystemBeveiligBestand($pad, 0640)) prepare43Stop('Ongewijzigd DNS-plan kon niet naar restrictieve mode worden gezet.');
+            return 'ongewijzigd';
+        }
         if (!$force) prepare43Stop('dns-plan.json bestaat al met andere inhoud; gebruik --force na controle.');
     } elseif (file_exists($pad)) {
         prepare43Stop('DNS-plandoel bestaat maar is geen regulier bestand.');
     }
-    $tmp = $map . '/.' . basename($pad) . '.tmp.' . bin2hex(random_bytes(8));
-    if (runtime41SymlinkInPad($tmp) !== null) prepare43Stop('Onveilig tijdelijk DNS-planpad.');
-    if (@file_put_contents($tmp, $inhoud, LOCK_EX) === false) prepare43Stop('DNS-plan kon niet tijdelijk worden geschreven.');
-    @chmod($tmp, 0640);
-    clearstatcache(true, $pad);
-    if (is_link($pad)) { @unlink($tmp); prepare43Stop('DNS-plandoel werd tijdens write een symlink.'); }
-    if (!@rename($tmp, $pad)) { @unlink($tmp); prepare43Stop('DNS-plan kon niet atomisch worden geplaatst.'); }
-    @chmod($pad, 0640);
+    if (!privateFilesystemAtomischSchrijf($pad, $inhoud, 0640)) {
+        prepare43Stop('DNS-plan kon niet atomisch met restrictieve mode worden geplaatst.');
+    }
     return 'geschreven';
 }
 
@@ -91,9 +90,10 @@ if (!is_dir($outputDir)) {
     $parent = dirname($outputDir);
     try { runtime41BestaandPad($parent, 'Parent van DNS outputmap', true); }
     catch (Throwable $e) { prepare43Stop($e->getMessage()); }
-    if (!@mkdir($outputDir, 0750) && !is_dir($outputDir)) prepare43Stop('DNS outputmap kon niet worden aangemaakt.');
 }
-@chmod($outputDir, 0750);
+if (!privateFilesystemBeveiligMap($outputDir, true)) {
+    prepare43Stop('DNS outputmap kon niet met restrictieve mode worden aangemaakt of gehard.');
+}
 try {
     $real = runtime41BestaandPad($outputDir, 'DNS outputmap', true);
     if (!runtime41Binnen($real, $context['tenant_root'])) prepare43Stop('DNS outputmap valt buiten de tenantroot.');
