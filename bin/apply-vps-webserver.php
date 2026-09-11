@@ -63,6 +63,16 @@ function apply42Run(array $cmd): array
     return process521Run($cmd, null, null, null, 300);
 }
 
+function apply42RootMeta(string $pad, int $mode, bool $map = false): void
+{
+    clearstatcache(true, $pad);
+    $meta = @lstat($pad);
+    if (!is_array($meta) || is_link($pad) || ($map ? !is_dir($pad) : !is_file($pad))
+        || (int)$meta['uid'] !== 0 || (int)$meta['gid'] !== 0 || (((int)$meta['mode'] & 0777) !== ($mode & 0777))) {
+        apply42Stop('Apache root:root metadata wijkt af: ' . $pad);
+    }
+}
+
 function apply42ApachePreflight(array $plan): void
 {
     $binary=(string)$plan['apache']['control_binary'];
@@ -111,9 +121,13 @@ function apply42VastePaden(array $plan): array
     }
     try { $fragmentDir = runtime41BestaandPad($fragmentDir, 'Apache fragmentmap', true); }
     catch (Throwable $e) { apply42Stop($e->getMessage()); }
-    @chown(dirname(dirname($fragmentDir)), 'root'); @chgrp(dirname(dirname($fragmentDir)), 'root');
-    @chown(dirname($fragmentDir), 'root'); @chgrp(dirname($fragmentDir), 'root');
-    @chown($fragmentDir, 'root'); @chgrp($fragmentDir, 'root'); @chmod($fragmentDir, 0755);
+    foreach ([dirname(dirname($fragmentDir)), dirname($fragmentDir)] as $parent) {
+        if (!@chown($parent, 'root') || !@chgrp($parent, 'root')) apply42Stop('Apache fragmentparent kon niet root-owned worden gemaakt: ' . $parent);
+    }
+    if (!@chown($fragmentDir, 'root') || !@chgrp($fragmentDir, 'root') || !@chmod($fragmentDir, 0755)) {
+        apply42Stop('Apache fragmentmap kon niet exact root:root 0755 worden gemaakt.');
+    }
+    apply42RootMeta($fragmentDir, 0755, true);
 
     return compact('sitesAvailable', 'sitesEnabled', 'fragmentDir');
 }
@@ -148,7 +162,11 @@ function apply42SchrijfRootAtomisch(string $doel, string $inhoud, bool $force, ?
     if (is_file($doel)) {
         $huidig = @file_get_contents($doel);
         if (!is_string($huidig)) apply42Stop("Bestaand Apache-bestand is niet leesbaar: {$doel}");
-        if (hash_equals(hash('sha256', $huidig), hash('sha256', $inhoud))) return 'ongewijzigd';
+        if (hash_equals(hash('sha256', $huidig), hash('sha256', $inhoud))) {
+            if (!@chown($doel, 'root') || !@chgrp($doel, 'root') || !@chmod($doel, 0644)) apply42Stop('Ongewijzigde Apache-config kon niet naar root:root 0644 worden genormaliseerd.');
+            apply42RootMeta($doel, 0644);
+            return 'ongewijzigd';
+        }
         if ($actief) apply42Stop('Afwijkend Apache-sitebestand is al actief; fase 4.2 wijzigt nooit live sites-enabled configuratie.');
         if (!$force) apply42Stop('Afwijkend INACTIEF Apache-bestand bestaat al; gebruik --force na controle.');
     } elseif (file_exists($doel)) {
@@ -163,12 +181,14 @@ function apply42SchrijfRootAtomisch(string $doel, string $inhoud, bool $force, ?
     if (!@chown($tmp, 'root') || !@chgrp($tmp, 'root') || !@chmod($tmp, 0644)) {
         @unlink($tmp); apply42Stop('Tijdelijke Apache-config kreeg niet de verplichte root:root 0644 rechten.');
     }
+    apply42RootMeta($tmp, 0644);
     clearstatcache(true, $doel);
     if (is_link($doel)) { @unlink($tmp); apply42Stop('Apache installatiedoel werd tijdens write een symlink.'); }
     if (!@rename($tmp, $doel)) { @unlink($tmp); apply42Stop('Apache-config kon niet atomisch worden geplaatst.'); }
     if (!@chown($doel, 'root') || !@chgrp($doel, 'root') || !@chmod($doel, 0644)) {
         apply42Stop('Geïnstalleerde Apache-config kreeg niet de verplichte root:root 0644 rechten.');
     }
+    apply42RootMeta($doel, 0644);
     return 'geschreven';
 }
 
@@ -233,10 +253,7 @@ function apply42LiveFragment(array $context, array $dirs, array $doelen): void
 
     if (@filetype($socket) !== 'socket') apply42Stop('Live-fragment vereist een actieve tenant PHP-FPM socket.');
     if (!is_file($doel) || is_link($doel)) apply42Stop('Geïnstalleerd live routingfragment ontbreekt of is geen regulier bestand.');
-    $meta = @lstat($doel);
-    if (!is_array($meta) || (int)$meta['uid'] !== 0 || (int)$meta['gid'] !== 0 || (((int)$meta['mode'] & 0777) !== 0644)) {
-        apply42Stop('Geïnstalleerd live routingfragment wijkt af van root:root 0644.');
-    }
+    apply42RootMeta($doel, 0644);
     if (!is_file($bron) || is_link($bron)) apply42Stop('Gebonden tenant-routingfragmentbron ontbreekt of is onveilig.');
 
     apply42LiveHttpsVhost($plan, $dirs, $doel);
@@ -262,6 +279,7 @@ function apply42LiveFragment(array $context, array $dirs, array $doelen): void
     if (!@chown($tmp, 'root') || !@chgrp($tmp, 'root') || !@chmod($tmp, 0644)) {
         @unlink($tmp); apply42Stop('Tijdelijk live routingfragment kreeg niet root:root 0644.');
     }
+    apply42RootMeta($tmp, 0644);
 
     clearstatcache(true, $doel);
     if (!is_file($doel) || is_link($doel)) {
@@ -270,6 +288,7 @@ function apply42LiveFragment(array $context, array $dirs, array $doelen): void
     if (!@rename($tmp, $doel)) {
         @unlink($tmp); apply42Stop('Live routingfragment kon niet atomisch worden vervangen.');
     }
+    apply42RootMeta($doel, 0644);
 
     [$naOk, $naMelding] = apply42Configtest($plan);
     if (!$naOk) {
