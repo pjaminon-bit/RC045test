@@ -49,19 +49,26 @@ jobs:
           php -v
           node --version
           npm --version
-          composer --version
 
-      - name: Installeer dev-tooling
+      - name: Installeer checksum-gepinde PHPStan
         shell: bash
         run: |
           set -euo pipefail
-          composer install --no-interaction --no-progress --prefer-dist
+          versie='2.2.13'
+          verwacht='a3293d850a9966fbef43e39d04f2b081b8eec35839126c43a54684f21b10ad69'
+          phpstan="$RUNNER_TEMP/phpstan-${versie}.phar"
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+            "https://github.com/phpstan/phpstan/releases/download/${versie}/phpstan.phar" \
+            --output "$phpstan"
+          printf '%s  %s\n' "$verwacht" "$phpstan" | sha256sum --check --strict
+          chmod 0555 "$phpstan"
+          printf 'PHPSTAN_PHAR=%s\n' "$phpstan" >> "$GITHUB_ENV"
 
       - name: PHPStan
         shell: bash
         run: |
           set -euo pipefail
-          composer analyse
+          php "$PHPSTAN_PHAR" analyse --configuration=phpstan.neon --no-progress --memory-limit=1G
 
       - name: Syntax volledige repository
         shell: bash
