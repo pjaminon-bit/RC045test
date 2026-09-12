@@ -7,7 +7,53 @@ require_once dirname(__DIR__) . '/storage/domein-repositories.php';
 require_once __DIR__ . '/lidmaatschap.php';
 require_once __DIR__ . '/account-binding.php';
 function ledenServiceLees(): array{return repoLedenLees();}
-function ledenServiceSchrijf(array $data,bool $backup=true): bool{return repoLedenSchrijf($data,$backup);}
+function ledenServiceLidmaatschapToewijzingGeldig(array $lid,?array $bestaand,?array $type,int $jaar): bool
+{
+    $typeId=trim((string)($lid['lidmaatschap_type']??''));
+    if($typeId==='')return true;
+    $geboortedatum=trim((string)($lid['geboortedatum']??''));
+    if(is_array($bestaand)){
+        $oudeTypeId=trim((string)($bestaand['lidmaatschap_type']??''));
+        $oudeGeboortedatum=trim((string)($bestaand['geboortedatum']??''));
+        if($typeId===$oudeTypeId&&$geboortedatum===$oudeGeboortedatum)return true;
+    }
+    if(!is_array($type)||trim((string)($type['id']??''))!==$typeId)return false;
+    $leeftijd=ledenLeeftijd($geboortedatum,$jaar.'-01-01');
+    return lidmaatschapTypeToegestaanVoorLeeftijd($type,$leeftijd);
+}
+function ledenServiceLidmaatschappenGeldig(array $nieuw,array $oud,?int $jaar=null,?callable $typeResolver=null): bool
+{
+    $jaar=$jaar??(int)date('Y');
+    $typeResolver=$typeResolver??static fn(string $id): ?array=>lidmaatschapTypeOpId($id);
+    $oudeOpId=[];
+    foreach((array)($oud['leden']??[]) as $lid){
+        if(!is_array($lid))continue;
+        $id=trim((string)($lid['id']??''));
+        if($id!=='')$oudeOpId[$id]=$lid;
+    }
+    foreach((array)($nieuw['leden']??[]) as $lid){
+        if(!is_array($lid))continue;
+        $id=trim((string)($lid['id']??''));
+        $bestaand=$id!==''&&isset($oudeOpId[$id])?$oudeOpId[$id]:null;
+        $typeId=trim((string)($lid['lidmaatschap_type']??''));
+        $type=null;
+        if($typeId!==''&&!is_array($bestaand))$type=$typeResolver($typeId);
+        elseif($typeId!==''&&is_array($bestaand)){
+            $oudeTypeId=trim((string)($bestaand['lidmaatschap_type']??''));
+            $geboortedatum=trim((string)($lid['geboortedatum']??''));
+            $oudeGeboortedatum=trim((string)($bestaand['geboortedatum']??''));
+            if($typeId!==$oudeTypeId||$geboortedatum!==$oudeGeboortedatum)$type=$typeResolver($typeId);
+        }
+        if(!ledenServiceLidmaatschapToewijzingGeldig($lid,$bestaand,$type,$jaar))return false;
+    }
+    return true;
+}
+function ledenServiceSchrijf(array $data,bool $backup=true): bool
+{
+    $bestaand=repoLedenLees();
+    if(!ledenServiceLidmaatschappenGeldig($data,$bestaand))return false;
+    return repoLedenSchrijf($data,$backup);
+}
 function ledenServiceUserId(array $lid): string{$id=trim((string)($lid['user_id']??''));if($id!=='')return$id;$naam=trim((string)($lid['beheer_account']??''));if($naam==='')return'';$r=authGebruikerRecordOpNaam($naam);return is_array($r)?authGebruikerId($r):'';}
 function ledenServiceVindVoorAccount(string $userId,string $gebruikersnaam=''): ?array{$userId=trim($userId);$gebruikersnaam=trim($gebruikersnaam);foreach((array)(ledenServiceLees()['leden']??[]) as $lid){if(!is_array($lid)||!empty($lid['gearchiveerd_op']))continue;if(ledenAccountKoppelingMatcht($lid,$userId,$gebruikersnaam))return$lid;}return null;}
 function ledenServiceAccountVerwijderBlokkades(string $userId,string $gebruikersnaam): array{return ledenAccountVerwijderBlokkades((array)(ledenServiceLees()['leden']??[]),trim($userId),trim($gebruikersnaam));}
