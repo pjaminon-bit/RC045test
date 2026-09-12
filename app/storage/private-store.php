@@ -4,6 +4,7 @@
 // ============================================================
 require_once dirname(__DIR__) . '/core/tenant-runtime.php';
 require_once dirname(__DIR__) . '/core/atomic-file-transaction.php';
+require_once dirname(__DIR__) . '/operational-log.php';
 require_once __DIR__ . '/tenant-backup-store.php';
 require_once __DIR__ . '/private-store-prewrite.php';
 require_once __DIR__ . '/private-filesystem.php';
@@ -21,6 +22,16 @@ function privateStoreDriver(): string
 }
 function privateStoreJsonRoot(): ?string{return tenantRuntimePrivateRoot(privateStoreConfig());}
 function privateStoreBackupSleutel(string $collectie): string{return'private-'.tenantRuntimeCollectieSleutel($collectie);}
+
+function privateStoreRapporteerException(string $event, Throwable $exception): void
+{
+    $config=null;
+    try{$config=privateStoreConfig();}catch(Throwable $ignored){}
+    vpOps46ReportException($config,$event,$exception,[
+        'component'=>'private_store',
+        'code'=>$event,
+    ]);
+}
 
 /**
  * Iedere bestaande tenantcollectie moet vóór overschrijven aantoonbaar een
@@ -136,7 +147,7 @@ function privateStoreJsonTransactieRollback(): bool
         try{
             if(!atomicFileTxRollback($context['snapshots'][$pad]))$ok=false;
         }catch(Throwable $e){
-            error_log('[platform] private JSON transaction rollback mislukt voor een opslagdoel: '.$e->getMessage());
+            privateStoreRapporteerException('private_store_json_rollback_failure',$e);
             $ok=false;
         }
     }
@@ -155,7 +166,7 @@ function privateStoreJsonTransactieCommit(): bool
         try{
             if(!atomicFileTxCommit($context['snapshots'][$pad]))$ok=false;
         }catch(Throwable $e){
-            error_log('[platform] private JSON transaction stagingcleanup mislukt: '.$e->getMessage());
+            privateStoreRapporteerException('private_store_json_cleanup_failure',$e);
             $ok=false;
         }
     }
@@ -223,8 +234,7 @@ function privateStorePdo(): PDO
         return$pdo;
     }
     catch(Throwable $e){
-        if(str_contains($e->getMessage(),'zonder DSN of fase-4.5'))error_log('[platform] private PDO: driver=pdo maar geen veilige verbinding geconfigureerd');
-        else error_log('[platform] private PDO niet beschikbaar: '.get_class($e).' · '.$e->getMessage());
+        privateStoreRapporteerException('private_store_pdo_unavailable',$e);
         $fout=$e;throw new RuntimeException('Private verenigingsopslag is tijdelijk niet beschikbaar.',0,$e);
     }
 }
@@ -264,7 +274,7 @@ function privateStoreTransactieOnbewaakt(callable $callback)
             $rollbackOk=$committed?true:privateStoreJsonTransactieRollback();
             $context=[];
             if(!$rollbackOk){
-                error_log('[platform] private JSON transaction rollback onvolledig na '.get_class($e).': '.$e->getMessage());
+                privateStoreRapporteerException('private_store_json_rollback_incomplete',$e);
                 throw new RuntimeException('Private JSON-transactie faalde en rollback kon niet volledig worden uitgevoerd.',0,$e);
             }
             throw$e;
@@ -282,7 +292,7 @@ function privateStoreLees(string $collectie,callable $jsonLezer): array
     }
     $pdo=privateStorePdo();
     try{$stmt=$pdo->prepare('SELECT payload FROM vereniging_private_store WHERE tenant_key = :tenant AND collection_key = :collection');$stmt->execute(['tenant'=>privateStoreTenant(),'collection'=>$collectie]);$rij=$stmt->fetch();}
-    catch(Throwable $e){error_log('[platform] private store read mislukt voor '.$collectie.': '.$e->getMessage());throw new RuntimeException('Private verenigingsopslag kon niet worden gelezen.',0,$e);}
+    catch(Throwable $e){privateStoreRapporteerException('private_store_read_failure',$e);throw new RuntimeException('Private verenigingsopslag kon niet worden gelezen.',0,$e);}
     if(!$rij){
         if(!privateStoreLegacyFallbackToegestaan())return[];
         $fallback=$jsonLezer();return is_array($fallback)?$fallback:[];
@@ -329,9 +339,9 @@ function privateStoreSchrijfOnbewaakt(string $collectie,array $data,callable $js
             $snapshot=privateStoreVerplichtePrebackup($collectie,$oudData);
             if(tenantBackupActief()&&$snapshot===null)throw new RuntimeException('Geen duurzame pre-backuproute kon worden opgeslagen.');
         }
-    }catch(Throwable $e){error_log('[platform] private store pre-backup mislukt voor '.$collectie.': '.$e->getMessage());throw new RuntimeException('Private verenigingsopslag kon niet veilig worden geback-upt.',0,$e);}
+    }catch(Throwable $e){privateStoreRapporteerException('private_store_prebackup_failure',$e);throw new RuntimeException('Private verenigingsopslag kon niet veilig worden geback-upt.',0,$e);}
     if($driver==='pgsql')$sql='INSERT INTO vereniging_private_store (tenant_key, collection_key, payload, updated_at) VALUES (:tenant,:collection,:payload,:updated) ON CONFLICT (tenant_key, collection_key) DO UPDATE SET payload = EXCLUDED.payload, updated_at = EXCLUDED.updated_at';
     elseif($driver==='sqlite')$sql='INSERT INTO vereniging_private_store (tenant_key, collection_key, payload, updated_at) VALUES (:tenant,:collection,:payload,:updated) ON CONFLICT(tenant_key, collection_key) DO UPDATE SET payload = excluded.payload, updated_at = excluded.updated_at';
     else$sql='INSERT INTO vereniging_private_store (tenant_key, collection_key, payload, updated_at) VALUES (:tenant,:collection,:payload,:updated) ON DUPLICATE KEY UPDATE payload=VALUES(payload), updated_at=VALUES(updated_at)';
-    try{$stmt=$pdo->prepare($sql);return$stmt->execute(['tenant'=>$tenant,'collection'=>$collectie,'payload'=>$json,'updated'=>$nu]);}catch(Throwable $e){error_log('[platform] private store write mislukt voor '.$collectie.': '.$e->getMessage());throw new RuntimeException('Private verenigingsopslag kon niet worden opgeslagen.',0,$e);}
+    try{$stmt=$pdo->prepare($sql);return$stmt->execute(['tenant'=>$tenant,'collection'=>$collectie,'payload'=>$json,'updated'=>$nu]);}catch(Throwable $e){privateStoreRapporteerException('private_store_write_failure',$e);throw new RuntimeException('Private verenigingsopslag kon niet worden opgeslagen.',0,$e);}
 }
