@@ -13,8 +13,37 @@ function ledenServiceVindVoorAccount(string $userId,string $gebruikersnaam=''): 
 function ledenServiceAccountVerwijderBlokkades(string $userId,string $gebruikersnaam): array{return ledenAccountVerwijderBlokkades((array)(ledenServiceLees()['leden']??[]),trim($userId),trim($gebruikersnaam));}
 function ledenServiceMigreerUserLinks(array &$data): int{$a=0;foreach((array)($data['leden']??[]) as $i=>$lid){if(!is_array($lid)||trim((string)($lid['user_id']??''))!=='')continue;$naam=trim((string)($lid['beheer_account']??''));if($naam==='')continue;$r=authGebruikerRecordOpNaam($naam);if(!is_array($r))continue;$id=authGebruikerId($r);if($id==='')continue;$data['leden'][$i]['user_id']=$id;$data['leden'][$i]['gewijzigd']=date('c');$a++;}return$a;}
 function ledenServiceKoppelAccount(array &$lid,string $userId,string $gebruikersnaam=''): void{$lid['user_id']=trim($userId);$lid['beheer_account']=trim($gebruikersnaam);$lid['gewijzigd']=date('c');}
-function ledenServiceArchiveer(array &$data,string $lidId,string $door): ?array{foreach((array)($data['leden']??[]) as $i=>$lid){if(!is_array($lid)||($lid['id']??'')!==$lidId)continue;if(!empty($lid['gearchiveerd_op']))return$lid;$data['leden'][$i]['gearchiveerd_op']=date('c');$data['leden'][$i]['gearchiveerd_door']=$door;$data['leden'][$i]['status']='opgezegd';$data['leden'][$i]['user_id']='';$data['leden'][$i]['beheer_account']='';$data['leden'][$i]['gewijzigd']=date('c');return$data['leden'][$i];}return null;}
-function ledenServiceHerstelArchief(array &$data,string $lidId): ?array{foreach((array)($data['leden']??[]) as $i=>$lid){if(!is_array($lid)||($lid['id']??'')!==$lidId)continue;$data['leden'][$i]['gearchiveerd_op']='';$data['leden'][$i]['gearchiveerd_door']='';$data['leden'][$i]['user_id']='';$data['leden'][$i]['beheer_account']='';$data['leden'][$i]['gewijzigd']=date('c');return$data['leden'][$i];}return null;}
+function ledenServiceArchiveer(array &$data,string $lidId,string $door): ?array{
+    foreach((array)($data['leden']??[]) as $i=>$lid){
+        if(!is_array($lid)||($lid['id']??'')!==$lidId)continue;
+        if(!empty($lid['gearchiveerd_op']))return$lid;
+        $statusVoorArchief=trim((string)($lid['status']??''));
+        $data['leden'][$i]['status_voor_archief']=$statusVoorArchief!==''?$statusVoorArchief:'actief';
+        $data['leden'][$i]['gearchiveerd_op']=date('c');
+        $data['leden'][$i]['gearchiveerd_door']=$door;
+        $data['leden'][$i]['status']='opgezegd';
+        $data['leden'][$i]['user_id']='';
+        $data['leden'][$i]['beheer_account']='';
+        $data['leden'][$i]['gewijzigd']=date('c');
+        return$data['leden'][$i];
+    }
+    return null;
+}
+function ledenServiceHerstelArchief(array &$data,string $lidId): ?array{
+    foreach((array)($data['leden']??[]) as $i=>$lid){
+        if(!is_array($lid)||($lid['id']??'')!==$lidId)continue;
+        $statusVoorArchief=trim((string)($lid['status_voor_archief']??''));
+        $data['leden'][$i]['status']=$statusVoorArchief!==''?$statusVoorArchief:'actief';
+        unset($data['leden'][$i]['status_voor_archief']);
+        $data['leden'][$i]['gearchiveerd_op']='';
+        $data['leden'][$i]['gearchiveerd_door']='';
+        $data['leden'][$i]['user_id']='';
+        $data['leden'][$i]['beheer_account']='';
+        $data['leden'][$i]['gewijzigd']=date('c');
+        return$data['leden'][$i];
+    }
+    return null;
+}
 function ledenServiceIsLijst(array $a): bool{return function_exists('array_is_list')?array_is_list($a):(count($a)===0||array_keys($a)===range(0,count($a)-1));}
 function ledenServicePurgeId(&$waarde,string $id): void{if(!is_array($waarde))return;if(ledenServiceIsLijst($waarde)){$nieuw=[];foreach($waarde as $item){if(is_string($item)&&hash_equals($item,$id))continue;if(is_array($item))ledenServicePurgeId($item,$id);$nieuw[]=$item;}$waarde=$nieuw;return;}foreach(array_keys($waarde) as $sleutel){if(is_string($sleutel)&&hash_equals($sleutel,$id)){unset($waarde[$sleutel]);continue;}$item=&$waarde[$sleutel];if(is_string($item)&&hash_equals($item,$id)){$item='';unset($item);continue;}if(is_array($item))ledenServicePurgeId($item,$id);unset($item);}}
 function ledenServiceVerwijderRelaties(string $lidId,string $aanmeldingId=''): bool{
