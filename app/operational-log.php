@@ -79,6 +79,35 @@ function vpOps46Log(array $config, string $event, string $level = 'info', array 
     }
 }
 
+/**
+ * Rapporteer een Throwable zonder ooit de vrije exceptiontekst te publiceren.
+ * De bestaande operationele tenantlog heeft voorrang; als die niet beschikbaar
+ * is (bijvoorbeeld tijdens een storagefout) blijft een informatie-arme FPM/PHP
+ * fallback over. Logging mag de oorspronkelijke fout nooit maskeren.
+ */
+function vpOps46ReportException(?array $config, string $event, Throwable $exception, array $context = []): void
+{
+    if (preg_match('/^[a-z][a-z0-9_.-]{1,63}$/D', $event) !== 1) $event = 'runtime_exception';
+    $context['error_class'] = get_class($exception);
+    $context['script'] = basename($exception->getFile());
+    $context['line'] = $exception->getLine();
+    $veilig = vpOps46SafeContext($context);
+
+    if (is_array($config)) {
+        try {
+            if (vpOps46Log($config, $event, 'error', $veilig)) return;
+        } catch (Throwable $ignored) {
+            // De oorspronkelijke runtimefout blijft leidend; gebruik fallback.
+        }
+    }
+
+    $fallback = json_encode(
+        ['event' => $event, 'context' => $veilig],
+        JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+    );
+    error_log('[platform] ' . (is_string($fallback) ? $fallback : '{"event":"runtime_exception"}'));
+}
+
 function vpOps46RegisterFatalLogger(array $config): void
 {
     if (PHP_SAPI === 'cli' || vpOps46ExternTenant($config) === null) return;

@@ -1,6 +1,7 @@
 <?php
 // Publiek, read-only endpoint voor expliciet toegestane tenantcontent.
 require_once __DIR__ . '/app/content/public-content-store.php';
+require_once __DIR__ . '/app/operational-log.php';
 
 $methode = strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET'));
 if (!in_array($methode, ['GET', 'HEAD'], true)) {
@@ -39,11 +40,14 @@ if ($externPad === null && !$configVerplicht) {
 try {
     $data = publicContentLees($sleutel);
 } catch (Throwable $e) {
-    error_log('[platform] publieke content-store faalde voor dataset ' . $sleutel . ': ' . $e->getMessage());
+    vpOps46ReportException(null, 'public_content_store_failure', $e, [
+        'component' => 'public_content',
+        'code' => 'store_read_failed',
+    ]);
     if ($externPad === null && !$configVerplicht) {
         // Standalone houdt de ingebouwde template-default actief wanneer een
         // optionele override wel bestaat maar ongeldig/onleesbaar is.
-        error_log('[platform] standalone override is ongeldig voor dataset ' . $sleutel . '; template-default blijft actief');
+        error_log('[platform] standalone override is ongeldig; template-default blijft actief');
         http_response_code(204);
         header('Cache-Control: no-store');
         header('X-Content-Type-Options: nosniff');
@@ -83,7 +87,7 @@ if ($sleutel === 'sponsors'
 
 $json = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 if ($json === false) {
-    error_log('[platform] publieke content kon niet als JSON worden uitgevoerd: ' . $sleutel);
+    error_log('[platform] publieke content kon niet als JSON worden uitgevoerd');
     http_response_code(500);
     header('Cache-Control: no-store');
     exit;
