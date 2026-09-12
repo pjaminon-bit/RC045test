@@ -48,7 +48,9 @@ f282(array_key_exists('einddatum_voor_status', $archiefGroep), 'archiveren legt 
 f282(($archiefGroep['einddatum_voor_status'] ?? null) === '', 'archiveren bewaart een oorspronkelijk lege einddatum');
 f282(($archiefGroep['einddatum'] ?? '') === '2026-09-12', 'archiveren behoudt de administratieve sluitdatum');
 
-$herstelInput = ['groepen' => [f282Groep('actief', '2026-09-12')]];
+$herstelGroep = f282Groep('actief', '2026-09-12');
+$herstelGroep['leden'][0]['tot'] = '2026-09-12';
+$herstelInput = ['groepen' => [$herstelGroep]];
 $hersteld = groepenPeriodeTransities($herstelInput, $gearchiveerd, '2026-09-13');
 $hersteldGroep = $hersteld['groepen'][0];
 f282(($hersteldGroep['status'] ?? '') === 'actief', 'herstellen zet groep actief');
