@@ -7,6 +7,7 @@ function groepenKort($v,int $max=120): string{$s=trim((string)$v);return functio
 function groepenId($v): string{$s=strtolower(groepenKort($v,80));if(function_exists('iconv')){$x=@iconv('UTF-8','ASCII//TRANSLIT',$s);if($x!==false)$s=$x;}$s=preg_replace('/[^a-z0-9]+/','_',$s);return trim((string)$s,'_');}
 function groepenNieuwId(string $type,string $naam,array $bestaand=[]): string{$basis=groepenId($type.'_'.$naam);if($basis==='')$basis=$type.'_groep';$id=$basis;$n=2;while(isset($bestaand[$id]))$id=$basis.'_'.$n++;return$id;}
 function groepenStatussen(): array{return ['actief'=>'Actief','afgerond'=>'Afgerond','gearchiveerd'=>'Gearchiveerd'];}
+function groepenStatusSluit(string $status): bool{return in_array($status,['afgerond','gearchiveerd'],true);}
 function groepenTypes(): array{return ['commissie'=>'Commissie','werkgroep'=>'Werkgroep'];}
 function groepenRelatieTypes(): array{return ['taken'=>'Taken','vergaderingen'=>'Vergaderingen','evenementen'=>'Evenementen'];}
 function groepenNormaliseerDatum($v): string{$v=groepenKort($v,10);return $v===''||preg_match('/^\d{4}-\d{2}-\d{2}$/',$v)?$v:'';}
@@ -14,10 +15,57 @@ function groepenNormaliseerRollen(array $rollen): array{$uit=[];$gezien=[];forea
 function groepenNormaliseerLeden(array $leden,array $rolIds): array{$uit=[];$actiefIndex=[];foreach($leden as $m){if(!is_array($m))continue;$lid=groepenKort($m['lid_id']??'',80);if($lid==='')continue;$rollen=[];foreach((array)($m['rollen']??[]) as $rol){$rol=groepenId($rol);if($rol!==''&&isset($rolIds[$rol]))$rollen[$rol]=true;}if(!$rollen&&isset($rolIds['lid']))$rollen['lid']=true;$sinds=groepenNormaliseerDatum($m['sinds']??'');$tot=groepenNormaliseerDatum($m['tot']??'');if($sinds!==''&&$tot!==''&&$tot<$sinds)$tot='';$record=['lid_id'=>$lid,'rollen'=>array_keys($rollen),'sinds'=>$sinds,'tot'=>$tot];if($tot===''){if(isset($actiefIndex[$lid])){foreach($record['rollen'] as $rol)$uit[$actiefIndex[$lid]]['rollen'][]=$rol;$uit[$actiefIndex[$lid]]['rollen']=array_values(array_unique($uit[$actiefIndex[$lid]]['rollen']));if($uit[$actiefIndex[$lid]]['sinds']===''&&$sinds!=='')$uit[$actiefIndex[$lid]]['sinds']=$sinds;continue;}$actiefIndex[$lid]=count($uit);}$uit[]=$record;}usort($uit,static fn($a,$b)=>strcmp((string)$a['lid_id'],(string)$b['lid_id'])?:strcmp((string)$a['sinds'],(string)$b['sinds']));return$uit;}
 function groepenNormaliseerRelatieIds($waarden): array{$uit=[];foreach((array)$waarden as $id){$id=groepenKort($id,80);if($id!=='')$uit[$id]=true;}return array_keys($uit);}
 function groepenNormaliseerRelaties(array $relaties,array $groepIds): array{$uit=[];foreach($relaties as $groepId=>$set){$groepId=groepenId($groepId);if($groepId===''||!isset($groepIds[$groepId])||!is_array($set))continue;$rij=[];foreach(groepenRelatieTypes() as $type=>$label)$rij[$type]=groepenNormaliseerRelatieIds($set[$type]??[]);$uit[$groepId]=$rij;}return$uit;}
-function groepenNormaliseerDocument(array $doc): array{$rollen=groepenNormaliseerRollen((array)($doc['rollen']??[]));$rolIds=[];foreach($rollen as $r)$rolIds[$r['id']]=true;$groepen=[];$ids=[];foreach((array)($doc['groepen']??[]) as $g){if(!is_array($g))continue;$type=(string)($g['type']??'');if(!isset(groepenTypes()[$type]))continue;$naam=groepenKort($g['naam']??'',80);if($naam==='')continue;$id=groepenId($g['id']??'');if($id===''||isset($ids[$id]))$id=groepenNieuwId($type,$naam,$ids);$ids[$id]=true;$status=(string)($g['status']??'actief');if(!isset(groepenStatussen()[$status]))$status='actief';$groepen[]=['id'=>$id,'type'=>$type,'naam'=>$naam,'omschrijving'=>groepenKort($g['omschrijving']??'',1000),'doel'=>groepenKort($g['doel']??'',1000),'status'=>$status,'startdatum'=>groepenNormaliseerDatum($g['startdatum']??''),'einddatum'=>groepenNormaliseerDatum($g['einddatum']??''),'leden'=>groepenNormaliseerLeden((array)($g['leden']??[]),$rolIds),'aangemaakt'=>groepenKort($g['aangemaakt']??'',40),'gewijzigd'=>groepenKort($g['gewijzigd']??'',40)];}$relaties=groepenNormaliseerRelaties((array)($doc['relaties']??[]),$ids);return ['schema'=>2,'rollen'=>$rollen,'groepen'=>$groepen,'relaties'=>$relaties,'updated'=>(string)($doc['updated']??'')];}
+function groepenNormaliseerDocument(array $doc): array
+{
+    $rollen=groepenNormaliseerRollen((array)($doc['rollen']??[]));
+    $rolIds=[];foreach($rollen as $r)$rolIds[$r['id']]=true;
+    $groepen=[];$ids=[];
+    foreach((array)($doc['groepen']??[]) as $g){
+        if(!is_array($g))continue;
+        $type=(string)($g['type']??'');if(!isset(groepenTypes()[$type]))continue;
+        $naam=groepenKort($g['naam']??'',80);if($naam==='')continue;
+        $id=groepenId($g['id']??'');if($id===''||isset($ids[$id]))$id=groepenNieuwId($type,$naam,$ids);$ids[$id]=true;
+        $status=(string)($g['status']??'actief');if(!isset(groepenStatussen()[$status]))$status='actief';
+        $groep=['id'=>$id,'type'=>$type,'naam'=>$naam,'omschrijving'=>groepenKort($g['omschrijving']??'',1000),'doel'=>groepenKort($g['doel']??'',1000),'status'=>$status,'startdatum'=>groepenNormaliseerDatum($g['startdatum']??''),'einddatum'=>groepenNormaliseerDatum($g['einddatum']??''),'leden'=>groepenNormaliseerLeden((array)($g['leden']??[]),$rolIds),'aangemaakt'=>groepenKort($g['aangemaakt']??'',40),'gewijzigd'=>groepenKort($g['gewijzigd']??'',40)];
+        if(array_key_exists('einddatum_voor_status',$g))$groep['einddatum_voor_status']=groepenNormaliseerDatum($g['einddatum_voor_status']??'');
+        $groepen[]=$groep;
+    }
+    $relaties=groepenNormaliseerRelaties((array)($doc['relaties']??[]),$ids);
+    return ['schema'=>2,'rollen'=>$rollen,'groepen'=>$groepen,'relaties'=>$relaties,'updated'=>(string)($doc['updated']??'')];
+}
+function groepenPeriodeTransities(array $nieuw,array $oud,?string $vandaag=null): array
+{
+    $vandaag=$vandaag??date('Y-m-d');
+    $oudeOpId=[];
+    foreach((array)($oud['groepen']??[]) as $groep){if(!is_array($groep))continue;$id=(string)($groep['id']??'');if($id!=='')$oudeOpId[$id]=$groep;}
+    foreach((array)($nieuw['groepen']??[]) as $i=>$groep){
+        if(!is_array($groep))continue;
+        $id=(string)($groep['id']??'');$bestaand=$oudeOpId[$id]??null;
+        $oudeStatus=is_array($bestaand)?(string)($bestaand['status']??'actief'):'actief';
+        $nieuweStatus=(string)($groep['status']??'actief');
+        $oudSluit=is_array($bestaand)&&groepenStatusSluit($oudeStatus);
+        $nieuwSluit=groepenStatusSluit($nieuweStatus);
+        if(!$oudSluit&&$nieuwSluit){
+            $nieuw['groepen'][$i]['einddatum_voor_status']=is_array($bestaand)?groepenNormaliseerDatum($bestaand['einddatum']??''):'';
+            if(($nieuw['groepen'][$i]['einddatum']??'')==='')$nieuw['groepen'][$i]['einddatum']=$vandaag;
+        }elseif($oudSluit&&$nieuwSluit){
+            if(array_key_exists('einddatum_voor_status',$bestaand))$nieuw['groepen'][$i]['einddatum_voor_status']=groepenNormaliseerDatum($bestaand['einddatum_voor_status']??'');
+        }elseif($oudSluit&&!$nieuwSluit){
+            if(array_key_exists('einddatum_voor_status',$bestaand))$nieuw['groepen'][$i]['einddatum']=groepenNormaliseerDatum($bestaand['einddatum_voor_status']??'');
+            unset($nieuw['groepen'][$i]['einddatum_voor_status']);
+        }else unset($nieuw['groepen'][$i]['einddatum_voor_status']);
+    }
+    return $nieuw;
+}
 function groepenLegacyDocument(): array{$doc=groepenLeeg();$leden=repoLedenLees();$legacy=(array)($leden['commissies']??[]);if(!$legacy)return groepenNormaliseerDocument($doc);foreach($legacy as $sleutel=>$c){$naam=is_array($c)?groepenKort($c['naam']??'',80):groepenKort($c,80);if($naam==='')continue;$id='commissie_'.groepenId($sleutel);$assign=[];foreach((array)($leden['leden']??[]) as $lid){if(!is_array($lid))continue;$lidId=(string)($lid['id']??'');if($lidId!==''&&in_array((string)$sleutel,(array)($lid['commissies']??[]),true))$assign[$lidId]=['lid_id'=>$lidId,'rollen'=>['lid'],'sinds'=>'','tot'=>''];}if(is_array($c)){foreach([['hoofd_lid_id','trekker'],['bestuurslid_id','bestuurslid']] as [$veld,$rol]){$lidId=groepenKort($c[$veld]??'',80);if($lidId==='')continue;if(!isset($assign[$lidId]))$assign[$lidId]=['lid_id'=>$lidId,'rollen'=>[],'sinds'=>'','tot'=>''];$assign[$lidId]['rollen'][]=$rol;$assign[$lidId]['rollen']=array_values(array_unique($assign[$lidId]['rollen']));}}$doc['groepen'][]=['id'=>$id,'type'=>'commissie','naam'=>$naam,'omschrijving'=>'','doel'=>'','status'=>'actief','startdatum'=>'','einddatum'=>'','leden'=>array_values($assign),'aangemaakt'=>'','gewijzigd'=>''];}return groepenNormaliseerDocument($doc);}
 function groepenLeesDocument(): array{$doc=groepenNormaliseerDocument(repoGroepenLees());$legacy=groepenLegacyDocument();if($legacy['groepen']){$ids=array_fill_keys(array_column($doc['groepen'],'id'),true);foreach($legacy['groepen'] as $g)if(!isset($ids[$g['id']])){$doc['groepen'][]=$g;$ids[$g['id']]=true;}}return groepenNormaliseerDocument($doc);}
-function groepenSchrijfDocument(array $doc,bool $backup=true): bool{return repoGroepenSchrijf(groepenNormaliseerDocument($doc),$backup);}
+function groepenSchrijfDocument(array $doc,bool $backup=true): bool
+{
+    $nieuw=groepenNormaliseerDocument($doc);
+    $oud=groepenNormaliseerDocument(repoGroepenLees());
+    $nieuw=groepenPeriodeTransities($nieuw,$oud);
+    return repoGroepenSchrijf(groepenNormaliseerDocument($nieuw),$backup);
+}
 function groepenVoorType(array $doc,string $type,bool $archiefMee=true): array{$uit=[];foreach((array)($doc['groepen']??[]) as $g){if(!is_array($g)||($g['type']??'')!==$type)continue;if(!$archiefMee&&($g['status']??'actief')==='gearchiveerd')continue;$uit[]=$g;}usort($uit,static fn($a,$b)=>strnatcasecmp((string)$a['naam'],(string)$b['naam']));return$uit;}
 function groepenActieveLeden(array $groep): array{return array_values(array_filter((array)($groep['leden']??[]),static fn($m)=>is_array($m)&&($m['tot']??'')===''));}
 function groepenVoorLid(array $doc,string $lidId): array{$uit=[];foreach((array)($doc['groepen']??[]) as $g){if(!is_array($g)||($g['status']??'actief')==='gearchiveerd')continue;foreach(groepenActieveLeden($g) as $m)if(($m['lid_id']??'')===$lidId){$uit[]=$g;break;}}return$uit;}
