@@ -32,7 +32,6 @@ function ledenServiceArchiveer(array &$data,string $lidId,string $door): ?array{
 function ledenServiceHerstelArchief(array &$data,string $lidId): ?array{
     foreach((array)($data['leden']??[]) as $i=>$lid){
         if(!is_array($lid)||($lid['id']??'')!==$lidId)continue;
-        if(empty($lid['gearchiveerd_op']))return$lid;
         $statusVoorArchief=trim((string)($lid['status_voor_archief']??''));
         $data['leden'][$i]['status']=$statusVoorArchief!==''?$statusVoorArchief:'actief';
         unset($data['leden'][$i]['status_voor_archief']);
