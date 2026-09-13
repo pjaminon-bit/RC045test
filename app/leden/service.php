@@ -7,6 +7,27 @@ require_once dirname(__DIR__) . '/storage/domein-repositories.php';
 require_once __DIR__ . '/lidmaatschap.php';
 require_once __DIR__ . '/account-binding.php';
 function ledenServiceLees(): array{return repoLedenLees();}
+function ledenServiceNormaliseerRelatiesMetHistorie(array $nieuw,array $bestaand,array $leden,callable $selecteerbaar): array
+{
+    $ledenOpId=[];
+    foreach($leden as $lid){
+        if(!is_array($lid))continue;
+        $id=trim((string)($lid['id']??''));
+        if($id!=='')$ledenOpId[$id]=$lid;
+    }
+    $resultaat=[];
+    foreach($nieuw as $id=>$waarde){
+        $id=trim((string)$id);
+        if($id===''||!isset($ledenOpId[$id])||!$selecteerbaar($ledenOpId[$id]))continue;
+        $resultaat[$id]=$waarde;
+    }
+    foreach($bestaand as $id=>$waarde){
+        $id=trim((string)$id);
+        if($id===''||array_key_exists($id,$resultaat)||!isset($ledenOpId[$id])||$selecteerbaar($ledenOpId[$id]))continue;
+        $resultaat[$id]=$waarde;
+    }
+    return $resultaat;
+}
 function ledenServiceLidmaatschapToewijzingGeldig(array $lid,?array $bestaand,?array $type,int $jaar): bool
 {
     $typeId=trim((string)($lid['lidmaatschap_type']??''));
