@@ -29,23 +29,27 @@ if(($_SERVER['REQUEST_METHOD']??'')==='POST'){
    if(!$commissie['geldig']){
     tkFlash((string)$commissie['reden'],'fout');
    }else{
-    $vergId=trim((string)($_POST['vergadering_id']??''));
-    $vergData=repoVergaderingenLees();
-    $vergSoort=$vergId===''?'':tkVergaderingSoort($vergData,$vergId);
-    $invoer=[
-     'omschrijving'=>$_POST['omschrijving']??'',
-     'toelichting'=>$_POST['toelichting']??'',
-     'status'=>$_POST['status']??'open',
-     'vergadering_soort'=>$vergSoort,
-     'vergadering_id'=>$vergSoort===''?'':$vergId,
-     'commissie_id'=>$commissie['id'],
-     'toegewezen_aan'=>$_POST['toegewezen_aan']??'',
-    ];
-    $t=taakNormaliseer($invoer,$bestaand);
-    $t['commissie_bron']=$commissie['bron'];
-    if($t['toegewezen_aan']!==''&&!in_array($t['toegewezen_aan'],array_column($ledenData['leden'],'id'),true))$t['toegewezen_aan']='';
-    if($idx===null){$t['nummer']=taakVolgendNummer($data);$t['aangemaakt_door']=$huidigeGebruiker;$data['taken'][]=$t;}else$data['taken'][$idx]=$t;
-    if(repoTakenSchrijf($data)){schrijfLog($logBestand,$huidigeGebruiker,'taak_opgeslagen',$t['id'].' · '.$t['omschrijving']);tkFlash('Taak opgeslagen.');}else tkFlash('Opslaan mislukt.','fout');
+    $toewijzing=ledenServiceTaakToewijzingValideer((string)($_POST['toegewezen_aan']??''),(string)($bestaand['toegewezen_aan']??''),(array)($ledenData['leden']??[]));
+    if(!$toewijzing['geldig']){
+     tkFlash((string)$toewijzing['reden'],'fout');
+    }else{
+     $vergId=trim((string)($_POST['vergadering_id']??''));
+     $vergData=repoVergaderingenLees();
+     $vergSoort=$vergId===''?'':tkVergaderingSoort($vergData,$vergId);
+     $invoer=[
+      'omschrijving'=>$_POST['omschrijving']??'',
+      'toelichting'=>$_POST['toelichting']??'',
+      'status'=>$_POST['status']??'open',
+      'vergadering_soort'=>$vergSoort,
+      'vergadering_id'=>$vergSoort===''?'':$vergId,
+      'commissie_id'=>$commissie['id'],
+      'toegewezen_aan'=>$toewijzing['id'],
+     ];
+     $t=taakNormaliseer($invoer,$bestaand);
+     $t['commissie_bron']=$commissie['bron'];
+     if($idx===null){$t['nummer']=taakVolgendNummer($data);$t['aangemaakt_door']=$huidigeGebruiker;$data['taken'][]=$t;}else$data['taken'][$idx]=$t;
+     if(repoTakenSchrijf($data)){schrijfLog($logBestand,$huidigeGebruiker,'taak_opgeslagen',$t['id'].' · '.$t['omschrijving']);tkFlash('Taak opgeslagen.');}else tkFlash('Opslaan mislukt.','fout');
+    }
    }
   }
   elseif($actie==='verwijderen'){
@@ -67,11 +71,15 @@ if($editId!=='')foreach((array)($data['taken']??[]) as $x)if(is_array($x)&&($x['
 $toon=($_GET['nieuw']??'')==='1'||$edit!==null;
 $t=$edit??['status'=>'open'];
 $ledenData=ledenServiceLees();
-$leden=array_values(array_filter($ledenData['leden'],static fn($l)=>is_array($l)&&empty($l['gearchiveerd_op'])));
+$alleLeden=array_values(array_filter((array)($ledenData['leden']??[]),'is_array'));
+$leden=array_values(array_filter($alleLeden,static fn($l)=>empty($l['gearchiveerd_op'])));
+$huidigeToegewezenId=trim((string)($t['toegewezen_aan']??''));
+$huidigeToegewezen=$huidigeToegewezenId===''?null:ledenServiceLidOpId($alleLeden,$huidigeToegewezenId);
+$huidigeToegewezenHistorisch=is_array($huidigeToegewezen)&&!empty($huidigeToegewezen['gearchiveerd_op'])?$huidigeToegewezen:null;
 $groepenDoc=taakCommissieDocument(repoGroepenLees());
 $commissies=taakCommissieActieveKeuzes($groepenDoc);
 $huidigeCommissieId=(string)($t['commissie_id']??'');
 $huidigeCommissie=$huidigeCommissieId===''?null:taakCommissieContext($groepenDoc,$ledenData,$huidigeCommissieId,(string)($t['commissie_bron']??''));
 $huidigeCommissieIsGroep=($huidigeCommissie['soort']??'')==='groep';
 $verg=vergaderingenGesorteerd(repoVergaderingenLees());
-?><!doctype html><html lang="nl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Taken</title><link rel="stylesheet" href="csp205-taken-8aa4538403cd.css"><link rel="stylesheet" href="ui-2026.css"></head><body><div class="top"><a href="./">← Beheer</a></div><main class="wrap"><h1>Taken</h1><a class="btn primary" href="?nieuw=1">+ Taak</a><?php if($flash):?><div class="melding <?=tkEsc($flash['type']??'')?>"><?=tkEsc($flash['tekst']??'')?></div><?php endif;?><?php if($toon):?><section class="card"><h2><?=$edit?'Taak bewerken':'Nieuwe taak'?></h2><form method="post"><input type="hidden" name="csrf" value="<?=tkEsc($csrfToken)?>"><input type="hidden" name="actie" value="opslaan"><input type="hidden" name="id" value="<?=tkEsc($edit['id']??'')?>"><div class="grid"><div class="veld"><label>Omschrijving</label><input name="omschrijving" maxlength="200" value="<?=tkEsc($t['omschrijving']??'')?>"></div><div class="veld"><label>Status</label><select name="status"><?php foreach(takenStatussen() as $k=>$lab):?><option value="<?=tkEsc($k)?>" <?=($t['status']??'')===$k?'selected':''?>><?=tkEsc($lab)?></option><?php endforeach;?></select></div><div class="veld"><label>Toegewezen aan</label><select name="toegewezen_aan"><option value="">Niemand</option><?php foreach($leden as $l):?><option value="<?=tkEsc($l['id'])?>" <?=($t['toegewezen_aan']??'')===$l['id']?'selected':''?>><?=tkEsc(ledenVolledigeNaam($l))?></option><?php endforeach;?></select></div><div class="veld"><label>Commissie</label><select name="commissie_id"><option value="">Geen</option><?php if($huidigeCommissie&&$huidigeCommissieId!==''&&(!$huidigeCommissieIsGroep||!isset($commissies[$huidigeCommissieId]))):?><option value="<?=tkEsc($huidigeCommissieId)?>" selected><?=tkEsc($huidigeCommissie['label'])?></option><?php endif;?><?php foreach($commissies as $k=>$naam):if($huidigeCommissieId===$k&&!$huidigeCommissieIsGroep)continue;?><option value="<?=tkEsc($k)?>" <?=$huidigeCommissieId===$k?'selected':''?>><?=tkEsc($naam)?></option><?php endforeach;?></select></div><div class="veld"><label>Vergadering</label><select name="vergadering_id"><option value="">Geen</option><?php foreach($verg as $v):?><option value="<?=tkEsc($v['id'])?>" <?=($t['vergadering_id']??'')===$v['id']?'selected':''?>><?=tkEsc(vergaderingWeergavenaam($v))?></option><?php endforeach;?></select></div></div><div class="veld"><label>Toelichting</label><textarea name="toelichting"><?=tkEsc($t['toelichting']??'')?></textarea></div><div class="actions"><button class="btn primary" type="submit">Opslaan</button><a class="btn" href="taken.php">Annuleren</a></div></form></section><?php endif;?><section class="card"><h2>Overzicht</h2><?php foreach($lijst as $item):?><?php $itemCommissie=taakCommissieContext($groepenDoc,$ledenData,(string)($item['commissie_id']??''),(string)($item['commissie_bron']??''));?><div class="item"><strong><?=tkEsc(taakWeergavenaam($item))?></strong><br><span class="meta"><?=tkEsc(takenStatussen()[$item['status']??'']??'')?><?=($item['toegewezen_aan']??'')!==''?' · toegewezen':''?><?=($itemCommissie['id']??'')!==''?' · commissie: '.tkEsc($itemCommissie['label']):''?></span><div class="actions"><a class="btn" href="?edit=<?=tkEsc($item['id'])?>">Bewerken</a><form method="post" onsubmit="return confirm('Taak verwijderen?');"><input type="hidden" name="csrf" value="<?=tkEsc($csrfToken)?>"><input type="hidden" name="actie" value="verwijderen"><input type="hidden" name="id" value="<?=tkEsc($item['id'])?>"><button class="btn danger" type="submit">Verwijderen</button></form></div></div><?php endforeach;?></section></main></body></html>
+?><!doctype html><html lang="nl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Taken</title><link rel="stylesheet" href="csp205-taken-8aa4538403cd.css"><link rel="stylesheet" href="ui-2026.css"></head><body><div class="top"><a href="./">← Beheer</a></div><main class="wrap"><h1>Taken</h1><a class="btn primary" href="?nieuw=1">+ Taak</a><?php if($flash):?><div class="melding <?=tkEsc($flash['type']??'')?>"><?=tkEsc($flash['tekst']??'')?></div><?php endif;?><?php if($toon):?><section class="card"><h2><?=$edit?'Taak bewerken':'Nieuwe taak'?></h2><form method="post"><input type="hidden" name="csrf" value="<?=tkEsc($csrfToken)?>"><input type="hidden" name="actie" value="opslaan"><input type="hidden" name="id" value="<?=tkEsc($edit['id']??'')?>"><div class="grid"><div class="veld"><label>Omschrijving</label><input name="omschrijving" maxlength="200" value="<?=tkEsc($t['omschrijving']??'')?>"></div><div class="veld"><label>Status</label><select name="status"><?php foreach(takenStatussen() as $k=>$lab):?><option value="<?=tkEsc($k)?>" <?=($t['status']??'')===$k?'selected':''?>><?=tkEsc($lab)?></option><?php endforeach;?></select></div><div class="veld"><label>Toegewezen aan</label><select name="toegewezen_aan"><option value="">Niemand</option><?php if($huidigeToegewezenHistorisch):?><option value="<?=tkEsc($huidigeToegewezenId)?>" selected><?=tkEsc(ledenVolledigeNaam($huidigeToegewezenHistorisch))?> (gearchiveerd)</option><?php endif;?><?php foreach($leden as $l):?><option value="<?=tkEsc($l['id'])?>" <?=($t['toegewezen_aan']??'')===$l['id']?'selected':''?>><?=tkEsc(ledenVolledigeNaam($l))?></option><?php endforeach;?></select></div><div class="veld"><label>Commissie</label><select name="commissie_id"><option value="">Geen</option><?php if($huidigeCommissie&&$huidigeCommissieId!==''&&(!$huidigeCommissieIsGroep||!isset($commissies[$huidigeCommissieId]))):?><option value="<?=tkEsc($huidigeCommissieId)?>" selected><?=tkEsc($huidigeCommissie['label'])?></option><?php endif;?><?php foreach($commissies as $k=>$naam):if($huidigeCommissieId===$k&&!$huidigeCommissieIsGroep)continue;?><option value="<?=tkEsc($k)?>" <?=$huidigeCommissieId===$k?'selected':''?>><?=tkEsc($naam)?></option><?php endforeach;?></select></div><div class="veld"><label>Vergadering</label><select name="vergadering_id"><option value="">Geen</option><?php foreach($verg as $v):?><option value="<?=tkEsc($v['id'])?>" <?=($t['vergadering_id']??'')===$v['id']?'selected':''?>><?=tkEsc(vergaderingWeergavenaam($v))?></option><?php endforeach;?></select></div></div><div class="veld"><label>Toelichting</label><textarea name="toelichting"><?=tkEsc($t['toelichting']??'')?></textarea></div><div class="actions"><button class="btn primary" type="submit">Opslaan</button><a class="btn" href="taken.php">Annuleren</a></div></form></section><?php endif;?><section class="card"><h2>Overzicht</h2><?php foreach($lijst as $item):?><?php $itemCommissie=taakCommissieContext($groepenDoc,$ledenData,(string)($item['commissie_id']??''),(string)($item['commissie_bron']??''));?><div class="item"><strong><?=tkEsc(taakWeergavenaam($item))?></strong><br><span class="meta"><?=tkEsc(takenStatussen()[$item['status']??'']??'')?><?=($item['toegewezen_aan']??'')!==''?' · toegewezen':''?><?=($itemCommissie['id']??'')!==''?' · commissie: '.tkEsc($itemCommissie['label']):''?></span><div class="actions"><a class="btn" href="?edit=<?=tkEsc($item['id'])?>">Bewerken</a><form method="post" onsubmit="return confirm('Taak verwijderen?');"><input type="hidden" name="csrf" value="<?=tkEsc($csrfToken)?>"><input type="hidden" name="actie" value="verwijderen"><input type="hidden" name="id" value="<?=tkEsc($item['id'])?>"><button class="btn danger" type="submit">Verwijderen</button></form></div></div><?php endforeach;?></section></main></body></html>
