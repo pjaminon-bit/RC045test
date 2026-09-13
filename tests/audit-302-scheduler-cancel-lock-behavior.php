@@ -48,15 +48,18 @@ function r302Spawn(array $cmd, string $cwd): array
 
 function r302Finish($proc, array $pipes, float $timeout = 10.0): array
 {
-    $done = r302Wait(static function () use ($proc): bool {
-        $status = proc_get_status($proc);
-        return is_array($status) && empty($status['running']);
+    $last = null;
+    $done = r302Wait(static function () use ($proc, &$last): bool {
+        $last = proc_get_status($proc);
+        return is_array($last) && empty($last['running']);
     }, $timeout, 'procesafronding');
     $out = stream_get_contents($pipes[1]);
     $err = stream_get_contents($pipes[2]);
     fclose($pipes[1]);
     fclose($pipes[2]);
-    $exit = proc_close($proc);
+    $closed = proc_close($proc);
+    $cached = is_array($last) ? (int)($last['exitcode'] ?? -1) : -1;
+    $exit = $cached >= 0 ? $cached : $closed;
     if (!$done && $exit === -1) $exit = 124;
     return [$exit, (string)$out, (string)$err];
 }
@@ -65,6 +68,32 @@ function r302RootRun(array $prefix, array $cmd, string $cwd, float $timeout = 10
 {
     [$proc, $pipes] = r302Spawn(array_merge($prefix, $cmd), $cwd);
     return r302Finish($proc, $pipes, $timeout);
+}
+
+function r302RootRead(array $prefix, string $path, string $cwd): ?string
+{
+    [$exit, $out] = r302RootRun($prefix, ['/bin/cat', $path], $cwd, 5.0);
+    return $exit === 0 ? $out : null;
+}
+
+function r302RootFileExists(array $prefix, string $path, string $cwd): bool
+{
+    [$exit] = r302RootRun($prefix, ['/usr/bin/test', '-f', $path], $cwd, 5.0);
+    return $exit === 0;
+}
+
+function r302RootMode(array $prefix, string $path, string $cwd): ?int
+{
+    [$exit, $out] = r302RootRun($prefix, ['/usr/bin/stat', '-c', '%a', $path], $cwd, 5.0);
+    $mode = trim($out);
+    return $exit === 0 && preg_match('/^[0-7]{3,4}$/D', $mode) === 1 ? octdec($mode) : null;
+}
+
+function r302RootDeleteJson(array $prefix, string $dir, string $cwd): void
+{
+    $code = 'foreach(glob($argv[1]."/*.json")?:[] as $f){if(!unlink($f)){fwrite(STDERR,"unlink failed: {$f}\\n");exit(1);}}';
+    [$exit,, $err] = r302RootRun($prefix, [PHP_BINARY, '-r', $code, $dir], $cwd, 5.0);
+    if ($exit !== 0) throw new RuntimeException('Root cleanup van pending JSON faalde: ' . trim($err));
 }
 
 function r302Schedule(string $id, string $tenant = 'alpha'): array
@@ -99,13 +128,6 @@ function r302Prelock(string $path)
         throw new RuntimeException('Testlock kon niet exclusief worden bezet.');
     }
     return $h;
-}
-
-function r302Mode(string $path): ?int
-{
-    clearstatcache(true, $path);
-    $m = @fileperms($path);
-    return is_int($m) ? ($m & 0777) : null;
 }
 
 $prefix = r302RootPrefix();
@@ -174,17 +196,19 @@ try {
     $runnerCmd = [PHP_BINARY, $root . '/bin/control-plane-scheduled-run.php', '--config=' . $configPath];
     [$runnerA, $runnerAPipes] = r302Spawn(array_merge($prefix, $runnerCmd, ['--schedule=' . $idA]), $root);
 
-    $runnerReachedLock = r302Wait(static function () use ($lockA, $runnerA): bool {
+    $runnerReachedLock = r302Wait(static function () use ($prefix, $root, $lockA, $runnerA): bool {
         $status = proc_get_status($runnerA);
-        return r302Mode($lockA) === 0600 && is_array($status) && !empty($status['running']);
+        return r302RootMode($prefix, $lockA, $root) === 0600 && is_array($status) && !empty($status['running']);
     }, 5.0, 'scheduled runner bereikt bezette schedulelock');
     r302Check($runnerReachedLock, 'scheduled runner bereikt de echte root-only lockgrens en blijft daar geblokkeerd');
 
-    $aBefore = json_decode((string)file_get_contents($schedules . '/' . $idA . '.json'), true);
+    $aBeforeRaw = r302RootRead($prefix, $schedules . '/' . $idA . '.json', $root);
+    $aBefore = is_string($aBeforeRaw) ? json_decode($aBeforeRaw, true) : null;
     r302Check(is_array($aBefore) && ($aBefore['status'] ?? '') === 'scheduled', 'geblokkeerde runner muteert schedulestatus nog niet');
 
     [$bExit, $bOut, $bErr] = r302RootRun($prefix, array_merge($runnerCmd, ['--schedule=' . $idB]), $root, 10.0);
-    $bDoc = json_decode((string)file_get_contents($schedules . '/' . $idB . '.json'), true);
+    $bRaw = r302RootRead($prefix, $schedules . '/' . $idB . '.json', $root);
+    $bDoc = is_string($bRaw) ? json_decode($bRaw, true) : null;
     r302Check(
         $bExit === 0 && str_contains($bOut, 'SCHEDULE QUEUED') && is_array($bDoc) && ($bDoc['status'] ?? '') === 'queued',
         'andere schedule-id kan queueën terwijl eerste id gelockt is; lock is niet globaal'
@@ -197,19 +221,18 @@ try {
     [$aExit, $aOut, $aErr] = r302Finish($runnerA, $runnerAPipes, 10.0);
     $runnerA = null;
     $runnerAPipes = [];
-    $aDoc = json_decode((string)file_get_contents($schedules . '/' . $idA . '.json'), true);
+    $aRaw = r302RootRead($prefix, $schedules . '/' . $idA . '.json', $root);
+    $aDoc = is_string($aRaw) ? json_decode($aRaw, true) : null;
     r302Check(
         $aExit === 0 && str_contains($aOut, 'SCHEDULE QUEUED') && is_array($aDoc) && ($aDoc['status'] ?? '') === 'queued',
         'scheduled runner gaat pas na expliciete lockvrijgave door en commit queued-state'
     );
     if ($aExit !== 0) fwrite(STDERR, "Runner A stderr: {$aErr}\n");
 
-    // Verwijder de door A/B gemaakte lifecycle-requests zodat de executortest
-    // uitsluitend de schedule-cancel request voor id C verwerkt.
-    foreach (glob($pending . '/*.json') ?: [] as $file) @unlink($file);
+    r302RootDeleteJson($prefix, $pending, $root);
 
     $requestId = str_repeat('d', 32);
-    r302WriteJson($pending . '/' . $requestId . '.json', [
+    $request = [
         'schema'=>1,
         'phase'=>'5.1-request',
         'request_id'=>$requestId,
@@ -219,18 +242,31 @@ try {
         'requested_at_utc'=>gmdate('Y-m-d\TH:i:s\Z'),
         'confirm'=>[],
         'admin'=>['schedule_id'=>$idC],
-    ]);
+    ];
+    $requestJson = json_encode($request, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+    if (!is_string($requestJson)) throw new RuntimeException('Cancelrequest kon niet worden geserialiseerd.');
+    [$seedExit,, $seedErr] = r302RootRun(
+        $prefix,
+        [PHP_BINARY, '-r', 'file_put_contents($argv[1],$argv[2]."\\n");chmod($argv[1],0640);', $pending . '/' . $requestId . '.json', $requestJson],
+        $root,
+        5.0
+    );
+    if ($seedExit !== 0) throw new RuntimeException('Cancelrequest kon niet root-owned worden voorbereid: ' . trim($seedErr));
 
     $heldC = r302Prelock($lockC);
     $executorCmd = [PHP_BINARY, $root . '/bin/control-plane-executor.php', '--config=' . $configPath];
     [$executor, $executorPipes] = r302Spawn(array_merge($prefix, $executorCmd), $root);
 
-    $executorReachedLock = r302Wait(static function () use ($lockC, $executor): bool {
+    $executorReachedLock = r302Wait(static function () use ($prefix, $root, $lockC, $executor): bool {
         $status = proc_get_status($executor);
-        return r302Mode($lockC) === 0600 && is_array($status) && !empty($status['running']);
+        return r302RootMode($prefix, $lockC, $root) === 0600 && is_array($status) && !empty($status['running']);
     }, 8.0, 'cancel-executor bereikt bezette schedulelock');
     r302Check($executorReachedLock, 'schedule-cancel executor bereikt exact dezelfde root-only schedulelock en blokkeert');
-    r302Check(!is_file($results . '/' . $requestId . '.json'), 'geblokkeerde cancel heeft vóór lockvrijgave nog geen resultaat gecommit');
+
+    $cBeforeRaw = r302RootRead($prefix, $schedules . '/' . $idC . '.json', $root);
+    $cBefore = is_string($cBeforeRaw) ? json_decode($cBeforeRaw, true) : null;
+    r302Check(is_array($cBefore) && ($cBefore['status'] ?? '') === 'scheduled', 'geblokkeerde cancel muteert schedulestatus vóór lockvrijgave niet');
+    r302Check(!r302RootFileExists($prefix, $results . '/' . $requestId . '.json', $root), 'geblokkeerde cancel heeft vóór lockvrijgave nog geen resultaat gecommit');
 
     flock($heldC, LOCK_UN);
     fclose($heldC);
@@ -240,15 +276,10 @@ try {
     $executorPipes = [];
     r302Check($eExit === 0 && str_contains($eOut, 'EXECUTOR OK'), 'cancel-executor rondt na lockvrijgave zijn queuecyclus af');
 
-    $resultPad = $results . '/' . $requestId . '.json';
-    $resultRaw = '';
-    if (is_file($resultPad)) {
-        [$catExit, $catOut] = r302RootRun($prefix, ['/bin/cat', $resultPad], $root, 5.0);
-        if ($catExit === 0) $resultRaw = $catOut;
-    }
-    $result = json_decode($resultRaw, true);
+    $resultRaw = r302RootRead($prefix, $results . '/' . $requestId . '.json', $root);
+    $result = is_string($resultRaw) ? json_decode($resultRaw, true) : null;
     r302Check(
-        is_array($result) && in_array((string)($result['status'] ?? ''), ['ok','failed'], true),
+        is_array($result) && in_array((string)($result['result'] ?? ''), ['ok','failed'], true),
         'cancel produceert pas na vrijgave een duurzaam executorresultaat'
     );
     if ($eExit !== 0) fwrite(STDERR, "Executor stderr: {$eErr}\n");
