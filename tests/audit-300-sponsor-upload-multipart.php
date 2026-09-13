@@ -66,14 +66,13 @@ function r300Http(int $poort, string $methode, string $pad, array $headers = [],
         }
         $offset += $geschreven;
     }
+
     $raw = stream_get_contents($socket);
     $meta = stream_get_meta_data($socket);
     fclose($socket);
     if (!is_string($raw) || !empty($meta['timed_out'])) throw new RuntimeException('HTTP-response ontbrak of timeoutte.');
 
-    $delen = explode("\r\n\r\n", $raw, 2);
-    $kop = $delen[0] ?? '';
-    $responseBody = $delen[1] ?? '';
+    [$kop, $responseBody] = array_pad(explode("\r\n\r\n", $raw, 2), 2, '');
     $kopRegels = explode("\r\n", $kop);
     $statusRegel = array_shift($kopRegels) ?: '';
     if (preg_match('/^HTTP\/1\.[01] ([0-9]{3})\b/', $statusRegel, $m) !== 1) {
@@ -84,10 +83,9 @@ function r300Http(int $poort, string $methode, string $pad, array $headers = [],
         $pos = strpos($regel, ':');
         if ($pos === false) continue;
         $naam = strtolower(trim(substr($regel, 0, $pos)));
-        $waarde = trim(substr($regel, $pos + 1));
-        $responseHeaders[$naam][] = $waarde;
+        $responseHeaders[$naam][] = trim(substr($regel, $pos + 1));
     }
-    return ['status' => (int) $m[1], 'headers' => $responseHeaders, 'body' => $responseBody, 'raw' => $raw];
+    return ['status' => (int) $m[1], 'headers' => $responseHeaders, 'body' => $responseBody];
 }
 
 function r300Cookie(array $response, ?string $huidig = null): ?string
@@ -125,6 +123,7 @@ function r300Multipart(array $velden, string $fileField, string $fileName, strin
 
 $tmp = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'rc045-a300-' . bin2hex(random_bytes(5));
 $private = $tmp . DIRECTORY_SEPARATOR . 'private';
+$sessions = $tmp . DIRECTORY_SEPARATOR . 'sessions';
 $configPad = $tmp . DIRECTORY_SEPARATOR . 'tenant.php';
 $serverOut = $tmp . DIRECTORY_SEPARATOR . 'php-server.out';
 $serverErr = $tmp . DIRECTORY_SEPARATOR . 'php-server.err';
@@ -135,16 +134,15 @@ try {
     if (!@mkdir($private . DIRECTORY_SEPARATOR . 'auth', 0750, true) && !is_dir($private . DIRECTORY_SEPARATOR . 'auth')) {
         throw new RuntimeException('Tijdelijke tenant-private-root kon niet worden aangemaakt.');
     }
+    if (!@mkdir($sessions, 0700, true) && !is_dir($sessions)) throw new RuntimeException('Tijdelijke PHP-sessiemap kon niet worden aangemaakt.');
 
     $poort = r300VrijePoort();
     $password = 'E2E-' . bin2hex(random_bytes(24));
     $hash = password_hash($password, PASSWORD_DEFAULT);
     if (!is_string($hash)) throw new RuntimeException('Master password_hash kon niet worden gemaakt.');
-    file_put_contents(
-        $private . DIRECTORY_SEPARATOR . 'auth' . DIRECTORY_SEPARATOR . 'master.php',
-        "<?php\n\$BEHEER_WACHTWOORD_HASH = " . var_export($hash, true) . ";\n"
-    );
-    @chmod($private . DIRECTORY_SEPARATOR . 'auth' . DIRECTORY_SEPARATOR . 'master.php', 0640);
+    $masterPad = $private . DIRECTORY_SEPARATOR . 'auth' . DIRECTORY_SEPARATOR . 'master.php';
+    file_put_contents($masterPad, "<?php\n\$BEHEER_WACHTWOORD_HASH = " . var_export($hash, true) . ";\n");
+    @chmod($masterPad, 0640);
 
     $config = [
         'vereniging' => [
@@ -169,26 +167,27 @@ try {
     if (!is_array($env)) $env = [];
     $env['VERENIGING_REQUIRE_TENANT_CONFIG'] = '1';
     $env['VERENIGING_CONFIG_FILE'] = $configPad;
-    $descriptors = [
-        0 => ['pipe', 'r'],
-        1 => ['file', $serverOut, 'ab'],
-        2 => ['file', $serverErr, 'ab'],
-    ];
-    $server = proc_open([PHP_BINARY, '-S', "127.0.0.1:{$poort}", '-t', $root], $descriptors, $pipes, $root, $env);
+    $server = proc_open(
+        [PHP_BINARY, '-d', 'session.save_path=' . $sessions, '-S', "127.0.0.1:{$poort}", '-t', $root],
+        [0 => ['pipe', 'r'], 1 => ['file', $serverOut, 'ab'], 2 => ['file', $serverErr, 'ab']],
+        $pipes,
+        $root,
+        $env
+    );
     if (!is_resource($server)) throw new RuntimeException('PHP built-in HTTP-server kon niet worden gestart.');
     if (isset($pipes[0]) && is_resource($pipes[0])) fclose($pipes[0]);
 
     $start = null;
     for ($i = 0; $i < 50; $i++) {
         try {
-            $start = r300Http($poort, 'GET', '/beheer.php');
+            $start = r300Http($poort, 'GET', '/beheer/');
             break;
         } catch (Throwable $e) {
             usleep(100000);
         }
     }
     if (!is_array($start)) throw new RuntimeException('Lokale HTTP-server werd niet bereikbaar.');
-    r300Check($start['status'] === 200, 'echte HTTP-runtime serveert het beheerloginformulier');
+    r300Check($start['status'] === 200, 'echte HTTP-runtime serveert het canonieke beheerloginformulier');
     $cookie = r300Cookie($start);
     $csrf = r300Csrf((string) $start['body']);
     r300Check(is_string($cookie) && $cookie !== '' && is_string($csrf), 'loginruntime levert geïsoleerde sessiecookie en CSRF-token');
@@ -200,12 +199,12 @@ try {
         'gebruikersnaam' => '',
         'wachtwoord' => $password,
     ], '', '&', PHP_QUERY_RFC3986);
-    $login = r300Http($poort, 'POST', '/beheer.php', [
+    $login = r300Http($poort, 'POST', '/beheer/', [
         'Cookie' => $cookie,
         'Content-Type' => 'application/x-www-form-urlencoded',
     ], $loginBody);
     $cookie = r300Cookie($login, $cookie);
-    r300Check($login['status'] === 302 && is_string($cookie) && $cookie !== '', 'hash-only masterlogin slaagt via echte HTTP-sessie');
+    r300Check(in_array($login['status'], [302, 303], true) && is_string($cookie) && $cookie !== '', 'hash-only masterlogin slaagt via echte HTTP-sessie');
 
     $beheer = r300Http($poort, 'GET', '/beheer/sponsors.php', ['Cookie' => $cookie]);
     $csrf = r300Csrf((string) $beheer['body']);
@@ -247,6 +246,9 @@ try {
         'geüploade bytes zijn via de normale publieke assetgateway exact beschikbaar'
     );
 
+    $beheerNaUpload = r300Http($poort, 'GET', '/beheer/sponsors.php', ['Cookie' => $cookie]);
+    $csrf = r300Csrf((string) $beheerNaUpload['body']);
+    if (!is_string($csrf)) throw new RuntimeException('CSRF-token na geldige upload ontbreekt.');
     $negatief = r300Multipart([
         'csrf' => $csrf,
         'cta_nl' => 'E2E sponsor CTA',
