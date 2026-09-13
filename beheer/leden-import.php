@@ -8,6 +8,7 @@ require_once dirname(__DIR__) . '/app/data-slot.php';
 require_once dirname(__DIR__) . '/app/storage/private-store.php';
 require_once dirname(__DIR__) . '/app/storage/private-store-batch-transaction.php';
 require_once dirname(__DIR__) . '/app/leden/service.php';
+require_once dirname(__DIR__) . '/app/leden/import-index.php';
 require_once dirname(__DIR__) . '/app/leden/contributies.php';
 require_once dirname(__DIR__) . '/app/leden/import-preview-store.php';
 
@@ -134,6 +135,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         }
 
         $data = ledenServiceLees();
+        $importIndex = ledenImportIndexBouw($data);
         $resultaten = [];
         $nieuw = 0;
         $bij = 0;
@@ -141,7 +143,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         foreach ($rijen as $rij) {
             if (!is_array($rij)) continue;
             $k = ledenNormaliseer($rij, null);
-            $match = ledenZoekBestaandeMet($data, $k);
+            $match = ledenImportIndexZoekMet($importIndex, $data, $k);
             $resultaten[] = [
                 'rij' => $rij,
                 'match_index' => $match['index'],
@@ -196,6 +198,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         $fout = '';
         try {
             $data = ledenServiceLees();
+            $importIndex = ledenImportIndexBouw($data);
             $fin = contributiesLees();
             $magAuth = authHeeftCapability('system.users.manage', true);
 
@@ -204,7 +207,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
                 if (!$rij) continue;
 
                 $k = ledenNormaliseer($rij, null);
-                $match = ledenZoekBestaandeMet($data, $k);
+                $match = ledenImportIndexZoekMet($importIndex, $data, $k);
                 $idx = $match['index'];
                 $bestaand = $idx === null ? null : $data['leden'][$idx];
                 $invoer = $rij;
@@ -219,22 +222,18 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
                 ));
 
                 if ($idx === null) {
-                    if ((int)$lid['nummer'] <= 0) {
-                        $lid['nummer'] = ledenVolgendNummer($data);
-                    } else {
-                        foreach ($data['leden'] as $ander) {
-                            if ((int)($ander['nummer'] ?? 0) === (int)$lid['nummer']) {
-                                $lid['nummer'] = ledenVolgendNummer($data);
-                                break;
-                            }
-                        }
+                    if ((int)$lid['nummer'] <= 0 || ledenImportIndexNummerInGebruik($importIndex, (int)$lid['nummer'])) {
+                        $lid['nummer'] = ledenImportIndexVolgendNummer($importIndex);
                     }
                     if ($lid['inschrijfdatum'] === '') $lid['inschrijfdatum'] = date('Y-m-d');
                     $lid['bron'] = 'csv_import';
+                    $nieuwIndex = count($data['leden']);
                     $data['leden'][] = $lid;
+                    ledenImportIndexWerkBij($importIndex, null, $lid, $nieuwIndex);
                     $toegevoegd++;
                 } else {
                     $data['leden'][$idx] = $lid;
+                    ledenImportIndexWerkBij($importIndex, is_array($bestaand) ? $bestaand : null, $lid, (int)$idx);
                     $bijgewerkt++;
                 }
                 $data['volgnummer'] = max((int)($data['volgnummer'] ?? 0), (int)$lid['nummer']);
