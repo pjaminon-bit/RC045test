@@ -23,6 +23,25 @@ function ledenImportIndexBucketVoegToe(array &$verzameling, string $sleutel, int
 {
     if ($sleutel === '') return;
     $bucket = $verzameling[$sleutel] ?? [];
+    if ($bucket === []) {
+        $verzameling[$sleutel] = [$lidIndex];
+        return;
+    }
+
+    $laatste = $bucket[array_key_last($bucket)];
+    if ($laatste === $lidIndex) return;
+    // Tijdens de initiële build en bij nieuwe leden lopen indices altijd op.
+    // Die dominante batchroute moet O(1) per bucket-add blijven, ook als veel
+    // leden dezelfde naam of hetzelfde importkenmerk delen.
+    if ($laatste < $lidIndex) {
+        $bucket[] = $lidIndex;
+        $verzameling[$sleutel] = $bucket;
+        return;
+    }
+
+    // Alleen een wijziging van een ouder bestaand record kan een index midden
+    // in een bucket terugplaatsen. Houd de array dan oplopend zodat [0]
+    // hetzelfde first-matchgedrag houdt als de legacy lineaire scan.
     foreach ($bucket as $positie => $bestaandIndex) {
         if ($bestaandIndex === $lidIndex) return;
         if ($bestaandIndex > $lidIndex) {
@@ -31,8 +50,6 @@ function ledenImportIndexBucketVoegToe(array &$verzameling, string $sleutel, int
             return;
         }
     }
-    $bucket[] = $lidIndex;
-    $verzameling[$sleutel] = $bucket;
 }
 
 function ledenImportIndexBucketVerwijder(array &$verzameling, string $sleutel, int $lidIndex): void
