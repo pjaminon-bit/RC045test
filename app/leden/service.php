@@ -28,6 +28,30 @@ function ledenServiceNormaliseerRelatiesMetHistorie(array $nieuw,array $bestaand
     }
     return $resultaat;
 }
+function ledenServiceLidOpId(array $leden,string $lidId): ?array
+{
+    $lidId=trim($lidId);
+    if($lidId==='')return null;
+    foreach($leden as $lid){
+        if(!is_array($lid))continue;
+        $id=trim((string)($lid['id']??''));
+        if($id!==''&&hash_equals($id,$lidId))return $lid;
+    }
+    return null;
+}
+function ledenServiceTaakToewijzingValideer(string $gevraagdId,string $bestaandId,array $leden): array
+{
+    $gevraagdId=trim($gevraagdId);
+    $bestaandId=trim($bestaandId);
+    $lengte=function_exists('mb_strlen')?mb_strlen($gevraagdId,'UTF-8'):strlen($gevraagdId);
+    if($lengte>40)return ['geldig'=>false,'id'=>'','historisch'=>false,'reden'=>'Toegewezen lid is ongeldig.'];
+    if($gevraagdId==='')return ['geldig'=>true,'id'=>'','historisch'=>false,'reden'=>''];
+    $lid=ledenServiceLidOpId($leden,$gevraagdId);
+    if($lid===null)return ['geldig'=>false,'id'=>'','historisch'=>false,'reden'=>'Toegewezen lid bestaat niet meer.'];
+    if(empty($lid['gearchiveerd_op']))return ['geldig'=>true,'id'=>$gevraagdId,'historisch'=>false,'reden'=>''];
+    if($bestaandId!==''&&hash_equals($bestaandId,$gevraagdId))return ['geldig'=>true,'id'=>$gevraagdId,'historisch'=>true,'reden'=>''];
+    return ['geldig'=>false,'id'=>'','historisch'=>false,'reden'=>'Een taak kan niet nieuw aan een gearchiveerd lid worden toegewezen.'];
+}
 function ledenServiceLidmaatschapToewijzingGeldig(array $lid,?array $bestaand,?array $type,int $jaar): bool
 {
     $typeId=trim((string)($lid['lidmaatschap_type']??''));
