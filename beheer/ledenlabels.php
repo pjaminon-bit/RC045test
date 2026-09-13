@@ -4,13 +4,58 @@ require_once dirname(__DIR__).'/app/auth-capabilities.php';
 require_once dirname(__DIR__).'/app/data-slot.php';
 require_once dirname(__DIR__).'/app/leden/labels.php';
 require_once dirname(__DIR__).'/app/leden/service.php';
-if(!$ingelogd){header('Location: ./');exit;}if(!authHeeftCapability('member_labels.manage')){http_response_code(403);echo'Geen toegang tot Ledenlabels.';exit;}
+if(!$ingelogd){header('Location: ./');exit;}
+if(!authHeeftCapability('member_labels.manage')){http_response_code(403);echo'Geen toegang tot Ledenlabels.';exit;}
 function llEsc($v):string{return htmlspecialchars((string)$v,ENT_QUOTES,'UTF-8');}
 $melding='';$meldingType='';
 if(($_SERVER['REQUEST_METHOD']??'')==='POST'){
  if(!csrfOk()){$melding='Sessie verlopen. Ververs de pagina.';$meldingType='fout';}
- else{$slot=dataSlotOpen();try{$doc=labelsLeesDocument();$oudeMap=labelsMap($doc,true);$labels=[];$nieuweIds=[];foreach($oudeMap as $id=>$oud){$rij=(array)($_POST['labels'][$id]??[]);$naam=labelsKort($rij['naam']??$oud['naam'],60);if($naam==='')$naam=$oud['naam'];$labels[]=['id'=>$id,'naam'=>$naam,'beschrijving'=>labelsKort($rij['beschrijving']??$oud['beschrijving'],300),'actief'=>!empty($rij['actief'])];$nieuweIds[$id]=true;}foreach((array)($_POST['nieuw']??[]) as $rij){if(!is_array($rij))continue;$naam=labelsKort($rij['naam']??'',60);$id=labelsId($rij['id']??$naam);if($naam===''||$id===''||isset($nieuweIds[$id]))continue;$labels[]=['id'=>$id,'naam'=>$naam,'beschrijving'=>labelsKort($rij['beschrijving']??'',300),'actief'=>true];$nieuweIds[$id]=true;}$doc['labels']=$labels;
-  $ledenData=ledenServiceLees();$actieveIds=[];foreach((array)($ledenData['leden']??[]) as $lid)if(is_array($lid)&&empty($lid['gearchiveerd_op'])&&($lid['id']??'')!=='')$actieveIds[(string)$lid['id']]=true;foreach(array_keys($actieveIds) as $lidId){$set=[];foreach($labels as $l){$id=(string)$l['id'];if(in_array($lidId,(array)($_POST['leden'][$id]??[]),true))$set[]=$id;}labelsZetVoorLid($doc,$lidId,$set);}if(labelsSchrijfDocument($doc)){schrijfLog($logBestand,$huidigeGebruiker,'ledenlabels_bijgewerkt',count($labels).' labels');$melding='Ledenlabels opgeslagen.';$meldingType='ok';}else{$melding='Opslaan mislukt.';$meldingType='fout';}}finally{dataSlotDicht($slot);}}
+ else{
+  $slot=dataSlotOpen();
+  try{
+   $doc=labelsLeesDocument();
+   $oudeMap=labelsMap($doc,true);
+   $labels=[];$nieuweIds=[];
+   foreach($oudeMap as $id=>$oud){
+    $rij=(array)($_POST['labels'][$id]??[]);
+    $naam=labelsKort($rij['naam']??$oud['naam'],60);
+    if($naam==='')$naam=$oud['naam'];
+    $labels[]=['id'=>$id,'naam'=>$naam,'beschrijving'=>labelsKort($rij['beschrijving']??$oud['beschrijving'],300),'actief'=>!empty($rij['actief'])];
+    $nieuweIds[$id]=true;
+   }
+   foreach((array)($_POST['nieuw']??[]) as $rij){
+    if(!is_array($rij))continue;
+    $naam=labelsKort($rij['naam']??'',60);
+    $id=labelsId($rij['id']??$naam);
+    if($naam===''||$id===''||isset($nieuweIds[$id]))continue;
+    $labels[]=['id'=>$id,'naam'=>$naam,'beschrijving'=>labelsKort($rij['beschrijving']??'',300),'actief'=>true];
+    $nieuweIds[$id]=true;
+   }
+   $doc['labels']=$labels;
+
+   $ledenData=ledenServiceLees();
+   $actieveIds=[];
+   foreach((array)($ledenData['leden']??[]) as $lid){
+    if(is_array($lid)&&empty($lid['gearchiveerd_op'])&&($lid['id']??'')!=='')$actieveIds[(string)$lid['id']]=true;
+   }
+   $labelIds=array_map(static fn($l)=>(string)$l['id'],$labels);
+   $selectiesPerLid=labelsSelectiesPerLid($labelIds,(array)($_POST['leden']??[]),$actieveIds);
+   foreach(array_keys($actieveIds) as $lidId){
+    if(!empty($selectiesPerLid[$lidId]))$doc['toewijzingen'][$lidId]=$selectiesPerLid[$lidId];
+    else unset($doc['toewijzingen'][$lidId]);
+   }
+
+   if(labelsSchrijfDocument($doc)){
+    schrijfLog($logBestand,$huidigeGebruiker,'ledenlabels_bijgewerkt',count($labels).' labels');
+    $melding='Ledenlabels opgeslagen.';$meldingType='ok';
+   }else{$melding='Opslaan mislukt.';$meldingType='fout';}
+  }finally{dataSlotDicht($slot);}
+ }
 }
-$doc=labelsLeesDocument();$labels=(array)$doc['labels'];$ledenData=ledenServiceLees();$leden=array_values(array_filter((array)($ledenData['leden']??[]),static fn($l)=>is_array($l)&&empty($l['gearchiveerd_op'])));usort($leden,static fn($a,$b)=>strcmp(ledenSorteernaam($a),ledenSorteernaam($b)));
-?><!doctype html><html lang="nl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Ledenlabels</title><link rel="stylesheet" href="csp205-ledenlabels-c4565c3cf0ff.css"><link rel="stylesheet" href="ui-2026.css"></head><body><div class="top"><a href="./">← Beheer</a></div><main class="wrap"><h1>Ledenlabels / segmenten</h1><p class="meta">Gebruik labels voor selecties zoals jeugd, vrijwilliger, trainer, wedstrijdteam of erelid. Labels geven nooit automatisch technische rechten.</p><?php if($melding):?><div class="flash <?=llEsc($meldingType)?>"><?=llEsc($melding)?></div><?php endif;?><form method="post"><input type="hidden" name="csrf" value="<?=llEsc($csrfToken)?>"><?php foreach($labels as $l):$id=(string)$l['id'];$toegewezen=[];foreach($leden as $lid)if(in_array($id,(array)($doc['toewijzingen'][$lid['id']]??[]),true))$toegewezen[]=(string)$lid['id'];?><section class="card"><div class="grid"><div class="veld"><label>Sleutel</label><input value="<?=llEsc($id)?>" disabled></div><div class="veld"><label>Naam</label><input name="labels[<?=llEsc($id)?>][naam]" maxlength="60" value="<?=llEsc($l['naam'])?>" required></div><label><input type="checkbox" name="labels[<?=llEsc($id)?>][actief]" value="1" <?=!empty($l['actief'])?'checked':''?>> Actief</label></div><div class="veld"><label>Beschrijving</label><textarea name="labels[<?=llEsc($id)?>][beschrijving]" maxlength="300"><?=llEsc($l['beschrijving'])?></textarea></div><h3>Leden</h3><div class="leden"><?php foreach($leden as $lid):?><label><input type="checkbox" name="leden[<?=llEsc($id)?>][]" value="<?=llEsc($lid['id'])?>" <?=in_array((string)$lid['id'],$toegewezen,true)?'checked':''?>> <?=llEsc(ledenVolledigeNaam($lid))?></label><?php endforeach;?></div></section><?php endforeach;?><section class="card"><h2>Nieuw label</h2><div class="grid"><div class="veld"><label>Sleutel (optioneel)</label><input name="nieuw[0][id]" placeholder="vrijwilliger"></div><div class="veld"><label>Naam</label><input name="nieuw[0][naam]" placeholder="Vrijwilliger"></div><div class="veld"><label>Beschrijving</label><input name="nieuw[0][beschrijving]" placeholder="Helpt regelmatig mee"></div></div><p class="meta">Na opslaan verschijnt het nieuwe label hierboven en kunnen leden worden gekoppeld.</p></section><button class="btn primary" type="submit">Labels opslaan</button></form></main></body></html>
+$doc=labelsLeesDocument();
+$labels=(array)$doc['labels'];
+$toewijzingSets=labelsToewijzingSets($doc);
+$ledenData=ledenServiceLees();
+$leden=array_values(array_filter((array)($ledenData['leden']??[]),static fn($l)=>is_array($l)&&empty($l['gearchiveerd_op'])));
+usort($leden,static fn($a,$b)=>strcmp(ledenSorteernaam($a),ledenSorteernaam($b)));
+?><!doctype html><html lang="nl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Ledenlabels</title><link rel="stylesheet" href="csp205-ledenlabels-c4565c3cf0ff.css"><link rel="stylesheet" href="ui-2026.css"></head><body><div class="top"><a href="./">← Beheer</a></div><main class="wrap"><h1>Ledenlabels / segmenten</h1><p class="meta">Gebruik labels voor selecties zoals jeugd, vrijwilliger, trainer, wedstrijdteam of erelid. Labels geven nooit automatisch technische rechten.</p><?php if($melding):?><div class="flash <?=llEsc($meldingType)?>"><?=llEsc($melding)?></div><?php endif;?><form method="post"><input type="hidden" name="csrf" value="<?=llEsc($csrfToken)?>"><?php foreach($labels as $l):$id=(string)$l['id'];?><section class="card"><div class="grid"><div class="veld"><label>Sleutel</label><input value="<?=llEsc($id)?>" disabled></div><div class="veld"><label>Naam</label><input name="labels[<?=llEsc($id)?>][naam]" maxlength="60" value="<?=llEsc($l['naam'])?>" required></div><label><input type="checkbox" name="labels[<?=llEsc($id)?>][actief]" value="1" <?=!empty($l['actief'])?'checked':''?>> Actief</label></div><div class="veld"><label>Beschrijving</label><textarea name="labels[<?=llEsc($id)?>][beschrijving]" maxlength="300"><?=llEsc($l['beschrijving'])?></textarea></div><h3>Leden</h3><div class="leden"><?php foreach($leden as $lid):$lidId=(string)$lid['id'];?><label><input type="checkbox" name="leden[<?=llEsc($id)?>][]" value="<?=llEsc($lidId)?>" <?=isset($toewijzingSets[$lidId][$id])?'checked':''?>> <?=llEsc(ledenVolledigeNaam($lid))?></label><?php endforeach;?></div></section><?php endforeach;?><section class="card"><h2>Nieuw label</h2><div class="grid"><div class="veld"><label>Sleutel (optioneel)</label><input name="nieuw[0][id]" placeholder="vrijwilliger"></div><div class="veld"><label>Naam</label><input name="nieuw[0][naam]" placeholder="Vrijwilliger"></div><div class="veld"><label>Beschrijving</label><input name="nieuw[0][beschrijving]" placeholder="Helpt regelmatig mee"></div></div><p class="meta">Na opslaan verschijnt het nieuwe label hierboven en kunnen leden worden gekoppeld.</p></section><button class="btn primary" type="submit">Labels opslaan</button></form></main></body></html>
