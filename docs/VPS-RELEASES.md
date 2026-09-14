@@ -1,6 +1,6 @@
 # VPS releases & rollback — fase 4.7
 
-Fase 4.7 beheert de gedeelde applicatiecode op de VPS als immutable releases. Tenantconfiguratie, databases, uploads, sessies en andere mutable data blijven buiten deze releaseboom.
+Status: **code/CI én echte releasewissel/rollback op de VPS afgerond.** Fase 4.7 beheert de gedeelde applicatiecode als immutable releases. Tenantconfiguratie, databases, uploads, sessies en andere mutable data blijven buiten deze releaseboom.
 
 ## Layout
 
@@ -116,6 +116,6 @@ Fase 3.5 bewaart historisch het fysieke releasepad dat actief was toen `deployme
 
 Daardoor blijven de reeds geteste 4.1–4.6 infrastructuurplannen bruikbaar zonder DNS/TLS/databaseplannen bij iedere code-release kunstmatig te herschrijven. Een losse of handmatig omgezette `current` blijft fail-closed ongeldig.
 
-## Geen GUI-actie
+## Control-plane en operatorgrens
 
-Release/deploy/rollback is in deze fase bewust root/operatorfunctionaliteit. Een toekomstige platform-control-plane kan deze vaste primitive aanroepen, maar een gewone verenigingsbeheerder krijgt geen directe filesystem-, systemd- of releasebevoegdheid.
+Release/deploy/rollback blijft privileged operatorfunctionaliteit. De inmiddels gerealiseerde platform-control-plane kan uitsluitend via de vastgelegde, allowlisted host-/executorgrens naar deze primitives verwijzen; de webapp of een gewone verenigingsbeheerder krijgt geen directe filesystem-, systemd- of releasebevoegdheid.

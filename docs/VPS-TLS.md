@@ -1,6 +1,6 @@
 # Fase 4.4 — TLS/HTTPS
 
-Status per **20-08-2026**: code/CI gereed; daadwerkelijke certificaatuitgifte en activatie gebeuren pas op de echte VPS.
+Status: **code/CI én echte certificaatuitgifte/renewalvalidatie op de VPS afgerond.** Dit document beschrijft het actuele TLS-contract voor nieuwe en gewijzigde tenants.
 
 ## Doel
 
@@ -102,7 +102,7 @@ Private keys worden nooit in JSON, Git of tenantbundles gekopieerd.
 
 ## HTTPS catch-all
 
-Een onbekende SNI/Host mag niet op het certificaat van de alfabetisch eerste tenant uitkomen. Daarom genereert de VPS één lokaal, self-signed **reject-certificaat** voor:
+Een onbekende SNI/Host mag niet op het certificaat van de alfabetisch eerste tenant uitkomen. Daarom gebruikt de VPS één lokaal, self-signed **reject-certificaat** voor:
 
 ```text
 invalid.verenigingsplatform.invalid
@@ -150,7 +150,7 @@ php bin/apply-vps-tls.php \
 - vergelijkt alle tenant-lokale artifacts;
 - voert geen root-, ACME- of Apache-write uit.
 
-## Root-activatie op de echte VPS
+## Root-activatie op de VPS
 
 ```bash
 sudo php bin/apply-vps-tls.php \
@@ -197,10 +197,10 @@ Certbot voert deploy-hooks alleen na een succesvolle uitgifte/renewal uit. De ho
 - TLS wordt niet geactiveerd zonder actieve tenant-FPM-route;
 - elke reload wordt voorafgegaan door een volledige Apache configtest.
 
-## Wat nog niet gebeurt in CI/DEV
+## CI versus echte VPS
 
-CI kan geen echte Let's Encrypt-uitgifte of root-Apache-activatie uitvoeren. De test bewijst daarom deterministisch de contracten, generated configs, bronbindingen en de root-tool-flow. De echte `--apply` wordt pas op de productie-VPS uitgevoerd.
+CI bewijst deterministisch de contracten, generated configs, bronbindingen en root-tool-flow. Echte Let's Encrypt-uitgifte, Apache-activatie en renewal zijn daarnaast tijdens de VPS-acceptatie daadwerkelijk uitgevoerd en gevalideerd. Voor nieuwe tenants blijft de echte `--apply` vanzelfsprekend een VPS-handeling; dat is een operationele stap, geen nog ontbrekende platformfase.
 
-## Volgende stap
+## Relatie met database provisioning
 
-Na 4.4 volgt **4.5 — database provisioning**.
+Na een geldige TLS-activatie kan de tenantketen verder met **fase 4.5 — database provisioning**. Dit beschrijft de operationele afhankelijkheid tussen de contracten; fase 4.5 zelf is inmiddels eveneens gerealiseerd en op de VPS gevalideerd.

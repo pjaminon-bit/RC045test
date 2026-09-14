@@ -1,6 +1,6 @@
 # Fase 4.1 — VPS runtime & Linux-isolatie
 
-Status per **20-08-2026**: implementatie voor de VPS-runtime-laag, inclusief fase 4.1.1 re-audit hardening.
+Status per **28-08-2026**: **code/CI én echte VPS-validatie afgerond**, inclusief fase 4.1.1 re-audit hardening.
 
 Fase 3.5/3.5.1 legt vast **welke tenant** bij welke gedeelde release, host en PHP-FPM-identiteit hoort. Fase 4.1 vertaalt dat contract naar concrete Linux- en PHP-FPM-artifacts zonder secrets in Git of in de runtimebundle te plaatsen.
 
@@ -124,7 +124,7 @@ Als `deployment.json`, `runtime-plan.json` of de poolconfig sinds generatie hand
 
 ## 5. Root-toepassing
 
-Pas op de echte Linux-VPS:
+Op de Linux-VPS:
 
 ```bash
 sudo php bin/apply-vps-runtime.php \
@@ -211,9 +211,9 @@ Zo kan één nieuw tenantbestand niet automatisch een bestaande productie-runtim
 
 De geïnstalleerde FPM-config onder `/etc/.../pool.d/` is `root:root 0644` en bevat geen secrets.
 
-## 9. Nog niet in fase 4.1
+## 9. Relatie met overige VPS-contracten
 
-Fase 4.1 configureert geen:
+Fase 4.1 configureert zelf geen:
 
 - Apache/Nginx tenant-vhost — fase 4.2;
 - DNS — fase 4.3;
@@ -223,4 +223,6 @@ Fase 4.1 configureert geen:
 - centrale release/rollbackautomation — fase 4.7;
 - tenant disable/export/remove lifecycle — fase 4.8.
 
-De daadwerkelijke root-`--apply` wordt pas op de toekomstige VPS uitgevoerd. De repository en CI kunnen nu wel het volledige plan, de FPM-config en alle veiligheidsvoorwaarden deterministisch valideren.
+Deze verantwoordelijkheden zijn inmiddels gerealiseerd en tijdens de eerste VPS-acceptatie daadwerkelijk gevalideerd. De fasenummers beschrijven de verantwoordelijkheidsgrenzen en uitvoervolgorde; zij betekenen niet dat deze infrastructuurlagen nog toekomstig zijn.
+
+Voor de actuele end-to-end status zijn `VPS-DEPLOYMENT.md` en `ROADMAP.md` leidend.
