@@ -39,7 +39,7 @@ De repository ondersteunt nog een losse/standalone configuratieroute, onder ande
 
 ## Runtime en lokale checks
 
-De productie-runtime controleert centraal de vereiste PHP-extensies in [`app/deployment/php-runtime-requirements.php`](app/deployment/php-runtime-requirements.php): `openssl`, `pdo_pgsql`, `mbstring`, `curl` en `dom`. De actuele VPS-/compatibiliteitslijn gebruikt PHP 8.5. Browser- en JavaScripttooling vereist Node.js 20 of nieuwer; zie [`package.json`](package.json).
+De productie-runtime controleert centraal de vereiste PHP-extensies in [`app/deployment/php-runtime-requirements.php`](app/deployment/php-runtime-requirements.php): `openssl`, `pdo_pgsql`, `mbstring`, `curl`, `dom` en `gd`. GD is vereist voor de ondersteunde server-side fotoboekverwerking. De actuele VPS-/compatibiliteitslijn gebruikt PHP 8.5. Browser- en JavaScripttooling vereist Node.js 20 of nieuwer; zie [`package.json`](package.json).
 
 Voor een volledige lokale bronregressie:
 
