@@ -28,7 +28,7 @@ Gebruik dit bestand voor de samenhang en ga voor concrete procedures naar de ges
 | Cryptografische backupattestatie | [BACKUP-ATTESTATION.md](BACKUP-ATTESTATION.md) |
 | Volledige bron/live regressie | [FULL-REGRESSION-ACCEPTANCE.md](FULL-REGRESSION-ACCEPTANCE.md) |
 
-De [README](../README.md) blijft de repository-ingang. Voor de actuele Security & Hardening Audit zijn de nieuwste handovercomment en de feitelijke GitHub-state in issue #138 leidend.
+De [README](../README.md) blijft de repository-ingang. Voor de actuele repository-audit zijn de nieuwste handovercomment en de feitelijke GitHub-state in issue #253 leidend.
 
 ## Leidende VPS-architectuur
 
@@ -36,27 +36,31 @@ De [README](../README.md) blijft de repository-ingang. Voor de actuele Security 
 /srv/verenigingsplatform/
 ├── current -> releases/<40-hex-commit>
 ├── releases/
-│   ├── <commit-a>/              # root-owned, immutable/read-only
+│   ├── <commit-a>/
+│   │   ├── public/              # enige web-DocumentRoot
+│   │   └── ... interne code buiten DocumentRoot ...
 │   └── <commit-b>/
 └── ... platform/release-state ...
 
 /srv/verenigingen/
 ├── <tenant-a>/
-│   ├── config.php               # server-only tenantconfig
+│   ├── config.php
 │   ├── runtime.env
 │   ├── tenant.json
 │   ├── deployment.json
 │   ├── runtime/
-│   └── private/                 # auth/data/sessies/uploads/backups/tmp/etc.
+│   └── private/
 └── <tenant-b>/
     └── ... eigen geïsoleerde tenantstate ...
 ```
 
 De harde grens is:
 
-- **gedeelde applicatiecode** staat in een immutable release onder `/srv/verenigingsplatform/releases/<commit>`;
+- gedeelde applicatiecode staat in een immutable release onder `/srv/verenigingsplatform/releases/<commit>`;
 - `current` verwijst atomisch naar één fysieke release;
-- **tenantconfiguratie en mutable/private data** staan onder `/srv/verenigingen/<tenant>` en nooit in de gedeelde release;
+- **alleen `/srv/verenigingsplatform/current/public` is de Apache DocumentRoot**;
+- de release-root zelf en alle interne code daarbuiten zijn web-side fail-closed denied;
+- tenantconfiguratie en mutable/private data staan onder `/srv/verenigingen/<tenant>` en nooit in de gedeelde release;
 - de tenantroot/private root is nooit een documentroot, alias of algemene statische webmap;
 - iedere tenant heeft een eigen Linux-runtime-identiteit, PHP-FPM-pool en Unix-socket;
 - permanente privileged host-entrypoints staan buiten de applicatierelease en voeren geen repository-/release-PHP als root uit.
@@ -81,7 +85,7 @@ php bin/prepare-vps-runtime.php \
   --php-version=8.5
 ```
 
-Bij root-toepassing hoort de FPM-pool bij dezelfde PHP-versie onder `/etc/php/8.5/fpm/pool.d`. De volledige generatie-, controle- en applyprocedure staat in `VPS-RUNTIME-ISOLATION.md`; dit deploymentcontract herhaalt alleen de actuele productiebaseline en vormt geen tweede operationele procedure.
+Bij root-toepassing hoort de FPM-pool bij dezelfde PHP-versie onder `/etc/php/8.5/fpm/pool.d`. De volledige generatie-, controle- en applyprocedure staat in `VPS-RUNTIME-ISOLATION.md`; dit deploymentcontract herhaalt alleen de actuele productiebaseline.
 
 ## Web- en netwerkgrenzen
 
@@ -89,7 +93,9 @@ De canonieke VPS-stack gebruikt Apache 2.4. Voor iedere tenant gelden onder meer
 
 - een globale HTTP/HTTPS catch-all weigert onbekende hosts voordat een tenantvhost kan matchen;
 - HTTP→HTTPS gebruikt de vaste canonieke host en spiegelt geen client-`Host` terug;
-- de documentroot is de gedeelde applicatierelease;
+- de DocumentRoot is exact de `public/`-subdirectory van de actieve gedeelde applicatierelease;
+- de release-root zelf en interne paden zoals `app/`, `bin/`, `tests/` en `docs/` liggen buiten de DocumentRoot;
+- alleen `public/index.php` is het fysieke PHP/FPM-entrypoint; virtuele publieke routes lopen via die frontcontroller;
 - PHP voor een tenanthost gaat uitsluitend naar de eigen PHP-FPM-socket;
 - tenant-private paden worden niet rechtstreeks geserveerd;
 - server-only code, tooling en VCS-metadata zijn niet publiek bereikbaar.
@@ -100,16 +106,16 @@ DNS, TLS en webserverconfiguratie zijn operationele onderdelen van de huidige ar
 
 De VPS ondersteunt tenantgebonden PostgreSQL/PDO conform `VPS-DATABASE.md`. Databasecredentials horen niet in Git, `deployment.json` of de gedeelde release. Private tenantdata blijft onder de tenant-private storagegrens of de tenantgebonden database.
 
-Legacy PHP+JSON-bestanden in de repository bestaan voor standalone/templatecompatibiliteit. Ze zijn **geen architectuurbron voor nieuwe VPS-tenants**. Voor standalone Apache kan de repository-`.htaccess` als defense-in-depth denylaag relevant blijven, maar er is geen handmatige FTP-stap in de VPS-deployflow.
+Legacy PHP+JSON-bestanden in de repository bestaan voor standalone/templatecompatibiliteit. Ze zijn geen architectuurbron voor nieuwe VPS-tenants. Voor standalone Apache kan de repository-`.htaccess` als defense-in-depth denylaag relevant blijven, maar er is geen handmatige FTP-stap in de VPS-deployflow.
 
 ## `.htaccess` en release-inhoud
 
-De repository bevat `.htaccess` als normaal versiebeheerd bestand. De immutable releaseflow bouwt een deterministisch inhoudsmanifest en sluit expliciet private/mutable paden en VCS-/CI-metadata uit; `.htaccess` is geen legacy handmatig te kopiëren serverbestand.
+De repository bevat `.htaccess` als normaal versiebeheerd bestand. De immutable releaseflow bouwt een deterministisch inhoudsmanifest en sluit expliciet private/mutable paden en VCS-/CI-metadata uit.
 
 Daarom geldt:
 
-- **VPS:** geen handmatige FTP-upload van `.htaccess`; releases komen via de gecontroleerde immutable release/deployflow;
-- **standalone/template:** volg de hosting-/migratiedocumentatie voor die omgeving en behandel `.htaccess` alleen als Apache defense-in-depth, niet als vervanging voor veilige private opslag.
+- **VPS:** geen handmatige FTP-upload van `.htaccess`; releases komen via de gecontroleerde immutable release/deployflow en alleen `public/` wordt door Apache gepubliceerd;
+- **standalone/template:** volg de hosting-/migratiedocumentatie voor die omgeving en behandel `.htaccess` alleen als defense-in-depth, niet als vervanging voor veilige private opslag.
 
 ## Immutable deployment en rollback
 
@@ -143,10 +149,9 @@ De GitHub-runner krijgt geen algemene root-shell en kopieert geen losse bestande
 
 ## Standalone versus VPS
 
-Houd deze twee deploymentmodellen bewust uit elkaar:
-
 **Multi-tenant VPS**
 - gedeelde immutable code;
+- alleen `current/public` als DocumentRoot;
 - externe fail-closed tenantconfig;
 - tenant-private filesystem/PDO;
 - eigen Linux-user + FPM-pool;

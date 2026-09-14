@@ -1,18 +1,35 @@
 # Fase 4.2 — Apache webserver & vhosts
 
-Status per **20-08-2026**: code/CI voor Apache 2.4 gereed; artifacts blijven bewust inactief tot DNS/TLS in fase 4.3/4.4.
+Status: **actueel productiecontract; fase 4.2 is op de VPS gevalideerd.** De webserverlaag gebruikt sinds hardening #226 uitsluitend de minimale `public/`-subdirectory van de actieve immutable release als DocumentRoot.
 
 ## Keuze: één ondersteunde productie-webserver
 
-Vanaf fase 4.2 is **Apache HTTP Server 2.4 op Ubuntu/Debian** de canonieke VPS-stack voor het verenigingsplatform. We implementeren niet parallel ook Nginx. De gedeelde applicatie gebruikt al een uitgebreid, getest `.htaccess`-contract; twee webservers zouden dezelfde kritieke rewrite- en denyregels dubbel moeten onderhouden.
+**Apache HTTP Server 2.4 op Ubuntu/Debian** is de canonieke VPS-stack. Minimumversie: **Apache 2.4.49**, onder meer vanwege `StrictHostCheck`.
 
-Minimumversie: **Apache 2.4.49**. Deze ondergrens is gekozen omdat `StrictHostCheck` vanaf die versie beschikbaar is.
+De VPS-securitygrens rust niet meer op een breed toegankelijke repository-root met een dubbel onderhouden denylist. Interne applicatiecode, tooling, tests en documentatie liggen fysiek buiten de DocumentRoot. De repository-`.htaccess` blijft alleen relevant binnen de publieke `public/`-boom en voor standalone/templatecompatibiliteit.
+
+## Public-rootarchitectuur
+
+Voor de actieve release:
+
+```text
+/srv/verenigingsplatform/current -> releases/<40-hex-commit>
+/srv/verenigingsplatform/current/public/   # enige DocumentRoot
+```
+
+Het actuele contract is:
+
+- `app_root` is `/srv/verenigingsplatform/current`;
+- `document_root` is exact `app_root/public`;
+- de release-root zelf is niet webtoegankelijk en krijgt `Require all denied`;
+- interne paden zoals `app/`, `bin/`, `tests/`, `docs/`, `.github/` en `.git/` liggen buiten de DocumentRoot en hoeven niet door een web-denylist te worden beschermd;
+- alleen `public/index.php` is een fysiek uitvoerbaar PHP-entrypoint;
+- virtuele publieke `.php`-routes worden door de publieke frontcontroller afgehandeld;
+- aliases buiten `public/` en generieke `ProxyPass`/`ProxyPassMatch`-routes zijn verboden.
 
 ## Waarom een expliciete catch-all nodig is
 
 Apache gebruikt bij name-based virtual hosts de eerste vhost voor een IP/poort wanneer geen `ServerName` of `ServerAlias` overeenkomt. Daarom mag de eerste `*:80` vhost nooit een tenant zijn.
-
-Fase 4.2 genereert één globale eerste/default vhost:
 
 ```apache
 <VirtualHost *:80>
@@ -31,9 +48,7 @@ Bestandsnaam:
 000-verenigingsplatform-http-catchall.conf
 ```
 
-Apache leest wildcard-includes alfabetisch; de `000-` prefix maakt de gewenste eerste positie expliciet wanneer de site later in fase 4.4 wordt geactiveerd.
-
-`StrictHostCheck On` is defense-in-depth. De catch-all zelf routeert nooit naar PHP/FPM en bevat geen tenantnaam, socket of alias.
+De catch-all routeert nooit naar PHP/FPM en bevat geen tenantnaam, socket of alias.
 
 ## Tenant HTTP-vhost
 
@@ -52,25 +67,17 @@ Belangrijk:
 - geen `ServerAlias`;
 - geen `%{HTTP_HOST}`, `$host` of andere request-afgeleide redirectdoelen;
 - geen PHP-handler en geen FPM-socket op poort 80;
-- `Redirect` gebruikt een literal doelhost en behoudt het resterende URL-pad.
-
-Bestandsnaam per tenant:
-
-```text
-100-vp-<tenant-key>-http.conf
-```
+- `Redirect` gebruikt een literal doelhost.
 
 ## HTTPS-routingfragment
 
-Fase 4.2 geeft nog geen certificaat uit. Daarom wordt de tenant-PHP-routing als apart fragment voorbereid. Fase 4.4 maakt later de volledige `*:443` vhost met exact `ServerName`, TLS-certificaat en een `Include` van dit fragment.
-
-Conceptueel:
+Fase 4.2 genereert het routingfragment dat fase 4.4 in de tenant-HTTPS-vhost opneemt. Conceptueel:
 
 ```apache
 UseCanonicalName On
 ProxyRequests Off
-DocumentRoot "/srv/verenigingsplatform/current"
-DirectoryIndex index.php index.html
+DocumentRoot "/srv/verenigingsplatform/current/public"
+DirectoryIndex index.php
 
 <Directory "/">
     Options None
@@ -79,45 +86,47 @@ DirectoryIndex index.php index.html
 </Directory>
 
 <Directory "/srv/verenigingsplatform/current">
-    Options -Indexes -ExecCGI +FollowSymLinks
-    AllowOverride All
+    Options None
+    AllowOverride None
+    Require all denied
+</Directory>
+
+<Directory "/srv/verenigingsplatform/current/public">
+    Options -Indexes -ExecCGI -MultiViews +FollowSymLinks
+    AllowOverride FileInfo Indexes Options
     Require all granted
 </Directory>
 
-<LocationMatch "^/(?:app|bin|tests|docs|\.github|\.git)(?:/|$)">
-    Require all denied
-</LocationMatch>
-
-<FilesMatch "...gevoelige serverbestanden...">
-    Require all denied
+<FilesMatch "(?i)\\.php$">
+    <RequireAll>
+        Require all granted
+        Require not expr "-f '%{REQUEST_FILENAME}'"
+    </RequireAll>
 </FilesMatch>
 
-<FilesMatch "\.php$">
+<Files "index.php">
+    AuthMerging Off
+    Require all granted
     SetHandler "proxy:unix:/run/php/<tenant-pool>.sock|fcgi://<tenant-pool>/"
-</FilesMatch>
+</Files>
 ```
 
-De FastCGI backendnaam na `|` is bewust **tenant-uniek**. Apache documenteert dat de hostname in deze handlerconstructie kan worden gewijzigd wanneer backends onderscheiden moeten worden. Daardoor wordt niet alleen de Unix-socket maar ook de logische proxy-workeridentity aan de tenantpool gekoppeld.
+De parent van `current` mag de release-symlink volgen, maar blijft inhoudelijk denied. De release-root zelf blijft eveneens denied. Alleen `public/` wordt aan clients aangeboden.
 
-Er bestaat geen generieke `ProxyPass` of `ProxyPassMatch` die de tenantbinding kan omzeilen.
+De FastCGI backendnaam na `|` is tenant-uniek. Daardoor zijn zowel Unix-socket als logische proxy-workeridentity aan dezelfde tenantpool gebonden.
 
-## Waarom `AllowOverride All` hier bewust is
+## Waarom geen brede denylist meer
 
-De applicatierelease bevat een vertrouwde, centraal beheerde `.htaccess` die onder andere:
+Voor #226 was de gehele release de DocumentRoot en moesten interne routes met Apache-regels en `.htaccess` worden geweigerd. Dat model is vervangen door een positieve public-rootgrens:
 
-- publieke content/assets rewrites uitvoert;
-- vriendelijke routes verzorgt;
-- aanvullende gevoelige bestanden blokkeert;
-- security headers zet;
-- `DirectoryIndex` en `Options` gebruikt.
+- interne code ligt fysiek buiten de DocumentRoot;
+- release-root is fail-closed denied;
+- alleen de publieke boom is granted;
+- alleen `index.php` krijgt de FPM-handler.
 
-De gedeelde release is vanuit fase 4.1 nooit tenant-writable. Daarom is `AllowOverride All` voor deze **centrale immutable code** acceptabel en voorkomt het dat we dezelfde applicatieregels foutgevoelig dubbel implementeren.
-
-Fase 4.2 voegt daarnaast server-side denyregels toe voor de belangrijkste tooling/VCS/private routes. Deze beschermen dus ook wanneer `.htaccess` onverwacht niet wordt verwerkt.
+Denyregels in `.htaccess` mogen defense-in-depth blijven voor daadwerkelijk publieke namen, maar vormen niet de primaire scheiding tussen publieke en interne repository-inhoud.
 
 ## 1. Webserverbundle genereren
-
-Voor een fase-4.1 tenant:
 
 ```bash
 php bin/prepare-vps-webserver.php \
@@ -144,9 +153,10 @@ php bin/prepare-vps-webserver.php \
 
 De generator:
 
-- valideert het volledige fase-4.1 runtimeplan opnieuw;
+- valideert het volledige runtimeplan opnieuw;
 - controleert de SHA-256-binding met `deployment.json`;
-- herleidt canonical host, DocumentRoot, pool en socket opnieuw;
+- eist dat DocumentRoot exact de fysieke `app_root/public`-subdirectory is;
+- herleidt canonical host, pool en socket opnieuw;
 - accepteert alleen output binnen de eigen tenantroot;
 - weigert symlinks en secretachtige CLI-argumenten;
 - schrijft atomisch en deterministisch;
@@ -160,19 +170,9 @@ php bin/apply-vps-webserver.php \
   --check
 ```
 
-`--check` vereist geen Apache en geen root. De tool:
+`--check` vereist geen Apache en geen root. De tool valideert bronbindings opnieuw, bouwt het plan deterministisch na en vergelijkt de gegenereerde Apache-artifacts byte-inhoudelijk.
 
-- valideert het runtimeplan/deploymentcontract opnieuw;
-- vergelijkt bron-SHA's;
-- bouwt `web-plan.json` opnieuw deterministisch op;
-- genereert alle drie Apache-artifacts opnieuw;
-- vergelijkt ze byte-inhoudelijk.
-
-Handmatige wijziging van plan, redirect, socket, DocumentRoot of denyregels maakt de bundle ongeldig.
-
-## 3. Inactieve root-installatie
-
-Pas op de toekomstige VPS:
+## 3. Root-installatie
 
 ```bash
 sudo php bin/apply-vps-webserver.php \
@@ -180,7 +180,7 @@ sudo php bin/apply-vps-webserver.php \
   --apply
 ```
 
-De root-tool ondersteunt bewust alleen de vaste Ubuntu/Debian paden:
+De root-tool ondersteunt uitsluitend de vaste Ubuntu/Debian paden:
 
 ```text
 /etc/apache2/sites-available
@@ -188,82 +188,36 @@ De root-tool ondersteunt bewust alleen de vaste Ubuntu/Debian paden:
 /etc/verenigingsplatform/apache/fragments
 ```
 
-Hij controleert vóór installatie:
+Voor installatie controleert hij onder meer Linux/EUID 0, Apacheversie, vereiste modules, veilige doelmappen, alle planbindings en Apache-syntax. Artifacts worden atomisch als `root:root 0644` geplaatst. Een reeds actief afwijkend sitebestand wordt niet stil overschreven.
 
-- Linux + EUID 0;
-- Apacheversie minimaal 2.4.49;
-- geladen modules: `alias`, `authz_core`, `dir`, `headers`, `proxy`, `proxy_fcgi`, `rewrite`;
-- veilige, symlinkvrije doelmappen;
-- alle bronbindings uit `web-plan.json`;
-- Apache syntax van de gegenereerde artifacts via `apache2ctl -t -c 'Include ...'`.
+## 4. Activatiegrens
 
-Daarna worden de **inactieve** bestanden atomisch als `root:root 0644` geplaatst.
+De fase-4.2 tool installeert de routingartifacts maar activeert of reloadt geen half-geconfigureerde tenant. DNS/TLS-activatie loopt via de fase-4.3/4.4 contracten en de georkestreerde bootstrap/releaseflow.
 
-Een reeds actief, afwijkend sitebestand wordt nooit overschreven, ook niet met `--force`.
+Voor een live activatie gelden altijd:
 
-## 4. Wat `--apply` nadrukkelijk NIET doet
+1. globale HTTP/HTTPS catch-all aanwezig;
+2. exacte tenantvhosts aanwezig;
+3. geldig TLS-certificaat en vaste canonical host;
+4. `apache2ctl configtest` over de volledige kandidaatconfig;
+5. gecontroleerde enable/reload;
+6. host-, redirect-, TLS- en FPM-smoketests.
 
-Fase 4.2:
+## 5. Securitygrenzen
 
-- voert geen `a2ensite` uit;
-- maakt geen symlink onder `sites-enabled`;
-- schrijft geen TLS-certificaat of private key;
-- voert geen `systemctl`, `service`, `reload`, `restart` of `graceful` uit;
-- zet dus geen half-geconfigureerde site live.
-
-Dit is nodig omdat DNS-readiness pas in fase 4.3 wordt vastgesteld en de volledige HTTPS-vhost/certificaten pas in fase 4.4 bestaan.
-
-## 5. Configtest en activatie
-
-De 4.2 root-tool syntax-test de afzonderlijke gegenereerde artifacts tegen de daadwerkelijk geladen Apache-config en modules. Dat bewijst dat de bestanden parseerbaar zijn.
-
-De **volledige live configuratie** kan pas worden getest wanneer fase 4.4 de HTTPS-wrapper en certificaatpaden heeft toegevoegd. Vóór activatie/reload moet fase 4.4 daarom:
-
-1. de HTTP catch-all als eerste/default site klaarzetten;
-2. de tenant HTTP-vhost klaarzetten;
-3. de HTTPS catch-all en tenant TLS-vhost opbouwen;
-4. `apache2ctl configtest` over de complete actieve kandidaatconfig uitvoeren;
-5. pas bij `Syntax OK` gecontroleerd enable/reload uitvoeren;
-6. daarna host-, redirect-, TLS- en FPM-smoketests uitvoeren.
-
-## 6. Securitygrenzen die 4.2 nu vastlegt
-
-- onbekende HTTP hosts gaan nooit naar de eerste tenant;
+- onbekende hosts gaan nooit naar een tenant;
 - geen Host-header reflection in redirects;
-- geen HTTP-verzoek gaat rechtstreeks naar PHP;
+- HTTP routeert niet naar PHP;
 - tenant A PHP gaat uitsluitend naar tenant A socket/backend;
-- tenant B socket kan niet in tenant A fragment voorkomen;
 - tenantroot/private root wordt nooit geserveerd;
-- shared release is de enige DocumentRoot;
-- `app`, `bin`, `tests`, `docs`, `.github`, `.git` zijn server-side geblokkeerd;
-- gevoelige config/data-opslagbestanden zijn server-side geblokkeerd;
-- forward proxy staat uit;
+- **alleen `app_root/public` is DocumentRoot**;
+- de release-root zelf is denied;
+- interne repositorycode ligt buiten de DocumentRoot;
+- alleen `public/index.php` is fysieke PHP/FPM-entrypoint;
+- aliases buiten de public-root zijn verboden;
 - generieke ProxyPass-routes zijn verboden;
-- artifacts zijn vóór DNS/TLS niet actief.
-
-## 7. Geen secrets
-
-`web-plan.json` en Apache-artifacts bevatten bewust geen:
-
-- beheerwachtwoorden/hashes;
-- databasecredentials/DSN;
-- TLS private key;
-- certificaatinhoud;
-- API-tokens.
-
-TLS-paden/secrets worden pas in fase 4.4 server-side gekoppeld.
-
-## 8. Volgende stap
-
-Na fase 4.2 volgt **4.3 — DNS**. Die fase bepaalt en valideert eerst waar tenantdomeinen naartoe wijzen. Pas daarna kan fase 4.4 veilig certificaten aanvragen en de in 4.2 voorbereide vhosts daadwerkelijk activeren.
+- artifacts bevatten geen secrets.
 
 ## Apache-bronnen
 
-De implementatie volgt de officiële Apache HTTP Server 2.4 documentatie voor:
-
-- name-based virtual-host selectie en het gedrag van de eerste/default vhost;
-- `StrictHostCheck` (beschikbaar vanaf 2.4.49);
-- `Redirect permanent` in een dedicated HTTP-vhost;
-- `mod_proxy_fcgi` `SetHandler` met Unix socket;
-- `Include`/wildcards en alfabetische volgorde;
-- `httpd -t` en `-c` voor syntaxtests.
+De implementatie volgt Apache HTTP Server 2.4 voor name-based vhosts, `StrictHostCheck`, redirects, `mod_proxy_fcgi`, includes en configtests. De repositorycode in `app/deployment/webserver-contract.php` is de uitvoerbare bron van waarheid voor de exacte gegenereerde configuratie.
