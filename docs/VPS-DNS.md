@@ -1,10 +1,10 @@
 # Fase 4.3 — DNS planning & readiness
 
-Status per **20-08-2026**: code/CI gereed; echte DNS-records worden pas ingesteld zodra het VPS-adres en de tenantdomeinen definitief zijn.
+Status: **code/CI én live VPS-validatie afgerond.** Het fase-4.3-contract blijft de actuele fail-closed DNS-readinessgrens vóór TLS-uitgifte en -activatie voor nieuwe of gewijzigde tenants.
 
 ## Doel
 
-Fase 4.3 vormt de harde grens tussen de in 4.2 voorbereide, nog inactieve Apache-configuratie en de TLS/HTTPS-activatie van fase 4.4.
+Fase 4.3 vormt de harde grens tussen de in 4.2 voorbereide Apache-configuratie en de TLS/HTTPS-activatie van fase 4.4.
 
 Een certificaat mag pas worden aangevraagd wanneer aantoonbaar is dat de exacte canonical host van de tenant via DNS naar de bedoelde VPS-route wijst. Een oud A- of AAAA-record naar een andere server telt daarom als fout, ook wanneer één correct record al aanwezig is.
 
@@ -105,11 +105,11 @@ Fase 4.3 schrijft bewust **niet automatisch** naar Cloudflare, Route53, TransIP,
 
 De operator stelt de records bij de gekozen provider in volgens `dns-plan.json`.
 
-Later kan tenant-lifecycle automation een provideradapter krijgen, maar ook dan blijft `dns-plan.json` het onafhankelijke gewenste-eindtoestandcontract.
+Een eventuele toekomstige provideradapter verandert dit gewenste-eindtoestandcontract niet: `dns-plan.json` blijft de onafhankelijke bron voor wat live moet worden aangetroffen.
 
 ## 3. Live readiness controleren
 
-Na de DNS-wijziging, op de toekomstige VPS:
+Na de DNS-wijziging op de VPS:
 
 ```bash
 php bin/check-vps-dns.php \
@@ -176,7 +176,7 @@ Het bewijs is maximaal **900 seconden / 15 minuten** geldig.
 8. exacte 15-minutengeldigheid;
 9. dat het bewijs nog niet verlopen is.
 
-Fase 4.4 moet deze verifier gebruiken vóór certificaatuitgifte of HTTPS-activatie.
+Fase 4.4 gebruikt deze verifier vóór certificaatuitgifte of HTTPS-activatie.
 
 ## 5. Wat propagation hier betekent
 
@@ -186,7 +186,7 @@ Het readinessbewijs betekent concreet:
 
 > de resolver die de productie-VPS op dit moment gebruikt ziet herhaaldelijk exact de bedoelde DNS-route.
 
-Dat is de relevante minimale preflight vóór ACME/TLS op die VPS. Monitoring via andere resolvers/locaties kan later in fase 4.6 worden toegevoegd zonder het fase-4.3 contract te verzwakken.
+Dat is de relevante minimale preflight vóór ACME/TLS op die VPS. Externe monitoring kan aanvullend meerdere resolvers/locaties bewaken zonder het fase-4.3 contract te verzwakken.
 
 ## 6. Geen activatie in 4.3
 
@@ -199,10 +199,8 @@ Fase 4.3:
 - wijzigt geen DNS-provideraccount;
 - bevat geen provider/API-secrets.
 
-De 4.2 webserverartifacts blijven dus inactief.
+## 7. Relatie met TLS
 
-## 7. Volgende stap
-
-Na een vers en geldig `dns-readiness.json` volgt **fase 4.4 — TLS/HTTPS**.
+Na een vers en geldig `dns-readiness.json` kan **fase 4.4 — TLS/HTTPS** worden uitgevoerd. Dit is een actuele operationele afhankelijkheid, geen nog toekomstige roadmapstap.
 
 Fase 4.4 bouwt de volledige HTTPS-vhost, koppelt certificaatpaden server-side, voegt een veilige `*:443` default/catch-all toe, voert een complete Apache `configtest` uit en activeert/reloadt pas wanneer DNS, TLS en tenant-FPM-routing als één geheel kloppen.

@@ -184,7 +184,7 @@ private/collections/
 
 Nieuwe tenants gebruiken canoniek `--driver=pdo`. De first-VPS/productiebootstrap geeft dit bovendien expliciet door en provisiont PostgreSQL vóór tenant-FPM wordt geactiveerd. `--driver=json` blijft alleen beschikbaar als bewuste standalone/legacycompatibiliteitskeuze. Een externe PDO-tenant valt nooit terug naar legacy JSON wanneer de database ontbreekt, faalt of een collectie leeg is.
 
-Databasecredentials worden niet door de provisioner gevraagd. DSN/user/password horen server-side via deployment/secrets gekoppeld te worden.
+Databasecredentials worden niet door de provisioner gevraagd. De canonieke VPS-stack gebruikt passwordloze Unix-socket peer authentication; expliciete DSN/user/passwordvelden blijven alleen relevant voor standalone/legacy ontwikkel- of migratiesituaties.
 
 ## 10. Backups en restore
 
@@ -224,19 +224,8 @@ Op de VPS hoort `/srv/verenigingen` alleen schrijfbaar te zijn voor de vertrouwd
 
 ## Productie-infrastructuurstatus
 
-De lijst die na fase 3.5.1 nog openstond is inmiddels door fase 4.1 t/m 5.2 geautomatiseerd:
+Fase 4.1 t/m 4.8, platformbeheer/control-plane en first-VPS bootstrap zijn inmiddels daadwerkelijk op de eerste Ubuntu 26.04-VPS toegepast en geaccepteerd. Fase 5.3 is op 28 augustus 2026 volledig groen afgerond, inclusief live DNS/TLS, PostgreSQL-isolatie, monitoring, lifecycle/export+restore en release/rollback.
 
-- Linux/PHP-FPM runtime-isolatie — fase 4.1/4.1.1;
-- Apache-vhosts en veilige catch-alls — fase 4.2;
-- DNS-readiness — fase 4.3;
-- TLS/Certbot — fase 4.4;
-- PostgreSQL provisioning en peer-authenticatie — fase 4.5/4.5.1;
-- monitoring/logging — fase 4.6;
-- release/rollback — fase 4.7;
-- tenant lifecycle/export/delete — fase 4.8;
-- platformbeheer/control-plane — fase 5.1;
-- georkestreerde first-VPS bootstrap — fase 5.2/5.2.1.
+Nieuwe VPS-tenants worden daarom niet via losse historische fasestappen als een nog te bouwen keten behandeld. Gebruik voor onboarding de actuele georkestreerde provisioning/bootstrap- en deploymentcontracten uit `docs/VPS-DEPLOYMENT.md`, `docs/VPS-FIRST-BOOTSTRAP.md` en de gespecialiseerde operationele documenten.
 
-Deze onderdelen zijn **code/CI-gereed**, maar zijn nog niet als complete keten op de eerste echte productie-VPS geaccepteerd. Voor een nieuwe VPS wordt de provisioner daarom niet los als eindstap uitgevoerd; fase 5.2 orkestreert hem samen met de infrastructuurlagen.
-
-De eerstvolgende stap is fase 5.3: server-readiness, DNS, exacte productiecheckout, root-vrije bootstrapcheck en daarna de echte first-VPS acceptatie. Zie `docs/VPS-READINESS.md`, `docs/VPS-FIRST-BOOTSTRAP.md` en `docs/ROADMAP.md`.
+Historische fasenummers blijven alleen bestaan om de herkomst van een contract te duiden; zij betekenen niet dat de voorziening nog toekomstig is.
