@@ -5,7 +5,7 @@
 
 function platformPhpRequiredExtensions(): array
 {
-    return ['openssl', 'pdo_pgsql', 'mbstring', 'curl', 'dom'];
+    return ['openssl', 'pdo_pgsql', 'mbstring', 'curl', 'dom', 'gd'];
 }
 
 function platformPhpAssertRequiredExtensions(): void
