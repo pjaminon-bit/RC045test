@@ -7,7 +7,7 @@ require_once __DIR__ . '/dns-contract.php';
 
 function control59Stages(): array
 {
-    return ['start','plans_ready','runtime_applied','database_applied','fpm_active','dns_ready','tls_active','monitoring_active','lifecycle_active','complete'];
+    return ['start','plans_ready','runtime_applied','database_applied','fpm_active','dns_ready','tls_active','monitoring_active','acceptance_ready','lifecycle_active','complete'];
 }
 
 function control59StageIndex(string $stage): int
@@ -20,6 +20,19 @@ function control59StageIndex(string $stage): int
 function control59Before(string $current,string $target): bool
 {
     return control59StageIndex($current)<control59StageIndex($target);
+}
+
+function control59AcceptanceValid(mixed $evidence,string $tenant): bool
+{
+    if(!is_array($evidence)||(int)($evidence['schema']??0)!==1||($evidence['phase']??'')!=='5.9-acceptance'||!hash_equals($tenant,(string)($evidence['tenant_key']??'')))return false;
+    if(!web42CanoniekeHost((string)($evidence['canonical_host']??''))||strtotime((string)($evidence['accepted_at_utc']??''))===false)return false;
+    $checks=$evidence['checks']??null;if(!is_array($checks)||$checks===[])return false;
+    foreach($checks as$key=>$value)if(!is_string($key)||!is_string($value)||$value!=='ok')return false;
+    $bindings=$evidence['bindings']??null;if(!is_array($bindings))return false;
+    foreach(['tenant_manifest_sha256','monitoring_plan_sha256','lifecycle_plan_sha256']as$key)if(preg_match('/^[0-9a-f]{64}$/D',(string)($bindings[$key]??''))!==1)return false;
+    $modules=$evidence['modules']??null;if(!is_array($modules)||!array_is_list($modules)||!in_array('website',$modules,true))return false;
+    foreach($modules as$module)if(!is_string($module)||preg_match('/^[a-z0-9_]{2,40}$/D',$module)!==1)return false;
+    return true;
 }
 
 function control59StateFile(array $c,string $tenant): string
@@ -35,8 +48,11 @@ function control59StateRead(array $c,string $tenant): array
     if(is_link($file)||!is_file($file)||!is_readable($file))throw new RuntimeException('Onboardingstate is onveilig.');
     $raw=@file_get_contents($file);$s=is_string($raw)?json_decode($raw,true):null;
     if(!is_array($s)||(int)($s['schema']??0)!==1||($s['phase']??'')!=='5.9-onboarding'||!hash_equals($tenant,(string)($s['tenant_key']??'')))throw new RuntimeException('Onboardingstate heeft ongeldig schema.');
-    control59StageIndex((string)($s['stage']??''));
+    $stage=(string)($s['stage']??'');control59StageIndex($stage);
     if(strtotime((string)($s['updated_at_utc']??''))===false)throw new RuntimeException('Onboardingstate mist geldige timestamp.');
+    // Een state uit de oudere fase 5.9 kon lifecycle_active/complete bereiken zonder
+    // pilotacceptatie. Zo'n state geldt nooit stil als bewijs voor het nieuwe contract.
+    if(in_array($stage,['lifecycle_active','complete'],true)&&!control59AcceptanceValid($s['acceptance']??null,$tenant))$s['stage']='monitoring_active';
     return$s;
 }
 
@@ -82,7 +98,7 @@ function control59DnsPlanProfile(string $tenantRoot): ?array
 
 function control59RunPhp(array $c,string $script,array $args,bool $soft=false): array
 {
-    $allowed=['prepare-vps-deployment.php','prepare-vps-runtime.php','prepare-vps-webserver.php','prepare-vps-database.php','prepare-vps-dns.php','apply-vps-runtime.php','apply-vps-webserver.php','apply-vps-database.php','check-vps-dns.php','prepare-vps-tls.php','apply-vps-tls.php','prepare-vps-monitoring.php','apply-vps-monitoring.php','prepare-vps-lifecycle.php','apply-vps-lifecycle.php'];
+    $allowed=['prepare-vps-deployment.php','prepare-vps-runtime.php','prepare-vps-webserver.php','prepare-vps-database.php','prepare-vps-dns.php','apply-vps-runtime.php','apply-vps-webserver.php','apply-vps-database.php','check-vps-dns.php','prepare-vps-tls.php','apply-vps-tls.php','prepare-vps-monitoring.php','apply-vps-monitoring.php','prepare-vps-lifecycle.php','apply-vps-lifecycle.php','check-vps-health.php'];
     if(!in_array($script,$allowed,true))throw new RuntimeException('Onboarding probeerde een niet-toegestaan script te starten.');
     $php=PHP_BINARY;if(preg_match('#^/usr/bin/php([0-9]{1,2}\.[0-9]{1,2})$#D',$php,$m)!==1||!is_file($php)||!is_executable($php))throw new RuntimeException('Onboarding vereist een exact gepinde productie-PHP-binary.');
     $path=rtrim((string)$c['app_root'],'/').'/bin/'.$script;if(is_link($path)||!is_file($path))throw new RuntimeException('Onboarding-script ontbreekt of is onveilig: '.$script);
@@ -95,6 +111,43 @@ function control59RunSystem(array $cmd,string $label): void
 {
     if($cmd===[]||!is_string($cmd[0])||!str_starts_with($cmd[0],'/'))throw new RuntimeException('Onboarding systeemcommando is niet absoluut.');
     [$code,$out,$err]=cpeRun($cmd);if($code!==0)throw new RuntimeException($label.' faalde: '.substr(trim($err!==''?$err:$out),0,420));
+}
+
+function control59TenantManifestAcceptance(string $root,string $tenant,string $host): array
+{
+    $file=$root.'/tenant.json';
+    if(runtime41SymlinkInPad($file)!==null||!is_file($file)||!is_readable($file))throw new RuntimeException('Pilotacceptatie mist een veilig tenantmanifest.');
+    $raw=@file_get_contents($file);try{$m=is_string($raw)?json_decode($raw,true,64,JSON_THROW_ON_ERROR):null;}catch(Throwable$e){$m=null;}
+    if(!is_array($m)||(int)($m['schema']??0)!==1||!hash_equals($tenant,(string)($m['tenant_key']??'')))throw new RuntimeException('Pilotacceptatie: tenantmanifestbinding is ongeldig.');
+    $url=(string)($m['site_url']??'');$parts=parse_url($url);$manifestHost=is_array($parts)?strtolower((string)($parts['host']??'')):'';
+    if(!hash_equals(strtolower($host),$manifestHost)||strtolower((string)($parts['scheme']??''))!=='https')throw new RuntimeException('Pilotacceptatie: tenantmanifest is niet aan de canonieke HTTPS-host gebonden.');
+    $mods=$m['modules']??null;if(!is_array($mods)||!array_is_list($mods)||!in_array('website',$mods,true))throw new RuntimeException('Pilotacceptatie: tenantmanifest mist een geldig moduleprofiel.');
+    foreach($mods as$module)if(!is_string($module)||preg_match('/^[a-z0-9_]{2,40}$/D',$module)!==1)throw new RuntimeException('Pilotacceptatie: moduleprofiel bevat een ongeldige module.');
+    return['sha256'=>hash('sha256',(string)$raw),'modules'=>array_values($mods)];
+}
+
+function control59PilotAcceptance(array $c,array &$state,string $root,string $tenant,string $host,string $monitoring,string $lifecycle): void
+{
+    $master=$root.'/private/auth/master.php';if(is_link($master)||!is_file($master))throw new RuntimeException('Pilotacceptatie: eerste tenantbeheerder ontbreekt.');
+    $manifest=control59TenantManifestAcceptance($root,$tenant,$host);
+    $homepage=$root.'/private/public-content/homepage.json';if(runtime41SymlinkInPad($homepage)!==null||!is_file($homepage)||!is_readable($homepage))throw new RuntimeException('Pilotacceptatie: homepagecontent ontbreekt of is onveilig.');
+    $homeRaw=@file_get_contents($homepage);try{$home=is_string($homeRaw)?json_decode($homeRaw,true,64,JSON_THROW_ON_ERROR):null;}catch(Throwable$e){$home=null;}if(!is_array($home))throw new RuntimeException('Pilotacceptatie: homepagecontent is niet geldig JSON.');
+    $lifeCtx=lifecycle48PlanLeesEnValideer($lifecycle);$lifePlan=$lifeCtx['plan'];
+    if(!hash_equals($tenant,(string)$lifePlan['tenant_key'])||!hash_equals(strtolower($host),strtolower((string)$lifePlan['canonical_host'])))throw new RuntimeException('Pilotacceptatie: lifecyclecontract hoort niet bij deze tenant/host.');
+    if(($lifePlan['lifecycle']['export_requires_suspended']??false)!==true||($lifePlan['lifecycle']['delete_requires_suspended_and_verified_export']??false)!==true||($lifePlan['security']['root_only_mutations']??false)!==true)throw new RuntimeException('Pilotacceptatie: backup/recovery-lifecyclecontract is niet fail-closed.');
+    control59RunPhp($c,'check-vps-health.php',['--monitoring-plan='.$monitoring,'--probe','--write-status']);
+    $curl='/usr/bin/curl';if(!is_file($curl)||!is_executable($curl))throw new RuntimeException('Pilotacceptatie: vaste curl-binary ontbreekt.');
+    [$code,$out,$err]=cpeRun([$curl,'--silent','--show-error','--output','/dev/null','--write-out','%{http_code}','--connect-timeout','5','--max-time','15','--resolve',$host.':443:127.0.0.1','https://'.$host.'/']);
+    if($code!==0||trim($out)!=='200')throw new RuntimeException('Pilotacceptatie: canonieke HTTPS-root gaf geen HTTP 200.'.($err!==''?' '.substr(trim($err),0,180):''));
+    $monitoringRaw=@file_get_contents($monitoring);$lifecycleRaw=@file_get_contents($lifecycle);if(!is_string($monitoringRaw)||!is_string($lifecycleRaw))throw new RuntimeException('Pilotacceptatie: planbinding kon niet byte-exact worden gelezen.');
+    $state['acceptance']=[
+        'schema'=>1,'phase'=>'5.9-acceptance','tenant_key'=>$tenant,'canonical_host'=>$host,'accepted_at_utc'=>gmdate('Y-m-d\TH:i:s\Z'),
+        'checks'=>['first_admin'=>'ok','tenant_manifest'=>'ok','module_profile'=>'ok','homepage_content'=>'ok','health_probe'=>'ok','https_root'=>'ok','lifecycle_export_contract'=>'ok'],
+        'modules'=>$manifest['modules'],
+        'bindings'=>['tenant_manifest_sha256'=>$manifest['sha256'],'monitoring_plan_sha256'=>hash('sha256',$monitoringRaw),'lifecycle_plan_sha256'=>hash('sha256',$lifecycleRaw)],
+    ];
+    if(!control59AcceptanceValid($state['acceptance'],$tenant))throw new RuntimeException('Pilotacceptatiebewijs kon niet veilig worden opgebouwd.');
+    control59Checkpoint($c,$state,'acceptance_ready');
 }
 
 function control59Resume(array $c,array $r): string
@@ -158,13 +211,18 @@ function control59Resume(array $c,array $r): string
         control59RunPhp($c,'apply-vps-monitoring.php',['--monitoring-plan='.$monitoring,'--apply']);
         control59Checkpoint($c,$state,'monitoring_active');
     }
-    if(control59Before((string)$state['stage'],'lifecycle_active')){
+    if(control59Before((string)$state['stage'],'acceptance_ready')){
         control59RunPhp($c,'prepare-vps-lifecycle.php',['--monitoring-plan='.$monitoring]);
+        [, $out]=control59RunPhp($c,'apply-vps-lifecycle.php',['--plan='.$lifecycle,'--status']);$statusDoc=json_decode($out,true);$life=is_array($statusDoc)?(string)($statusDoc['status']??''):'';
+        if(!in_array($life,['unmanaged','active'],true))throw new RuntimeException('Pilotacceptatie verwacht unmanaged of active lifecycle, kreeg: '.$life);
+        control59PilotAcceptance($c,$state,$root,$tenant,$host,$monitoring,$lifecycle);
+    }
+    if(control59Before((string)$state['stage'],'lifecycle_active')){
         [, $out]=control59RunPhp($c,'apply-vps-lifecycle.php',['--plan='.$lifecycle,'--status']);$statusDoc=json_decode($out,true);$life=is_array($statusDoc)?(string)($statusDoc['status']??''):'';
         if($life==='unmanaged')control59RunPhp($c,'apply-vps-lifecycle.php',['--plan='.$lifecycle,'--adopt-active']);
         elseif($life!=='active')throw new RuntimeException('Lifecycle-onboarding verwacht unmanaged of active, kreeg: '.$life);
         control59Checkpoint($c,$state,'lifecycle_active');
     }
     if(control59Before((string)$state['stage'],'complete'))control59Checkpoint($c,$state,'complete');
-    return'Onboarding volledig afgerond: runtime, database, webserver, DNS, TLS, monitoring en lifecycle zijn actief.';
+    return'Onboarding volledig afgerond: pilotacceptatie, runtime, database, webserver, DNS, TLS, monitoring en lifecycle zijn aantoonbaar actief.';
 }
