@@ -268,7 +268,7 @@ function control58AuditRefresh(array $c,int $limit=500): void
 {
     $audit=(string)$c['audit_file'];$rows=[];
     if(is_file($audit)&&!is_link($audit)&&is_readable($audit)){
-        $lines=@file($audit,FILE_IGNORE_NEW_LINES|FILE_SKIP_EMPTY_LINES);if(is_array($lines))foreach(array_slice($lines,-$limit)as$line){$r=json_decode($line,true);if(!is_array($r))continue;$op=(string)($r['operator']??'');$tenant=(string)($r['tenant_key']??'');$result=(string)($r['result']??'');if(!control58OperatorValid($op)||($tenant!=='platform'&&!runtime41CanoniekeTenantKey($tenant))||!in_array($result,['ok','failed'],true))continue;$rows[]=['timestamp_utc'=>(string)($r['timestamp_utc']??gmdate('Y-m-d\TH:i:s\Z'),'operator'=>$op,'tenant_key'=>$tenant,'action'=>substr((string)($r['action']??''),0,64),'result'=>$result,'message'=>substr((string)($r['message']??''),0,300)];}
+        $lines=@file($audit,FILE_IGNORE_NEW_LINES|FILE_SKIP_EMPTY_LINES);if(is_array($lines))foreach(array_slice($lines,-$limit)as$line){$r=json_decode($line,true);if(!is_array($r))continue;$op=(string)($r['operator']??'');$tenant=(string)($r['tenant_key']??'');$result=(string)($r['result']??'');if(!control58OperatorValid($op)||($tenant!=='platform'&&!runtime41CanoniekeTenantKey($tenant))||!in_array($result,['ok','failed'],true))continue;$rows[]=['timestamp_utc'=>(string)($r['timestamp_utc']??gmdate('Y-m-d\TH:i:s\Z')),'operator'=>$op,'tenant_key'=>$tenant,'action'=>substr((string)($r['action']??''),0,64),'result'=>$result,'message'=>substr((string)($r['message']??''),0,300)];}
     }
     cpeWrite(control58ExecutorPaths($c)['audit_view_file'],['schema'=>1,'phase'=>'5.8-audit-view','generated_at_utc'=>gmdate('Y-m-d\TH:i:s\Z'),'rows'=>$rows],0640,$c['runtime_user']);
 }
