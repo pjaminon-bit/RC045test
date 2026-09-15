@@ -1,6 +1,7 @@
 <?php
-// Non-root onboarding request helper. DNS topology is public configuration and
-// may enter the queue; passwords, hashes and provider credentials never do.
+// Non-root onboarding request helper. DNS topology and safe pilot-readiness
+// attestations may enter the queue; passwords, hashes from auth state and
+// provider credentials never do.
 
 require_once __DIR__ . '/control-plane-admin-suite.php';
 
@@ -16,10 +17,28 @@ function cpOnboardIpCsv(string $raw,int $version): string
     sort($out,SORT_STRING);return implode(',',$out);
 }
 
+function cpOnboardSha256(string $raw,string $label): string
+{
+    $sha=strtolower(trim($raw));
+    if(preg_match('/^[0-9a-f]{64}$/D',$sha)!==1)throw new RuntimeException($label.' moet een volledige SHA-256 zijn.');
+    return $sha;
+}
+
 function cpOnboardResumeRequest(array $input): string
 {
     cpSuiteRequire('mutate');
     $tenant=trim((string)($input['tenant']??''));$row=cp51TenantUitSnapshot($tenant);$status=(string)($row['status']??'');
+    if($status==='active'){
+        $progress=cpSuiteOnboarding($row);if((int)$progress['percent']>=100)throw new RuntimeException('Deze vereniging is al volledig pilot-gereed.');
+        if((string)($input['branding_reviewed']??'')!=='1'||(string)($input['recovery_restored']??'')!=='1')throw new RuntimeException('Bevestig zowel content/branding als de uitgevoerde geïsoleerde herstelproef.');
+        $admin=[
+            'branding_reviewed'=>true,
+            'recovery_restored'=>true,
+            'restore_database_sha256'=>cpOnboardSha256((string)($input['restore_database_sha256']??''),'Database-herstelhash'),
+            'restore_files_sha256'=>cpOnboardSha256((string)($input['restore_files_sha256']??''),'Bestands-herstelhash'),
+        ];
+        return cpSuiteQueue($tenant,'onboarding-resume',$admin);
+    }
     if(!in_array($status,['setup_required','unmanaged'],true))throw new RuntimeException('Deze vereniging staat niet meer in een hervatbare onboardingstatus.');
     $strategy=strtolower(trim((string)($input['dns_strategy']??'')));
     if(!in_array($strategy,['direct','cname'],true))throw new RuntimeException('Kies direct of CNAME als DNS-strategie.');
