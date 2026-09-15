@@ -45,7 +45,7 @@ function control58RolesWarning(array $c): ?string
     $file=control58ExecutorPaths($c)['roles_file'];
     if(!file_exists($file)&&!is_link($file))return'Operatorrollenstate ontbreekt; alle beheeroperators zijn fail-closed alleen-lezen totdat root de rollen expliciet bootstrapt.';
     try{$doc=control58ReadRoles($c);}catch(Throwable$e){return'Operatorrollenstate is ongeldig of onveilig; alle beheeroperators zijn fail-closed alleen-lezen totdat root herstel uitvoert.';}
-    if($doc===null||$doc['roles']===[])return'Operatorrollenstate bevat geen actieve owner; alle beheeroperators zijn fail-closed alleen-lezen totdat root herstel uitvoert.';
+    if($doc===null||$doc['roles']===[])return'Operatorrollenstate bevat geen actieve owner; alle beheeroperators zijn fail-closed alleen-lezen totdat root de rollen expliciet bootstrapt.';
     try{$users=control58HtpasswdUsers($c);}catch(Throwable$e){return'Basic-Auth operatorstate is ongeldig; rollen kunnen niet veilig worden gesynchroniseerd.';}
     if($users!==[]){$hasOwner=false;foreach($users as$user)if(($doc['roles'][$user]??null)==='owner'){$hasOwner=true;break;}if(!$hasOwner)return'Geen huidige Basic-Auth operator heeft de ownerrol; beheer is fail-closed totdat root herstel uitvoert.';}
     return null;
@@ -109,8 +109,10 @@ function control58ValidateAdminRequest(array $c,array $r): void
     }
     if($action==='onboarding-resume'){
         $key=(string)$r['tenant_key'];if(!runtime41CanoniekeTenantKey($key))throw new RuntimeException('Onboarding bevat ongeldige tenant-key.');
-        $tenant=control58FindTenant($c,$key);$status=(string)($tenant['status']??'');if(!in_array($status,['setup_required','unmanaged'],true))throw new RuntimeException('Tenant staat niet in een hervatbare onboardingstatus.');
-        control59DnsProfile($admin,(string)($tenant['canonical_host']??''));return;
+        $tenant=control58FindTenant($c,$key);$status=(string)($tenant['status']??'');
+        if(in_array($status,['setup_required','unmanaged'],true)){control59DnsProfile($admin,(string)($tenant['canonical_host']??''));return;}
+        if($status==='active'){control59PilotReadinessPayload($admin);$state=control59StateRead($c,$key);if(!in_array((string)$state['stage'],['lifecycle_active','pilot_ready','complete'],true))throw new RuntimeException('Actieve tenant staat niet op het pilot-readinesscheckpoint.');return;}
+        throw new RuntimeException('Tenant staat niet in een hervatbare onboardingstatus.');
     }
     if(in_array($action,['diagnose','tls-renew'],true)){
         if($admin!==[]||(string)$r['tenant_key']==='platform'||!runtime41CanoniekeTenantKey((string)$r['tenant_key']))throw new RuntimeException('Tenantbeheerpayload is ongeldig.');
@@ -164,21 +166,26 @@ function control58TlsStatusFromPlan(array $plan): array
     return['status'=>$status,'valid_to_utc'=>gmdate('Y-m-d\TH:i:s\Z',$to),'days_remaining'=>$days,'cert_name'=>$cert];
 }
 
-function control58Onboarding(string $tenantRoot,string $status): array
+function control58Onboarding(array $c,string $tenantRoot,array $row): array
 {
+    $status=(string)($row['status']??'');$modules=is_array($row['modules']??null)?$row['modules']:[];$ready=control59SnapshotReadiness($c,$tenantRoot,$row);
     $checks=[
         ['key'=>'basis','label'=>'Basis tenant','done'=>is_file($tenantRoot.'/tenant.json')&&is_file($tenantRoot.'/config.php')&&is_file($tenantRoot.'/runtime.env')&&is_dir($tenantRoot.'/private')],
         ['key'=>'admin','label'=>'Eerste beheerder','done'=>is_file($tenantRoot.'/private/auth/master.php')&&!is_link($tenantRoot.'/private/auth/master.php')],
+        ['key'=>'modules','label'=>'Moduleprofiel','done'=>in_array('website',$modules,true)],
         ['key'=>'runtime','label'=>'PHP runtime','done'=>is_file($tenantRoot.'/runtime/runtime-plan.json')],
         ['key'=>'database','label'=>'Database','done'=>is_file($tenantRoot.'/database/database-plan.json')],
         ['key'=>'web','label'=>'Webserver','done'=>is_file($tenantRoot.'/webserver/web-plan.json')],
         ['key'=>'dns','label'=>'DNS readiness','done'=>is_file($tenantRoot.'/dns/dns-readiness.json')],
         ['key'=>'tls','label'=>'TLS/HTTPS','done'=>is_file($tenantRoot.'/tls/tls-plan.json')],
         ['key'=>'monitoring','label'=>'Monitoring','done'=>is_file($tenantRoot.'/monitoring/monitoring-plan.json')],
-        ['key'=>'lifecycle','label'=>'Lifecycle','done'=>is_file($tenantRoot.'/lifecycle/lifecycle-plan.json')],
-        ['key'=>'active','label'=>'Actief','done'=>$status==='active'],
+        ['key'=>'acceptance','label'=>'Technische pilotacceptatie','done'=>$ready['technical_acceptance']],
+        ['key'=>'lifecycle','label'=>'Lifecycle actief','done'=>$ready['lifecycle_active']],
+        ['key'=>'branding','label'=>'Content & branding gereed','done'=>$ready['branding_ready']],
+        ['key'=>'recovery','label'=>'Export & herstel bewezen','done'=>$ready['recovery_ready']],
+        ['key'=>'complete','label'=>'Pilot gereed','done'=>$ready['pilot_complete']],
     ];
-    return['steps'=>$checks];
+    return['steps'=>$checks,'pilot_readiness'=>$ready,'infrastructure_active'=>$status==='active'];
 }
 
 function control58EnrichTenantRow(array $c,string $tenantRoot,array $row,?array $lifecyclePlan=null): array
@@ -193,7 +200,7 @@ function control58EnrichTenantRow(array $c,string $tenantRoot,array $row,?array 
         catch(Throwable$e){$row['tls']=['status'=>'invalid','valid_to_utc'=>null,'days_remaining'=>null];}
     }
     try{$row['dns_profile']=control59DnsPlanProfile($tenantRoot);}catch(Throwable$e){$row['dns_profile']=null;}
-    $row['onboarding']=control58Onboarding($tenantRoot,(string)($row['status']??''));return$row;
+    $row['onboarding']=control58Onboarding($c,$tenantRoot,$row);return$row;
 }
 
 function control58ScheduleFiles(array $c): array
@@ -261,7 +268,7 @@ function control58AuditRefresh(array $c,int $limit=500): void
 {
     $audit=(string)$c['audit_file'];$rows=[];
     if(is_file($audit)&&!is_link($audit)&&is_readable($audit)){
-        $lines=@file($audit,FILE_IGNORE_NEW_LINES|FILE_SKIP_EMPTY_LINES);if(is_array($lines))foreach(array_slice($lines,-$limit)as$line){$r=json_decode($line,true);if(!is_array($r))continue;$op=(string)($r['operator']??'');$tenant=(string)($r['tenant_key']??'');$result=(string)($r['result']??'');if(!control58OperatorValid($op)||($tenant!=='platform'&&!runtime41CanoniekeTenantKey($tenant))||!in_array($result,['ok','failed'],true))continue;$rows[]=['timestamp_utc'=>(string)($r['timestamp_utc']??gmdate('Y-m-d\TH:i:s\Z')),'operator'=>$op,'tenant_key'=>$tenant,'action'=>substr((string)($r['action']??''),0,64),'result'=>$result,'message'=>substr((string)($r['message']??''),0,300)];}
+        $lines=@file($audit,FILE_IGNORE_NEW_LINES|FILE_SKIP_EMPTY_LINES);if(is_array($lines))foreach(array_slice($lines,-$limit)as$line){$r=json_decode($line,true);if(!is_array($r))continue;$op=(string)($r['operator']??'');$tenant=(string)($r['tenant_key']??'');$result=(string)($r['result']??'');if(!control58OperatorValid($op)||($tenant!=='platform'&&!runtime41CanoniekeTenantKey($tenant))||!in_array($result,['ok','failed'],true))continue;$rows[]=['timestamp_utc'=>(string)($r['timestamp_utc']??gmdate('Y-m-d\TH:i:s\Z'),'operator'=>$op,'tenant_key'=>$tenant,'action'=>substr((string)($r['action']??''),0,64),'result'=>$result,'message'=>substr((string)($r['message']??''),0,300)];}
     }
     cpeWrite(control58ExecutorPaths($c)['audit_view_file'],['schema'=>1,'phase'=>'5.8-audit-view','generated_at_utc'=>gmdate('Y-m-d\TH:i:s\Z'),'rows'=>$rows],0640,$c['runtime_user']);
 }
