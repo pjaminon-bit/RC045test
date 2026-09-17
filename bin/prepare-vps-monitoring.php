@@ -1,14 +1,15 @@
 <?php
 if (PHP_SAPI !== 'cli') { http_response_code(403); exit('Alleen via CLI beschikbaar.'); }
 require_once dirname(__DIR__) . '/app/deployment/monitoring-contract.php';
+require_once dirname(__DIR__) . '/app/deployment/monitoring-alert.php';
 require_once dirname(__DIR__) . '/app/storage/private-filesystem.php';
 
 function prep46Stop(string $melding, int $code = 1): void { fwrite(STDERR, "FOUT: {$melding}\n"); exit($code); }
 function prep46Help(): void
 {
     echo "Gebruik:\n";
-    echo "  php bin/prepare-vps-monitoring.php --tls-plan=/srv/.../tls/tls-plan.json --database-plan=/srv/.../database/database-plan.json [--alerts=enabled|disabled] [--dry-run] [--force]\n";
-    echo "Alerting staat standaard enabled; kies alleen expliciet disabled wanneer deze installatie bewust geen externe alert-adapter gebruikt.\n";
+    echo "  php bin/prepare-vps-monitoring.php --tls-plan=/srv/.../tls/tls-plan.json --database-plan=/srv/.../database/database-plan.json [--alerts=auto|enabled|disabled] [--dry-run] [--force]\n";
+    echo "Alerting staat standaard op auto: zonder externe alert-adapter disabled, met een geldige root-owned executable adapter enabled. Expliciet enabled blijft fail-closed.\n";
 }
 function prep46Write(string $pad, string $inhoud, int $mode, bool $force): string
 {
@@ -37,9 +38,13 @@ if (isset($opt['help'])) { prep46Help(); exit(0); }
 $tls = trim((string)($opt['tls-plan'] ?? ''));
 $db = trim((string)($opt['database-plan'] ?? ''));
 if ($tls === '' || $db === '') prep46Stop('--tls-plan en --database-plan zijn verplicht.');
-$alerts = strtolower(trim((string)($opt['alerts'] ?? 'enabled')));
-if (!in_array($alerts, ['enabled', 'disabled'], true)) prep46Stop('--alerts accepteert alleen enabled of disabled.');
-try { $context = monitoring46Context($tls, $db); $plan = monitoring46Plan($context, $alerts === 'enabled'); }
+$alerts = strtolower(trim((string)($opt['alerts'] ?? 'auto')));
+if (!in_array($alerts, ['auto', 'enabled', 'disabled'], true)) prep46Stop('--alerts accepteert alleen auto, enabled of disabled.');
+try {
+    if ($alerts === 'auto') $alerts = monitoring46AlertModeVoorProvisioning();
+    $context = monitoring46Context($tls, $db);
+    $plan = monitoring46Plan($context, $alerts === 'enabled');
+}
 catch (Throwable $e) { prep46Stop($e->getMessage()); }
 if (isset($opt['dry-run'])) { echo monitoring46Json($plan); exit(0); }
 $out = (string)$plan['bundle']['output_dir'];
