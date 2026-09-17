@@ -9,7 +9,7 @@ function prep46Help(): void
 {
     echo "Gebruik:\n";
     echo "  php bin/prepare-vps-monitoring.php --tls-plan=/srv/.../tls/tls-plan.json --database-plan=/srv/.../database/database-plan.json [--alerts=auto|enabled|disabled] [--dry-run] [--force]\n";
-    echo "Alerting staat standaard enabled. Gebruik auto voor platform-onboarding: zonder externe alert-adapter disabled, met een geldige root-owned executable adapter enabled. Expliciet enabled blijft fail-closed.\n";
+    echo "Alerting staat standaard op auto: zonder externe alert-adapter disabled, met een geldige root-owned executable adapter enabled. Expliciet enabled blijft fail-closed.\n";
 }
 function prep46Write(string $pad, string $inhoud, int $mode, bool $force): string
 {
@@ -38,7 +38,7 @@ if (isset($opt['help'])) { prep46Help(); exit(0); }
 $tls = trim((string)($opt['tls-plan'] ?? ''));
 $db = trim((string)($opt['database-plan'] ?? ''));
 if ($tls === '' || $db === '') prep46Stop('--tls-plan en --database-plan zijn verplicht.');
-$alerts = strtolower(trim((string)($opt['alerts'] ?? 'enabled')));
+$alerts = strtolower(trim((string)($opt['alerts'] ?? 'auto')));
 if (!in_array($alerts, ['auto', 'enabled', 'disabled'], true)) prep46Stop('--alerts accepteert alleen auto, enabled of disabled.');
 try {
     if ($alerts === 'auto') $alerts = monitoring46AlertModeVoorProvisioning();
