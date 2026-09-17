@@ -30,6 +30,17 @@ function prep46Write(string $pad, string $inhoud, int $mode, bool $force): strin
     if (!privateFilesystemBeveiligBestand($pad, $mode)) prep46Stop("Monitoringbestand heeft na plaatsing niet de vereiste mode: {$pad}");
     return 'geschreven';
 }
+function prep46AlleenAlertPolicyDrift(string $pad, array $nieuw): bool
+{
+    if (is_link($pad) || !is_file($pad) || !is_readable($pad)) return false;
+    $raw = @file_get_contents($pad);
+    if (!is_string($raw)) return false;
+    try { $oud = json_decode($raw, true, 512, JSON_THROW_ON_ERROR); }
+    catch (JsonException $e) { return false; }
+    if (!is_array($oud) || !is_array($oud['alerts'] ?? null) || !array_key_exists('enabled', $oud['alerts']) || !is_bool($oud['alerts']['enabled'])) return false;
+    $oud['alerts']['enabled'] = (bool)$nieuw['alerts']['enabled'];
+    return hash_equals(monitoring46Json($nieuw), monitoring46Json($oud));
+}
 foreach ($_SERVER['argv'] ?? [] as $arg) {
     if (preg_match('/^--(?:password|secret|token|key|dsn|webhook|email)(?:=|$)/i', (string)$arg) === 1) prep46Stop('Secrets/contactdata horen niet in fase-4.6 CLI-argumenten.');
 }
@@ -38,10 +49,10 @@ if (isset($opt['help'])) { prep46Help(); exit(0); }
 $tls = trim((string)($opt['tls-plan'] ?? ''));
 $db = trim((string)($opt['database-plan'] ?? ''));
 if ($tls === '' || $db === '') prep46Stop('--tls-plan en --database-plan zijn verplicht.');
-$alerts = strtolower(trim((string)($opt['alerts'] ?? 'auto')));
-if (!in_array($alerts, ['auto', 'enabled', 'disabled'], true)) prep46Stop('--alerts accepteert alleen auto, enabled of disabled.');
+$alertsMode = strtolower(trim((string)($opt['alerts'] ?? 'auto')));
+if (!in_array($alertsMode, ['auto', 'enabled', 'disabled'], true)) prep46Stop('--alerts accepteert alleen auto, enabled of disabled.');
 try {
-    if ($alerts === 'auto') $alerts = monitoring46AlertModeVoorProvisioning();
+    $alerts = $alertsMode === 'auto' ? monitoring46AlertModeVoorProvisioning() : $alertsMode;
     $context = monitoring46Context($tls, $db);
     $plan = monitoring46Plan($context, $alerts === 'enabled');
 }
@@ -52,6 +63,8 @@ if (is_link($out)) prep46Stop('Monitoring outputmap mag geen symlink zijn.');
 if (!is_dir($out) && !@mkdir($out, 0750, true) && !is_dir($out)) prep46Stop('Monitoring outputmap kon niet worden aangemaakt.');
 if (!privateFilesystemBeveiligMap($out, true)) prep46Stop('Monitoring outputmap kon niet veilig op 0750 worden gezet.');
 $force = isset($opt['force']);
-prep46Write((string)$plan['bundle']['plan_file'], monitoring46Json($plan), 0640, $force);
+$planFile = (string)$plan['bundle']['plan_file'];
+$policyReconcile = !$force && $alertsMode === 'auto' && prep46AlleenAlertPolicyDrift($planFile, $plan);
+prep46Write($planFile, monitoring46Json($plan), 0640, $force || $policyReconcile);
 foreach (monitoring46Artifacts($plan) as $pad => $inhoud) prep46Write((string)$pad, $inhoud, 0640, $force);
 echo 'OK  fase 4.6 monitoringbundle tenant=' . $plan['tenant_key'] . ' alerts=' . ($plan['alerts']['enabled'] ? 'enabled' : 'disabled') . "\n";

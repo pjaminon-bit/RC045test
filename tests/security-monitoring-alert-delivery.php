@@ -31,7 +31,7 @@ c154($dRetry['send']===true&&$dRetry['reason']==='failure_transition','mislukte 
 $s2=monitoring46AlertNieuweState($s1,'down',$now+60,$dRetry,'delivered');
 c154(($s2['last_delivered_state']??'')==='down'&&($s2['last_alert_epoch']??0)===$now+60,'alleen succesvolle delivery werkt last delivered state en epoch bij');
 $dQuiet=monitoring46AlertBeslissing($enabled,$s2,'down',$now+120);
-c154($dQuiet['send']===false,'geen reminder vóór één uur na succesvolle vorige delivery');
+c154($dQuiet['send']===false,'geen reminder vóór één uur na succesvolle delivery');
 $dReminder=monitoring46AlertBeslissing($enabled,$s2,'down',$now+3660);
 c154($dReminder['send']===true&&$dReminder['reason']==='reminder','down-state krijgt hourly reminder na succesvolle vorige delivery');
 $sReminderFail=monitoring46AlertNieuweState($s2,'down',$now+3660,$dReminder,'pending','adapter_exit');
@@ -68,6 +68,9 @@ c154(str_contains($health,"\$status['alert_delivery']")&&strpos($health,'health4
 c154(str_contains($apply,"monitoring46AlertAdapterFout((array)\$p['alerts'])")&&strpos($apply,"monitoring46AlertAdapterFout((array)\$p['alerts'])")<strpos($apply,"apply46SafeDir('/var/log/verenigingsplatform'"),'provisioning valideert enabled adapter vóór monitoringmutaties');
 c154(str_contains($apply,"'--probe','--write-status','--alert'")&&strpos($apply,"'--probe','--write-status','--alert'")<strpos($apply,"'enable','--now'"),'eerste provisioningprobe bewijst health én delivery vóór timeractivatie');
 c154(str_contains($prepare,"'alerts:'")&&str_contains($prepare,"['auto', 'enabled', 'disabled']")&&str_contains($prepare,'monitoring46AlertModeVoorProvisioning()')&&str_contains($contract,"'enabled'=>\$alertsEnabled"),'monitoringconfig heeft expliciete auto/enabled/disabled alertmodus');
+c154(str_contains($prepare,'function prep46AlleenAlertPolicyDrift')&&str_contains($prepare,"\$alertsMode === 'auto'")&&str_contains($prepare,'prep46AlleenAlertPolicyDrift($planFile, $plan)'),'resumable onboarding beperkt automatische planreconciliatie tot auto-alertmodus');
+c154(str_contains($prepare,"\$oud['alerts']['enabled'] = (bool)\$nieuw['alerts']['enabled'];")&&str_contains($prepare,'hash_equals(monitoring46Json($nieuw), monitoring46Json($oud))'),'retry-reconciliatie accepteert alleen byte-equivalente plannen na wijziging van alerts.enabled');
+c154(str_contains($prepare,'prep46Write($planFile, monitoring46Json($plan), 0640, $force || $policyReconcile)')&&str_contains($prepare,'monitoring46Artifacts($plan) as $pad => $inhoud) prep46Write((string)$pad, $inhoud, 0640, $force)'),'policy-reconciliatie forceert alleen het bewezen driftende plan en geen generieke artifactoverschrijving');
 c154(str_contains($contract,"\$legacy=!array_key_exists('enabled',\$alerts)")&&str_contains($contract,"if(\$legacy)\$p['alerts']['enabled']=true"),'bestaande schema-1 monitoringplannen migreren compatibel als fail-closed enabled');
 
 echo"Issue #154 monitoring alert delivery: {$ok} OK, {$fout} fout(en)\n";exit($fout===0?0:1);
