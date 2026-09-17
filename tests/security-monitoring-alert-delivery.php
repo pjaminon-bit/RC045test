@@ -31,7 +31,7 @@ c154($dRetry['send']===true&&$dRetry['reason']==='failure_transition','mislukte 
 $s2=monitoring46AlertNieuweState($s1,'down',$now+60,$dRetry,'delivered');
 c154(($s2['last_delivered_state']??'')==='down'&&($s2['last_alert_epoch']??0)===$now+60,'alleen succesvolle delivery werkt last delivered state en epoch bij');
 $dQuiet=monitoring46AlertBeslissing($enabled,$s2,'down',$now+120);
-c154($dQuiet['send']===false,'geen reminder vóór één uur na succesvolle delivery');
+c154($dQuiet['send']===false,'geen reminder vóór één uur na succesvolle vorige delivery');
 $dReminder=monitoring46AlertBeslissing($enabled,$s2,'down',$now+3660);
 c154($dReminder['send']===true&&$dReminder['reason']==='reminder','down-state krijgt hourly reminder na succesvolle vorige delivery');
 $sReminderFail=monitoring46AlertNieuweState($s2,'down',$now+3660,$dReminder,'pending','adapter_exit');
@@ -67,7 +67,7 @@ c154(str_contains($health,"monitoring46AlertNieuweState(\$oud,\$nu,\$epoch,\$bes
 c154(str_contains($health,"\$status['alert_delivery']")&&strpos($health,'health46Alert($plan,$status)')<strpos($health,"health46AtomicJson((string)\$plan['logging']['health_status'],\$status)"),'healthstatus bevat afzonderlijke alert-deliverystatus na deliverypoging');
 c154(str_contains($apply,"monitoring46AlertAdapterFout((array)\$p['alerts'])")&&strpos($apply,"monitoring46AlertAdapterFout((array)\$p['alerts'])")<strpos($apply,"apply46SafeDir('/var/log/verenigingsplatform'"),'provisioning valideert enabled adapter vóór monitoringmutaties');
 c154(str_contains($apply,"'--probe','--write-status','--alert'")&&strpos($apply,"'--probe','--write-status','--alert'")<strpos($apply,"'enable','--now'"),'eerste provisioningprobe bewijst health én delivery vóór timeractivatie');
-c154(str_contains($prepare,"'alerts:'")&&str_contains($prepare,"['enabled', 'disabled']")&&str_contains($contract,"'enabled'=>\$alertsEnabled"),'monitoringconfig heeft expliciete enabled/disabled alertmodus');
+c154(str_contains($prepare,"'alerts:'")&&str_contains($prepare,"['auto', 'enabled', 'disabled']")&&str_contains($prepare,'monitoring46AlertModeVoorProvisioning()')&&str_contains($contract,"'enabled'=>\$alertsEnabled"),'monitoringconfig heeft expliciete auto/enabled/disabled alertmodus');
 c154(str_contains($contract,"\$legacy=!array_key_exists('enabled',\$alerts)")&&str_contains($contract,"if(\$legacy)\$p['alerts']['enabled']=true"),'bestaande schema-1 monitoringplannen migreren compatibel als fail-closed enabled');
 
 echo"Issue #154 monitoring alert delivery: {$ok} OK, {$fout} fout(en)\n";exit($fout===0?0:1);
