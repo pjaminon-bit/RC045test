@@ -64,6 +64,45 @@ function monitoring46AlertAdapterFoutMelding(string $code): string
     };
 }
 
+function monitoring46AlertAdapterPath(): string
+{
+    $configured = getenv('VERENIGINGSPLATFORM_ALERT_ADAPTER');
+    $adapter = trim(is_string($configured) ? $configured : '');
+    return $adapter !== '' ? $adapter : '/etc/verenigingsplatform/monitoring/alert-command';
+}
+
+function monitoring46AlertModeUitMetadata(
+    string $adapter,
+    bool $bestaat,
+    bool $regulier,
+    bool $symlink,
+    bool $executable,
+    ?array $stat
+): string {
+    $fout = monitoring46AlertAdapterMetadataFout($adapter, $bestaat, $regulier, $symlink, $executable, $stat);
+    if ($fout === 'adapter_missing') return 'disabled';
+    if ($fout !== null) throw new RuntimeException(monitoring46AlertAdapterFoutMelding($fout));
+    return 'enabled';
+}
+
+function monitoring46AlertModeVoorProvisioning(?string $adapter = null): string
+{
+    $adapter = trim($adapter ?? monitoring46AlertAdapterPath());
+    $symlink = $adapter !== '' && is_link($adapter);
+    $bestaat = $adapter !== '' && file_exists($adapter);
+    $regulier = $bestaat && is_file($adapter);
+    $executable = $regulier && is_executable($adapter);
+    $stat = $regulier && !$symlink ? @stat($adapter) : null;
+    return monitoring46AlertModeUitMetadata(
+        $adapter,
+        $bestaat,
+        $regulier,
+        $symlink,
+        $executable,
+        is_array($stat) ? $stat : null
+    );
+}
+
 function monitoring46AlertBeslissing(array $alerts, array $oud, string $huidig, int $epoch): array
 {
     if (!in_array($huidig, ['up', 'down'], true)) throw new RuntimeException('Onbekende healthstate voor alertbeslissing.');
