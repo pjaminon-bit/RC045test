@@ -145,8 +145,10 @@ jobs:
           pilot319_beheer_status="$(curl --silent --show-error --location --dump-header "$pilot319_beheer_headers" --output /dev/null --write-out '%{http_code}' --connect-timeout 10 --max-time 30 "$PILOT319_BASE_URL/beheer/" || true)"
           if [[ "$pilot319_beheer_status" != '200' ]]; then
             pilot319_diag="$(awk 'BEGIN{IGNORECASE=1} /^X-Pilot319-Diagnostic:/ {sub(/^[^:]+:[[:space:]]*/, ""); gsub(/\r/, ""); print; exit}' "$pilot319_beheer_headers")"
+            pilot319_path_class="$(awk 'BEGIN{IGNORECASE=1} /^X-Pilot319-Session-Path-Class:/ {sub(/^[^:]+:[[:space:]]*/, ""); gsub(/\r/, ""); print; exit}' "$pilot319_beheer_headers")"
             rm -f "$pilot319_beheer_headers"
             echo "PILOT319_DIAG=${pilot319_diag:-missing}" >&2
+            echo "PILOT319_SESSION_PATH_CLASS=${pilot319_path_class:-n/a}" >&2
             echo "FOUT: $PILOT319_BASE_URL/beheer/ gaf HTTP ${pilot319_beheer_status:-geen}, verwacht 200" >&2
             exit 1
           fi
