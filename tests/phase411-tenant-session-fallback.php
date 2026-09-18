@@ -2,6 +2,8 @@
 $root = dirname(__DIR__);
 require_once $root . '/app/auth-storage.php';
 
+ob_start();
+
 $ok = 0;
 $fout = 0;
 
@@ -95,5 +97,7 @@ try {
     rr411f($tmp);
 }
 
+$output = ob_get_clean();
+echo $output;
 echo "Phase 4.1.1 tenant session fallback: {$ok} OK, {$fout} fout(en)\n";
 exit($fout === 0 ? 0 : 1);
