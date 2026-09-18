@@ -51,6 +51,19 @@ function tenantRuntimeConfiguratieFout(string $intern): void
 
     if (PHP_SAPI !== 'cli') {
         if (!headers_sent()) {
+            // Tijdelijke TEST-diagnose voor disposable pilot #319. Alleen de
+            // exacte pilot-host krijgt een grove foutcode; nooit paden, secrets
+            // of fouttekst. Verwijderen zodra #319 operationeel is afgerond.
+            $pilotHost = strtolower(trim((string)($_SERVER['HTTP_HOST'] ?? '')));
+            if (hash_equals('pilot319.149-143-36-59.sslip.io', $pilotHost)) {
+                $pilotCode = match ($intern) {
+                    'Installatie-eigen PHP session.save_path kon niet worden geactiveerd.' => 'session_save_path',
+                    'Installatie-eigen sessiemap kon niet naar restrictieve mode worden gezet.' => 'session_mode',
+                    'Installatie-eigen sessiemap is niet schrijfbaar.' => 'session_not_writable',
+                    default => 'other_runtime_config',
+                };
+                header('X-Pilot319-Diagnostic: ' . $pilotCode);
+            }
             http_response_code(503);
             header('Content-Type: text/plain; charset=UTF-8');
             header('Cache-Control: no-store');

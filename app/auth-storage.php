@@ -158,6 +158,25 @@ function authStorageActiveerSessieIsolatie(array $siteConfig, string $projectRoo
     if (!hash_equals($sessiePad, $actiefPad)) {
         $gezet = ini_set('session.save_path', $sessiePad);
         if ($gezet === false || !hash_equals($sessiePad, (string)ini_get('session.save_path'))) {
+            if (PHP_SAPI !== 'cli' && !headers_sent()
+                && hash_equals('pilot319.149-143-36-59.sslip.io', strtolower(trim((string)($_SERVER['HTTP_HOST'] ?? ''))))) {
+                $normActief = rtrim((string)preg_replace('~/+~', '/', $actiefPad), '/');
+                $normVerwacht = rtrim((string)preg_replace('~/+~', '/', $sessiePad), '/');
+                if ($actiefPad === '') {
+                    $padKlasse = 'empty';
+                } elseif (hash_equals($normVerwacht, $normActief)) {
+                    $padKlasse = 'lexical_equivalent';
+                } elseif (in_array($normActief, ['/var/lib/php/sessions', '/tmp'], true)) {
+                    $padKlasse = 'system_default';
+                } elseif (preg_match('#^/srv/verenigingen/[a-z0-9][a-z0-9-]*/private/sessions$#D', $normActief) === 1) {
+                    $padKlasse = 'other_tenant_path';
+                } elseif (str_starts_with($normActief, '/srv/verenigingen/')) {
+                    $padKlasse = 'tenant_tree_other';
+                } else {
+                    $padKlasse = 'other';
+                }
+                header('X-Pilot319-Session-Path-Class: ' . $padKlasse);
+            }
             tenantRuntimeConfiguratieFout('Installatie-eigen PHP session.save_path kon niet worden geactiveerd.');
         }
     }
