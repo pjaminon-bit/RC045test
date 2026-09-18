@@ -83,7 +83,7 @@ jobs:
             -o UserKnownHostsFile="$known_hosts" \
             -o HostKeyAlias="$VPS_SSH_HOST_ALIAS" \
             -o ConnectTimeout=15 \
-            "$VPS_SSH_USER$@VPS_TAILSCALE_HOST" \
+            "$VPS_SSH_USER@$VPS_TAILSCALE_HOST" \
             "deploy $DEPLOY_SHA")"
           printf '%s\n' "$output"
           grep -Fqx "DEPLOYED $DEPLOY_SHA" <<<"$output"
