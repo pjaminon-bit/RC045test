@@ -1,5 +1,6 @@
 <?php
 $root = dirname(__DIR__);
+require_once $root . '/app/deployment/runtime-contract.php';
 $ok = 0; $fout = 0;
 function check41(bool $cond, string $label): void { global $ok,$fout; if($cond){$ok++;echo"OK: $label\n";}else{$fout++;fwrite(STDERR,"FOUT: $label\n");} }
 function rr41(string $pad): void { if(is_link($pad)||is_file($pad)){@unlink($pad);return;} if(!is_dir($pad))return; foreach(scandir($pad)?:[] as $i){if($i==='.'||$i==='..')continue;rr41($pad.DIRECTORY_SEPARATOR.$i);}@rmdir($pad); }
@@ -59,6 +60,33 @@ try {
     $fpmA=(string)file_get_contents((string)$jA['bundle']['php_fpm_file']);
     check41(str_contains($fpmA,'clear_env = yes')&&str_contains($fpmA,'env[VERENIGING_REQUIRE_TENANT_CONFIG] = "1"'),'gegenereerde FPM-config activeert fail-closed tenantenvironment');
     check41(str_contains($fpmA,'php_admin_value[session.save_path] = "'.$a.'/private/sessions"')&&str_contains($fpmA,'php_admin_value[upload_tmp_dir] = "'.$a.'/private/tmp"'),'FPM-config bindt tijdelijke runtime-opslag aan eigen private root');
+    check41(runtime41FpmTempPathDrift($jA,$fpmA)==='exact','FPM-driftclassificatie herkent een byte-exact geïnstalleerde tenantpool');
+    $anderePaden=str_replace(
+        [
+            'php_admin_value[session.save_path] = "'.$a.'/private/sessions"',
+            'php_admin_value[upload_tmp_dir] = "'.$a.'/private/tmp"',
+        ],
+        [
+            'php_admin_value[session.save_path] = "'.$b.'/private/sessions"',
+            'php_admin_value[upload_tmp_dir] = "'.$b.'/private/tmp"',
+        ],
+        $fpmA
+    );
+    check41(runtime41FpmTempPathDrift($jA,$anderePaden)==='repairable_other_tenant_temp_paths','uitsluitend canonieke cross-tenant session/tmp-drift is smal herstelbaar');
+    $alleenSessie=str_replace(
+        'php_admin_value[session.save_path] = "'.$a.'/private/sessions"',
+        'php_admin_value[session.save_path] = "'.$b.'/private/sessions"',
+        $fpmA
+    );
+    check41(runtime41FpmTempPathDrift($jA,$alleenSessie)==='repairable_other_tenant_temp_paths','ook één cross-tenant tijdelijk pad wordt gecontroleerd als smalle drift herkend');
+    $bredeDrift=str_replace('user = '.(string)$jA['os']['user'],'user = root',$anderePaden);
+    check41(runtime41FpmTempPathDrift($jA,$bredeDrift)==='unsafe','bredere FPM-identiteitsdrift blijft fail-closed');
+    $willekeurigPad=str_replace(
+        'php_admin_value[session.save_path] = "'.$a.'/private/sessions"',
+        'php_admin_value[session.save_path] = "/tmp/sessions"',
+        $fpmA
+    );
+    check41(runtime41FpmTempPathDrift($jA,$willekeurigPad)==='unsafe','niet-canoniek tijdelijk pad wordt nooit automatisch gerepareerd');
     check41(!str_contains(strtolower($fpmA),'password')&&!str_contains(strtolower($fpmA),'dsn')&&!str_contains($fpmA,'BEHEER_WACHTWOORD_HASH'),'FPM-config bevat geen authenticatie- of databasesecrets');
     $perm=fileperms($planA); check41($perm!==false&&(($perm&0777)===0640),'runtime-plan.json krijgt server-only mode 0640');
 
