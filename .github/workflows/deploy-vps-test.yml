@@ -29,7 +29,6 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
-      issues: write
       id-token: write
     env:
       DEPLOY_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
@@ -114,7 +113,6 @@ jobs:
           }
 
       - name: Smoke test nieuwe VPS-testrelease
-        id: pilot319-smoke
         shell: bash
         run: |
           set -euo pipefail
@@ -151,42 +149,13 @@ jobs:
             rm -f "$pilot319_beheer_headers"
             echo "PILOT319_DIAG=${pilot319_diag:-missing}" >&2
             echo "PILOT319_SESSION_PATH_CLASS=${pilot319_path_class:-n/a}" >&2
-            printf 'pilot_status=%s\n' "${pilot319_beheer_status:-none}" >> "$GITHUB_OUTPUT"
-            printf 'pilot_diag=%s\n' "${pilot319_diag:-missing}" >> "$GITHUB_OUTPUT"
-            printf 'pilot_path_class=%s\n' "${pilot319_path_class:-n/a}" >> "$GITHUB_OUTPUT"
             echo "FOUT: $PILOT319_BASE_URL/beheer/ gaf HTTP ${pilot319_beheer_status:-geen}, verwacht 200" >&2
             exit 1
           fi
           rm -f "$pilot319_beheer_headers"
-          printf 'pilot_status=200\n' >> "$GITHUB_OUTPUT"
-          printf 'pilot_diag=ok\n' >> "$GITHUB_OUTPUT"
-          printf 'pilot_path_class=expected\n' >> "$GITHUB_OUTPUT"
           echo "OK: $PILOT319_BASE_URL/beheer/ -> HTTP 200"
 
           wacht_op_status "$PILOT319_BASE_URL/healthz.php" 204 nee
-
-      - name: Rapporteer tijdelijke pilot319-runtimeclassificatie
-        if: ${{ always() }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PILOT_STEP_OUTCOME: ${{ steps.pilot319-smoke.outcome }}
-          PILOT_STATUS: ${{ steps.pilot319-smoke.outputs.pilot_status }}
-          PILOT_DIAG: ${{ steps.pilot319-smoke.outputs.pilot_diag }}
-          PILOT_PATH_CLASS: ${{ steps.pilot319-smoke.outputs.pilot_path_class }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
-          body="Tijdelijke TEST-runtimeclassificatie pilot319 op `$DEPLOY_SHA`.
-
-- deploy/smokestap: `${PILOT_STEP_OUTCOME:-unknown}`
-- `/beheer/` HTTP: `${PILOT_STATUS:-not_reached}`
-- runtimeklasse: `${PILOT_DIAG:-not_reached}`
-- actieve session.save_path-klasse: `${PILOT_PATH_CLASS:-not_reached}`
-- run: $run_url
-
-Geen paden, responsebody, secrets of PII gelogd. LIVE is niet gewijzigd."
-          gh issue comment 319 --repo "$GITHUB_REPOSITORY" --body "$body"
 
   e2e-fixture-setup:
     needs: deploy-vps-test
