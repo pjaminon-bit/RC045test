@@ -402,6 +402,71 @@ function runtime41FpmConfig(array $plan): string
     return implode("\n", $regels) . "\n";
 }
 
+/**
+ * Classificeer uitsluitend de bekende FPM-drift waarbij een tenantpool verder
+ * byte-exact klopt, maar session.save_path en/of upload_tmp_dir nog naar de
+ * private runtime-opslag van een andere canonieke tenant wijzen.
+ *
+ * Dit is bewust géén algemene config-normalisatie: iedere andere afwijking
+ * blijft fail-closed.
+ */
+function runtime41FpmTempPathDrift(array $plan, string $installed): string
+{
+    $expected = runtime41FpmConfig($plan);
+    if (hash_equals($expected, $installed)) return 'exact';
+
+    $directives = [
+        'session.save_path' => (string)($plan['php_fpm']['session_save_path'] ?? ''),
+        'upload_tmp_dir' => (string)($plan['php_fpm']['upload_tmp_dir'] ?? ''),
+    ];
+    $expectedNormalized = $expected;
+    $installedNormalized = $installed;
+    $actual = [];
+
+    foreach ($directives as $directive => $expectedPath) {
+        $quoted = preg_quote($directive, '/');
+        $pattern = '/^php_admin_value\\[' . $quoted . '\\] = "([^"\\r\\n]+)"$/m';
+        $expectedCount = preg_match_all($pattern, $expected, $expectedMatches);
+        $installedCount = preg_match_all($pattern, $installed, $installedMatches);
+        if ($expectedCount !== 1 || $installedCount !== 1) return 'unsafe';
+        if (!hash_equals($expectedPath, (string)$expectedMatches[1][0])) return 'unsafe';
+
+        $actualPath = (string)$installedMatches[1][0];
+        $actual[$directive] = $actualPath;
+        $token = 'php_admin_value[' . $directive . '] = "__TENANT_PRIVATE_TEMP_PATH__"';
+        $expectedNormalized = preg_replace($pattern, $token, $expectedNormalized, 1, $ec);
+        $installedNormalized = preg_replace($pattern, $token, $installedNormalized, 1, $ic);
+        if (!is_string($expectedNormalized) || !is_string($installedNormalized) || $ec !== 1 || $ic !== 1) return 'unsafe';
+    }
+
+    if (!hash_equals($expectedNormalized, $installedNormalized)) return 'unsafe';
+
+    $privateRoot = runtime41NormPad((string)($plan['filesystem']['private_root']['path'] ?? ''));
+    $tenantKey = (string)($plan['tenant_key'] ?? '');
+    $tenantBase = runtime41NormPad(dirname(dirname($privateRoot)));
+    if (!runtime41CanoniekeTenantKey($tenantKey) || $tenantBase === '/' || $tenantBase === '.') return 'unsafe';
+
+    $changed = false;
+    foreach ([
+        'session.save_path' => 'sessions',
+        'upload_tmp_dir' => 'tmp',
+    ] as $directive => $leaf) {
+        $expectedPath = $directives[$directive];
+        $actualPath = runtime41NormPad((string)$actual[$directive]);
+        if (hash_equals(runtime41NormPad($expectedPath), $actualPath)) continue;
+
+        $prefix = rtrim($tenantBase, '/') . '/';
+        if (!str_starts_with($actualPath, $prefix)) return 'unsafe';
+        $relative = substr($actualPath, strlen($prefix));
+        if (preg_match('#^([a-z0-9](?:[a-z0-9-]*[a-z0-9])?)/private/' . preg_quote($leaf, '#') . '$#D', $relative, $m) !== 1) return 'unsafe';
+        $otherTenant = (string)$m[1];
+        if (!runtime41CanoniekeTenantKey($otherTenant) || hash_equals($tenantKey, $otherTenant)) return 'unsafe';
+        $changed = true;
+    }
+
+    return $changed ? 'repairable_other_tenant_temp_paths' : 'unsafe';
+}
+
 function runtime41PlanLeesEnValideer(string $planPad): array
 {
     $planPad = runtime41BestaandPad($planPad, 'runtime-plan.json');
