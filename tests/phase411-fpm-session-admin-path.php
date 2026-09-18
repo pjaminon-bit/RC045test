@@ -76,6 +76,12 @@ try {
         ($context['path'] ?? '') === $sessions && (string)ini_get('session.save_path') === $sessions,
         'reeds correct session.save_path blijft bruikbaar zonder padwijziging'
     );
+    clearstatcache(true, $sessions);
+    $sessieMode = @fileperms($sessions);
+    check411(
+        is_int($sessieMode) && (($sessieMode & 0777) === 0700),
+        'auth-storage normaliseert een bestaande tenant-sessiemap naar runtimecontract 0700'
+    );
 
     session_name($oudeNaam);
     ini_set('session.save_path', $anderPad);
