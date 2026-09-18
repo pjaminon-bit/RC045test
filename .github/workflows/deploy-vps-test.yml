@@ -37,6 +37,7 @@ jobs:
       VPS_SSH_USER: ${{ vars.VPS_TEST_SSH_USER || 'vst-deploy' }}
       VPS_SSH_PORT: ${{ vars.VPS_TEST_SSH_PORT || '22' }}
       VPS_TEST_BASE_URL: https://test.vps.holox.nl
+      PILOT319_BASE_URL: https://pilot319.149-143-36-59.sslip.io
     steps:
       - name: Valideer gemergde PR-lineage voor iedere deploy
         env:
@@ -136,6 +137,11 @@ jobs:
           wacht_op_status "$VPS_TEST_BASE_URL/beheer/" 200 ja
           wacht_op_status "$VPS_TEST_BASE_URL/healthz.php" 204 nee
           wacht_op_status "$VPS_TEST_BASE_URL/bin/apply-vps-release.php" 404 nee
+          # Tijdelijke operationele acceptatie voor pilot-readiness #319.
+          # Verwijder deze drie regels weer zodra #319 volledig is afgerond.
+          wacht_op_status "$PILOT319_BASE_URL/" 200 ja
+          wacht_op_status "$PILOT319_BASE_URL/beheer/" 200 ja
+          wacht_op_status "$PILOT319_BASE_URL/healthz.php" 204 nee
 
   e2e-fixture-setup:
     needs: deploy-vps-test
