@@ -137,7 +137,10 @@ function authStorageActiveerSessieIsolatie(array $siteConfig, string $projectRoo
     $context = authStorageSessieContext($siteConfig, $projectRoot, $privateRoot);
     $sessiePad = $context['path'];
 
-    if (!privateFilesystemBeveiligMap($sessiePad, true)) {
+    // Het fase-4.1 runtimecontract reserveert de sessiemap als 0700. Gebruik
+    // daarom niet de generieke private-mapwrapper (0750): een request mag de
+    // door root aangebrachte strengere sessiemode nooit weer verruimen.
+    if (!privateFilesystemBeveiligMapMetMode($sessiePad, 0700, true)) {
         tenantRuntimeConfiguratieFout('Installatie-eigen sessiemap kon niet naar restrictieve mode worden gezet.');
     }
     if (!is_dir($sessiePad) || !is_writable($sessiePad)) {
