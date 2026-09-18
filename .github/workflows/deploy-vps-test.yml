@@ -140,7 +140,26 @@ jobs:
           # Tijdelijke operationele acceptatie voor pilot-readiness #319.
           # Verwijder deze drie regels weer zodra #319 volledig is afgerond.
           wacht_op_status "$PILOT319_BASE_URL/" 200 ja
-          wacht_op_status "$PILOT319_BASE_URL/beheer/" 200 ja
+
+          pilot319_beheer_body="$(mktemp)"
+          pilot319_beheer_status="$(curl --silent --show-error --location --output "$pilot319_beheer_body" --write-out '%{http_code}' --connect-timeout 10 --max-time 30 "$PILOT319_BASE_URL/beheer/" || true)"
+          if [[ "$pilot319_beheer_status" != '200' ]]; then
+            if grep -Fq 'Installatie-eigen PHP session.save_path kon niet worden geactiveerd.' "$pilot319_beheer_body"; then
+              echo 'PILOT319_DIAG=session_save_path_mismatch' >&2
+            elif grep -Fq 'Installatie-eigen sessiemap kon niet naar restrictieve mode worden gezet.' "$pilot319_beheer_body"; then
+              echo 'PILOT319_DIAG=session_directory_mode' >&2
+            elif grep -Fq 'Installatie-eigen sessiemap is niet schrijfbaar.' "$pilot319_beheer_body"; then
+              echo 'PILOT319_DIAG=session_directory_not_writable' >&2
+            else
+              echo 'PILOT319_DIAG=unknown_503' >&2
+            fi
+            rm -f "$pilot319_beheer_body"
+            echo "FOUT: $PILOT319_BASE_URL/beheer/ gaf HTTP ${pilot319_beheer_status:-geen}, verwacht 200" >&2
+            exit 1
+          fi
+          rm -f "$pilot319_beheer_body"
+          echo "OK: $PILOT319_BASE_URL/beheer/ -> HTTP 200"
+
           wacht_op_status "$PILOT319_BASE_URL/healthz.php" 204 nee
 
   e2e-fixture-setup:
