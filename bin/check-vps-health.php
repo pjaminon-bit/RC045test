@@ -66,6 +66,93 @@ function health46AtomicJson(string $pad, array $data, int $mode = 0640): void
     if(!@rename($tmp,$pad)){@unlink($tmp);health46Stop('Status kon niet atomisch worden geplaatst.');}
     health46ModeExact($pad,$mode,false,true);
 }
+function health46RootConfigMeta(string $pad): void
+{
+    clearstatcache(true, $pad);
+    $st=@lstat($pad);
+    if(!is_array($st)||is_link($pad)||!is_file($pad)||(int)$st['uid']!==0||(int)$st['gid']!==0||(((int)$st['mode']&0777)!==0644)){
+        throw new RuntimeException('FPM poolconfig heeft onverwachte metadata.');
+    }
+}
+function health46FpmConfigWrite(string $pad, string $inhoud): void
+{
+    if(runtime41SymlinkInPad($pad)!==null||is_link($pad))throw new RuntimeException('FPM poolconfigpad bevat een symlink.');
+    $dir=dirname($pad);
+    if(!is_dir($dir)||is_link($dir))throw new RuntimeException('FPM poolconfigmap is onveilig.');
+    $tmp=$dir.'/.'.basename($pad).'.pilot319.'.bin2hex(random_bytes(6));
+    if(@file_put_contents($tmp,$inhoud,LOCK_EX)===false)throw new RuntimeException('Tijdelijke FPM poolconfig kon niet worden geschreven.');
+    if(!@chown($tmp,0)||!@chgrp($tmp,0)||!@chmod($tmp,0644)){@unlink($tmp);throw new RuntimeException('Tijdelijke FPM poolconfig kreeg onveilige metadata.');}
+    health46RootConfigMeta($tmp);
+    if(is_link($pad)||!@rename($tmp,$pad)){@unlink($tmp);throw new RuntimeException('FPM poolconfig kon niet atomisch worden vervangen.');}
+    health46RootConfigMeta($pad);
+}
+function health46Pilot319FpmReconcile(array $monitorPlan): void
+{
+    if(!hash_equals('pilot319',(string)($monitorPlan['tenant_key']??'')))return;
+
+    $runtimePad=(string)($monitorPlan['source']['runtime_plan_file']??'');
+    $ctx=runtime41PlanLeesEnValideer($runtimePad);
+    $runtime=$ctx['plan'];
+    $deployment=$ctx['deployment'];
+    if(!hash_equals('pilot319',(string)($runtime['tenant_key']??''))||!hash_equals('pilot319',(string)($deployment['tenant_key']??''))){
+        throw new RuntimeException('pilot319 runtimebinding wijkt af.');
+    }
+
+    $configFile=(string)$deployment['config_file'];
+    $tenantConfig=require $configFile;
+    if(!is_array($tenantConfig))throw new RuntimeException('pilot319 tenantconfig is geen array.');
+    $configTenant=(string)($tenantConfig['vereniging']['sleutel']??'');
+    $configPrivate=runtime41NormPad((string)($tenantConfig['opslag']['private_root']??''));
+    $expectedPrivate=runtime41NormPad((string)($runtime['filesystem']['private_root']['path']??''));
+    if(!hash_equals('pilot319',$configTenant)||!hash_equals($expectedPrivate,$configPrivate)||!hash_equals(runtime41NormPad((string)$deployment['private_root']),$expectedPrivate)){
+        throw new RuntimeException('pilot319 config, deployment en runtimeplan bevestigen niet dezelfde private root.');
+    }
+
+    $bundle=(string)($runtime['bundle']['php_fpm_file']??'');
+    if(runtime41SymlinkInPad($bundle)!==null||is_link($bundle)||!is_file($bundle))throw new RuntimeException('pilot319 FPM runtimebundle ontbreekt of is onveilig.');
+    $expected=runtime41FpmConfig($runtime);
+    $bundleRaw=@file_get_contents($bundle);
+    if(!is_string($bundleRaw)||!hash_equals($expected,$bundleRaw))throw new RuntimeException('pilot319 FPM runtimebundle wijkt af van het runtimecontract.');
+
+    $phpVersion=(string)($runtime['settings']['php_version']??'');
+    if(!runtime41PhpVersie($phpVersion)||!hash_equals($phpVersion,(string)($monitorPlan['runtime']['php_version']??''))){
+        throw new RuntimeException('pilot319 PHP-versiebinding wijkt af.');
+    }
+    $installed='/etc/php/'.$phpVersion.'/fpm/pool.d/'.basename($bundle);
+    if(runtime41SymlinkInPad($installed)!==null||is_link($installed)||!is_file($installed))throw new RuntimeException('pilot319 geïnstalleerde FPM poolconfig ontbreekt of is onveilig.');
+    health46RootConfigMeta($installed);
+    $current=@file_get_contents($installed);
+    if(!is_string($current))throw new RuntimeException('pilot319 geïnstalleerde FPM poolconfig is onleesbaar.');
+    if(hash_equals($expected,$current))return;
+
+    $drift=runtime41FpmTempPathDrift($runtime,$current);
+    if(!hash_equals('repairable_other_tenant_temp_paths',$drift)){
+        throw new RuntimeException('pilot319 FPM pooldrift is breder dan de twee tenant-private tijdelijke paden; automatische repair geweigerd.');
+    }
+
+    $fpm='/usr/sbin/php-fpm'.$phpVersion;
+    if(!is_file($fpm)||!is_executable($fpm))throw new RuntimeException('pilot319 FPM testbinary ontbreekt.');
+    $service='php'.$phpVersion.'-fpm.service';
+
+    health46FpmConfigWrite($installed,$expected);
+    [$testCode,$testOut,$testErr]=health46Run([$fpm,'-t']);
+    if($testCode!==0){
+        health46FpmConfigWrite($installed,$current);
+        throw new RuntimeException('pilot319 FPM configtest faalde na repair; oorspronkelijke config is hersteld: '.trim($testErr!==''?$testErr:$testOut));
+    }
+
+    [$reloadCode,,$reloadErr]=health46Run(['systemctl','reload',$service]);
+    if($reloadCode!==0){
+        health46FpmConfigWrite($installed,$current);
+        [$rollbackTest]=health46Run([$fpm,'-t']);
+        [$rollbackReload]=health46Run(['systemctl','reload',$service]);
+        if($rollbackTest!==0||$rollbackReload!==0)throw new RuntimeException('pilot319 FPM reload faalde en rollback kon niet volledig worden bewezen.');
+        throw new RuntimeException('pilot319 FPM reload faalde; oorspronkelijke config is hersteld: '.$reloadErr);
+    }
+
+    echo "PILOT319 FPM RUNTIME RECONCILED  scope=session.save_path,upload_tmp_dir\n";
+}
+
 function health46CertBinnenEigenLineage(string $pad): bool
 {
     if(!is_file($pad)) return false;
@@ -131,7 +218,7 @@ try{$ctx=monitoring46PlanLeesEnValideer($planPad);$plan=$ctx['plan'];}catch(Thro
 if(isset($opt['check'])&&!isset($opt['probe'])){echo 'CHECK OK  tenant='.$plan['tenant_key']."\n";exit(0);}
 if(!isset($opt['probe'])||isset($opt['check']))health46Stop('Kies exact --check of --probe.');
 if(PHP_OS_FAMILY!=='Linux'||!function_exists('posix_geteuid')||posix_geteuid()!==0)health46Stop('--probe vereist Linux root.');
-try{health46Deps($plan);}catch(Throwable$e){health46Stop($e->getMessage());}
+try{health46Deps($plan);health46Pilot319FpmReconcile($plan);}catch(Throwable$e){health46Stop($e->getMessage());}
 
 $checks=[];
 foreach([$plan['runtime']['apache_service'],$plan['runtime']['fpm_service'],$plan['runtime']['postgresql_service']]as$svc){[$c,$o]=health46Run(['systemctl','is-active',(string)$svc]);health46Check($c===0&&$o==='active','service:'.(string)$svc,$checks);}
