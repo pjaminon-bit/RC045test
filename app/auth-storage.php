@@ -5,6 +5,71 @@
 require_once __DIR__ . '/core/tenant-runtime.php';
 require_once __DIR__ . '/storage/private-filesystem.php';
 
+
+/**
+ * Veilige fallback rond PHP's native files-sessionhandler.
+ *
+ * De normale productiegrens blijft een tenant-eigen php_admin_value voor
+ * session.save_path. Als een bestaande FPM-pool aantoonbaar naar een andere
+ * tenant wijst en PHP die adminwaarde niet kan wijzigen, mag de applicatie dat
+ * verkeerde pad nooit gebruiken. Deze wrapper onderschept uitsluitend open()
+ * en bindt de native files-handler aan het reeds gevalideerde tenantpad.
+ *
+ * SessionUpdateTimestampHandlerInterface wordt bewust geïmplementeerd zodat
+ * session.use_strict_mode actief blijft bij de user-level wrapper.
+ */
+final class AuthStorageTenantFileSessionHandler extends SessionHandler implements SessionUpdateTimestampHandlerInterface
+{
+    public function __construct(private string $tenantPath)
+    {
+    }
+
+    public function open(string $path, string $name): bool
+    {
+        return parent::open($this->tenantPath, $name);
+    }
+
+    private function sessionBestand(string $id): ?string
+    {
+        $lengte = strlen($id);
+        if ($lengte < 22 || $lengte > 256 || preg_match('/^[a-zA-Z0-9,-]+$/D', $id) !== 1) {
+            return null;
+        }
+        return rtrim($this->tenantPath, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'sess_' . $id;
+    }
+
+    public function validateId(string $id): bool
+    {
+        $bestand = $this->sessionBestand($id);
+        return $bestand !== null && is_file($bestand) && !is_link($bestand);
+    }
+
+    public function updateTimestamp(string $id, string $data): bool
+    {
+        if ($this->sessionBestand($id) === null) return false;
+        return parent::write($id, $data);
+    }
+}
+
+function authStorageRegistreerTenantFileSessionHandler(string $sessiePad): bool
+{
+    if (!hash_equals('files', (string)ini_get('session.save_handler'))) {
+        return false;
+    }
+    if (session_status() !== PHP_SESSION_NONE) {
+        return false;
+    }
+
+    $handler = new AuthStorageTenantFileSessionHandler($sessiePad);
+    if (!session_set_save_handler($handler, true)) {
+        return false;
+    }
+
+    // Houd de wrapper expliciet gedurende de request-lifecycle vast.
+    $GLOBALS['authStorageTenantFileSessionHandler'] = $handler;
+    return true;
+}
+
 /**
  * Externe tenantmasters accepteren uitsluitend een geldige password_hash en
  * mogen geen plaintext compatibiliteitsvariabele bevatten. De standalone
@@ -156,28 +221,36 @@ function authStorageActiveerSessieIsolatie(array $siteConfig, string $projectRoo
 
     $actiefPad = (string)ini_get('session.save_path');
     if (!hash_equals($sessiePad, $actiefPad)) {
-        $gezet = ini_set('session.save_path', $sessiePad);
-        if ($gezet === false || !hash_equals($sessiePad, (string)ini_get('session.save_path'))) {
-            if (PHP_SAPI !== 'cli' && !headers_sent()
-                && hash_equals('pilot319.149-143-36-59.sslip.io', strtolower(trim((string)($_SERVER['HTTP_HOST'] ?? ''))))) {
-                $normActief = rtrim((string)preg_replace('~/+~', '/', $actiefPad), '/');
-                $normVerwacht = rtrim((string)preg_replace('~/+~', '/', $sessiePad), '/');
-                if ($actiefPad === '') {
-                    $padKlasse = 'empty';
-                } elseif (hash_equals($normVerwacht, $normActief)) {
-                    $padKlasse = 'lexical_equivalent';
-                } elseif (in_array($normActief, ['/var/lib/php/sessions', '/tmp'], true)) {
-                    $padKlasse = 'system_default';
-                } elseif (preg_match('#^/srv/verenigingen/[a-z0-9][a-z0-9-]*/private/sessions$#D', $normActief) === 1) {
-                    $padKlasse = 'other_tenant_path';
-                } elseif (str_starts_with($normActief, '/srv/verenigingen/')) {
-                    $padKlasse = 'tenant_tree_other';
-                } else {
-                    $padKlasse = 'other';
+        ini_set('session.save_path', $sessiePad);
+        if (!hash_equals($sessiePad, (string)ini_get('session.save_path'))) {
+            // Externe tenants mogen bij FPM-drift nooit het globale of een
+            // andere tenant zijn session.save_path gebruiken. Alleen wanneer
+            // de native files-handler actief is, binden we die expliciet aan
+            // het eigen reeds gevalideerde 0700-pad.
+            if ($privateRoot !== null && authStorageRegistreerTenantFileSessionHandler($sessiePad)) {
+                error_log('[platform] tenant-bound native session handler actief door FPM session.save_path drift.');
+            } else {
+                if (PHP_SAPI !== 'cli' && !headers_sent()
+                    && hash_equals('pilot319.149-143-36-59.sslip.io', strtolower(trim((string)($_SERVER['HTTP_HOST'] ?? ''))))) {
+                    $normActief = rtrim((string)preg_replace('~/+~', '/', $actiefPad), '/');
+                    $normVerwacht = rtrim((string)preg_replace('~/+~', '/', $sessiePad), '/');
+                    if ($actiefPad === '') {
+                        $padKlasse = 'empty';
+                    } elseif (hash_equals($normVerwacht, $normActief)) {
+                        $padKlasse = 'lexical_equivalent';
+                    } elseif (in_array($normActief, ['/var/lib/php/sessions', '/tmp'], true)) {
+                        $padKlasse = 'system_default';
+                    } elseif (preg_match('#^/srv/verenigingen/[a-z0-9][a-z0-9-]*/private/sessions$#D', $normActief) === 1) {
+                        $padKlasse = 'other_tenant_path';
+                    } elseif (str_starts_with($normActief, '/srv/verenigingen/')) {
+                        $padKlasse = 'tenant_tree_other';
+                    } else {
+                        $padKlasse = 'other';
+                    }
+                    header('X-Pilot319-Session-Path-Class: ' . $padKlasse);
                 }
-                header('X-Pilot319-Session-Path-Class: ' . $padKlasse);
+                tenantRuntimeConfiguratieFout('Installatie-eigen PHP session.save_path kon niet worden geactiveerd.');
             }
-            tenantRuntimeConfiguratieFout('Installatie-eigen PHP session.save_path kon niet worden geactiveerd.');
         }
     }
 
