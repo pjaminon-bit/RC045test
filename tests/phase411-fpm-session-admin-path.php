@@ -39,16 +39,17 @@ $runtimeBron = (string)file_get_contents($root . '/app/deployment/runtime-contra
 
 $actiefPos = strpos($authBron, '$actiefPad = (string)ini_get(\'session.save_path\');');
 $guardPos = strpos($authBron, 'if (!hash_equals($sessiePad, $actiefPad))');
-$setPos = strpos($authBron, '$gezet = ini_set(\'session.save_path\', $sessiePad);');
+$setPos = strpos($authBron, 'ini_set(\'session.save_path\', $sessiePad);');
+$fallbackPos = strpos($authBron, 'authStorageRegistreerTenantFileSessionHandler($sessiePad)');
 
 check411(
     str_contains($runtimeBron, "php_admin_value[session.save_path] = "),
     'FPM-contract zet tenant session.save_path als php_admin_value vast'
 );
 check411(
-    $actiefPos !== false && $guardPos !== false && $setPos !== false
-        && $actiefPos < $guardPos && $guardPos < $setPos,
-    'auth-storage accepteert eerst een reeds exact vastgezet session.save_path voordat ini_set wordt geprobeerd'
+    $actiefPos !== false && $guardPos !== false && $setPos !== false && $fallbackPos !== false
+        && $actiefPos < $guardPos && $guardPos < $setPos && $setPos < $fallbackPos,
+    'auth-storage accepteert eerst een correct pad, probeert daarna ini_set en activeert pas bij blijvende drift de tenantfallback'
 );
 
 $tmp = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'phase411-session-' . bin2hex(random_bytes(5));
