@@ -86,6 +86,38 @@ function health46FpmConfigWrite(string $pad, string $inhoud): void
     if(is_link($pad)||!@rename($tmp,$pad)){@unlink($tmp);throw new RuntimeException('FPM poolconfig kon niet atomisch worden vervangen.');}
     health46RootConfigMeta($pad);
 }
+function health46FpmMainPid(string $service): int
+{
+    [$code,$out,$err]=health46Run(['systemctl','show',$service,'--property=MainPID','--value']);
+    if($code!==0||preg_match('/^[0-9]+$/D',$out)!==1||(int)$out<=0){
+        throw new RuntimeException('FPM MainPID kon niet betrouwbaar worden bepaald'.($err!==''?': '.$err:'').'.');
+    }
+    return (int)$out;
+}
+function health46FpmChildPids(int $mainPid): array
+{
+    $pad='/proc/'.$mainPid.'/task/'.$mainPid.'/children';
+    if($mainPid<=0||is_link($pad)||!is_file($pad))return[];
+    $raw=@file_get_contents($pad);
+    if(!is_string($raw)||trim($raw)==='')return[];
+    $pids=[];
+    foreach(preg_split('/\\s+/',trim($raw))?:[]as$pid){
+        if(preg_match('/^[0-9]+$/D',(string)$pid)!==1)continue;
+        $n=(int)$pid;if($n>0)$pids[$n]=true;
+    }
+    $out=array_keys($pids);sort($out,SORT_NUMERIC);return$out;
+}
+function health46FpmWachtOudeWorkersWeg(string $service,array $oudeWorkers,int $timeoutMs=15000): void
+{
+    if($oudeWorkers===[])return;
+    $deadline=microtime(true)+($timeoutMs/1000);
+    do{
+        $main=health46FpmMainPid($service);
+        if(array_intersect($oudeWorkers,health46FpmChildPids($main))===[])return;
+        usleep(100000);
+    }while(microtime(true)<$deadline);
+    throw new RuntimeException('Oude PHP-FPM workers bleven actief na runtime-reconcile.');
+}
 function health46FpmReconcile(array $monitorPlan): void
 {
     $tenantKey=(string)($monitorPlan['tenant_key']??'');
@@ -137,6 +169,8 @@ function health46FpmReconcile(array $monitorPlan): void
         throw new RuntimeException('FPM configtest faalde na repair; oorspronkelijke config is hersteld: '.trim($testErr!==''?$testErr:$testOut));
     }
 
+    $mainPid=health46FpmMainPid($service);
+    $oudeWorkers=health46FpmChildPids($mainPid);
     [$reloadCode,,$reloadErr]=health46Run(['systemctl','reload',$service]);
     if($reloadCode!==0){
         health46FpmConfigWrite($installed,$current);
@@ -145,6 +179,7 @@ function health46FpmReconcile(array $monitorPlan): void
         if($rollbackTest!==0||$rollbackReload!==0)throw new RuntimeException('FPM reload faalde en rollback kon niet volledig worden bewezen.');
         throw new RuntimeException('FPM reload faalde; oorspronkelijke config is hersteld: '.$reloadErr);
     }
+    health46FpmWachtOudeWorkersWeg($service,$oudeWorkers);
 
     echo 'FPM RUNTIME RECONCILED  tenant='.$tenantKey." scope=session.save_path,upload_tmp_dir\n";
 }
