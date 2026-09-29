@@ -175,7 +175,31 @@ function authStorageActiveerSessieIsolatie(array $siteConfig, string $projectRoo
                 } else {
                     $padKlasse = 'other';
                 }
+                $configTenant = tenantRuntimeVeiligeSleutel((string)($siteConfig['vereniging']['sleutel'] ?? 'default'));
+                $configTenantClass = match ($configTenant) {
+                    'pilot319' => 'self',
+                    'test' => 'test',
+                    default => 'other',
+                };
+                $normPrivate = $privateRoot === null
+                    ? ''
+                    : rtrim((string)preg_replace('~/+~', '/', $privateRoot), '/');
+                $privateRootClass = match (true) {
+                    $normPrivate === '/srv/verenigingen/pilot319/private' => 'self',
+                    $normPrivate === '/srv/verenigingen/test/private' => 'test',
+                    preg_match('#^/srv/verenigingen/[a-z0-9][a-z0-9-]*/private$#D', $normPrivate) === 1 => 'other',
+                    default => 'other',
+                };
+                $activeSessionTenantClass = match (true) {
+                    $normActief === '/srv/verenigingen/pilot319/private/sessions' => 'self',
+                    $normActief === '/srv/verenigingen/test/private/sessions' => 'test',
+                    preg_match('#^/srv/verenigingen/[a-z0-9][a-z0-9-]*/private/sessions$#D', $normActief) === 1 => 'other',
+                    default => 'other',
+                };
                 header('X-Pilot319-Session-Path-Class: ' . $padKlasse);
+                header('X-Pilot319-Config-Tenant-Class: ' . $configTenantClass);
+                header('X-Pilot319-Private-Root-Class: ' . $privateRootClass);
+                header('X-Pilot319-Active-Session-Tenant-Class: ' . $activeSessionTenantClass);
             }
             tenantRuntimeConfiguratieFout('Installatie-eigen PHP session.save_path kon niet worden geactiveerd.');
         }
