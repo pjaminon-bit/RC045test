@@ -138,9 +138,55 @@ function apply47Health(string $release, array $tenants, bool $stop=true): bool
 {
     $checker=$release.'/bin/check-vps-health.php';foreach($tenants as$t){$php='/usr/bin/php'.(string)$t['php_version'];[$c,,$e]=apply47Run([$php,$checker,'--monitoring-plan='.$t['monitoring_plan'],'--probe','--write-status']);if($c!==0){if($stop)apply47Stop('Healthcheck faalt voor '.$t['tenant'].($e!==''?': '.$e:''));return false;}}return true;
 }
+function apply47FpmMainPid(string $service): int
+{
+    [$c,$o,$e]=apply47Run(['/usr/bin/systemctl','show',$service,'--property=MainPID','--value']);
+    if($c!==0||preg_match('/^[0-9]+$/D',$o)!==1||(int)$o<=0){
+        fwrite(STDERR,'FOUT: MainPID voor '.$service.' kon niet betrouwbaar worden bepaald'.($e!==''?': '.$e:'')."\n");
+        return 0;
+    }
+    return (int)$o;
+}
+function apply47FpmChildPids(int $mainPid): array
+{
+    if($mainPid<=0)return[];
+    $pad='/proc/'.$mainPid.'/task/'.$mainPid.'/children';
+    if(!is_file($pad)||is_link($pad))return[];
+    $raw=@file_get_contents($pad);
+    if(!is_string($raw))return[];
+    $raw=trim($raw);
+    if($raw==='')return[];
+    $out=[];
+    foreach(preg_split('/\\s+/', $raw)?:[]as$p){
+        if(preg_match('/^[0-9]+$/D',(string)$p)!==1)continue;
+        $pid=(int)$p;if($pid>0)$out[$pid]=true;
+    }
+    $pids=array_keys($out);sort($pids,SORT_NUMERIC);return$pids;
+}
+function apply47FpmWachtOudeWorkersWeg(string $service,array $oudeWorkers,int $timeoutMs=15000): bool
+{
+    if($oudeWorkers===[])return true;
+    $deadline=microtime(true)+($timeoutMs/1000);
+    do{
+        $main=apply47FpmMainPid($service);if($main<=0)return false;
+        $actueel=apply47FpmChildPids($main);
+        if(array_intersect($oudeWorkers,$actueel)===[])return true;
+        usleep(100000);
+    }while(microtime(true)<$deadline);
+    fwrite(STDERR,'FOUT: oude PHP-FPM workers bleven actief na reload van '.$service."\n");
+    return false;
+}
 function apply47FpmReload(array $tenants): bool
 {
-    $services=[];foreach($tenants as$t)$services['php'.$t['php_version'].'-fpm.service']=true;foreach(array_keys($services)as$s){[$c,,$e]=apply47Run(['/usr/bin/systemctl','reload',$s]);if($c!==0){fwrite(STDERR,"FOUT: reload {$s} faalt: {$e}\n");return false;}}return true;
+    $services=[];foreach($tenants as$t)$services['php'.$t['php_version'].'-fpm.service']=true;
+    foreach(array_keys($services)as$s){
+        $main=apply47FpmMainPid($s);if($main<=0)return false;
+        $oudeWorkers=apply47FpmChildPids($main);
+        [$c,,$e]=apply47Run(['/usr/bin/systemctl','reload',$s]);
+        if($c!==0){fwrite(STDERR,"FOUT: reload {$s} faalt: {$e}\n");return false;}
+        if(!apply47FpmWachtOudeWorkersWeg($s,$oudeWorkers))return false;
+    }
+    return true;
 }
 function apply47ApacheTest(): void { [$c,,$e]=apply47Run(['/usr/sbin/apache2ctl','configtest']);if($c!==0)apply47Stop('Apache configtest faalt: '.$e); }
 function apply47State(array $active, ?array $previous, ?array $transition, int $tenants, bool $bootstrap=false): array
